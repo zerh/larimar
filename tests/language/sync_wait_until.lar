@@ -1,0 +1,101 @@
+// expect: run
+// output: sum 55
+// output: bounded: 10100 in 200 items, never above 4
+// output: ticket 3 served
+// wait until on a method of a synchronized class: whoever calls it waits there until the condition
+// holds; when any method of the object ends, the waiters look at their condition again.
+
+synchronized class Queue {
+    let items: int32[64] = [];
+    let closed: bool = false;
+
+    function put(v: int32): void { self.items.push(v); }
+    function close(): void { self.closed = true; }
+
+    function take(): int32 wait until (self.items.length > 0 || self.closed) {
+        if (self.items.length == 0) { return -1; }
+        let v: int32 = self.items[0];
+        let rest: int32[64] = [];
+        for (i in 1..self.items.length) { rest.push(self.items[i]); }
+        self.items = rest;
+        return v;
+    }
+}
+
+synchronized class Total {
+    let sum: int64 = 0;
+    function add(n: int64): void { self.sum += n; }
+    function get(): int64 { return self.sum; }
+}
+
+/** At most 4 items: put waits while it is full, take while it is empty. */
+synchronized class Bounded {
+    let items: int32[4] = [];
+    let most: int32 = 0;
+    let count: int32 = 0;
+
+    function put(v: int32): void wait until (self.items.length < 4) {
+        self.items.push(v);
+        if (self.items.length > self.most) { self.most = self.items.length; }
+    }
+
+    function take(): int32 wait until (self.items.length > 0) {
+        let v: int32 = self.items[0];
+        let rest: int32[4] = [];
+        for (i in 1..self.items.length) { rest.push(self.items[i]); }
+        self.items = rest;
+        self.count += 1;
+        return v;
+    }
+
+    function highest(): int32 { return self.most; }
+    function taken(): int32 { return self.count; }
+}
+
+/** The condition can use the parameters: each one waits for its own turn. */
+synchronized class Counter {
+    let now: int32 = 0;
+    function serve(ticket: int32): int32 wait until (self.now >= ticket) { return ticket; }
+    function next(): void { self.now += 1; }
+}
+
+function main(): int32 {
+    let queue: Queue = {};
+    let total: Total = {};
+    let consumer: Thread = {
+        run: () -> {
+            while (true) {
+                let v: int32 = queue.take();
+                if (v < 0) { break; }
+                total.add(v as int64);
+            }
+        }
+    };
+    consumer.start();
+    for (i in 1..11) { queue.put(i); }
+    queue.close();
+    consumer.join();
+    println("sum ${total.get()}");
+
+    let box: Bounded = {};
+    let got: Total = {};
+    {
+        let workers: byte[*] = [] in heap;
+        for (p in 0..2) {
+            let producer: Thread = { run: () -> { for (k in 1..101) { box.put(k); } } } in workers;
+            producer.start();
+        }
+        for (c in 0..2) {
+            let taker: Thread = { run: () -> { for (k in 0..100) { got.add(box.take() as int64); } } } in workers;
+            taker.start();
+        }
+    }
+    println("bounded: ${got.get()} in ${box.taken()} items, never above ${box.highest()}");
+
+    let counter: Counter = {};
+    let waiter: Thread = { run: () -> { println("ticket ${counter.serve(3)} served"); } };
+    waiter.start();
+    for (i in 0..3) { counter.next(); }
+    waiter.join();
+    return 0;
+}

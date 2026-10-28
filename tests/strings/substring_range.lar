@@ -1,0 +1,6 @@
+// expect: panic substring(2, 9) is out of range (length 4)
+function main(): int32 {
+    let s: String = "hola";
+    println(s.substring(2, 9));
+    return 0;
+}

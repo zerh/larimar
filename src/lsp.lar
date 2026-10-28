@@ -1,0 +1,465 @@
+// lsp: larimar lsp, the language server editors start (Language Server Protocol, JSON-RPC on stdin and
+// stdout, each message after a "Content-Length: N" header).
+//
+// The server keeps the texts of the open documents (docstore.lar, freed when they change) and nothing
+// else. Each question (the errors of a file, hover, go to definition, ...) is answered by a new process:
+// a fork() of the server that links and analyzes the program with the editor's texts, writes its answer
+// to a pipe and ends. So an analysis never leaves memory behind, never sees the state of the one before,
+// and a crash only loses one answer. Where fork() does not exist (Windows), or with
+// LARIMAR_LSP_NO_FORK=1, the question goes to a new `larimarc lsp-worker` through two files.
+//
+// The errors are computed when the editor stops typing (no message for a moment) for the file that
+// changed last, and published for every file of its program.
+
+import std.os;
+import std.path as Paths;
+import std.io.files as Files;
+import std.io.console as Console;
+import std.json as Json;
+import std.json { JsonError };
+import std.io.files { IoError };
+import session { analyzeFile, projectMain };
+import docstore { setDocument, removeDocument, document, documentCount, documentPath };
+import ide {
+    hoverJson, definitionJson, referencesJson, symbolsJson, completionJson, signatureJson, diagnosticsJson,
+    prepareCompletion, pathOfUri, fileIndex
+};
+
+c_code {
+    #ifndef _WIN32
+    #include <unistd.h>
+    #include <poll.h>
+    #include <sys/types.h>
+    #include <sys/wait.h>
+    #endif
+    #include <stdlib.h>
+
+    #ifndef _WIN32
+    static int lm_lsp_pipe[2] = { -1, -1 };     /* (Windows has no fork: the worker is a process) */
+    #endif
+
+    /* fork with a pipe from the child: 0 in the child, its pid in the server, -1 if it cannot */
+    static int32_t lm_lsp_fork(void) {
+    #ifdef _WIN32
+        return -1;
+    #else
+        fflush(stdout);
+        fflush(stderr);
+        if (pipe(lm_lsp_pipe) != 0) return -1;
+        pid_t p = fork();
+        if (p < 0) {
+            close(lm_lsp_pipe[0]);
+            close(lm_lsp_pipe[1]);
+            return -1;
+        }
+        if (p == 0) {
+            close(lm_lsp_pipe[0]);
+            dup2(2, 1);                  /* stdout is the editor's: nothing the analysis prints goes there */
+            alarm(60);                   /* an analysis that never ends must not stay forever */
+            return 0;
+        }
+        close(lm_lsp_pipe[1]);
+        return (int32_t)p;
+    #endif
+    }
+
+    /* in the child: writes the answer and ends */
+    static void lm_lsp_send(const char* text, int32_t len) {
+    #ifndef _WIN32
+        size_t done = 0;
+        while (done < (size_t)len) {
+            ssize_t k = write(lm_lsp_pipe[1], text + done, (size_t)len - done);
+            if (k <= 0) break;
+            done += (size_t)k;
+        }
+        close(lm_lsp_pipe[1]);
+        _exit(0);
+    #endif
+    }
+
+    /* in the child: ends without answering, with a code for the one waiting */
+    static void lm_lsp_quit(int32_t code) {
+    #ifndef _WIN32
+        _exit(code);
+    #endif
+    }
+
+    /* in the server: everything the child wrote ("" if it ended without answering) */
+    static const char* lm_lsp_receive(RtMem* m, int32_t pid) {
+        RtSb sb = rt_sb_mem(m, 0);
+        rt_sb_add(&sb, "", 0);
+    #ifndef _WIN32
+        char buf[65536];
+        for (;;) {
+            ssize_t k = read(lm_lsp_pipe[0], buf, sizeof buf);
+            if (k < 0 && errno == EINTR) continue;
+            if (k <= 0) break;
+            rt_sb_add(&sb, buf, (int32_t)k);
+        }
+        close(lm_lsp_pipe[0]);
+        int status = 0;
+        while (waitpid((pid_t)pid, &status, 0) < 0 && errno == EINTR) {}
+    #endif
+        return sb.buf;
+    }
+
+    /*
+     * In the child: one more process tries first (the program of the project, which may not reach the
+     * file). 0: this is that process; 1: it answered, so the child ends; 2: it could not.
+     */
+    static int32_t lm_lsp_attempt(void) {
+    #ifdef _WIN32
+        return 2;
+    #else
+        fflush(stderr);
+        pid_t p = fork();
+        if (p < 0) return 2;
+        if (p == 0) return 0;
+        int status = 0;
+        while (waitpid(p, &status, 0) < 0 && errno == EINTR) {}
+        return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 1 : 2;
+    #endif
+    }
+
+    /* whether a message arrives on stdin within ms milliseconds */
+    static bool lm_lsp_waiting(int32_t ms) {
+    #ifdef _WIN32
+        return false;
+    #else
+        struct pollfd p;
+        p.fd = 0;
+        p.events = POLLIN;
+        p.revents = 0;
+        return poll(&p, 1, ms) > 0;
+    #endif
+    }
+
+    /* stdin without a buffer of its own, so poll() sees every byte that has not been read */
+    static void lm_lsp_unbuffered(void) { setvbuf(stdin, NULL, _IONBF, 0); }
+
+    /* the file whose errors are still to be published */
+    static char* lm_lsp_pending;
+    static void lm_lsp_set_pending(const char* path) {
+        free(lm_lsp_pending);
+        lm_lsp_pending = NULL;
+        if (path[0]) {
+            size_t n = strlen(path);
+            lm_lsp_pending = (char*)malloc(n + 1);
+            if (lm_lsp_pending) memcpy(lm_lsp_pending, path, n + 1);
+        }
+    }
+    static const char* lm_lsp_get_pending(void) { return lm_lsp_pending ? lm_lsp_pending : ""; }
+
+    #ifdef _WIN32
+    #include <process.h>
+    static int32_t lm_lsp_pid(void) { return (int32_t)_getpid(); }
+    #else
+    static int32_t lm_lsp_pid(void) { return (int32_t)getpid(); }
+    #endif
+}
+
+extern function lm_lsp_fork(): int32;
+extern function lm_lsp_send(text: String, length: int32): void;
+extern function lm_lsp_quit(code: int32): void;
+extern function lm_lsp_receive(m: byte[*], pid: int32): String;
+extern function lm_lsp_attempt(): int32;
+extern function lm_lsp_waiting(ms: int32): bool;
+extern function lm_lsp_unbuffered(): void;
+extern function lm_lsp_set_pending(path: String): void;
+extern function lm_lsp_get_pending(): String;
+extern function lm_lsp_pid(): int32;
+
+const VERSION: String = "0.1";
+const QUIET_MS: int32 = 300;             // how long the editor must stop typing before the errors
+
+// =====================================================================================
+// Messages
+// =====================================================================================
+
+/** The next message's body, or null when the editor closed the input. */
+function readMessage(): String? {
+    let length: int32 = -1;
+    while (true) {
+        let line: String? = Console.readLine();
+        if (line == null) { return null; }
+        if (line! == "") {
+            if (length >= 0) { break; }
+            continue;
+        }
+        let colon: int32? = line!.indexOf(":");
+        if (colon != null && line!.substring(0, colon!).trim().toLowerCase() == "content-length") {
+            length = (line!.substring(colon! + 1).trim().toInt() ?? -1) as int32;
+        }
+    }
+    let body: String = Console.read(length);
+    if (Console.lastCount() < length) { return null; }
+    return body;
+}
+
+function send(body: String): void {
+    Console.write("Content-Length: ${body.length}\r\n\r\n");
+    Console.write(body);
+    Console.flush();
+}
+
+function respond(id: String, result: String): void {
+    send("{\"jsonrpc\":\"2.0\",\"id\":${id},\"result\":${result}}");
+}
+
+function respondError(id: String, code: int32, message: String): void {
+    send("{\"jsonrpc\":\"2.0\",\"id\":${id},\"error\":{\"code\":${code},\"message\":${Json.quote(message)}}}");
+}
+
+function notify(method: String, params: String): void {
+    send("{\"jsonrpc\":\"2.0\",\"method\":${Json.quote(method)},\"params\":${params}}");
+}
+
+function log(text: String): void { Console.printError("[larimar lsp] ${text}"); }
+
+function capabilities(): String {
+    let sync: String = "\"textDocumentSync\":{\"openClose\":true,\"change\":1,\"save\":{\"includeText\":false}}";
+    let simple: String = "\"hoverProvider\":true,\"definitionProvider\":true,\"referencesProvider\":true,\"documentSymbolProvider\":true";
+    let completion: String = "\"completionProvider\":{\"triggerCharacters\":[\".\"]}";
+    let signature: String = "\"signatureHelpProvider\":{\"triggerCharacters\":[\"(\",\",\"]}";
+    return "{\"capabilities\":{${sync},${simple},${completion},${signature}},\"serverInfo\":{\"name\":\"larimar\",\"version\":\"${VERSION}\"}}";
+}
+
+/** The normalized path of a message's text document. */
+function docPath(msg: Any): String {
+    let uri: String = msg.params.textDocument.uri as String ?? "";
+    return Paths.normalize(Paths.absolute(pathOfUri(uri)));
+}
+
+// =====================================================================================
+// The server
+// =====================================================================================
+
+let forking: bool = true;
+
+/** larimar lsp */
+public function serve(): int32 {
+    Console.binaryMode();
+    lm_lsp_unbuffered();
+    forking = os.platform() != "windows" && (os.env("LARIMAR_LSP_NO_FORK") ?? "") != "1";
+    let shutdown: bool = false;
+    while (true) {
+        // the errors, once the editor stops typing
+        if (lm_lsp_get_pending() != "" && !lm_lsp_waiting(QUIET_MS)) {
+            publish(lm_lsp_get_pending());
+            lm_lsp_set_pending("");
+        }
+        let body: String? = readMessage();
+        if (body == null) { return shutdown ? 0 : 1; }
+        let msg: Any = {};
+        try {
+            msg = Json.parse(body!);
+        } catch (JsonError e) {
+            log("a message that is not JSON");
+            continue;
+        }
+        let method: String = msg.method as String ?? "";
+        let hasId: bool = msg.containsKey("id") && msg.id != null;
+        let id: String = hasId ? Json.stringify(msg.id) : "null";
+        switch (method) {
+            case "initialize" -> respond(id, capabilities());
+            case "initialized" -> {}
+            case "shutdown" -> {
+                shutdown = true;
+                respond(id, "null");
+            }
+            case "exit" -> { return shutdown ? 0 : 1; }
+            case "textDocument/didOpen" -> {
+                let path: String = docPath(msg);
+                setDocument(path, msg.params.textDocument.text as String ?? "");
+                lm_lsp_set_pending(path);
+            }
+            case "textDocument/didChange" -> {
+                let path: String = docPath(msg);
+                let changes: Any = msg.params.contentChanges;
+                if (changes.length > 0) {
+                    setDocument(path, changes[changes.length - 1].text as String ?? "");
+                    lm_lsp_set_pending(path);
+                }
+            }
+            case "textDocument/didSave" -> lm_lsp_set_pending(docPath(msg));
+            case "textDocument/didClose" -> removeDocument(docPath(msg));
+            case "textDocument/hover", "textDocument/definition", "textDocument/references",
+                 "textDocument/documentSymbol", "textDocument/completion", "textDocument/signatureHelp" -> {
+                respond(id, ask(body!));
+            }
+            case "$/cancelRequest", "$/setTrace", "workspace/didChangeConfiguration", "workspace/didChangeWatchedFiles" -> {}
+            default -> {
+                if (hasId) { respondError(id, -32601, "not supported: ${method}"); }
+            }
+        }
+    }
+    return 0;
+}
+
+/** Publishes the errors of the program a file belongs to. */
+function publish(path: String): void {
+    let answer: String = ask("{\"method\":\"larimar/diagnostics\",\"path\":${Json.quote(path)}}");
+    if (answer == "null") { return; }
+    for (line in answer.split("\n")) {
+        if (line.trim() != "") { notify("textDocument/publishDiagnostics", line); }
+    }
+}
+
+/** The answer (JSON) to a message, from a new process. */
+function ask(body: String): String {
+    if (forking) {
+        let pid: int32 = lm_lsp_fork();
+        if (pid == 0) {
+            let out: String = answerInChild(body);
+            lm_lsp_send(out, out.length);
+        }
+        if (pid > 0) {
+            let got: String = lm_lsp_receive(pid);
+            return got == "" ? "null" : got.clone();
+        }
+        log("fork() failed; using lsp-worker");
+        forking = false;
+    }
+    return askWorker(body);
+}
+
+/** In the forked process: analyze and answer. */
+function answerInChild(body: String): String {
+    let msg: Any = parsed(body);
+    let path: String = pathOf(msg);
+    let main: String = projectMain(path);
+    if (main != path) {
+        let tried: int32 = lm_lsp_attempt();
+        if (tried == 0) {                       // the project's program: answer only if it reaches the file
+            let out: String? = answer(msg, path, main);
+            if (out == null) { lm_lsp_quit(3); }
+            lm_lsp_send(out!, out!.length);
+        }
+        if (tried == 1) { lm_lsp_quit(0); }
+    }
+    return answer(msg, path, path) ?? "null";
+}
+
+function parsed(body: String): Any {
+    try {
+        return Json.parse(body);
+    } catch (JsonError e) {
+        return {};
+    }
+}
+
+function pathOf(msg: Any): String {
+    let p: String? = msg.path as String;
+    if (p != null) { return p!; }
+    return docPath(msg);
+}
+
+/** The answer after analyzing `main`, or null when that program does not reach the file. */
+function answer(msg: Any, path: String, main: String): String? {
+    let method: String = msg.method as String ?? "";
+    let line: int32 = (msg.params.position.line as int64 ?? 0) as int32;
+    let character: int32 = (msg.params.position.character as int64 ?? 0) as int32;
+    if (method == "textDocument/completion" || method == "textDocument/signatureHelp") {
+        if (document(path) == null) {
+            let text: String? = readFile(path);
+            if (text != null) { setDocument(path, text!); }
+        }
+        prepareCompletion(path, line, character, method == "textDocument/signatureHelp");
+    }
+    analyzeFile(main, Paths.parent(main));
+    if (fileIndex(path) < 0) { return null; }
+    switch (method) {
+        case "larimar/diagnostics" -> { return diagnosticsJson(path); }
+        case "textDocument/hover" -> { return hoverJson(path, line, character); }
+        case "textDocument/definition" -> { return definitionJson(path, line, character); }
+        case "textDocument/references" -> {
+            let withDecl: bool = msg.params.context.includeDeclaration as bool ?? true;
+            return referencesJson(path, line, character, withDecl);
+        }
+        case "textDocument/documentSymbol" -> { return symbolsJson(path); }
+        case "textDocument/completion" -> { return completionJson(path, line, character); }
+        case "textDocument/signatureHelp" -> { return signatureJson(path); }
+        default -> { return "null"; }
+    }
+}
+
+function readFile(path: String): String? {
+    try {
+        return Files.readString(path);
+    } catch (IoError e) {
+        return null;
+    }
+}
+
+// =====================================================================================
+// Without fork(): larimarc lsp-worker <request.json> <response.json>
+// =====================================================================================
+
+let workerCount: int32 = 0;
+
+function askWorker(body: String): String {
+    workerCount += 1;
+    let tmp: String = os.env("TEMP") ?? os.env("TMPDIR") ?? "/tmp";
+    let base: String = Paths.join(tmp, "larimar-lsp-${lm_lsp_pid()}-${workerCount}");
+    let req: String = "${base}-request.json";
+    let resp: String = "${base}-response.json";
+    let sb: StringBuilder = {};
+    sb.add("{\"message\":");
+    sb.add(body);
+    sb.add(",\"documents\":{");
+    for (i in 0..documentCount()) {
+        if (i > 0) { sb.add(","); }
+        let p: String = documentPath(i);
+        sb.add("${Json.quote(p)}:${Json.quote(document(p) ?? "")}");
+    }
+    sb.add("}}");
+    try {
+        Files.writeString(req, sb.toString());
+    } catch (IoError e) {
+        log("cannot write ${req}");
+        return "null";
+    }
+    os.run("\"${selfPath()}\" lsp-worker \"${req}\" \"${resp}\" ${quiet()}");
+    let out: String = readFile(resp) ?? "null";
+    try { Files.delete(req); } catch (IoError e) {}
+    try { Files.delete(resp); } catch (IoError e) {}
+    return out.trim() == "" ? "null" : out.clone();
+}
+
+/** The worker's standard output goes to the standard error: the standard output is the editor's. */
+function quiet(): String { return "1>&2"; }
+
+function selfPath(): String {
+    let exe: String = os.platform() == "windows" ? "larimarc.exe" : "larimarc";
+    return Paths.join(os.programDir(), exe);
+}
+
+/** larimarc lsp-worker: answers one question written to a file by the server. */
+public function worker(reqPath: String, respPath: String): int32 {
+    let text: String = readFile(reqPath) ?? "";
+    let req: Any = parsed(text);
+    let docs: Any = req.documents;
+    for (p, t in docs.fields) { setDocument(p, t as String ?? ""); }
+    let msg: Any = req.message;
+    let path: String = pathOf(msg);
+    let alone: bool = req.alone as bool ?? false;
+    let main: String = alone ? path : projectMain(path);
+    let out: String? = answer(msg, path, main);
+    if (out == null && alone) { out = "null"; }
+    if (out == null) {
+        // the project's program does not reach the file: one more worker, with the file as the program
+        req.alone = true;
+        try {
+            Files.writeString(reqPath, Json.stringify(req));
+        } catch (IoError e) {
+            return 1;
+        }
+        return os.run("\"${selfPath()}\" lsp-worker \"${reqPath}\" \"${respPath}\" ${quiet()}");
+    }
+    try {
+        Files.writeString(respPath, out!);
+    } catch (IoError e) {
+        return 1;
+    }
+    return 0;
+}

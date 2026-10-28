@@ -1,0 +1,24 @@
+// expect: run
+// output: 7
+// output: 12
+// c-has: sumar
+// El c_code del programa se copia entero, aunque Larimar no use cada cosa directamente
+// (aquí, un puntero a función global que solo usa otra función de C).
+c_code {
+    static int32_t sumar(int32_t a, int32_t b) { return a + b; }
+    static int32_t multiplicar(int32_t a, int32_t b) { return a * b; }
+
+    int32_t (*some_operation)(int32_t, int32_t) = sumar;
+
+    static void use_multiply(void) { some_operation = multiplicar; }
+}
+
+extern function some_operation(a: int32, b: int32): int32;
+extern function use_multiply(): void;
+
+function main(): int32 {
+    println("${some_operation(3, 4)}");
+    use_multiply();
+    println("${some_operation(3, 4)}");
+    return 0;
+}

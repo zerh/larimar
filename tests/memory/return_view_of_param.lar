@@ -1,0 +1,14 @@
+// expect: run
+// output: hol|mun
+// output: hola
+// Una función que devuelve una vista de su parámetro: la vista vive lo que vive el original.
+function first3(s: String): String { return s.substring(0, 3); }
+function clean(s: String): String { return s.trim(); }
+function main(): int32 {
+    let a: String = "hola mundo".toUpperCase().toLowerCase();
+    let b: String = first3(a);
+    let c: String = first3(a.substring(5));
+    println("${b}|${c}");
+    println(clean("   hola   "));
+    return 0;
+}

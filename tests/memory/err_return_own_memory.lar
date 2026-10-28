@@ -1,0 +1,8 @@
+// expect: error which is freed when the function returns
+// Devolver algo creado en una memoria propia que muere al salir de la función.
+function make(): String {
+    let memory: byte[*] = [] in heap;
+    let s: String = "hola".toUpperCase() in memory;
+    return s;
+}
+function main(): int32 { println(make()); return 0; }

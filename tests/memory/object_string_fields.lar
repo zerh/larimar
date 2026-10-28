@@ -1,0 +1,16 @@
+// expect: run
+// output: Ana (3) Ana!
+// Un objeto con campos de texto creados: viven en la memoria del objeto.
+class Person {
+    let name: String;
+    let visits: int32 = 0;
+    function shout(): String { return "${self.name}!"; }
+    function visit(): void { self.visits += 1; }
+}
+function create(n: String): Person { return Person { name: n.trim() }; }
+function main(): int32 {
+    let p: Person = create("  Ana  ");
+    for (i in 0..3) { p.visit(); }
+    println("${p.name} (${p.visits}) ${p.shout()}");
+    return 0;
+}

@@ -1,0 +1,14 @@
+// expect: run
+// output: 2 uno-1 dos-2 true
+// Una memoria propia: lo creado ahí sobrevive al bloque donde se creó.
+function main(): int32 {
+    let memory: byte[*] = [] in heap;
+    let kept: String[*] = [] in memory;
+    {
+        let a: String = "uno-${1}" in memory;
+        kept.push(a);
+        kept.push("dos-${2}" in memory);
+    }
+    println("${kept.length} ${kept[0]} ${kept[1]} ${memory.length > 0}");
+    return 0;
+}

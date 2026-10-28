@@ -1,0 +1,11 @@
+// expect: run
+// output: 8080 x-1 3
+// Un Any con valores creados anidados.
+function config(n: int32): Any {
+    return { port: 8080, name: "x-${n}", list: { 1, 2, "tres".toUpperCase() } };
+}
+function main(): int32 {
+    let c: Any = config(1);
+    println("${c.port as int32 ?? 0} ${c.name as String ?? ""} ${c.list.length}");
+    return 0;
+}

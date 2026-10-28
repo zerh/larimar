@@ -1,0 +1,199 @@
+// std.io.streams: bytes from anywhere, and text on top of them.
+//
+//   import std.io.streams { InputStream, OutputStream, Closeable, MemoryInputStream, MemoryOutputStream, Reader, copy };
+//
+//   let lines: Reader = { from: open("notes.txt") };          // a File is an InputStream
+//   let line: String? = lines.readLine();
+//
+//   let out: MemoryOutputStream = {};
+//   copy(MemoryInputStream { data: "hello" }, out);
+//   println(out.toString());
+//
+// A File, the console (std.io.console) and the memory streams below are streams. Only what holds
+// something of the system (a File) is Closeable; it also closes itself when its memory is freed.
+//
+// Memory: reading and copying ask the system for memory only where they must. A Reader has one buffer
+// for its whole life, and a line is created once, at its exact size, wherever the caller puts the
+// result. So reading a file of any size line by line can use a fixed buffer on the stack:
+//
+//   while (true) {
+//       let scratch: byte[4096] = [];                     // on the stack: no malloc in the loop
+//       let line: String? = lines.readLine() in scratch;  // the line is created in scratch
+//       if (line == null) { break; }
+//       ...
+//   }
+
+import std.io.files { IoError };
+
+/** The size of the buffers of Reader and copy(). */
+const CHUNK: int32 = 4096;
+
+/** Where bytes are read from. */
+public interface InputStream {
+    /** Fills buffer from its start; returns how many bytes it read, 0 when nothing is left. */
+    function read(buffer: byte[]): int32 throws IoError;
+}
+
+/** Where bytes are written. */
+public interface OutputStream {
+    /** Writes all of them, or throws. */
+    function write(bytes: byte[]): void throws IoError;
+    /** Makes sure what was written has arrived (nothing to do for what has no buffer). */
+    function flush(): void throws IoError;
+}
+
+/** Something that holds a resource of the system and can let it go before its memory is freed. */
+public interface Closeable {
+    function close(): void throws IoError;
+}
+
+/** Reads bytes (or UTF-8 text) already in memory. A String is bytes, so it serves for both. */
+public class MemoryInputStream implements InputStream {
+    let data: String;
+    let position: int32 = 0;
+
+    function read(buffer: byte[]): int32 throws IoError {
+        let count: int32 = 0;
+        while (count < buffer.length && self.position < self.data.length) {   // a memcpy, when Bytes.copy exists
+            buffer[count] = self.data[self.position];
+            count += 1;
+            self.position += 1;
+        }
+        return count;
+    }
+}
+
+/** Collects what is written, in its own memory (it must grow: collecting is its job). */
+public class MemoryOutputStream implements OutputStream {
+    let data: byte[*] = [];
+
+    function write(bytes: byte[]): void throws IoError {
+        for (b in bytes) { self.data.push(b); }                               // one append, when ByteBuffer exists
+    }
+
+    function flush(): void throws IoError {}                                  // already in memory
+
+    /** What was written, as text (a copy). */
+    function toString(): String { return stringOf(self.data); }
+
+    /** What was written, as bytes (a copy). */
+    function toByteArray(): byte[*] { return self.data.clone(); }
+}
+
+/**
+ * Text from any InputStream. Lines are cut only at \n (and a \r before it is dropped), so a UTF-8
+ * character is never split, even when its bytes arrive in two reads. It does not close what it reads:
+ * whoever opened it does (or its memory does).
+ *
+ * Its buffer lives with it (one allocation for its whole life). A line that is all in the buffer (almost
+ * every line) becomes a String with one copy, created where the caller puts the result; only a line that
+ * crosses the end of the buffer is gathered first.
+ */
+public class Reader implements InputStream {
+    let from: InputStream;
+    let chunk: byte[*] = buffer(CHUNK);
+    let count: int32 = 0;          // valid bytes in chunk
+    let position: int32 = 0;       // next byte to use
+    let finished: bool = false;
+
+    /** Makes sure there is a byte to read; false at the end. */
+    function more(): bool throws IoError {
+        if (self.position < self.count) { return true; }
+        if (self.finished) { return false; }
+        self.count = self.from.read(self.chunk);
+        self.position = 0;
+        if (self.count == 0) { self.finished = true; }
+        return self.count > 0;
+    }
+
+    /** The next line, without its end; null when nothing is left. */
+    function readLine(): String? throws IoError {
+        if (!self.more()) { return null; }
+        // the common case: the '\n' is in what the buffer already has -> one copy, nothing gathered
+        let end: int32 = self.position;
+        while (end < self.count && self.chunk[end] != '\n') { end += 1; }
+        if (end < self.count) {
+            let start: int32 = self.position;
+            self.position = end + 1;
+            let stop: int32 = end > start && self.chunk[end - 1] == '\r' ? end - 1 : end;
+            return stringOfRange(self.chunk, start, stop);
+        }
+        // the line goes on past the buffer: gather it (this list dies when readLine returns)
+        let line: byte[*] = [];
+        while (self.more()) {
+            let b: byte = self.chunk[self.position];
+            self.position += 1;
+            if (b == '\n') { break; }
+            line.push(b);
+        }
+        if (line.length > 0 && line[line.length - 1] == '\r') { line.pop(); }
+        return stringOfRange(line, 0, line.length);        // the exact size, in one allocation
+    }
+
+    /**
+     * Up to max bytes (and no more than buffer.length) into buffer, from its start: first what the Reader
+     * already has, then from its stream. 0 at the end. Lines and bytes can be mixed: what readLine() left
+     * in the buffer comes out here first (an HTTP body after its header lines, say).
+     */
+    function readInto(buffer: byte[], max: int32): int32 throws IoError {
+        let want: int32 = max < buffer.length ? max : buffer.length;
+        if (want <= 0) { return 0; }
+        if (self.position == self.count && want == buffer.length && !self.finished) {
+            let n: int32 = self.from.read(buffer);           // nothing buffered: straight into theirs
+            if (n == 0) { self.finished = true; }
+            return n;
+        }
+        if (!self.more()) { return 0; }
+        let n: int32 = 0;
+        while (n < want && self.position < self.count) {
+            buffer[n] = self.chunk[self.position];
+            n += 1;
+            self.position += 1;
+        }
+        return n;
+    }
+
+    /** As an InputStream: readInto(buffer, buffer.length). */
+    function read(buffer: byte[]): int32 throws IoError { return self.readInto(buffer, buffer.length); }
+
+    /** Everything that is left. */
+    function readAll(): String throws IoError {
+        let rest: byte[*] = [];
+        while (self.more()) {
+            rest.push(self.chunk[self.position]);
+            self.position += 1;
+        }
+        return stringOfRange(rest, 0, rest.length);
+    }
+}
+
+/**
+ * n zero bytes, to give to read(). (A `byte[4096] = []` would not do: a T[N] starts empty, and read()
+ * fills only up to the length of what it receives.)
+ */
+public function buffer(n: int32): byte[*] {
+    let b: byte[*] = [];
+    for (i in 0..n) { b.push(0); }
+    return b;
+}
+
+/**
+ * Copies everything from input to output, then flushes output. Closes neither. One buffer for the whole
+ * copy; a full read is written as it is, and the last, shorter piece goes through a buffer on the stack:
+ * copying a file of any size asks the system for memory once.
+ */
+public function copy(input: InputStream, output: OutputStream): void throws IoError {
+    let chunk: byte[*] = buffer(CHUNK);
+    while (true) {
+        let n: int32 = input.read(chunk);
+        if (n == 0) { break; }
+        if (n == chunk.length) {
+            output.write(chunk);                    // full: no copy
+            continue;
+        }
+        let part: byte[4096] = [];                  // the first n bytes, on the stack (a view, when slices of byte[] exist)
+        for (i in 0..n) { part.push(chunk[i]); }
+        output.write(part);
+    }
+    output.flush();
+}

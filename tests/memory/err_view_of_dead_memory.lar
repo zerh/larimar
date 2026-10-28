@@ -1,0 +1,12 @@
+// expect: error but 'keep' lives longer
+// Una vista de algo creado en una memoria interior no puede salir de ella.
+function main(): int32 {
+    let keep: String = "";
+    {
+        let memory: byte[*] = [] in heap;
+        let s: String = "abcdef".toUpperCase() in memory;
+        keep = s.substring(0, 2);
+    }
+    println(keep);
+    return 0;
+}

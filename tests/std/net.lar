@@ -1,0 +1,81 @@
+// expect: run
+// output: server got: hello
+// output: server got: ñandú 2
+// output: server got 5000 bytes
+// output: client got: HELLO | ñANDú 2 | 5000
+// output: refused: connection refused
+// std.net: a server and a client (in a thread) on 127.0.0.1, lines both ways with Reader, a block with copy().
+import std.net { TcpSocket, TcpListener, NetError, message };
+import std.io.streams { Reader, MemoryInputStream, copy };
+import std.io.files { IoError };
+
+synchronized class Result {
+    let text: String = "";
+    function set(t: String): void { self.text = t.clone(); }
+    function get(): String { return self.text; }
+}
+
+function client(port: int32, result: Result): void throws NetError {
+    let socket: TcpSocket = TcpSocket.connect("127.0.0.1", port);
+    socket.setTimeout(5000);
+    try {
+        socket.writeText("hello\n");
+        socket.writeText("ñandú 2\n");
+        copy(MemoryInputStream { data: "x".repeat(5000) }, socket);
+        socket.finishWriting();
+        let lines: Reader = { from: socket };
+        let a: String = lines.readLine() ?? "";
+        let b: String = lines.readLine() ?? "";
+        let c: String = lines.readLine() ?? "";
+        result.set("${a} | ${b} | ${c}");
+    } catch (IoError e) {
+        result.set("client: io");
+    }
+}
+
+function main(): int32 throws NetError {
+    let server: TcpListener = TcpListener.bind("127.0.0.1", 0);
+    let port: int32 = server.port();
+    let shared: byte[*] = [] in heap;
+    let result: Result = {} in shared;
+    {
+        let threads: byte[*] = [] in heap;
+        let t: Thread = {
+            run: () -> {
+                try {
+                    client(port, result);
+                } catch (NetError e) {
+                    result.set("client: ${message(e)}");
+                }
+            }
+        } in threads;
+        t.start();
+
+        let conn: TcpSocket = server.accept();
+        conn.setTimeout(5000);
+        try {
+        let lines: Reader = { from: conn };
+        let first: String = lines.readLine() ?? "";
+        let second: String = lines.readLine() ?? "";
+        println("server got: ${first}");
+        println("server got: ${second}");
+        let rest: String = lines.readAll();
+        println("server got ${rest.length} bytes");
+        conn.writeText("${first.toUpperCase()}\n${second.toUpperCase()}\n${rest.length}\n");
+        conn.close();
+        } catch (IoError e) {
+            println("server: io");
+        }
+    }   // waits for the client thread
+    println("client got: ${result.get()}");
+
+    let closed: int32 = port;
+    try { server.close(); } catch (IoError e) {}
+    try {
+        TcpSocket.connect("127.0.0.1", closed);
+        println("connected?");
+    } catch (NetError e) {
+        println("refused: ${message(e)}");
+    }
+    return 0;
+}

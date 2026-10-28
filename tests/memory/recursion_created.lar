@@ -1,0 +1,11 @@
+// expect: run
+// output: (((((x)))))
+// Recursión que construye texto: cada nivel crea en la memoria del que llama.
+function nest(s: String, n: int32): String {
+    if (n == 0) { return s; }
+    return "(${nest(s, n - 1)})";
+}
+function main(): int32 {
+    println(nest("x", 5));
+    return 0;
+}

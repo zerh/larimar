@@ -1,0 +1,806 @@
+// linker: modules (Linker.java). Each file is a module; `import a.b` loads a/b.lar.
+//
+// Every module is parsed, its top-level declarations are renamed with its path
+// (geo.shapes.Circle becomes geo__shapes__Circle; the main file keeps its names), every
+// reference is resolved through the module's imports, and everything is joined into one
+// program. The analyzer and the generator then see a single program with distinct names.
+//
+// Lines are file index * 1000000 + line; decode() turns them back into "file:line".
+
+import std.path as Paths;
+import std.io.files as Files;
+import std.io.files { IoError };
+import std.text { isIdentifierPart, isDigit };
+import ast {
+    Node, Expr, Stmt, TK, TypeRef, Program, CIncludeDecl, CCodeDecl, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ConstDecl,
+    Param, FunctionDecl, FieldDecl, StructDecl, ClassDecl, InterfaceDecl, NativeTypeDecl, EnumDecl, declName, isTypeDecl, VarDecl,
+    AssignStmt, ReturnStmt, ExprStmt, IfStmt, WhileStmt, ForStmt, ThrowStmt, YieldStmt, TryStmt, SwitchStmt,
+    BlockStmt, StringLit, Ident, Member, Index, Call, Unary, Binary, Ternary, IsExpr, Cast, Unwrap, Lambda, ObjectLit,
+    ArrayLit, Placed, Pattern, SwitchExpr, PT_NAME, PT_CONSTANT, PT_NULL
+};
+import parser { parseProgram, parseError };
+import docstore { document };
+
+public const FILE_LINES: int32 = 1000000;
+
+class Module {
+    let path: String;              // "geo.shapes"; "" for the main file
+    let prefix: String;            // "geo__shapes__"; "" for the main file
+    let index: int32;
+    let program: Program? = null;
+    let ownValues: Any;
+    let ownTypes: Any;
+    let publics: Any;
+    let values: Any;
+    let types: Any;
+    let aliases: Any;           // alias -> index in mods
+}
+
+function newModule(path: String in default, index: int32): Module {
+    let prefix: String = path != "" ? ("${path.replace(".", "__")}__" in default) : "";
+    return Module {
+        path, prefix, index, ownValues: {} in default, ownTypes: {} in default, publics: {} in default,
+        values: {} in default, types: {} in default, aliases: {} in default
+    } in default;
+}
+
+let mods: Module[*] = [] in default;           // every module, by load order
+let modIndex: Any = {} in default;               // path -> index in mods (loaded or failed)
+let order: Module[*] = [] in default;          // a module comes after the ones it imports
+let errors: String[*] = [] in default;
+let root: Module = newModule("", 0);
+let lang: Module? = null;
+/** The words of the program's sources: what it can use from std.lang. */
+let words: Any = {} in default;
+let rootDir: String = "";
+let stdDir: String = "std";
+
+/** The files of the program, by index (for messages and RT_FILES). */
+public let fileNames: String[*] = [] in default;
+/** Per file (same order as fileNames): its absolute path, and the text that was read (for larimar lsp). */
+public let filePaths: String[*] = [] in default;
+public let fileSources: String[*] = [] in default;
+
+/** Links the program whose main file is `mainFile` (shown as `mainShown`). Errors go to linkErrors. */
+public let linkErrors: String[*] = [] in default;
+
+public function link(mainShown: String in default, mainSource: String in default, sourceDir: String in default, std: String in default, mainPath: String in default): Program {
+    rootDir = sourceDir;
+    stdDir = std;
+    fileNames.push(mainShown);
+    filePaths.push(mainPath);
+    fileSources.push(mainSource);
+    mods.push(root);
+    modIndex[""] = 0;
+    parse(root, mainSource);
+    if (root.program != null) { visit(root); }
+    // the main file is std/lang.lar itself (open in the editor): it is the language, not loaded again
+    let langItself: bool = Paths.normalize(Paths.absolute(mainPath)) == Paths.normalize(Paths.absolute(moduleFile("std.lang")));
+    if (root.program != null && !langItself) { loadLang(); }
+    for (m in order) { tables(m); }
+    let prog: Program = Program { line: 1 } in default;
+    if (lang != null) {
+        for (d in lang!.program!.decls) {
+            rewriteDecl(lang!, d);
+            d.builtin = true;
+            prog.decls.push(d);
+        }
+    }
+    let seen: Any = {} in default;
+    for (m in order) {
+        for (d in m.program!.decls) {
+            if (langItself && m == root) { d.builtin = true; }       // its declarations are the language's
+            if (d is CIncludeDecl c) {
+                let key: String = "${c.header}|${c.platform}" in default;
+                if (seen[key] != null) { continue; }
+                seen[key] = 1;
+            }
+            rewriteDecl(m, d);
+            prog.decls.push(d);
+        }
+    }
+    for (e in errors) { linkErrors.push(e); }
+    return prog;
+}
+
+function dictFromSet(into: Any, names: Any in default, prefix: String): void {
+    for (k, v in names.fields) { into[k] = "${prefix}${k}"; }
+}
+
+function error(line: int32, msg: String): void {
+    errors.push("Module Error [Line ${line}]: ${msg}");
+}
+
+/**
+ * std.lang, cut down to the declarations the program mentions, and the ones those mention
+ * (comments after // do not count). A name the main file declares itself is its own.
+ */
+function loadLang(): void {
+    let source: String? = readSource(moduleFile("std.lang"));
+    if (source == null) {
+        error(1, "The language's own module was not found (looked for ${shownName("std.lang")}); set LARIMAR_HOME to the folder that has std/.");
+        return;
+    }
+    let m: Module = newModule("", fileNames.length);
+    let p: Program = parseProgram(source, m.index * FILE_LINES + 1);
+    if (parseError != "") {
+        errors.push(parseError);
+        return;
+    }
+    let lines: String[*] = source.split("\n") in default;
+    // String and Any have methods written here: every program may call them without naming the type
+    // (\"ab\".repeat(2)). What it does not call leaves the C later (prune).
+    words["String"] = true;
+    words["Any"] = true;
+    let all: Node[*] = p.decls;
+    let kept: bool[*] = [] in default;
+    for (d in all) { kept.push(false); }
+    let changed: bool = true;
+    while (changed) {
+        changed = false;
+        for (i, d in all) {
+            let name: String = declName(d);
+            if (d is FunctionDecl sf && sf.typeName != "") {          // a static function: when its type and its name are used
+                name = words.contains(sf.typeName) ? sf.name : "";
+            }
+            let shadowed: bool = (root.ownTypes.contains(name) || root.ownValues.contains(name)) && p.publics.contains(name);
+            if (kept[i] || name == "" || !words.contains(name) || shadowed) { continue; }
+            kept[i] = true;
+            changed = true;
+            for (k in d.line % FILE_LINES - 1..(i + 1 < all.length ? all[i + 1].line % FILE_LINES - 1 : lines.length)) { addWords(lines[k]); }
+        }
+    }
+    let cSymbols: Any = {} in default;
+    for (i, d in all) {
+        if (kept[i] && d is ExternFunctionDecl f) { cSymbols[f.name] = true; }
+    }
+    for (i, d in all) {
+        if (d is CCodeDecl c && cCodeUses(c.code, cSymbols)) { kept[i] = true; }
+    }
+    let decls: Node[*] = [] in default;
+    for (i, d in all) {
+        if (!kept[i]) { continue; }
+        decls.push(d);
+        if (isTypeDecl(d)) { m.ownTypes[declName(d)] = 1; } else { m.ownValues[declName(d)] = 1; }
+    }
+    if (decls.length == 0) { return; }
+    fileNames.push(shownName("std.lang"));
+    filePaths.push(Paths.absolute(moduleFile("std.lang")).clone() in default);
+    fileSources.push(source!);
+    p.decls = decls;
+    m.program = p;
+    for (n in p.publics) { m.publics[n] = 1; }
+    // public names keep their name (every program sees them); private helpers get a prefix, so a program
+    // can declare an isSpace of its own
+    for (k, v in m.ownValues.fields) { m.values[k] = m.publics.contains(k) ? k : "std__lang__${k}"; }
+    for (k, v in m.ownTypes.fields) { m.types[k] = m.publics.contains(k) ? k : "std__lang__${k}"; }
+    lang = m;
+}
+
+/** Adds the words of a text (not those of its comments) to `words`. */
+function addWords(text: String in default): void {
+    let i: int32 = 0;
+    while (i < text.length) {
+        let start: int32 = i;
+        if (text[i] == '/' && i + 1 < text.length && text[i + 1] == '/') {
+            while (i < text.length && text[i] != '\n') { i += 1; }
+        } else if (isIdentifierPart(text[i]) && !isDigit(text[i])) {
+            while (i < text.length && isIdentifierPart(text[i])) { i += 1; }
+            words[text.substring(start, i)] = true;
+        } else {
+            i += 1;
+        }
+    }
+}
+
+function cCodeUses(code: String in default, cSymbols: Any in default): bool {
+    let i: int32 = 0;
+    while (i < code.length) {
+        if (isIdentifierPart(code[i]) && !isDigit(code[i])) {
+            let start: int32 = i;
+            while (i < code.length && isIdentifierPart(code[i])) { i += 1; }
+            if (cSymbols.contains(code.substring(start, i))) { return true; }
+        } else {
+            i += 1;
+        }
+    }
+    return false;
+}
+
+function parse(m: Module in default, source: String in default): void {
+    addWords(source);
+    let p: Program = parseProgram(source, m.index * FILE_LINES + 1);
+    if (parseError != "") {
+        errors.push(parseError);
+        return;
+    }
+    m.program = p;
+    for (d in p.decls) {
+        let name: String = declName(d);
+        if (name == "") { continue; }
+        if (isTypeDecl(d)) { m.ownTypes[name] = 1; } else { m.ownValues[name] = 1; }
+    }
+    for (n in p.publics) { m.publics[n] = 1; }
+}
+
+/** The files read: sources live as long as the compiler. */
+let texts: byte[*] = [] in heap;
+
+/** The text of a file, or null if it cannot be read. */
+public function readSource(path: String): String? {
+    let open: String? = document(Paths.normalize(Paths.absolute(path)));     // the editor's text, if it is open there
+    if (open != null) { return open!.clone() in texts; }
+    try {
+        return Files.readString(path) in texts;
+    } catch (IoError e) {
+        return null;
+    }
+}
+
+public function isStd(path: String): bool { return path.startsWith("std."); }
+
+/** Where a module's file is. */
+function moduleFile(path: String): String {
+    return isStd(path) ? Paths.join(stdDir, "${path.substring(4).replace(".", "/")}.lar") : Paths.join(rootDir, "${path.replace(".", "/")}.lar");
+}
+
+/** How a module's file is shown in messages. */
+function shownName(path: String): String {
+    if (isStd(path)) { return "${path.replace(".", "/")}.lar"; }
+    return showFrom != "" ? Paths.relative(showFrom, moduleFile(path)) : moduleFile(path);
+}
+
+/** When set, module files are shown relative to this folder (or absolute when outside it). */
+public let showFrom: String = "";
+
+/** Loads the imports first, so each module comes after the ones it uses (and globals start in that order). */
+function visit(m: Module in default): void {
+    for (imp in m.program!.imports) {
+        if (modIndex[imp.path] != null) { continue; }       // already loaded, or a cycle: fine for declarations
+        let source: String? = readSource(moduleFile(imp.path));
+        if (source == null) {
+            error(imp.line, "Module '${imp.path}' not found (looked for ${shownName(imp.path)}).");
+            continue;
+        }
+        let dep: Module = newModule(imp.path, fileNames.length);
+        fileNames.push(shownName(imp.path));
+        filePaths.push(Paths.absolute(moduleFile(imp.path)).clone() in default);
+        fileSources.push(source!);
+        mods.push(dep);
+        modIndex[dep.path] = mods.length - 1;
+        parse(dep, source);
+        if (dep.program != null) { visit(dep); }
+    }
+    order.push(m);
+}
+
+// ---- what each module can see ----------------------------------------------------------
+
+function tables(m: Module in default): void {
+    if (lang != null && m != lang!) {     // the language's public names: visible everywhere, below the module's own
+        for (k, v in lang!.types.fields) {
+            if (lang!.publics.contains(k)) { m.types[k] = v; }
+        }
+        for (k, v in lang!.values.fields) {
+            if (lang!.publics.contains(k)) { m.values[k] = v; }
+        }
+    }
+    dictFromSet(m.values, m.ownValues, m.prefix);
+    dictFromSet(m.types, m.ownTypes, m.prefix);
+    for (imp in m.program!.imports) {
+        let ti: int32 = (modIndex[imp.path] as int32 ?? -1);
+        if (ti < 0) { continue; }
+        let target: Module = mods[ti];
+        if (target.program == null) { continue; }
+        if (target == m) {
+            error(imp.line, "A module cannot import itself.");
+            continue;
+        }
+        if (!imp.hasNames) {
+            let a: String = imp.alias;
+            if (m.values[a] != null || m.types[a] != null || m.aliases[a] != null) {
+                error(imp.line, "'${a}' is already used in this file; import the module with another name: import ${imp.path} as other;");
+            } else {
+                m.aliases[a] = ti;
+            }
+            continue;
+        }
+        for (n in imp.names) {
+            let found: bool = false;
+            if (target.ownValues[n] != null) {
+                found = true;
+                bring(m, m.values, n, target, "${target.prefix}${n}" in default, imp.line);
+            }
+            if (target.ownTypes[n] != null) {
+                found = true;
+                bring(m, m.types, n, target, "${target.prefix}${n}" in default, imp.line);
+            }
+            if (!found) { error(imp.line, "Module '${target.path}' has no '${n}'."); }
+        }
+    }
+}
+
+function bring(m: Module, into: Any, n: String in into, from: Module, mangled: String in into, line: int32): void {
+    if (from.publics[n] == null) {
+        error(line, "'${n}' is private to module '${from.path}'; mark it 'public' there to use it here.");
+    } else if (into[n] != null && (into[n] as String ?? "") != mangled) {
+        let last: String = from.path.substring((from.path.lastIndexOf(".") ?? -1) + 1);
+        error(line, "'${n}' is already defined in this file; import the module instead and write ${last}.${n}.");
+    } else {
+        into[n] = mangled;
+    }
+}
+
+// ---- renaming ---------------------------------------------------------------------------------
+// Declarations are renamed in place; an expression may be replaced (alias.name becomes the name).
+
+let rm: Module = root;                          // the module being rewritten
+let scopes: Any[*] = [] in default;
+let scopeDepth: int32 = 0;
+
+function push(): void {
+    if (scopeDepth < scopes.length) { scopes[scopeDepth] = {} in default; } else { scopes.push({} in default); }
+    scopeDepth += 1;
+}
+
+function pop(): void { scopeDepth -= 1; }
+
+function declare(n: String in default): void {
+    if (n != "" && scopeDepth > 0) { scopes[scopeDepth - 1][n] = 1; }
+}
+
+function local(n: String): bool {
+    let i: int32 = 0;
+    while (i < scopeDepth) {
+        if (scopes[i][n] != null) { return true; }
+        i += 1;
+    }
+    return false;
+}
+
+function rewriteDecl(m: Module in default, d: Node in default): void {
+    rm = m;
+    scopeDepth = 0;
+    let dn: String = declName(d);
+    let mapped: String = (isTypeDecl(d) ? m.types[dn] : m.values[dn]) as String ?? "";
+    let own: String = (lang != null && m == lang! && mapped != "" ? mapped : "${m.prefix}${dn}") in default;
+    switch (d) {
+        case FunctionDecl f -> {
+            if (f.typeName == "") {
+                function_(f, own);
+            } else {                                                 // static: Type.name, in the module of Type
+                if (m.ownTypes[f.typeName] == null) {
+                    error(f.line, "Static function '${f.typeName}.${f.name}' must be declared in the module that declares '${f.typeName}'.");
+                }
+                f.typeName = typeName(f.typeName, f.line);
+                function_(f, f.name);
+            }
+        }
+        case ConstDecl c -> {
+            c.name = own;
+            typeRef(c.type);
+            c.value = expr(c.value);
+        }
+        case VarDecl v -> {
+            v.name = own;
+            typeRef(v.type);
+            v.init = exprOpt(v.init);
+        }
+        case StructDecl s -> {
+            s.name = own;
+            fields(s.fields);
+            for (f in s.methods) { function_(f, f.name); }
+        }
+        case ClassDecl c -> {
+            c.name = own;
+            if (c.superName != "") { c.superName = typeName(c.superName, c.line); }
+            let ifs: String[*] = [] in default;
+            for (i in c.interfaces) { ifs.push(typeName(i, c.line)); }
+            c.interfaces = ifs;
+            fields(c.fields);
+            for (f in c.methods) { function_(f, f.name); }
+        }
+        case InterfaceDecl i -> {
+            i.name = own;
+            for (f in i.methods) { function_(f, f.name); }
+        }
+        case NativeTypeDecl t -> {
+            t.name = own;
+            for (f in t.methods) { function_(f, f.name); }
+        }
+        case EnumDecl e -> {
+            e.name = own;
+            for (v in e.variants) { params(v.fields); }
+        }
+        case CCodeDecl c -> { c.fromStd = (lang != null && m == lang!) || isStd(m.path); }
+        case ExternTypeDecl t -> {
+            t.name = own;
+            typeRef(t.func);
+            if (t.releasedBy != "") {            // the function that releases it: a name of this module (or one it sees)
+                let v: String = rm.values[t.releasedBy] as String ?? "";
+                if (v != "") { t.releasedBy = v; }
+            }
+        }
+        case ExternValueDecl v -> {
+            v.name = own;
+            typeRef(v.type);
+        }
+        case ExternFunctionDecl f -> {
+            let headers: bool = false;
+            for (x in m.program!.decls) {
+                if (x is CIncludeDecl || x is CCodeDecl) { headers = true; }
+            }
+            f.name = own;
+            params(f.params);
+            typeRef(f.ret);
+            f.prototype = !headers;
+        }
+        default -> {}
+    }
+}
+
+function function_(f: FunctionDecl in default, name: String in default): void {
+    push();
+    params(f.params);
+    for (p in f.params) { declare(p.name); }
+    block(f.body, false);
+    pop();
+    f.name = name;
+    typeRef(f.ret);
+    typeRef(f.throwsType);
+}
+
+function fields(fs: FieldDecl[*] in default): void {
+    for (f in fs) {
+        typeRef(f.type);
+        f.defaultValue = exprOpt(f.defaultValue);
+    }
+}
+
+function params(ps: Param[*] in default): void {
+    for (p in ps) { typeRef(p.type); }
+}
+
+function typeRef(t: TypeRef? in default): void {
+    if (t == null || t.rewritten) { return; }
+    t.rewritten = true;
+    if (t.kind == TK.Named) {
+        t.name = typeName(t.name, t.line);
+        return;
+    }
+    for (p in t.params) { typeRef(p); }
+    typeRef(t.inner);
+    t.size = exprOpt(t.size);
+}
+
+/** Shape, geo.Shape, Shape.Circle (enum variant), geo.Shape.Circle. */
+function typeName(name: String in default, line: int32): String {
+    let dot: int32? = name.indexOf(".");
+    let head: String = dot != null ? name.substring(0, dot) : name;
+    let rest: String = dot != null ? name.substring(dot) : "";
+    if (rm.types[head] != null) { return "${(rm.types[head] as String ?? "")}${rest}" in default; }
+    if (dot != null && rm.aliases[head] != null) {
+        let r: String = rest.substring(1);
+        let dot2: int32? = r.indexOf(".");
+        let member: String = dot2 != null ? r.substring(0, dot2) : r;
+        let mangled: String = exported(mods[(rm.aliases[head] as int32 ?? -1)], member, false, line);
+        return mangled == "" ? name : ("${mangled}${dot2 != null ? r.substring(dot2) : ""}" in default);
+    }
+    hidden(head, line);
+    return name;
+}
+
+/** A public name of another module: values first, then types ("" after an error). */
+function exported(from: Module, n: String, values: bool, line: int32): String {
+    let found: bool = (values && from.ownValues[n] != null) || from.ownTypes[n] != null;
+    if (!found) {
+        error(line, "Module '${from.path}' has no '${n}'.");
+        return "";
+    }
+    if (from.publics[n] == null) {
+        error(line, "'${n}' is private to module '${from.path}'; mark it 'public' there to use it here.");
+        return "";
+    }
+    return "${from.prefix}${n}" in default;
+}
+
+/** Modules do not see the main file's declarations (nobody imports the main file). */
+function hidden(n: String, line: int32): void {
+    if (rm != root && (root.ownValues[n] != null || root.ownTypes[n] != null)) {
+        error(line, "'${n}' is declared in the main file, which modules cannot see; move it to a module and import it.");
+    }
+}
+
+// ---- statements
+
+function block(body: Stmt[*] in default, newScope: bool): void {
+    if (newScope) { push(); }
+    for (s in body) { stmt(s); }
+    if (newScope) { pop(); }
+}
+
+function stmt(s: Stmt in default): void {
+    switch (s) {
+        case VarDecl v -> {
+            typeRef(v.type);
+            v.init = exprOpt(v.init);
+            declare(v.name);
+        }
+        case AssignStmt a -> {
+            a.target = expr(a.target);
+            a.value = expr(a.value);
+        }
+        case ReturnStmt r -> { r.value = exprOpt(r.value); }
+        case ExprStmt e -> { e.expr = expr(e.expr); }
+        case ThrowStmt t -> { t.value = expr(t.value); }
+        case YieldStmt y -> { y.value = expr(y.value); }
+        case SwitchStmt sw -> switchExpr(sw.switchExpr);
+        case IfStmt i -> {
+            i.cond = expr(i.cond);
+            block(i.thenBody, true);
+            block(i.elseBody, true);
+        }
+        case WhileStmt w -> {
+            w.cond = expr(w.cond);
+            block(w.body, true);
+        }
+        case ForStmt f -> {
+            f.iterable = expr(f.iterable);
+            f.rangeEnd = exprOpt(f.rangeEnd);
+            push();
+            declare(f.indexName);
+            declare(f.varName);
+            block(f.body, false);
+            pop();
+        }
+        case TryStmt t -> {
+            block(t.body, true);
+            for (c in t.catches) {
+                push();
+                declare(c.varName);
+                c.typeName = typeName(c.typeName, c.line);
+                block(c.body, false);
+                pop();
+            }
+        }
+        case BlockStmt b -> block(b.body, true);
+        default -> {}
+    }
+}
+
+// ---- expressions
+
+function exprOpt(e: Expr? in default): Expr? { return e == null ? null : expr(e); }
+
+/** The expression renamed; module.name comes back as the name itself. */
+function expr(e: Expr in default): Expr {
+    if (e.rewritten) { return e is Member m && m.replaced != null ? m.replaced! : e; }
+    e.rewritten = true;
+    switch (e) {
+        case Ident id -> identName(id);
+        case Member m -> {
+            if (m.object is Ident obj && isAlias(obj.name)) {          // alias.name is the name itself
+                let name: String = exported(mods[(rm.aliases[obj.name] as int32 ?? -1)], m.name, true, m.line);
+                let id: Ident = Ident { line: m.line, name: name == "" ? m.name : name, rewritten: true } in default;
+                m.replaced = id;
+                return id;
+            }
+            m.object = expr(m.object);
+        }
+        case Index x -> {
+            x.object = expr(x.object);
+            x.index = expr(x.index);
+        }
+        case Binary b -> {
+            b.left = expr(b.left);
+            b.right = expr(b.right);
+        }
+        case Ternary t -> {
+            t.cond = expr(t.cond);
+            t.then = expr(t.then);
+            t.otherwise = expr(t.otherwise);
+        }
+        case IsExpr x -> {
+            x.expr = expr(x.expr);
+            x.typeName = x.typeName.contains(".") ? typeName(x.typeName, x.line) : rm.types[x.typeName] as String ?? x.typeName;
+            declare(x.binding);
+        }
+        case Call c -> {
+            c.callee = expr(c.callee);
+            let args: Expr[*] = [] in default;
+            for (a in c.args) { args.push(expr(a)); }
+            c.args = args;
+        }
+        case Unary u -> { u.operand = expr(u.operand); }
+        case Unwrap u -> { u.expr = expr(u.expr); }
+        case Cast c -> {
+            c.expr = expr(c.expr);
+            typeRef(c.type);
+        }
+        case Lambda l -> {
+            params(l.params);
+            push();
+            for (p in l.params) { declare(p.name); }
+            block(l.body, false);
+            pop();
+        }
+        case ObjectLit o -> {
+            if (o.typeName != "") { o.typeName = typeName(o.typeName, o.line); }
+            for (f in o.fields) { f.value = expr(f.value); }
+        }
+        case ArrayLit a -> {
+            let elems: Expr[*] = [] in default;
+            for (x in a.elems) { elems.push(expr(x)); }
+            a.elems = elems;
+        }
+        case StringLit s -> {
+            let exprs: Expr[*] = [] in default;
+            for (x in s.exprs) { exprs.push(expr(x)); }
+            s.exprs = exprs;
+        }
+        case Placed p -> {
+            p.expr = expr(p.expr);
+            p.memory = exprOpt(p.memory);
+            typeRef(p.buffer);
+        }
+        case SwitchExpr sw -> switchExpr(sw);
+        default -> {}
+    }
+    return e;
+}
+
+function switchExpr(sw: SwitchExpr in default): void {
+    sw.subject = expr(sw.subject);
+    for (c in sw.cases) {
+        push();
+        for (p in c.patterns) { pattern(p); }
+        c.guard = exprOpt(c.guard);
+        c.expr = exprOpt(c.expr);
+        if (c.hasBlock) { block(c.block, true); }
+        if (c.throwStmt != null) { c.throwStmt!.value = expr(c.throwStmt!.value); }
+        pop();
+    }
+}
+
+function isAlias(n: String): bool {
+    return !local(n) && rm.values[n] == null && rm.types[n] == null && rm.aliases[n] != null;
+}
+
+function identName(id: Ident in default): void {
+    let n: String = id.name;
+    if (local(n)) { return; }
+    let v: String = rm.values[n] as String ?? rm.types[n] as String ?? "";
+    if (v != "") {
+        id.name = v;
+        return;
+    }
+    if (rm.aliases[n] != null) {
+        error(id.line, "'${n}' is a module; use one of its names: ${n}.name");
+        return;
+    }
+    hidden(n, id.line);
+}
+
+/** A variant keeps its name; a type or a constant is renamed (variant lookup ignores a module prefix). */
+function pattern(p: Pattern in default): void {
+    if (p.kind == PT_NULL) { return; }
+    if (p.kind == PT_CONSTANT) {
+        p.constant = exprOpt(p.constant);
+        return;
+    }
+    let name: String = p.name;
+    if (name.contains(".")) {
+        name = typeName(name, p.line);
+    } else if (rm.types[name] != null) {
+        name = rm.types[name] as String ?? "";
+    } else if (p.kind == PT_NAME && !local(name) && rm.values[name] != null) {
+        name = rm.values[name] as String ?? "";
+    }
+    p.name = name;
+    declare(p.binding);
+    for (b in p.bindings) { declare(b); }
+}
+
+// ---- messages -------------------------------------------------------------------------------------
+
+/** "[Line 2000005]" -> "[src/geo.lar:5]", "line 7" -> "main.lar:7", and geo__Shape -> geo.Shape. */
+public function decode(msg: String): String {
+    let a: String = replaceLines(msg, "[Line ", true);
+    let b: String = replaceLines(a, "line ", false);
+    return b.replace("__", ".");
+}
+
+function replaceLines(msg: String, key: String, bracket: bool): String {
+    let sb: StringBuilder = {} in default;
+    let i: int32 = 0;
+    let done: int32 = 0;
+    while (true) {
+        let at: int32? = msg.indexOf(key, i);
+        if (at == null) { break; }
+        let j: int32 = at + key.length;
+        let k: int32 = j;
+        while (k < msg.length && isDigit(msg[k])) { k += 1; }
+        let ok: bool = k > j;
+        if (bracket) {
+            ok = ok && k < msg.length && msg[k] == ']';
+        } else {
+            ok = ok && (at == 0 || !isIdentifierPart(msg[at - 1])) && (k >= msg.length || !isIdentifierPart(msg[k]));
+        }
+        if (!ok) {
+            i = at + 1;
+            continue;
+        }
+        let n: int64 = msg.substring(j, k).toInt() ?? 0;
+        let file: int32 = (n / 1000000) as int32;
+        let name: String = "?";
+        if (file < fileNames.length) { name = fileNames[file]; }
+        sb.add(msg.substring(done, at));
+        if (bracket) {
+            sb.add("[${name}:${n % 1000000}]");
+            done = k + 1;
+        } else {
+            sb.add("${name}:${n % 1000000}");
+            done = k;
+        }
+        i = done;
+    }
+    sb.add(msg.substring(done));
+    return sb.toString();
+}
+
+// ---- for the editor (ide.lar) ----------------------------------------------------------------
+
+function moduleOfFile(index: int32): Module? {
+    for (m in mods) {
+        if (m.index == index) { return m; }
+    }
+    if (lang != null && lang!.index == index) { return lang; }
+    return null;
+}
+
+/** What a file can name: name -> its name after linking (its own, imported and the language's). */
+public function namesOfFile(index: int32): Any {
+    let out: Any = {} in default;
+    let m: Module? = moduleOfFile(index);
+    if (m == null) { return out; }
+    for (k, v in m!.values.fields) { out[k] = (v as String ?? k).clone() in default; }
+    for (k, v in m!.types.fields) { out[k] = (v as String ?? k).clone() in default; }
+    return out;
+}
+
+/** A name std.lang keeps to itself (its helpers): every file sees it, but the editor does not offer it. */
+public function isLangHelper(name: String): bool {
+    if (lang == null) { return false; }
+    let own: bool = lang!.ownValues[name] != null || lang!.ownTypes[name] != null;
+    return own && lang!.publics[name] == null;
+}
+
+/** The modules a file imports with a name: alias -> module path ("geo.shapes"). */
+public function aliasesOfFile(index: int32): Any {
+    let out: Any = {} in default;
+    let m: Module? = moduleOfFile(index);
+    if (m == null) { return out; }
+    for (k, v in m!.aliases.fields) {
+        let i: int32 = v as int32 ?? -1;
+        if (i >= 0 && i < mods.length) { out[k] = mods[i].path.clone() in default; }
+    }
+    return out;
+}
+
+/** The public names of a module, each with its name after linking. */
+public function publicsOfModule(path: String): Any {
+    let out: Any = {} in default;
+    let i: int32 = modIndex[path] as int32 ?? -1;
+    if (i < 0 || i >= mods.length) { return out; }
+    let m: Module = mods[i];
+    for (k, v in m.publics.fields) { out[k] = "${m.prefix}${k}" in default; }
+    return out;
+}
+
+/** The file of a module, from its path ("geo.shapes"), or "". */
+public function fileOfModule(path: String): String {
+    let i: int32 = modIndex[path] as int32 ?? -1;
+    if (i < 0 || i >= mods.length) { return ""; }
+    let idx: int32 = mods[i].index;
+    return idx >= 0 && idx < filePaths.length ? filePaths[idx] : "";
+}

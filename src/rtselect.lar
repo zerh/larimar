@@ -1,0 +1,356 @@
+// rtselect: only the runtime the program uses (Runtime.select in the Java version).
+//
+// The runtime is cut into paragraphs (blank lines outside braces and #if blocks; each #include is
+// one). A paragraph is kept when it defines a name the program uses, or a name a kept paragraph uses.
+// #ifdef RT_THREADS and #ifdef RT_FILES are decided here.
+
+import std.text { isIdentifierPart, isDigit };
+import runtime { RUNTIME, RUNTIME_ANY };
+
+/** What each standard header gives (enough for the runtime and for the generated code). */
+const HEADER_NAMES: String = "stdint.h stdbool.h stddef.h stdio.h stdlib.h string.h";
+const HEADER_STDINT: String = "int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t intptr_t uintptr_t INT8_MIN INT8_MAX INT16_MIN INT16_MAX INT32_MIN INT32_MAX INT64_MIN INT64_MAX UINT8_MAX UINT16_MAX UINT32_MAX UINT64_MAX SIZE_MAX";
+const HEADER_STDBOOL: String = "bool true false";
+const HEADER_STDDEF: String = "size_t NULL ptrdiff_t offsetof";
+const HEADER_STDIO: String = "FILE stdout stderr stdin printf fprintf snprintf sprintf fputs fputc puts putchar fwrite fread fflush fopen fclose fgets getchar EOF";
+const HEADER_STDLIB: String = "malloc calloc realloc free exit abort strtod strtol strtoll strtoul strtoull getenv system atoi";
+const HEADER_STRING: String = "memcpy memmove memset memcmp memchr strlen strcmp strncmp strchr strrchr strstr strpbrk strcpy strncpy strcat";
+
+function headerNames(i: int32): String {
+    return switch (i) {
+        case 0 -> HEADER_STDINT;
+        case 1 -> HEADER_STDBOOL;
+        case 2 -> HEADER_STDDEF;
+        case 3 -> HEADER_STDIO;
+        case 4 -> HEADER_STDLIB;
+        default -> HEADER_STRING;
+    };
+}
+
+/** A paragraph of the runtime. A comment-only paragraph is a heading. */
+class Unit {
+    let lines: String[*];
+    let defines: String[*] = [];
+    let uses: String[*] = [];
+    let include: bool = false;
+    let heading: bool = false;
+}
+
+/**
+ * The runtime the program needs, in the runtime's order. allHeaders: the program has its own C
+ * (c_code, extern), which may count on the standard headers.
+ */
+public function selectRuntime(program: String, threads: bool, files: bool, allHeaders: bool): String {
+    let units: Unit[*] = split(resolve("${RUNTIME}${RUNTIME_ANY}", threads, files));
+    // name -> the paragraphs that define it (a chain through defNext)
+    let head: Any = {};
+    let defUnit: int32[*] = [];
+    let defNext: int32[*] = [];
+    let heads: int32[*] = [];
+    for (i, u in units) {
+        for (d in u.defines) {
+            let slot: int32 = (head[d] as int32 ?? -1);
+            if (slot < 0) {
+                slot = heads.length;
+                heads.push(-1);
+                head[d] = slot;
+            }
+            defUnit.push(i);
+            defNext.push(heads[slot]);
+            heads[slot] = defUnit.length - 1;
+        }
+    }
+    let need: bool[*] = [];
+    for (u in units) { need.push(false); }
+    let work: int32[*] = [];
+    let wanted: Any = identifiers(program);
+    if (allHeaders) {
+        let i: int32 = 0;
+        while (i < 6) {
+            wanted[headerNames(i).split(" ")[0]] = true;
+            i += 1;
+        }
+    }
+    for (k, v in wanted.fields) { mark(k, head, heads, defUnit, defNext, need, work); }
+    let w: int32 = 0;
+    while (w < work.length) {     // a queue: the order does not change the result
+        for (name in units[work[w]].uses) { mark(name, head, heads, defUnit, defNext, need, work); }
+        w += 1;
+    }
+    let out: StringBuilder = {};
+    let lastInclude: bool = false;
+    for (i, u in units) {
+        let emit: bool = need[i];
+        if (u.heading) {          // a heading goes with the paragraphs under it
+            let j: int32 = i + 1;
+            while (j < units.length && !units[j].heading) {
+                if (need[j]) { emit = true; }
+                j += 1;
+            }
+        }
+        if (!emit) { continue; }
+        if (out.length() > 0 && !(lastInclude && u.include)) { out.add("\n"); }
+        for (l in u.lines) {
+            out.add(l);
+            out.add("\n");
+        }
+        lastInclude = u.include;
+    }
+    return out.toString();
+}
+
+function mark(name: String, head: Any, heads: int32[*], defUnit: int32[*], defNext: int32[*], need: bool[*], work: int32[*]): void {
+    let slot: int32 = (head[name] as int32 ?? -1);
+    if (slot < 0) { return; }
+    let e: int32 = heads[slot];
+    while (e >= 0) {
+        let u: int32 = defUnit[e];
+        if (!need[u]) {
+            need[u] = true;
+            work.push(u);
+        }
+        e = defNext[e];
+    }
+}
+
+/** Keeps the lines that apply: #ifdef RT_THREADS / RT_FILES (and their #else) are decided; other #if stay. */
+function resolve(text: String, threads: bool, files: bool): String[*] {
+    let out: String[*] = [];
+    // the open #if blocks: known (decided here), cond, and whether the lines around were kept
+    let known: bool[*] = [];
+    let cond: bool[*] = [];
+    let parent: bool[*] = [];
+    let top: int32 = 0;
+    let active: bool = true;
+    for (ln in text.split("\n")) {
+        let t: String = ln.trim();
+        if (t.startsWith("#ifdef ") || t.startsWith("#ifndef ") || t.startsWith("#if ")) {
+            let macro: String = "";
+            if (!t.startsWith("#if ")) { macro = t.substring((t.indexOf(" ") ?? 0) + 1).trim(); }
+            let k: bool = macro == "RT_THREADS" || macro == "RT_FILES";
+            let defined: bool = macro == "RT_THREADS" ? threads : files;
+            let c: bool = t.startsWith("#ifdef ") == defined;
+            if (top < known.length) {
+                known[top] = k;
+                cond[top] = c;
+                parent[top] = active;
+            } else {
+                known.push(k);
+                cond.push(c);
+                parent.push(active);
+            }
+            top += 1;
+            if (!k && active) { out.push(ln); }
+            active = active && (!k || c);
+            continue;
+        }
+        if ((t.startsWith("#else") || t.startsWith("#elif") || t.startsWith("#endif")) && top > 0) {
+            let f: int32 = top - 1;
+            if (t.startsWith("#endif")) {
+                top -= 1;
+                active = parent[f];
+                if (!known[f] && active) { out.push(ln); }
+                continue;
+            }
+            if (known[f]) {
+                cond[f] = !cond[f];
+                active = parent[f] && cond[f];
+            } else if (parent[f]) {
+                out.push(ln);
+            }
+            continue;
+        }
+        if (active) { out.push(ln); }
+    }
+    return out;
+}
+
+/** Paragraphs separated by blank lines (outside braces and #if blocks); each #include is one. */
+function split(lines: String[*]): Unit[*] {
+    let units: Unit[*] = [];
+    let cur: String[*] = [];
+    let braces: int32 = 0;
+    let pp: int32 = 0;
+    inComment = false;
+    for (ln in lines) {
+        let t: String = ln.trim();
+        if (braces == 0 && pp == 0 && (t.isEmpty() || t.startsWith("#include"))) {
+            if (cur.length > 0) { units.push(unit(cur, false)); }
+            cur = [];
+            if (!t.isEmpty()) { units.push(unit([ln], true)); }
+            continue;
+        }
+        cur.push(ln);
+        if (t.startsWith("#if")) { pp += 1; } else if (t.startsWith("#endif")) { pp -= 1; }
+        braces += braceDelta(ln);
+    }
+    if (cur.length > 0) { units.push(unit(cur, false)); }
+    return units;
+}
+
+/** Inside a block comment that started on an earlier line. */
+let inComment: bool = false;
+
+function braceDelta(ln: String): int32 {
+    let d: int32 = 0;
+    let i: int32 = 0;
+    while (i < ln.length) {
+        let c: byte = ln[i];
+        if (inComment) {
+            if (c == '*' && i + 1 < ln.length && ln[i + 1] == '/') {
+                inComment = false;
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+        if (c == '/' && i + 1 < ln.length && ln[i + 1] == '*') {
+            inComment = true;
+            i += 2;
+            continue;
+        }
+        if (c == '/' && i + 1 < ln.length && ln[i + 1] == '/') { break; }
+        if (c == '"' || c == '\'') {
+            i += 1;
+            while (i < ln.length && ln[i] != c) {
+                if (ln[i] == '\\') { i += 1; }
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+        if (c == '{') { d += 1; } else if (c == '}') { d -= 1; }
+        i += 1;
+    }
+    return d;
+}
+
+function unit(lines: String[*], include: bool): Unit {
+    let toks: String[*] = tokens(lines.join("\n"));
+    let u: Unit = Unit { lines, include };
+    if (include) {
+        let h: String = lines[0].trim();
+        h = h.substring((h.indexOf("<") ?? 0) + 1, h.indexOf(">") ?? h.length);
+        for (i, name in HEADER_NAMES.split(" ")) {
+            if (name == h) {
+                for (d in headerNames(i).split(" ")) { u.defines.push(d); }
+            }
+        }
+        return u;
+    }
+    let seen: Any = {};
+    for (t in toks) {
+        if (isName(t) && !seen.contains(t)) {
+            seen[t] = true;
+            u.uses.push(t);
+        }
+    }
+    let defs: Any = {};
+    let braces: int32 = 0;
+    let parens: int32 = 0;
+    let i: int32 = 0;
+    while (i < toks.length) {
+        let t: String = toks[i];
+        let prev: String = i > 0 ? toks[i - 1] : "";
+        let next: String = i + 1 < toks.length ? toks[i + 1] : "";
+        if (t == "{") {
+            braces += 1;
+        } else if (t == "}") {
+            braces -= 1;
+        } else if (t == "(") {
+            parens += 1;
+        } else if (t == ")") {
+            parens -= 1;
+        }
+        if (braces != 0 || parens != 0 || !isName(t)) {
+            i += 1;
+            continue;
+        }
+        if (prev == "#" && t == "define" && isName(next)) {
+            define(u, defs, next);
+        } else if (t == "typedef") {        // typedef struct A ... B;  typedef X B;
+            if (next == "struct" && i + 2 < toks.length) { define(u, defs, toks[i + 2]); }
+            let depth: int32 = 0;
+            let j: int32 = i + 1;
+            while (j < toks.length) {
+                let x: String = toks[j];
+                if (x == "{") {
+                    depth += 1;
+                } else if (x == "}") {
+                    depth -= 1;
+                } else if (x == ";" && depth == 0) {
+                    break;
+                }
+                j += 1;
+            }
+            if (j < toks.length && isName(toks[j - 1])) { define(u, defs, toks[j - 1]); }
+            i = j;
+        } else if (t == "struct" && isName(next) && i + 2 < toks.length && toks[i + 2] == "{") {
+            define(u, defs, next);
+        } else if (t == "enum" && next == "{") {     // enum { A, B = 2, C };
+            let j: int32 = i + 2;
+            while (j < toks.length && toks[j] != "}") {
+                let x: String = toks[j];
+                let after: String = j + 1 < toks.length ? toks[j + 1] : "";
+                if (isName(x) && (after == "," || after == "}" || after == "=")) { define(u, defs, x); }
+                j += 1;
+            }
+        } else if ((next == "(" || next == "=" || next == "[") && (isName(prev) || prev == "*") && prev != "define") {
+            define(u, defs, t);
+        }
+        i += 1;
+    }
+    u.heading = u.defines.length == 0 && u.uses.length == 0;
+    return u;
+}
+
+function define(u: Unit, defs: Any, name: String in u): void {
+    if (!defs.contains(name)) {
+        defs[name] = true;
+        u.defines.push(name);
+    }
+}
+
+public function isName(t: String): bool { return !t.isEmpty() && letter(t[0]); }
+
+function letter(c: byte): bool { return isIdentifierPart(c) && !isDigit(c); }
+
+/** The identifiers of a C text (comments, strings and character literals left out). */
+function identifiers(c: String): Any {
+    let out: Any = {};
+    for (t in tokens(c)) {
+        if (isName(t)) { out[t] = true; }
+    }
+    return out;
+}
+
+/** C tokens: names, numbers and single punctuation characters; comments, strings and characters are skipped. */
+public function tokens(c: String): String[*] {
+    let out: String[*] = [];
+    let i: int32 = 0;
+    let n: int32 = c.length;
+    while (i < n) {
+        let ch: byte = c[i];
+        if (ch == '/' && i + 1 < n && c[i + 1] == '*') {
+            let end: int32 = c.indexOf("*/", i + 2) ?? -1;
+            i = end < 0 ? n : end + 2;
+        } else if (ch == '/' && i + 1 < n && c[i + 1] == '/') {
+            while (i < n && c[i] != '\n') { i += 1; }
+        } else if (ch == '"' || ch == '\'') {
+            i += 1;
+            while (i < n && c[i] != ch) {
+                if (c[i] == '\\') { i += 1; }
+                i += 1;
+            }
+            i += 1;
+        } else if (isIdentifierPart(ch)) {
+            let start: int32 = i;
+            while (i < n && isIdentifierPart(c[i])) { i += 1; }
+            out.push(c.substring(start, i));
+        } else {
+            if (ch > ' ') { out.push(c.substring(i, i + 1)); }
+            i += 1;
+        }
+    }
+    return out;
+}

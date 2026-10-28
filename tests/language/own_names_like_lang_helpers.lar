@@ -1,0 +1,11 @@
+// expect: run
+// output: true hola|007 [5]
+// A program may declare names that std.lang uses for its own private helpers (isSpace, padded...):
+// those helpers are std.lang's, and do not clash with the program's.
+function isSpace(c: byte): bool { return c == '_'; }
+function padded(n: int32): String { return "[${n}]"; }
+
+function main(): int32 {
+    println("${isSpace('_')} ${"  hola ".trim()}|${"7".padStart(3, "0")} ${padded(5)}");
+    return 0;
+}

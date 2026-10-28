@@ -1,0 +1,1478 @@
+// ide: answers the editor's questions (larimar lsp) from an analyzed program: errors, hover, go to
+// definition, references, the symbols of a file, completion and the signature being written.
+//
+// It runs in a process made only for one question (see lsp.lar): it may keep what it builds for the
+// whole process, which ends when it answers. Positions come from the editor as (line, character) from 0,
+// with characters counted in UTF-16; the compiler counts lines from 1 (with the file in the number, see
+// FILE_LINES) and knows the line of each node, not its column, so the column of a name is found in the
+// text of its line.
+
+import std.path as Paths;
+import std.text { isIdentifierPart };
+import std.json as Json;
+import ast {
+    Node, Expr, Stmt, Program, FunctionDecl, StructDecl, ClassDecl, InterfaceDecl, NativeTypeDecl, EnumDecl,
+    EnumVariant, VarDecl, ConstDecl, FieldDecl, Param, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ForStmt, TryStmt,
+    Ident, Member, Call, Lambda, ObjectLit, IsExpr, allStmts, allExprs, exprAll
+};
+import sema {
+    Symbol, SymK, Type, TyK, NamedK, ArrK, FunctionInfo, MethodInfo, FieldInfo, StructInfo, ClassInfo, InterfaceInfo,
+    EnumInfo, VariantInfo, MemberInfo, MbK, CallInfo, CallK, LambdaInfo, functions, structs, classes, interfaces,
+    enums, nativeMethods, externInfos, ExternTypeInfo, structOf, classOf, interfaceOf, enumOf, functionOf,
+    externInfoOf, allFields, findMethod, chain, T_STRING, T_ANY
+};
+import linker { isLangHelper, filePaths, fileSources, FILE_LINES, decode, namesOfFile, aliasesOfFile, publicsOfModule, fileOfModule };
+import session { program, stdDir, diagnostics, Diagnostic };
+import docstore { document, setDocument };
+import std.io.console as Console;
+
+// =====================================================================================
+// Files, lines and positions
+// =====================================================================================
+
+/** The start of each line of a file (by file index), computed when first needed. */
+class Lines {
+    let text: String;
+    let starts: int32[*] = [];
+}
+
+let lineCache: Lines[*] = [] in default;
+
+function linesOf(index: int32): Lines {
+    while (lineCache.length < fileSources.length) {
+        let i: int32 = lineCache.length;
+        lineCache.push(Lines { text: fileSources[i] });
+        let l: Lines = lineCache[i];
+        l.starts.push(0);
+        for (k, c in l.text) {
+            if (c == '\n') { l.starts.push(k + 1); }
+        }
+    }
+    if (index < 0 || index >= lineCache.length) { return Lines { text: "" } in default; }
+    return lineCache[index];
+}
+
+/** The text of a line (from 1) of a file, without its end. */
+public function lineText(index: int32, line: int32): String {
+    let l: Lines = linesOf(index);
+    if (line < 1 || line > l.starts.length) { return ""; }
+    let from: int32 = l.starts[line - 1];
+    let to: int32 = line < l.starts.length ? l.starts[line] - 1 : l.text.length;
+    if (to > from && l.text[to - 1] == '\r') { to -= 1; }
+    return l.text.substring(from, to < from ? from : to);
+}
+
+function lineCount(index: int32): int32 { return linesOf(index).starts.length; }
+
+/** The file index of a path in the analysis, or -1. */
+public function fileIndex(path: String): int32 {
+    let p: String = Paths.normalize(path);
+    for (i, f in filePaths) {
+        if (Paths.normalize(f) == p) { return i; }
+    }
+    return -1;
+}
+
+function fileOf(encoded: int32): int32 { return encoded / FILE_LINES; }
+function lineOf(encoded: int32): int32 { return encoded % FILE_LINES; }
+
+/** UTF-16 units of the first `byteCol` bytes of a line (what the editor counts). */
+public function utf16Col(line: String, byteCol: int32): int32 {
+    let n: int32 = 0;
+    let i: int32 = 0;
+    while (i < byteCol && i < line.length) {
+        let c: byte = line[i];
+        if (c < 0x80 || (c & 0xC0) == 0xC0) { n += c >= 0xF0 ? 2 : 1; }
+        i += 1;
+    }
+    return n;
+}
+
+/** The byte of a line where the editor's UTF-16 column falls. */
+public function byteCol(line: String, units: int32): int32 {
+    let n: int32 = 0;
+    let i: int32 = 0;
+    while (i < line.length && n < units) {
+        let c: byte = line[i];
+        if (c < 0x80 || (c & 0xC0) == 0xC0) { n += c >= 0xF0 ? 2 : 1; }
+        i += 1;
+        while (i < line.length && (line[i] & 0xC0) == 0x80) { i += 1; }
+    }
+    return i;
+}
+
+function nameByte(c: byte): bool { return isIdentifierPart(c) || c >= 128; }
+
+/** The byte columns where `word` is written as a whole name; dotted: 1 after a '.', 0 not after one, -1 any. */
+function wordColumns(text: String, word: String, dotted: int32): int32[*] {
+    let out: int32[*] = [] in default;
+    if (word == "") { return out; }
+    let from: int32 = 0;
+    while (true) {
+        let at: int32? = text.indexOf(word, from);
+        if (at == null) { break; }
+        let a: int32 = at!;
+        let end: int32 = a + word.length;
+        let before: bool = a > 0 && nameByte(text[a - 1]);
+        let after: bool = end < text.length && nameByte(text[end]);
+        let dot: bool = a > 0 && text[a - 1] == '.';
+        if (!before && !after && (dotted < 0 || (dotted == 1) == dot)) { out.push(a); }
+        from = a + 1;
+    }
+    return out;
+}
+
+/** The name the cursor is on (bytes from..to of the line), and whether a '.' comes before it. */
+class Word {
+    let text: String = "";
+    let from: int32 = 0;
+    let to: int32 = 0;
+    let dotted: bool = false;
+}
+
+function wordAt(line: String, col: int32): Word {
+    let from: int32 = col;
+    while (from > 0 && nameByte(line[from - 1])) { from -= 1; }
+    let to: int32 = col;
+    while (to < line.length && nameByte(line[to])) { to += 1; }
+    let w: Word = Word {} in default;
+    w.text = line.substring(from, to).clone() in default;
+    w.from = from;
+    w.to = to;
+    w.dotted = from > 0 && line[from - 1] == '.';
+    return w;
+}
+
+/** A range of the editor, as JSON, for bytes from..to of a line (from 1) of a file. */
+function rangeJson(index: int32, line: int32, from: int32, to: int32): String {
+    let t: String = lineText(index, line);
+    let a: int32 = utf16Col(t, from);
+    let b: int32 = utf16Col(t, to);
+    return "{\"start\":{\"line\":${line - 1},\"character\":${a}},\"end\":{\"line\":${line - 1},\"character\":${b}}}" in default;
+}
+
+/** The range of a whole line, without its indentation. */
+function lineRangeJson(index: int32, line: int32): String {
+    let t: String = lineText(index, line);
+    let from: int32 = 0;
+    while (from < t.length && (t[from] == ' ' || t[from] == '\t')) { from += 1; }
+    let to: int32 = t.length > from ? t.length : from + 1;
+    return rangeJson(index, line, from, to);
+}
+
+/** file:///a/b%20c.lar */
+public function uriOfPath(path: String): String {
+    let sb: StringBuilder = {};
+    sb.add("file://");
+    let p: String = path.replace("\\", "/");
+    if (!p.startsWith("/")) { sb.add("/"); }
+    for (c in p) {
+        if (nameByte(c) && c < 128 || c == '/' || c == '.' || c == '-' || c == '~' || c == ':') {
+            sb.add(stringOf([c]));
+        } else {
+            sb.add("%${HEXU.substring((c >> 4) as int32, ((c >> 4) as int32) + 1)}${HEXU.substring((c & 15) as int32, ((c & 15) as int32) + 1)}");
+        }
+    }
+    return sb.toString().clone();
+}
+
+/** The path of a file:// URI. */
+public function pathOfUri(uri: String): String {
+    let s: String = uri.startsWith("file://") ? uri.substring(7) : uri;
+    let bytes: byte[*] = [];
+    let i: int32 = 0;
+    while (i < s.length) {
+        let c: byte = s[i];
+        if (c == '%' && i + 2 < s.length) {
+            let h: int32 = hexValue(s[i + 1]);
+            let l: int32 = hexValue(s[i + 2]);
+            if (h >= 0 && l >= 0) {
+                bytes.push((h * 16 + l) as byte);
+                i += 3;
+                continue;
+            }
+        }
+        bytes.push(c);
+        i += 1;
+    }
+    let p: String = stringOf(bytes);
+    // file:///C:/x on Windows
+    if (p.length > 2 && p[0] == '/' && p[2] == ':') { return p.substring(1).clone(); }
+    return p.clone();
+}
+
+const HEXU: String = "0123456789ABCDEF";
+
+function hexValue(c: byte): int32 {
+    if (c >= '0' && c <= '9') { return (c - '0') as int32; }
+    if (c >= 'a' && c <= 'f') { return (c - 'a') as int32 + 10; }
+    if (c >= 'A' && c <= 'F') { return (c - 'A') as int32 + 10; }
+    return -1;
+}
+
+function isStdFile(path: String): bool {
+    let s: String = Paths.normalize(stdDir());
+    return path.startsWith(s);
+}
+
+// =====================================================================================
+// Names: what linking did to them
+// =====================================================================================
+
+/** The name as written: geo__shapes__Shape -> Shape, Order.make -> make. */
+function shortName(name: String): String {
+    let s: String = name;
+    let dot: int32? = s.lastIndexOf(".");
+    if (dot != null) { s = s.substring(dot! + 1); }
+    let under: int32? = s.lastIndexOf("__");
+    if (under != null) { s = s.substring(under! + 2); }
+    return s;
+}
+
+/** The name to show: geo__shapes__Shape -> geo.shapes.Shape. */
+function shown(name: String): String { return decode(name); }
+
+function typeText(t: Type?): String { return t == null ? "?" : decode(t!.text); }
+
+// =====================================================================================
+// Everything the program declares and every expression it has
+// =====================================================================================
+
+let exprs: Expr[*] = [] in default;             // every expression (lambda bodies too)
+let locals: Symbol[*] = [] in default;          // every local variable and parameter
+let paramSyms: Symbol[*] = [] in default;       // the parameters among them
+let collected: bool = false;
+
+function collect(): void {
+    if (collected) { return; }
+    collected = true;
+    for (f in functions) {
+        if (f.isExtern || f.decl == null) { continue; }
+        for (s in f.paramSymbols) {
+            locals.push(s);
+            paramSyms.push(s);
+        }
+        body(f.decl!.body);
+    }
+    for (s in structs) {
+        for (fi in s.fields) { exprAll(fi.defaultValue, true, exprs); }
+        for (m in s.methods) { method(m); }
+    }
+    for (c in classes) {
+        for (fi in c.fields) { exprAll(fi.defaultValue, true, exprs); }
+        for (m in c.methods) { method(m); }
+    }
+    for (m in nativeMethods) { method(m); }
+    for (d in program.decls) {
+        if (d is VarDecl v) { exprAll(v.init, true, exprs); }
+        if (d is ConstDecl c) { exprAll(c.value, true, exprs); }
+    }
+    // lambdas: their parameters and their locals
+    for (e in exprs) {
+        if (e is Lambda l) {
+            let li: LambdaInfo? = l.lambda;
+            if (li != null) {
+                for (s in li!.params) {
+                    locals.push(s);
+                    paramSyms.push(s);
+                }
+            }
+            statements(l.body);
+        }
+    }
+}
+
+function method(m: MethodInfo in default): void {
+    for (s in m.paramSymbols) {
+        locals.push(s);
+        paramSyms.push(s);
+    }
+    if (m.decl.hasBody) { body(m.decl.body); }
+}
+
+function body(b: Stmt[*] in default): void {
+    allExprs(b, true, exprs);
+    statements(b);
+}
+
+function statements(b: Stmt[*] in default): void {
+    let all: Stmt[*] = [] in default;
+    allStmts(b, all);
+    for (s in all) {
+        if (s is VarDecl v && v.symbol != null) { locals.push(v.symbol!); }
+        if (s is ForStmt f && f.forInfo != null) {
+            if (f.forInfo!.index != null) { locals.push(f.forInfo!.index!); }
+            if (f.forInfo!.value != null) { locals.push(f.forInfo!.value!); }
+        }
+        if (s is TryStmt t) {
+            for (c in t.catches) {
+                if (c.catchInfo != null && c.catchInfo!.variable != null) { locals.push(c.catchInfo!.variable!); }
+            }
+        }
+    }
+}
+
+// =====================================================================================
+// What a name refers to
+// =====================================================================================
+
+const K_NONE: int32 = 0;
+const K_LOCAL: int32 = 1;       // a local variable or a parameter
+const K_GLOBAL: int32 = 2;      // a global variable or a constant
+const K_FUNC: int32 = 3;
+const K_METHOD: int32 = 4;
+const K_FIELD: int32 = 5;
+const K_TYPE: int32 = 6;
+const K_VARIANT: int32 = 7;
+const K_MODULE: int32 = 8;
+const K_BUILTIN: int32 = 9;
+
+class Target {
+    let kind: int32 = 0;
+    let name: String = "";          // as written
+    let line: int32 = 0;            // where it is declared (0: nowhere, a built-in)
+    let symbol: Symbol? = null;
+    let func: FunctionInfo? = null;
+    let method: MethodInfo? = null;
+    let field: FieldInfo? = null;
+    let typeName: String = "";      // K_TYPE: its name after linking
+    let variant: VariantInfo? = null;
+    let enumName: String = "";
+    let module: String = "";        // K_MODULE: its path
+    let decl: Node? = null;         // a global or a constant
+}
+
+function none(): Target { return Target {} in default; }
+
+function ofSymbol(s: Symbol in default): Target {
+    if (s.kind == SymK.Function && s.func != null) { return ofFunc(s.func!); }
+    let t: Target = Target { name: s.name.clone() in default, line: s.line, symbol: s } in default;
+    t.kind = s.kind == SymK.Global || s.kind == SymK.Const ? K_GLOBAL : K_LOCAL;
+    if (t.kind == K_GLOBAL) {
+        for (d in program.decls) {
+            if (d is VarDecl v && v.name == s.name) { t.decl = v; t.line = v.line; }
+            if (d is ConstDecl c && c.name == s.name) { t.decl = c; t.line = c.line; }
+        }
+        t.name = shortName(s.name).clone() in default;
+    }
+    return t;
+}
+
+function ofFunc(f: FunctionInfo in default): Target {
+    return Target { kind: K_FUNC, name: shortName(f.name).clone() in default, line: f.line, func: f } in default;
+}
+
+function ofMethod(m: MethodInfo in default): Target {
+    return Target { kind: K_METHOD, name: m.name.clone() in default, line: m.decl.line, method: m } in default;
+}
+
+function ofField(f: FieldInfo in default): Target {
+    return Target { kind: K_FIELD, name: f.name.clone() in default, line: f.line, field: f } in default;
+}
+
+function ofVariant(e: EnumInfo in default, v: VariantInfo in default): Target {
+    return Target { kind: K_VARIANT, name: v.name.clone() in default, line: v.line, variant: v, enumName: e.name.clone() in default } in default;
+}
+
+/** A type by its name after linking, or K_NONE. */
+function ofType(linked: String): Target {
+    let line: int32 = 0;
+    let so: StructInfo? = structOf(linked);
+    if (so != null) { line = so.line; }
+    let co: ClassInfo? = classOf(linked);
+    if (co != null) { line = co.line; }
+    let io: InterfaceInfo? = interfaceOf(linked);
+    if (io != null) { line = io.line; }
+    let eo: EnumInfo? = enumOf(linked);
+    if (eo != null) { line = eo.line; }
+    let xo: ExternTypeInfo? = externInfoOf(linked);
+    if (xo != null) { line = xo.decl.line; }
+    if (line == 0) {
+        for (d in program.decls) {
+            if (d is NativeTypeDecl n && n.name == linked) { line = n.line; }
+        }
+    }
+    if (line == 0 && linked != "String" && linked != "Any") { return none(); }
+    return Target { kind: K_TYPE, name: shortName(linked).clone() in default, line, typeName: linked.clone() in default } in default;
+}
+
+/** A declaration by its name after linking (geo__shapes__area). */
+function ofLinked(linked: String): Target {
+    let t: Target = ofType(linked);
+    if (t.kind != K_NONE) { return t; }
+    let f: FunctionInfo? = functionOf(linked);
+    if (f != null) { return ofFunc(f!); }
+    for (d in program.decls) {
+        if (d is VarDecl v && v.name == linked && v.symbol != null) { return ofSymbol(v.symbol!); }
+        if (d is ConstDecl c && c.name == linked) {
+            return Target { kind: K_GLOBAL, name: shortName(linked).clone() in default, line: c.line, decl: c } in default;
+        }
+    }
+    return none();
+}
+
+/** What the name under the cursor refers to. */
+function targetAt(index: int32, line: int32, w: Word): Target {
+    collect();
+    let enc: int32 = index * FILE_LINES + line;
+    let word: String = w.text;
+    if (word == "") { return none(); }
+    // a declaration on this line
+    for (f in functions) {
+        if (f.line == enc && shortName(f.name) == word) { return ofFunc(f); }
+    }
+    for (s in structs) {
+        if (s.line == enc && shortName(s.name) == word) { return ofType(s.name); }
+        for (fi in s.fields) { if (fi.line == enc && fi.name == word) { return ofField(fi); } }
+        for (m in s.methods) { if (m.decl.line == enc && m.name == word) { return ofMethod(m); } }
+    }
+    for (c in classes) {
+        if (c.line == enc && shortName(c.name) == word) { return ofType(c.name); }
+        for (fi in c.fields) { if (fi.line == enc && fi.name == word) { return ofField(fi); } }
+        for (m in c.methods) { if (m.decl.line == enc && m.name == word) { return ofMethod(m); } }
+    }
+    for (i in interfaces) {
+        if (i.line == enc && shortName(i.name) == word) { return ofType(i.name); }
+        for (m in i.methods) { if (m.decl.line == enc && m.name == word) { return ofMethod(m); } }
+    }
+    for (m in nativeMethods) { if (m.decl.line == enc && m.name == word) { return ofMethod(m); } }
+    for (e in enums) {
+        if (e.line == enc && shortName(e.name) == word) { return ofType(e.name); }
+        for (v in e.variants) { if (v.line == enc && v.name == word) { return ofVariant(e, v); } }
+    }
+    for (x in externInfos) {
+        if (x.decl.line == enc && shortName(x.name) == word) { return ofType(x.name); }
+    }
+    for (d in program.decls) {
+        if (d is VarDecl v && v.line == enc && shortName(v.name) == word && v.symbol != null) { return ofSymbol(v.symbol!); }
+        if (d is ConstDecl c && c.line == enc && shortName(c.name) == word) {
+            let t: Target = Target { kind: K_GLOBAL, name: word.clone() in default, line: c.line, decl: c } in default;
+            return t;
+        }
+        if (d is NativeTypeDecl n && n.line == enc && n.name == word) { return ofType(n.name); }
+    }
+    for (s in locals) {
+        if (s.line == enc && s.name == word) { return ofSymbol(s); }
+    }
+    // a use on this line
+    for (e in exprs) {
+        if (e.line == enc && e is Member m && m.name == word && w.dotted && m.replaced != null && m.replaced! is Ident id) {
+            let byName: Target = ofLinked(id.name);
+            if (byName.kind != K_NONE) { return byName; }
+        }
+        if (e.line == enc && e is Call c && c.callee is Member m && m.name == word && w.dotted && m.replaced != null && m.replaced! is Ident id) {
+            let byName: Target = ofLinked(id.name);
+            if (byName.kind != K_NONE) { return byName; }
+        }
+    }
+    for (e in exprs) {
+        if (e.line != enc) { continue; }
+        switch (e) {
+            case Call c -> {
+                if (c.callee is Member m && m.name == word && w.dotted) {
+                    let ci: CallInfo? = c.call;
+                    if (ci != null) {
+                        if (ci!.method != null) { return ofMethod(ci!.method!); }
+                        if (ci!.func != null) { return ofFunc(ci!.func!); }
+                        if (ci!.kind == CallK.Builtin) {
+                            return Target { kind: K_BUILTIN, name: word.clone() in default } in default;
+                        }
+                    }
+                }
+            }
+            case Member m -> {
+                if (m.name == word && w.dotted && m.member != null) {
+                    let mi: MemberInfo = m.member!;
+                    if (mi.kind == MbK.Field && mi.field != null) { return ofField(mi.field!); }
+                    if (mi.kind == MbK.EnumConst && mi.enumInfo != null && mi.variant != null) { return ofVariant(mi.enumInfo!, mi.variant!); }
+                    if (mi.kind == MbK.StaticMethod && mi.method != null) { return ofMethod(mi.method!); }
+                    return Target { kind: K_BUILTIN, name: word.clone() in default } in default;
+                }
+            }
+            default -> {}
+        }
+    }
+    for (e in exprs) {
+        if (e.line == enc && e is Ident id && shortName(id.name) == word && id.symbol != null) { return ofSymbol(id.symbol!); }
+    }
+    for (e in exprs) {
+        if (e.line == enc && e is Call c && c.callee is Ident id && shortName(id.name) == word && c.call != null && c.call!.func != null) {
+            return ofFunc(c.call!.func!);
+        }
+    }
+    // a name the file can see: a type, a function, a module
+    let names: Any = namesOfFile(index);
+    let linked: String? = names[word] as String;
+    if (linked != null) {
+        let t: Target = ofType(linked!);
+        if (t.kind != K_NONE) { return t; }
+        let f: FunctionInfo? = functionOf(linked!);
+        if (f != null) { return ofFunc(f!); }
+    }
+    let alias: String? = aliasesOfFile(index)[word] as String;
+    if (alias != null) {
+        return Target { kind: K_MODULE, name: word.clone() in default, module: alias!.clone() in default } in default;
+    }
+    if (word == "String" || word == "Any") { return ofType(word); }
+    return none();
+}
+
+// =====================================================================================
+// What to show about it
+// =====================================================================================
+
+function signature(name: String, params: String[*], ret: String, throwsText: String): String {
+    let r: String = ret == "void" ? ": void" : ": ${ret}";
+    let t: String = throwsText != "" ? " throws ${throwsText}" : "";
+    return "${name}(${params.join(", ")})${r}${t}" in default;
+}
+
+function funcParams(f: FunctionInfo): String[*] {
+    let out: String[*] = [] in default;
+    let sig: Type? = f.sig;
+    for (i, p in f.params) {
+        let tt: String = sig != null && i < sig!.params.length ? typeText(sig!.params[i]) : "?";
+        out.push("${p.name}: ${tt}" in default);
+    }
+    if (f.varargs) { out.push("..."); }
+    return out;
+}
+
+function methodParams(m: MethodInfo): String[*] {
+    let out: String[*] = [] in default;
+    let sig: Type? = m.sig;
+    for (i, p in m.decl.params) {
+        let tt: String = sig != null && i < sig!.params.length ? typeText(sig!.params[i]) : "?";
+        out.push("${p.name}: ${tt}" in default);
+    }
+    return out;
+}
+
+function funcLabel(f: FunctionInfo): String {
+    let fd: FunctionDecl? = f.decl;
+    let n: String = fd != null && fd!.typeName != "" ? "${shortName(fd!.typeName)}.${fd!.name}" : shortName(f.name);
+    return signature(n, funcParams(f), f.sig != null ? typeText(f.sig!.elem) : "?", f.throwsType != null ? typeText(f.throwsType) : "");
+}
+
+function methodLabel(m: MethodInfo): String {
+    let n: String = m.isOperator ? "operator ${m.name}" : m.name;
+    return signature(n, methodParams(m), m.sig != null ? typeText(m.sig!.elem) : "?", m.throwsType != null ? typeText(m.throwsType) : "");
+}
+
+/** The code shown on hover. */
+function detail(t: Target): String {
+    switch (t.kind) {
+        case K_LOCAL -> {
+            let s: Symbol = t.symbol!;
+            for (p in paramSyms) {
+                if (p == s) { return "${s.name}: ${typeText(s.type)}"; }
+            }
+            return "let ${s.name}: ${typeText(s.type)}";
+        }
+        case K_GLOBAL -> {
+            let d: Node? = t.decl;
+            if (d != null && d! is ConstDecl c) {
+                return "const ${shortName(c.name)}: ${c.ty != null ? typeText(c.ty) : typeOfConst(c)}";
+            }
+            if (t.symbol != null) {
+                let xv: ExternValueDecl? = t.symbol!.externValue;
+                if (xv != null) {                // extern const / extern let: a name C has
+                    let at: String = xv.platform != "" ? "    // #when ${xv.platform}" : "";
+                    return "extern ${xv.isConst ? "const" : "let"} ${t.name}: ${typeText(t.symbol!.type)}${at}";
+                }
+                return "let ${t.name}: ${typeText(t.symbol!.type)}";
+            }
+            return "let ${t.name}";
+        }
+        case K_FUNC -> {
+            let f: FunctionInfo = t.func!;
+            let fd: FunctionDecl? = f.decl;
+            if (f.isExtern) { return "extern function ${funcLabel(f)}"; }
+            let lead: String = fd != null && fd!.exportName != "" ? "export function" : fd != null && fd!.typeName != "" ? "static function" : "function";
+            return "${lead} ${funcLabel(f)}";
+        }
+        case K_METHOD -> {
+            let m: MethodInfo = t.method!;
+            let lead: String = m.decl.isStatic ? "static function" : m.decl.isOverride ? "override function" : "function";
+            return "${lead} ${methodLabel(m)}";
+        }
+        case K_FIELD -> {
+            let f: FieldInfo = t.field!;
+            return "let ${f.name}: ${typeText(f.type)}";
+        }
+        case K_TYPE -> { return typeDetail(t.typeName); }
+        case K_VARIANT -> {
+            let v: VariantInfo = t.variant!;
+            if (!v.hasPayload) { return "${shown(t.enumName)}.${v.name}"; }
+            let ps: String[*] = [];
+            for (f in v.fields) { ps.push("${f.name}: ${typeText(f.type)}"); }
+            return "${shown(t.enumName)}.${v.name}(${ps.join(", ")})";
+        }
+        case K_MODULE -> { return "import ${t.module}"; }
+        case K_BUILTIN -> { return "${t.name}  (built-in)"; }
+        default -> { return ""; }
+    }
+}
+
+function typeOfConst(c: ConstDecl): String { return c.type.name; }
+
+function typeDetail(linked: String): String {
+    let n: String = shown(linked);
+    let so: StructInfo? = structOf(linked);
+    if (so != null) {
+        let lines: String[*] = [];
+        for (f in so.fields) { lines.push("    let ${f.name}: ${typeText(f.type)};"); }
+        for (m in so.methods) { lines.push("    function ${methodLabel(m)};"); }
+        let head: String = so.decl.cName != "" ? "extern type ${n} = struct" : "struct ${n}";
+        return lines.length == 0 ? "${head} {}" : "${head} {\n${lines.join("\n")}\n}";
+    }
+    let co: ClassInfo? = classOf(linked);
+    if (co != null) {
+        let head: String = co.sync ? "synchronized class ${n}" : "class ${n}";
+        if (co.superName != "") { head = "${head} extends ${shown(co.superName)}"; }
+        if (co.interfaces.length > 0) {
+            let ifaces: String[*] = [];
+            for (i in co.interfaces) { ifaces.push(shown(i)); }
+            head = "${head} implements ${ifaces.join(", ")}";
+        }
+        let lines: String[*] = [];
+        for (f in co.fields) { lines.push("    let ${f.name}: ${typeText(f.type)};"); }
+        for (m in co.methods) { lines.push("    function ${methodLabel(m)};"); }
+        return lines.length == 0 ? head : "${head} {\n${lines.join("\n")}\n}";
+    }
+    let io: InterfaceInfo? = interfaceOf(linked);
+    if (io != null) {
+        let lines: String[*] = [];
+        for (m in io.methods) { lines.push("    function ${methodLabel(m)};"); }
+        return "interface ${n} {\n${lines.join("\n")}\n}";
+    }
+    let eo: EnumInfo? = enumOf(linked);
+    if (eo != null) {
+        let vs: String[*] = [];
+        for (v in eo.variants) {
+            if (!v.hasPayload) {
+                vs.push(v.name);
+                continue;
+            }
+            let ps: String[*] = [];
+            for (f in v.fields) { ps.push("${f.name}: ${typeText(f.type)}"); }
+            vs.push("${v.name}(${ps.join(", ")})");
+        }
+        return "enum ${n} { ${vs.join(", ")} }";
+    }
+    let xo: ExternTypeInfo? = externInfoOf(linked);
+    if (xo != null) {
+        if (xo.sig != null) { return "extern type ${n} = ${typeText(xo.sig)}"; }
+        let lines: String[*] = [] in default;             // one per platform it is declared for
+        let all: ExternTypeDecl[*] = [xo.decl] in default;
+        for (alt in xo.alts) { all.push(alt); }
+        for (d in all) {
+            let c: String = d.cType != "" ? " = c \"${d.cType}\"" : "";
+            let r: String = d.releasedBy != "" ? " released by ${shortName(d.releasedBy)}" : "";
+            let w: String = d.platform != "" ? "    // #when ${d.platform}" : "";
+            lines.push("extern type ${n}${c}${r}${w}");
+        }
+        return lines.join("\n");
+    }
+    return "native type ${n}";
+}
+
+// The comment written right above a declaration (// lines or a doc block), as text.
+function docAbove(index: int32, line: int32): String {
+    let out: String[*] = [];
+    let l: int32 = line - 1;
+    while (l >= 1) {
+        let t: String = lineText(index, l).trim();
+        if (!(t.startsWith("//") || t.startsWith("*") || t.startsWith("/*"))) { break; }
+        let clean: String = t;
+        if (clean.startsWith("/**")) { clean = clean.substring(3); }
+        else if (clean.startsWith("/*")) { clean = clean.substring(2); }
+        else if (clean.startsWith("//")) { clean = clean.substring(2); }
+        else if (clean.startsWith("*") && !clean.startsWith("*/")) { clean = clean.substring(1); }
+        if (clean.endsWith("*/")) { clean = clean.substring(0, clean.length - 2); }
+        if (clean.startsWith("*/")) { clean = ""; }
+        out.push(clean.trim());
+        l -= 1;
+    }
+    let sb: StringBuilder = {};
+    let i: int32 = out.length - 1;
+    while (i >= 0) {
+        if (out[i] != "" || sb.length() > 0) {
+            if (sb.length() > 0) { sb.add("\n"); }
+            sb.add(out[i]);
+        }
+        i -= 1;
+    }
+    return sb.toString().trim().clone();
+}
+
+/** Where a target is declared: file index, line and the byte columns of its name. */
+class Place {
+    let index: int32 = -1;
+    let line: int32 = 0;
+    let from: int32 = 0;
+    let to: int32 = 0;
+}
+
+function placeOf(t: Target): Place {
+    let p: Place = Place {} in default;
+    if (t.kind == K_MODULE) {
+        let f: String = fileOfModule(t.module);
+        p.index = fileIndex(f);
+        p.line = 1;
+        return p;
+    }
+    if (t.line <= 0) { return p; }
+    p.index = fileOf(t.line);
+    p.line = lineOf(t.line);
+    let cols: int32[*] = wordColumns(lineText(p.index, p.line), t.name, -1);
+    if (cols.length > 0) {
+        p.from = cols[0];
+        p.to = cols[0] + t.name.length;
+    }
+    return p;
+}
+
+function locationJson(p: Place): String {
+    if (p.index < 0 || p.index >= filePaths.length) { return "null"; }
+    return "{\"uri\":${Json.quote(uriOfPath(filePaths[p.index]))},\"range\":${rangeJson(p.index, p.line, p.from, p.to)}}" in default;
+}
+
+// =====================================================================================
+// The questions
+// =====================================================================================
+
+/** The cursor: a file index, a line from 1 and a byte column. */
+class Cursor {
+    let index: int32 = -1;
+    let line: int32 = 0;
+    let col: int32 = 0;
+}
+
+function cursorOf(path: String, line0: int32, char16: int32): Cursor {
+    let c: Cursor = Cursor {} in default;
+    c.index = fileIndex(path);
+    c.line = line0 + 1;
+    if (c.index >= 0) { c.col = byteCol(lineText(c.index, c.line), char16); }
+    return c;
+}
+
+/** Hover: the declaration, as code, and its comment. */
+public function hoverJson(path: String, line0: int32, char16: int32): String {
+    let c: Cursor = cursorOf(path, line0, char16);
+    if (c.index < 0) { return "null"; }
+    let w: Word = wordAt(lineText(c.index, c.line), c.col);
+    let t: Target = targetAt(c.index, c.line, w);
+    if (t.kind == K_NONE) { return "null"; }
+    let code: String = detail(t);
+    if (code == "") { return "null"; }
+    let p: Place = placeOf(t);
+    let doc: String = p.index >= 0 && t.kind != K_MODULE ? docAbove(p.index, p.line) : "";
+    let owner: String = ownerNote(t);
+    let md: String = "```larimar\n${code}\n```";
+    if (owner != "") { md = "${md}\n\n${owner}"; }
+    if (doc != "") { md = "${md}\n\n${doc}"; }
+    return "{\"contents\":{\"kind\":\"markdown\",\"value\":${Json.quote(md)}},\"range\":${rangeJson(c.index, c.line, w.from, w.to)}}" in default;
+}
+
+function ownerNote(t: Target): String {
+    if (t.kind == K_METHOD) { return "Method of `${shown(t.method!.owner)}`."; }
+    if (t.kind == K_FIELD) { return "Field of `${shown(t.field!.owner)}`."; }
+    if (t.kind == K_LOCAL) {
+        for (p in paramSyms) {
+            if (p == t.symbol!) { return "Parameter."; }
+        }
+        return "Local variable.";
+    }
+    if (t.kind == K_MODULE) { return "Module `${t.module}`."; }
+    return "";
+}
+
+/** Go to definition. */
+public function definitionJson(path: String, line0: int32, char16: int32): String {
+    let c: Cursor = cursorOf(path, line0, char16);
+    if (c.index < 0) { return "null"; }
+    let t: Target = targetAt(c.index, c.line, wordAt(lineText(c.index, c.line), c.col));
+    if (t.kind == K_NONE || t.kind == K_BUILTIN) { return "null"; }
+    return locationJson(placeOf(t));
+}
+
+/** Every place that names the same thing (with its declaration when `withDecl`). */
+public function referencesJson(path: String, line0: int32, char16: int32, withDecl: bool): String {
+    let c: Cursor = cursorOf(path, line0, char16);
+    if (c.index < 0) { return "[]"; }
+    let t: Target = targetAt(c.index, c.line, wordAt(lineText(c.index, c.line), c.col));
+    if (t.kind == K_NONE || t.kind == K_BUILTIN || t.kind == K_MODULE) { return "[]"; }
+    collect();
+    let lines: int32[*] = [];               // encoded line, dotted (1, 0 or -1), in pairs
+    if (withDecl && t.line > 0) {
+        lines.push(t.line);
+        lines.push(-1);
+    }
+    if (t.kind == K_TYPE) {                 // types: every place their name is written, in the program's files
+        for (i, f in filePaths) {
+            if (isStdFile(f) && !(i == fileOf(t.line))) { continue; }
+            for (l in 1..lineCount(i) + 1) {
+                if (wordColumns(lineText(i, l), t.name, -1).length > 0) {
+                    lines.push(i * FILE_LINES + l);
+                    lines.push(-1);
+                }
+            }
+        }
+    }
+    for (e in exprs) {
+        let hit: int32 = refersTo(e, t);
+        if (hit >= 0) {
+            lines.push(e.line);
+            lines.push(hit);
+        }
+    }
+    let seen: Any = {};
+    let sb: StringBuilder = {};
+    sb.add("[");
+    let first: bool = true;
+    let k: int32 = 0;
+    while (k < lines.length) {
+        let enc: int32 = lines[k];
+        let dotted: int32 = lines[k + 1];
+        k += 2;
+        let index: int32 = fileOf(enc);
+        let line: int32 = lineOf(enc);
+        for (col in wordColumns(lineText(index, line), t.name, dotted)) {
+            let key: String = "${enc}:${col}";
+            if (seen.contains(key)) { continue; }
+            seen[key] = true;
+            if (!first) { sb.add(","); }
+            first = false;
+            let p: Place = Place { index, line, from: col, to: col + t.name.length } in default;
+            sb.add(locationJson(p));
+        }
+    }
+    sb.add("]");
+    return sb.toString().clone();
+}
+
+/** Whether an expression names the target: -1 no; else how its name is written (1 after a '.', 0 not, -1 any). */
+function refersTo(e: Expr, t: Target): int32 {
+    switch (e) {
+        case Ident id -> {
+            let s: Symbol? = id.symbol;
+            if (s == null) { return -1; }
+            if ((t.kind == K_LOCAL || t.kind == K_GLOBAL) && t.symbol != null && s! == t.symbol!) { return 0; }
+            if (t.kind == K_GLOBAL && t.symbol == null && s!.name == (t.decl != null && t.decl! is ConstDecl c ? c.name : "")) { return 0; }
+            if (t.kind == K_FUNC && s!.func != null && s!.func! == t.func!) { return -1; }
+            return -1;
+        }
+        case Member m -> {
+            let mi: MemberInfo? = m.member;
+            if (mi == null) { return -1; }
+            if (t.kind == K_FIELD && mi!.field != null && mi!.field! == t.field!) { return 1; }
+            if (t.kind == K_VARIANT && mi!.variant != null && mi!.variant! == t.variant!) { return 1; }
+            if (t.kind == K_METHOD && mi!.method != null && mi!.method! == t.method!) { return 1; }
+            return -1;
+        }
+        case Call c -> {
+            let ci: CallInfo? = c.call;
+            if (ci == null) { return -1; }
+            if (t.kind == K_METHOD && ci!.method != null && ci!.method! == t.method!) { return 1; }
+            if (t.kind == K_FUNC && ci!.func != null && ci!.func! == t.func! && c.callee is Member) { return 1; }
+            return -1;
+        }
+        default -> { return -1; }
+    }
+}
+
+// ---- the symbols of a file ----------------------------------------------------------
+
+// LSP SymbolKind
+const SK_CLASS: int32 = 5;
+const SK_METHOD: int32 = 6;
+const SK_FIELD: int32 = 8;
+const SK_ENUM: int32 = 10;
+const SK_INTERFACE: int32 = 11;
+const SK_FUNCTION: int32 = 12;
+const SK_VARIABLE: int32 = 13;
+const SK_CONSTANT: int32 = 14;
+const SK_ENUM_MEMBER: int32 = 22;
+const SK_STRUCT: int32 = 23;
+const SK_OPERATOR: int32 = 25;
+
+/** The symbols of a file: its declarations, with the members of its types inside. */
+public function symbolsJson(path: String): String {
+    let index: int32 = fileIndex(path);
+    if (index < 0) { return "[]"; }
+    let items: String[*] = [];
+    for (d in program.decls) {
+        if (d.line / FILE_LINES != index || d.builtin && !isStdFile(path)) { continue; }
+        switch (d) {
+            case FunctionDecl f -> {
+                let n: String = f.typeName != "" ? "${shortName(f.typeName)}.${f.name}" : shortName(f.name);
+                items.push(symbolJson(n, SK_FUNCTION, f.line, shortName(f.name), [] in default));
+            }
+            case StructDecl s -> {
+                let kids: String[*] = [] in default;
+                for (fd in s.fields) { kids.push(symbolJson(fd.name, SK_FIELD, fd.line, fd.name, [] in default)); }
+                for (m in s.methods) { kids.push(symbolJson(m.name, m.isOperator ? SK_OPERATOR : SK_METHOD, m.line, m.name, [] in default)); }
+                items.push(symbolJson(shortName(s.name), SK_STRUCT, s.line, shortName(s.name), kids));
+            }
+            case ClassDecl c -> {
+                let kids: String[*] = [] in default;
+                for (fd in c.fields) { kids.push(symbolJson(fd.name, SK_FIELD, fd.line, fd.name, [] in default)); }
+                for (m in c.methods) { kids.push(symbolJson(m.name, m.isOperator ? SK_OPERATOR : SK_METHOD, m.line, m.name, [] in default)); }
+                items.push(symbolJson(shortName(c.name), SK_CLASS, c.line, shortName(c.name), kids));
+            }
+            case InterfaceDecl i -> {
+                let kids: String[*] = [] in default;
+                for (m in i.methods) { kids.push(symbolJson(m.name, SK_METHOD, m.line, m.name, [] in default)); }
+                items.push(symbolJson(shortName(i.name), SK_INTERFACE, i.line, shortName(i.name), kids));
+            }
+            case NativeTypeDecl n -> {
+                let kids: String[*] = [] in default;
+                for (m in n.methods) { kids.push(symbolJson(m.name, SK_METHOD, m.line, m.name, [] in default)); }
+                items.push(symbolJson(n.name, SK_CLASS, n.line, n.name, kids));
+            }
+            case EnumDecl e -> {
+                let kids: String[*] = [] in default;
+                for (v in e.variants) { kids.push(symbolJson(v.name, SK_ENUM_MEMBER, v.line, v.name, [] in default)); }
+                items.push(symbolJson(shortName(e.name), SK_ENUM, e.line, shortName(e.name), kids));
+            }
+            case VarDecl v -> { items.push(symbolJson(shortName(v.name), SK_VARIABLE, v.line, shortName(v.name), [] in default)); }
+            case ConstDecl c -> { items.push(symbolJson(shortName(c.name), SK_CONSTANT, c.line, shortName(c.name), [] in default)); }
+            case ExternTypeDecl x -> { items.push(symbolJson(shortName(x.name), SK_CLASS, x.line, shortName(x.name), [] in default)); }
+            case ExternFunctionDecl x -> { items.push(symbolJson(shortName(x.name), SK_FUNCTION, x.line, shortName(x.name), [] in default)); }
+            case ExternValueDecl x -> { items.push(symbolJson(shortName(x.name), x.isConst ? SK_CONSTANT : SK_VARIABLE, x.line, shortName(x.name), [] in default)); }
+            default -> {}
+        }
+    }
+    return "[${items.join(",")}]" in default;
+}
+
+function symbolJson(name: String, kind: int32, encoded: int32, word: String, kids: String[*]): String {
+    let index: int32 = fileOf(encoded);
+    let line: int32 = lineOf(encoded);
+    let cols: int32[*] = wordColumns(lineText(index, line), word, -1);
+    let from: int32 = cols.length > 0 ? cols[0] : 0;
+    let end: int32 = blockEnd(index, line);
+    let endText: String = lineText(index, end);
+    let full: String = "{\"start\":{\"line\":${line - 1},\"character\":0},\"end\":{\"line\":${end - 1},\"character\":${utf16Col(endText, endText.length)}}}";
+    let kidText: String = kids.length > 0 ? ",\"children\":[${kids.join(",")}]" : "";
+    return "{\"name\":${Json.quote(name)},\"kind\":${kind},\"range\":${full},\"selectionRange\":${rangeJson(index, line, from, from + word.length)}${kidText}}" in default;
+}
+
+/** The line where the block a declaration opens on `line` closes (the same line when it has none). */
+function blockEnd(index: int32, line: int32): int32 {
+    let depth: int32 = 0;
+    let opened: bool = false;
+    let l: int32 = line;
+    let total: int32 = lineCount(index);
+    while (l <= total) {
+        let t: String = lineText(index, l);
+        let i: int32 = 0;
+        while (i < t.length) {
+            let c: byte = t[i];
+            if (c == '/' && i + 1 < t.length && t[i + 1] == '/') { break; }
+            if (c == '"' || c == '\'') {
+                i += 1;
+                while (i < t.length && t[i] != c) {
+                    if (t[i] == '\\') { i += 1; }
+                    i += 1;
+                }
+            } else if (c == '{') {
+                depth += 1;
+                opened = true;
+            } else if (c == '}') {
+                depth -= 1;
+                if (opened && depth == 0) { return l; }
+            } else if (c == ';' && !opened && depth == 0) {
+                return l;
+            }
+            i += 1;
+        }
+        l += 1;
+    }
+    return line;
+}
+
+// ---- completion ------------------------------------------------------------------------
+
+/** What completion needs to know about the line being written (set by prepareCompletion). */
+let probeLine: int32 = 0;            // from 1
+let probePrefix: String = "";        // the part of the name already written
+let probeMember: bool = false;       // after a '.'
+let probeChain: String = "";         // what comes before the '.'
+let probeCall: String = "";          // signature help: the name before the '('
+let probeArg: int32 = 0;             // signature help: the argument the cursor is in
+
+const PROBE: String = "larimarCompletionProbe";
+
+/**
+ * Before analyzing for completion or signature help: the line being written does not compile yet, so in
+ * this process the document gets a line that does (the rest of the program stays as it is).
+ */
+public function prepareCompletion(path: String, line0: int32, char16: int32, signatureHelp: bool): void {
+    let text: String? = document(path);
+    if (text == null) { return; }
+    let lines: String[*] = text!.split("\n");
+    if (line0 < 0 || line0 >= lines.length) { return; }
+    let line: String = lines[line0];
+    let col: int32 = byteCol(line, char16);
+    let before: String = line.substring(0, col);
+    let after: String = line.substring(col);
+    let indent: String = line.substring(0, line.length - line.trimStart().length);
+    probeLine = line0 + 1;
+    let replacement: String = "";
+    if (signatureHelp) {
+        let open: int32 = openParen(before);
+        if (open < 0) { return; }
+        probeArg = commasAfter(before, open);
+        let name: Word = wordAt(before, open);
+        probeCall = name.text.clone() in default;
+        let dotted: bool = name.from > 0 && before[name.from - 1] == '.';
+        if (dotted) {
+            probeChain = chainBefore(before, name.from - 1).clone() in default;
+            probeMember = true;
+            replacement = probeStatement(text!, before, name.from - 1 - probeChain.length, indent);
+        }
+    } else {
+        let w: Word = wordAt(before, before.length);
+        probePrefix = w.text.clone() in default;
+        if (w.dotted) {
+            probeMember = true;
+            probeChain = chainBefore(before, w.from - 1).clone() in default;
+            replacement = after.trim() == "" || needsNoProbe(text!, probeChain)
+                ? probeStatement(text!, before, w.from - 1 - probeChain.length, indent)
+                : "${before.substring(0, w.from)}${PROBE}${after}";
+        }
+    }
+    let sb: StringBuilder = {};
+    for (i, l in lines) {
+        if (i > 0) { sb.add("\n"); }
+        sb.add(i == line0 ? replacement : l);
+    }
+    setDocument(path, sb.toString());
+}
+
+/**
+ * A line that compiles and has `chain.probe()`, so the analysis gives the type of what comes before the
+ * '.'; "" when the names alone answer (a module or a type before the '.': the program must still link).
+ */
+function probeStatement(text: String, before: String, chainStart: int32, indent: String): String {
+    if (needsNoProbe(text, probeChain)) { return ""; }
+    let prefix: String = chainStart > 0 ? before.substring(0, chainStart) : "";
+    let lead: String = prefix.trim();
+    if ((lead.startsWith("let ") || lead.startsWith("const ")) && openParen(prefix) < 0 && lead.endsWith("=")) {
+        return "${prefix}${probeChain}.${PROBE}();";           // let x: T = chain.probe();  keeps the variable
+    }
+    return "${indent}${probeChain}.${PROBE}();";
+}
+
+/** A module alias (import ... as chain) or a type name: completed from the names, without a probe. */
+function needsNoProbe(text: String, chain: String): bool {
+    for (c in chain) {
+        if (!nameByte(c)) { return false; }
+    }
+    if (chain.length > 0 && chain[0] >= 'A' && chain[0] <= 'Z') { return true; }
+    return text.contains(" as ${chain};");
+}
+
+/** The '(' still open before the cursor, or -1. */
+function openParen(before: String): int32 {
+    let depth: int32 = 0;
+    let i: int32 = before.length - 1;
+    while (i >= 0) {
+        let c: byte = before[i];
+        if (c == ')' || c == ']') { depth += 1; }
+        if (c == '(' || c == '[') {
+            if (depth == 0) { return c == '(' ? i : -1; }
+            depth -= 1;
+        }
+        i -= 1;
+    }
+    return -1;
+}
+
+function commasAfter(before: String, open: int32): int32 {
+    let n: int32 = 0;
+    let depth: int32 = 0;
+    let quote: bool = false;
+    let i: int32 = open + 1;
+    while (i < before.length) {
+        let c: byte = before[i];
+        if (c == '"') { quote = !quote; }
+        if (!quote) {
+            if (c == '(' || c == '[' || c == '{') { depth += 1; }
+            if (c == ')' || c == ']' || c == '}') { depth -= 1; }
+            if (c == ',' && depth == 0) { n += 1; }
+        }
+        i += 1;
+    }
+    return n;
+}
+
+/** The expression that ends right before byte `dot` (a '.'): names, dots, calls and indexes. */
+function chainBefore(line: String, dot: int32): String {
+    let i: int32 = dot;
+    while (i > 0) {
+        let c: byte = line[i - 1];
+        if (nameByte(c) || c == '.') {
+            i -= 1;
+        } else if (c == ')' || c == ']') {
+            let close: byte = c;
+            let open: byte = c == ')' ? '(' : '[';
+            let depth: int32 = 0;
+            while (i > 0) {
+                let d: byte = line[i - 1];
+                if (d == close) { depth += 1; }
+                if (d == open) {
+                    depth -= 1;
+                    if (depth == 0) {
+                        i -= 1;
+                        break;
+                    }
+                }
+                i -= 1;
+            }
+        } else {
+            break;
+        }
+    }
+    return line.substring(i, dot);
+}
+
+// LSP CompletionItemKind
+const CK_METHOD: int32 = 2;
+const CK_FUNCTION: int32 = 3;
+const CK_FIELD: int32 = 5;
+const CK_VARIABLE: int32 = 6;
+const CK_CLASS: int32 = 7;
+const CK_INTERFACE: int32 = 8;
+const CK_MODULE: int32 = 9;
+const CK_PROPERTY: int32 = 10;
+const CK_ENUM: int32 = 13;
+const CK_KEYWORD: int32 = 14;
+const CK_ENUM_MEMBER: int32 = 20;
+const CK_CONSTANT: int32 = 21;
+const CK_STRUCT: int32 = 22;
+
+const KEYWORDS: String = "let const function return if else while for in is break continue struct class interface enum extends implements override self super native true false null extern c_include c_code switch case default yield when try catch throw throws heap operator as import public private synchronized static export raw";
+
+class Items {
+    let parts: String[*] = [];
+    let seen: Any = {};
+}
+
+function add(items: Items, label: String, kind: int32, detailText: String, doc: String): void {
+    if (label == "" || items.seen.contains(label) || label.contains("__")) { return; }
+    if (probePrefix != "" && !label.toLowerCase().startsWith(probePrefix.toLowerCase())) { return; }
+    items.seen[label] = true;
+    let d: String = detailText != "" ? ",\"detail\":${Json.quote(detailText)}" : "";
+    let m: String = doc != "" ? ",\"documentation\":{\"kind\":\"markdown\",\"value\":${Json.quote(doc)}}" : "";
+    items.parts.push("{\"label\":${Json.quote(label)},\"kind\":${kind}${d}${m}}" in default);
+}
+
+/** Completion, after prepareCompletion and the analysis. */
+public function completionJson(path: String, line0: int32, char16: int32): String {
+    let index: int32 = fileIndex(path);
+    let items: Items = Items {} in default;
+    if (index < 0) { return "{\"isIncomplete\":false,\"items\":[]}"; }
+    collect();
+    if (probeMember) {
+        memberItems(items, index);
+    } else {
+        nameItems(items, index);
+    }
+    return "{\"isIncomplete\":false,\"items\":[${items.parts.join(",")}]}" in default;
+}
+
+/** The probe left by prepareCompletion: the object before the '.'. */
+function probeObject(index: int32): Expr? {
+    let enc: int32 = index * FILE_LINES + probeLine;
+    for (e in exprs) {
+        if (e.line == enc && e is Member m && m.name == PROBE) { return m.object; }
+        if (e.line == enc && e is Call c && c.callee is Member m2 && m2.name == PROBE) { return m2.object; }
+    }
+    return null;
+}
+
+function memberItems(items: Items, index: int32): void {
+    // a module: its public names
+    let alias: String? = aliasesOfFile(index)[probeChain] as String;
+    if (alias != null) {
+        let pubs: Any = publicsOfModule(alias!);
+        for (k, v in pubs.fields) { nameItem(items, k, v as String ?? k); }
+        return;
+    }
+    // a type written before the '.': its variants and static functions
+    let names: Any = namesOfFile(index);
+    let typeName: String? = names[probeChain] as String;
+    if (typeName != null && (enumOf(typeName!) != null || structOf(typeName!) != null || classOf(typeName!) != null)) {
+        let eo: EnumInfo? = enumOf(typeName!);
+        if (eo != null) {
+            for (v in eo.variants) { add(items, v.name, CK_ENUM_MEMBER, detail(ofVariant(eo, v)), ""); }
+        }
+        for (f in functions) {
+            if (f.decl != null && f.decl!.typeName == typeName!) { add(items, f.decl!.name, CK_FUNCTION, detail(ofFunc(f)), docOf(f.line)); }
+        }
+        return;
+    }
+    let obj: Expr? = probeObject(index);
+    if (obj == null || obj!.ty == null) { return; }
+    let t: Type = obj!.ty!;
+    if (t.kind == TyK.Opt && t.elem != null) { t = t.elem!; }
+    typeMembers(items, t);
+}
+
+function typeMembers(items: Items, t: Type): void {
+    if (t.kind == TyK.Array) {
+        add(items, "length", CK_PROPERTY, "length: int32", "");
+        if (t.ak == ArrK.Growable) {
+            add(items, "push", CK_METHOD, "push(x: ${typeText(t.elem)}): void", "");
+            add(items, "pop", CK_METHOD, "pop(): ${typeText(t.elem)}", "");
+            add(items, "clear", CK_METHOD, "clear(): void", "");
+        }
+        add(items, "map", CK_METHOD, "map(f: (${typeText(t.elem)}) -> R): R[*]", "");
+        add(items, "filter", CK_METHOD, "filter(f: (${typeText(t.elem)}) -> bool): ${typeText(t.elem)}[*]", "");
+        add(items, "contains", CK_METHOD, "contains(x: ${typeText(t.elem)}): bool", "");
+        if (t.elem != null && t.elem! == T_STRING) { add(items, "join", CK_METHOD, "join(separator: String): String", ""); }
+        add(items, "clone", CK_METHOD, "clone(): ${typeText(t)}", "");
+        return;
+    }
+    if (t.kind == TyK.Prim) {
+        for (m in nativeMethods) {
+            if (m.owner == t.name && !m.isOperator) { add(items, m.name, CK_METHOD, methodLabel(m), docOf(m.decl.line)); }
+        }
+        if (t == T_STRING) {
+            add(items, "length", CK_METHOD, "length(): int32", "");
+            add(items, "substring", CK_METHOD, "substring(from: int32, to: int32): String", "");
+            add(items, "split", CK_METHOD, "split(separator: String): String[*]", "");
+            add(items, "lines", CK_METHOD, "lines(): String[*]", "");
+            add(items, "bytes", CK_METHOD, "bytes(): byte[]", "");
+            add(items, "clone", CK_METHOD, "clone(): String", "");
+        }
+        if (t == T_ANY) {
+            add(items, "length", CK_PROPERTY, "length: int32", "");
+            add(items, "fields", CK_PROPERTY, "fields: the entries by name (for (name, value in t.fields))", "");
+            add(items, "clone", CK_METHOD, "clone(): Any", "");
+        }
+        return;
+    }
+    if (t.kind != TyK.Named) { return; }
+    let so: StructInfo? = structOf(t.name);
+    if (so != null) {
+        for (f in so.fields) { add(items, f.name, CK_FIELD, "let ${f.name}: ${typeText(f.type)}", docOf(f.line)); }
+        for (m in so.methods) {
+            if (!m.isOperator) { add(items, m.name, CK_METHOD, methodLabel(m), docOf(m.decl.line)); }
+        }
+        return;
+    }
+    if (classOf(t.name) != null) {
+        for (f in allFields(t.name.clone() in default)) { add(items, f.name, CK_FIELD, "let ${f.name}: ${typeText(f.type)}", docOf(f.line)); }
+        let ch: ClassInfo[*] = chain(t.name.clone() in default);
+        let i: int32 = ch.length - 1;
+        while (i >= 0) {            // the class first, then its parents
+            for (m in ch[i].methods) {
+                if (!m.isOperator && !m.decl.isStatic) { add(items, m.name, CK_METHOD, methodLabel(m), docOf(m.decl.line)); }
+            }
+            i -= 1;
+        }
+        return;
+    }
+    let io: InterfaceInfo? = interfaceOf(t.name);
+    if (io != null) {
+        for (m in io.methods) { add(items, m.name, CK_METHOD, methodLabel(m), docOf(m.decl.line)); }
+    }
+}
+
+function docOf(encoded: int32): String {
+    if (encoded <= 0) { return ""; }
+    return docAbove(fileOf(encoded), lineOf(encoded));
+}
+
+/** A name a file can see, by its name after linking. */
+function nameItem(items: Items, name: String, linked: String): void {
+    let f: FunctionInfo? = functionOf(linked);
+    if (f != null) {
+        add(items, name, CK_FUNCTION, detail(ofFunc(f!)), docOf(f!.line));
+        return;
+    }
+    if (structOf(linked) != null) { add(items, name, CK_STRUCT, typeDetail(linked), ""); return; }
+    if (classOf(linked) != null) { add(items, name, CK_CLASS, typeDetail(linked), ""); return; }
+    if (interfaceOf(linked) != null) { add(items, name, CK_INTERFACE, typeDetail(linked), ""); return; }
+    if (enumOf(linked) != null) { add(items, name, CK_ENUM, typeDetail(linked), ""); return; }
+    if (externInfoOf(linked) != null) { add(items, name, CK_CLASS, typeDetail(linked), ""); return; }
+    for (d in program.decls) {
+        if (d is VarDecl v && v.name == linked) {
+            add(items, name, CK_VARIABLE, v.symbol != null ? "let ${name}: ${typeText(v.symbol!.type)}" : "", docOf(v.line));
+            return;
+        }
+        if (d is ConstDecl c && c.name == linked) {
+            add(items, name, CK_CONSTANT, "const ${name}", docOf(c.line));
+            return;
+        }
+    }
+    add(items, name, CK_VARIABLE, "", "");
+}
+
+function nameItems(items: Items, index: int32): void {
+    // locals and parameters of the function the cursor is in, declared before it
+    let enc: int32 = index * FILE_LINES + probeLine;
+    let start: int32 = enclosingStart(index, probeLine);
+    if (start > 0) {
+        for (s in locals) {
+            if (s.line >= index * FILE_LINES + start && s.line <= enc) {
+                add(items, s.name, CK_VARIABLE, "${s.name}: ${typeText(s.type)}", "");
+            }
+        }
+    }
+    let names: Any = namesOfFile(index);
+    for (k, v in names.fields) {
+        if (!isLangHelper(k)) { nameItem(items, k, v as String ?? k); }
+    }
+    let aliases: Any = aliasesOfFile(index);
+    for (k, v in aliases.fields) { add(items, k, CK_MODULE, "import ${v as String ?? k}", ""); }
+    add(items, "print", CK_FUNCTION, "print(text: String): void", "");
+    add(items, "println", CK_FUNCTION, "println(text: String): void", "");
+    add(items, "panic", CK_FUNCTION, "panic(message: String): void", "Stops the program with the message and the line (exit code 101).");
+    for (k in KEYWORDS.split(" ")) { add(items, k, CK_KEYWORD, "", ""); }
+}
+
+/** The line where the function or method around a line starts, or 0. */
+function enclosingStart(index: int32, line: int32): int32 {
+    let best: int32 = 0;
+    for (f in functions) {
+        if (f.decl != null && fileOf(f.line) == index) { best = closer(best, index, lineOf(f.line), line); }
+    }
+    for (s in structs) {
+        for (m in s.methods) { if (fileOf(m.decl.line) == index) { best = closer(best, index, lineOf(m.decl.line), line); } }
+    }
+    for (c in classes) {
+        for (m in c.methods) { if (fileOf(m.decl.line) == index) { best = closer(best, index, lineOf(m.decl.line), line); } }
+    }
+    for (m in nativeMethods) { if (fileOf(m.decl.line) == index) { best = closer(best, index, lineOf(m.decl.line), line); } }
+    return best;
+}
+
+function closer(best: int32, index: int32, start: int32, line: int32): int32 {
+    if (start <= line && start > best && blockEnd(index, start) >= line) { return start; }
+    return best;
+}
+
+// ---- signature help -------------------------------------------------------------------------
+
+/** The signature of the call being written, after prepareCompletion(..., true) and the analysis. */
+public function signatureJson(path: String): String {
+    let index: int32 = fileIndex(path);
+    if (index < 0 || probeCall == "") { return "null"; }
+    collect();
+    let label: String = "";
+    let params: String[*] = [];
+    let doc: String = "";
+    if (probeMember) {
+        let names: Any = namesOfFile(index);
+        let typeName: String? = names[probeChain] as String;
+        if (typeName != null) {                             // Type.staticFunction(
+            let f: FunctionInfo? = functionOf("${typeName!}.${probeCall}");
+            if (f != null) {
+                label = funcLabel(f!);
+                params = funcParams(f!);
+                doc = docOf(f!.line);
+            }
+        } else {
+            let alias: String? = aliasesOfFile(index)[probeChain] as String;
+            if (alias != null) {                            // module.function(
+                let pubs: Any = publicsOfModule(alias!);
+                let linked: String? = pubs[probeCall] as String;
+                let f: FunctionInfo? = linked != null ? functionOf(linked!) : null;
+                if (f != null) {
+                    label = funcLabel(f!);
+                    params = funcParams(f!);
+                    doc = docOf(f!.line);
+                }
+            } else {
+                let obj: Expr? = probeObject(index);
+                let m: MethodInfo? = obj != null && obj!.ty != null ? methodOf(obj!.ty!, probeCall) : null;
+                if (m != null) {
+                    label = methodLabel(m!);
+                    params = methodParams(m!);
+                    doc = docOf(m!.decl.line);
+                }
+            }
+        }
+    } else {
+        let names: Any = namesOfFile(index);
+        let linked: String? = names[probeCall] as String;
+        let f: FunctionInfo? = linked != null ? functionOf(linked!) : null;
+        if (f != null) {
+            label = funcLabel(f!);
+            params = funcParams(f!);
+            doc = docOf(f!.line);
+        }
+    }
+    if (label == "") { return "null"; }
+    let ps: String[*] = [];
+    for (p in params) { ps.push("{\"label\":${Json.quote(p)}}"); }
+    let d: String = doc != "" ? ",\"documentation\":{\"kind\":\"markdown\",\"value\":${Json.quote(doc)}}" : "";
+    return "{\"signatures\":[{\"label\":${Json.quote(label)},\"parameters\":[${ps.join(",")}]${d}}],\"activeSignature\":0,\"activeParameter\":${probeArg}}" in default;
+}
+
+function methodOf(t0: Type, name: String): MethodInfo? {
+    let t: Type = t0.kind == TyK.Opt && t0.elem != null ? t0.elem! : t0;
+    if (t.kind == TyK.Prim) {
+        for (m in nativeMethods) {
+            if (m.owner == t.name && m.name == name) { return m; }
+        }
+        return null;
+    }
+    if (t.kind != TyK.Named) { return null; }
+    let so: StructInfo? = structOf(t.name);
+    if (so != null) {
+        for (m in so.methods) {
+            if (m.name == name) { return m; }
+        }
+        return null;
+    }
+    if (classOf(t.name) != null) { return findMethod(t.name.clone() in default, name, false, -1); }
+    let io: InterfaceInfo? = interfaceOf(t.name);
+    if (io != null) {
+        for (m in io.methods) {
+            if (m.name == name) { return m; }
+        }
+    }
+    return null;
+}
+
+// ---- errors ---------------------------------------------------------------------------------
+
+/**
+ * The errors of the analysis, per file: one { uri, diagnostics } per line, for every file of the program that is not
+ * part of std (so a file whose errors are fixed gets an empty list), and for any file with errors.
+ */
+public function diagnosticsJson(requested: String): String {
+    let found: Diagnostic[*] = diagnostics();
+    let byFile: Any = {};
+    for (i, f in filePaths) {
+        if (!isStdFile(f) || Paths.normalize(f) == Paths.normalize(requested)) { byFile[f] = true; }
+    }
+    for (d in found) {
+        let file: String = d.file != "" ? d.file : requested;
+        if (!byFile.containsKey(file)) { byFile[file] = true; }
+    }
+    let sb: StringBuilder = {};
+    let first: bool = true;
+    for (file, v in byFile.fields) {
+        if (!first) { sb.add("\n"); }
+        first = false;
+        let index: int32 = fileIndex(file);
+        let ds: String[*] = [];
+        for (d in found) {
+            let df: String = d.file != "" ? d.file : requested;
+            if (df != file) { continue; }
+            let line: int32 = d.line > 0 ? d.line : 1;
+            let range: String = index >= 0 ? lineRangeJson(index, line)
+                : "{\"start\":{\"line\":${line - 1},\"character\":0},\"end\":{\"line\":${line - 1},\"character\":1}}";
+            ds.push("{\"range\":${range},\"severity\":1,\"source\":\"larimar\",\"message\":${Json.quote(d.message)}}");
+        }
+        sb.add("{\"uri\":${Json.quote(uriOfPath(file))},\"diagnostics\":[${ds.join(",")}]}");
+    }
+    return sb.toString().clone();
+}

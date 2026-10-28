@@ -1,0 +1,18 @@
+// expect: run
+// output: counter 0 | counter 10 | counter 20
+// Regresión: un texto interpolado copia sus partes, así que no "lleva" la vida de ellas
+// (se rechazaba código correcto con un error de vida falso).
+class Counter {
+    let n: int32 = 0;
+    static function starting(n: int32): Counter { return Counter { n }; }
+    static function label(c: Counter): String { return "counter ${c.n}"; }
+}
+function main(): int32 {
+    let names: String[*] = [];
+    for (i in 0..3) {
+        let c: Counter = Counter.starting(i * 10);
+        names.push(Counter.label(c));
+    }
+    println(names.join(" | "));
+    return 0;
+}

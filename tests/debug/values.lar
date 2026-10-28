@@ -1,0 +1,39 @@
+// expect: run
+// output: Larimar ñ 42 7 - 1 Rex 3 2 2 circle 1.5 2 3 tom
+// Also used by debug_test.py: larimar --debug, a debugger stopping on .lar lines, Larimar's formatters.
+enum Shape { Circle(r: float64), Square(side: float64), Empty }
+struct Point { let x: int32; let y: int32; }
+class Animal { let name: String; let age: int32 = 3; }
+class Dog extends Animal { let breed: String = "mutt"; }
+interface Named { function name(): String; }
+class Cat implements Named { let n: String = "tom"; function name(): String { return self.n; } }
+
+function describe(s: Shape): String {
+    switch (s) {
+        case Circle { r } -> { return "circle ${r}"; }
+        case Square { side } -> { return "square ${side}"; }
+        case Empty -> { return "empty"; }
+    }
+}
+
+function main(): int32 {
+    let name: String = "Larimar ñ";
+    let n: int32 = 42;
+    let maybe: int32? = 7;
+    let nothing: String? = null;
+    let p: Point = Point { x: 1, y: 2 };
+    let d: Dog = Dog { name: "Rex" };
+    let a: Animal = d;
+    let list: String[*] = ["a", "b", "c"];
+    let nums: int32[] = [1, 2, 3];
+    let pts: Point[*] = [p, Point { x: 3, y: 4 }];
+    let shape: Shape = Shape.Circle { r: 1.5 };
+    let data: Any = { 1, "two", name: "x", inner: { 3, true } };
+    let pet: Named = Cat {};
+    let total: int32 = 0;
+    for (i in 0..3) {
+        total += i;
+    }
+    println("${name} ${n} ${maybe ?? 0} ${nothing ?? "-"} ${p.x} ${a.name} ${list.length} ${nums[1]} ${pts.length} ${describe(shape)} ${data.length} ${total} ${pet.name()}");      // break here
+    return 0;
+}

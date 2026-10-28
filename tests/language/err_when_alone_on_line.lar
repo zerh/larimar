@@ -1,0 +1,5 @@
+// expect: error '#when windows' goes alone on its line
+function main(): void {
+    #when windows println("no");
+    #end
+}

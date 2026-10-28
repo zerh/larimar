@@ -1,0 +1,633 @@
+// lexer: source text -> tokens (Lexer.java).
+//
+// String literals keep their raw text (escapes and ${...} included); the parser splits
+// them and lexes each ${...} again. An error stops the lexer: lexError says why.
+
+import std.text { isDigit, isIdentifierPart, isUpper, isLower };
+
+public enum TT {
+    Let, Const, Function, Return, If, Else, While, For, In, Is, Break, Continue,
+    Struct, Class, Interface, Enum, Extends, Implements, Override, Super, Self, New, Native,
+    True, False, Null, Extern, CInclude, CCode, Switch, Case, Default, Yield, When,
+    Try, Catch, Throw, Throws, Heap, Operator, As, Import, Public, Private, Synchronized, Static,
+    Ident, Int, Float, Str,
+    Assign, Eq, Ne, Lt, Le, Gt, Ge, Plus, Minus, Star, Slash, Percent,
+    Amp, Pipe, Caret, Tilde, Shl, Shr, And, Or, Not, Question, QQ,
+    Arrow, Dot, DotDot, Ellipsis, Comma, Colon, Semi, OpAssign,
+    LParen, RParen, LBrace, RBrace, LBracket, RBracket, Eof,
+    HashWhen, HashElse, HashEnd          // #when platform, #else, #end: each alone on its line
+}
+
+public class Token {
+    let kind: TT;
+    let text: String;
+    let line: int32;
+    let num: int64 = 0;      // Int: the value (as uint64 when big)
+    let big: bool = false;   // Int: above the int64 range, inside uint64
+    let huge: bool = false;  // Int: does not fit in 64 bits
+}
+
+let src: String = "";
+let pos: int32 = 0;
+let line: int32 = 0;
+let toks: Token[*] = [] in default;
+
+/** The first lexical error ("" when there is none). */
+public let lexError: String = "";
+
+/** `startLine` is the encoded line of the first byte (file * 1000000 + line). */
+public function tokenize(source: String in default, startLine: int32): Token[*] {
+    src = source;
+    pos = 0;
+    line = startLine;
+    lexError = "";
+    toks = [] in default;
+    while (pos < src.length && lexError == "") {
+        let c: byte = src[pos];
+        if (c == '\n') {
+            line += 1;
+            pos += 1;
+        } else if (c == ' ' || c == '\t' || c == '\r' || c == 12 || c == 11) {
+            pos += 1;
+        } else if (c == '/' && peek(1) == '/') {
+            while (pos < src.length && src[pos] != '\n') { pos += 1; }
+        } else if (c == '/' && peek(1) == '*') {
+            blockComment();
+        } else if (c == 'r' && peek(1) == 'a' && peek(2) == 'w' && peek(3) == '"' && peek(4) == '"' && peek(5) == '"') {
+            rawTextBlock();
+        } else if (isLetter(c) || c == '_') {
+            identifier();
+        } else if (isDigit(c)) {
+            number();
+        } else if (c == '"') {
+            if (peek(1) == '"' && peek(2) == '"') { textBlock(); } else { stringLiteral(); }
+        } else if (c == '\'') {
+            charLiteral();
+        } else if (c == '#') {
+            directive();
+        } else {
+            punctuation(c);
+        }
+    }
+    toks.push(Token { kind: TT.Eof, text: "", line } in default);
+    return toks;
+}
+
+function fail(at: int32, msg: String): void {
+    if (lexError == "") { lexError = "Lexical Error [Line ${at}]: ${msg}" in default; }
+    pos = src.length;
+}
+
+/** ASCII letters, and the bytes of any non-ASCII character (names can use any letter). */
+function isLetter(b: byte): bool { return isUpper(b) || isLower(b) || b >= 128; }
+/** A byte of a name: letters (any), digits and _. */
+function isNameByte(b: byte): bool { return isIdentifierPart(b) || b >= 128; }
+
+function peek(k: int32): byte {
+    return pos + k < src.length ? src[pos + k] : 0;
+}
+
+function add(kind: TT, text: String in default, length: int32): void {
+    toks.push(Token { kind, text, line } in default);
+    pos += length;
+}
+
+function blockComment(): void {
+    let start: int32 = line;
+    pos += 2;
+    while (pos < src.length && !(src[pos] == '*' && peek(1) == '/')) {
+        if (src[pos] == '\n') { line += 1; }
+        pos += 1;
+    }
+    if (pos >= src.length) {
+        fail(start, "Unterminated block comment");
+        return;
+    }
+    pos += 2;
+}
+
+function identifier(): void {
+    let start: int32 = pos;
+    while (pos < src.length && isNameByte(src[pos])) { pos += 1; }
+    let word: String = src.substring(start, pos);
+    if (word.contains("__")) {
+        fail(line, "'${word}': names cannot contain '__' (it is reserved for module names in the generated C).");
+        return;
+    }
+    if (word == "c_code") {
+        cCode();
+        return;
+    }
+    toks.push(Token { kind: keyword(word), text: word, line } in default);
+}
+
+function keyword(w: String): TT {
+    return switch (w) {
+        case "let" -> TT.Let;
+        case "const" -> TT.Const;
+        case "function" -> TT.Function;
+        case "return" -> TT.Return;
+        case "if" -> TT.If;
+        case "else" -> TT.Else;
+        case "while" -> TT.While;
+        case "for" -> TT.For;
+        case "in" -> TT.In;
+        case "is" -> TT.Is;
+        case "break" -> TT.Break;
+        case "continue" -> TT.Continue;
+        case "struct" -> TT.Struct;
+        case "class" -> TT.Class;
+        case "interface" -> TT.Interface;
+        case "enum" -> TT.Enum;
+        case "extends" -> TT.Extends;
+        case "implements" -> TT.Implements;
+        case "override" -> TT.Override;
+        case "super" -> TT.Super;
+        case "self" -> TT.Self;
+        case "new" -> TT.New;
+        case "native" -> TT.Native;
+        case "true" -> TT.True;
+        case "false" -> TT.False;
+        case "null" -> TT.Null;
+        case "extern" -> TT.Extern;
+        case "c_include" -> TT.CInclude;
+        case "switch" -> TT.Switch;
+        case "case" -> TT.Case;
+        case "default" -> TT.Default;
+        case "yield" -> TT.Yield;
+        case "when" -> TT.When;
+        case "try" -> TT.Try;
+        case "catch" -> TT.Catch;
+        case "throw" -> TT.Throw;
+        case "throws" -> TT.Throws;
+        case "heap" -> TT.Heap;
+        case "operator" -> TT.Operator;
+        case "as" -> TT.As;
+        case "import" -> TT.Import;
+        case "public" -> TT.Public;
+        case "private" -> TT.Private;
+        case "synchronized" -> TT.Synchronized;
+        case "static" -> TT.Static;
+        default -> TT.Ident;
+    };
+}
+
+/** c_code { ... }: the C text up to the matching brace (braces in C strings and comments do not count). */
+function cCode(): void {
+    let startLine: int32 = line;
+    while (pos < src.length && (src[pos] == ' ' || src[pos] == '\t' || src[pos] == '\r' || src[pos] == '\n' || src[pos] == 12 || src[pos] == 11)) {
+        if (src[pos] == '\n') { line += 1; }
+        pos += 1;
+    }
+    if (pos >= src.length || src[pos] != '{') {
+        fail(line, "Expected '{' after c_code");
+        return;
+    }
+    pos += 1;
+    let begin: int32 = pos;
+    let depth: int32 = 1;
+    while (pos < src.length) {
+        let c: byte = src[pos];
+        if (c == '\n') {
+            line += 1;
+            pos += 1;
+        } else if (c == '/' && peek(1) == '/') {
+            while (pos < src.length && src[pos] != '\n') { pos += 1; }
+        } else if (c == '/' && peek(1) == '*') {
+            pos += 2;
+            while (pos < src.length && !(src[pos] == '*' && peek(1) == '/')) {
+                if (src[pos] == '\n') { line += 1; }
+                pos += 1;
+            }
+            pos += 2;
+        } else if (c == '"' || c == '\'') {
+            pos += 1;
+            while (pos < src.length && src[pos] != c && src[pos] != '\n') {
+                if (src[pos] == '\\') { pos += 1; }
+                pos += 1;
+            }
+            pos += 1;
+        } else {
+            if (c == '{') { depth += 1; }
+            if (c == '}') {
+                depth -= 1;
+                if (depth == 0) {
+                    toks.push(Token { kind: TT.CCode, text: src.substring(begin, pos), line: startLine } in default);
+                    pos += 1;
+                    return;
+                }
+            }
+            pos += 1;
+        }
+    }
+    fail(startLine, "c_code { is never closed");
+}
+
+function digitValue(b: byte): int32 {
+    if (isDigit(b)) { return (b - '0') as int32; }
+    if (b >= 'a' && b <= 'z') { return (b - 'a') as int32 + 10; }
+    return b >= 'A' && b <= 'Z' ? (b - 'A') as int32 + 10 : 99;
+}
+
+/** A literal whose digits are `digits` (without '_') in base `radix`. */
+function intToken(digits: String in default, radix: int32, whole: String in default): void {
+    let v: uint64 = 0;
+    let huge: bool = false;
+    let r: uint64 = radix as uint64;
+    for (b in digits) {
+        let d: int32 = digitValue(b);
+        if (d >= radix) {
+            let what: String = radix == 16 ? "hexadecimal" : "binary";
+            fail(line, "Invalid ${what} literal '${whole}'");
+            return;
+        }
+        let du: uint64 = d as uint64;
+        if (v > (18446744073709551615 - du) / r) { huge = true; }
+        v = v * r + du;
+    }
+    let text: String = "${v}" in default;
+    if (huge) {
+        let t: String = digits;
+        while (t.length > 1 && t.startsWith("0")) { t = t.substring(1); }
+        text = t;
+    }
+    toks.push(Token { kind: TT.Int, text, line, num: v as int64, big: v > 9223372036854775807, huge } in default);
+}
+
+/** Digits without '_', or "" after reporting an error. */
+function cleanDigits(digits: String, whole: String): String {
+    if (digits.isEmpty() || digits.startsWith("_") || digits.endsWith("_") || digits.contains("__")) {
+        fail(line, "Invalid number literal '${whole}'");
+        return "";
+    }
+    return digits.replace("_", "");
+}
+
+function number(): void {
+    let start: int32 = pos;
+    if (src[pos] == '0' && (peek(1) == 'x' || peek(1) == 'X' || peek(1) == 'b' || peek(1) == 'B')) {   // 0x 0b
+        let radix: int32 = peek(1) == 'x' || peek(1) == 'X' ? 16 : 2;
+        pos += 2;
+        let digitsStart: int32 = pos;
+        while (pos < src.length && isNameByte(src[pos])) { pos += 1; }
+        let whole: String = src.substring(start, pos);
+        let clean: String = cleanDigits(src.substring(digitsStart, pos), whole) in default;
+        if (lexError != "") { return; }
+        intToken(clean, radix, whole);
+        return;
+    }
+    while (pos < src.length && (isDigit(src[pos]) || src[pos] == '_')) { pos += 1; }
+    let isFloat: bool = false;
+    if (pos < src.length && src[pos] == '.' && isDigit(peek(1))) {
+        isFloat = true;
+        pos += 1;
+        while (pos < src.length && (isDigit(src[pos]) || src[pos] == '_')) { pos += 1; }
+    }
+    if (pos < src.length && (src[pos] == 'e' || src[pos] == 'E')
+        && (isDigit(peek(1)) || ((peek(1) == '+' || peek(1) == '-') && isDigit(peek(2))))) {
+        isFloat = true;
+        pos += 2;
+        while (pos < src.length && isDigit(src[pos])) { pos += 1; }
+    }
+    if (pos < src.length && (isLetter(src[pos]) || src[pos] == '_')) {
+        fail(line, "Invalid number literal '${src.substring(start, pos + 1)}'");
+        return;
+    }
+    let text: String = src.substring(start, pos);
+    let clean: String = cleanDigits(text, text) in default;
+    if (lexError != "") { return; }
+    if (isFloat) {
+        toks.push(Token { kind: TT.Float, text: clean, line } in default);
+    } else {
+        intToken(clean, 10, text);
+    }
+}
+
+/** Keeps the raw text; ${...} pieces are lexed again by the parser. */
+function stringLiteral(): void {
+    let start: int32 = line;
+    pos += 1;
+    let begin: int32 = pos;
+    while (pos < src.length && src[pos] != '"') {
+        let c: byte = src[pos];
+        if (c == '\\' && pos + 1 < src.length) {
+            pos += 2;
+        } else if (c == '$' && peek(1) == '{') {
+            if (!interpolation(start)) { return; }
+        } else {
+            if (c == '\n') { line += 1; }
+            pos += 1;
+        }
+    }
+    if (pos >= src.length) {
+        fail(start, "Unterminated string literal");
+        return;
+    }
+    toks.push(Token { kind: TT.Str, text: src.substring(begin, pos), line: start } in default);
+    pos += 1;
+}
+
+/** Skips ${...} (with the strings nested in it); false after reporting an error. */
+function interpolation(start: int32): bool {
+    let depth: int32 = 0;
+    while (pos < src.length) {
+        let d: byte = src[pos];
+        pos += 1;
+        if (d == '\n') { line += 1; }
+        if (d == '{') {
+            depth += 1;
+        } else if (d == '}') {
+            depth -= 1;
+            if (depth == 0) { return true; }
+        } else if (d == '"') {
+            while (pos < src.length && src[pos] != '"') {
+                if (src[pos] == '\\' && pos + 1 < src.length) { pos += 1; }
+                pos += 1;
+            }
+            if (pos < src.length) { pos += 1; }
+        }
+    }
+    fail(start, "Unterminated '\${' in string literal");
+    return false;
+}
+
+/** A text block (\"\"\" then a new line ... \"\"\"): the common indentation and the spaces at line ends go. */
+function textBlock(): void {
+    let start: int32 = line;
+    pos += 3;
+    while (pos < src.length && (src[pos] == ' ' || src[pos] == '\t' || src[pos] == '\r')) { pos += 1; }
+    if (pos >= src.length || src[pos] != '\n') {
+        fail(start, "A text block starts with \"\"\" and a new line; write the text on the next line");
+        return;
+    }
+    pos += 1;
+    line += 1;
+    let begin: int32 = pos;
+    while (true) {
+        if (pos >= src.length) {
+            fail(start, "Unterminated text block (\"\"\")");
+            return;
+        }
+        let c: byte = src[pos];
+        if (c == '\\' && pos + 1 < src.length) {
+            if (src[pos + 1] == '\n') { line += 1; }
+            pos += 2;
+        } else if (c == '"' && peek(1) == '"' && peek(2) == '"') {
+            break;
+        } else if (c == '$' && peek(1) == '{') {
+            if (!interpolation(start)) { return; }
+        } else {
+            if (c == '\n') { line += 1; }
+            pos += 1;
+        }
+    }
+    let text: String = src.substring(begin, pos).replace("\r", "") in default;
+    pos += 3;
+    toks.push(Token { kind: TT.Str, text: stripIndent(text) in default, line: start } in default);
+}
+
+/**
+ * raw\"\"\" then a new line ... \"\"\": a text block taken as it is written. No escapes (a backslash is a
+ * backslash) and no ${...}. The common indentation goes, as in a text block. If the text has three quotes in
+ * a row, open with more (raw\"\"\"\") and close with as many.
+ */
+function rawTextBlock(): void {
+    let start: int32 = line;
+    pos += 3;
+    let quotes: int32 = 0;
+    while (pos < src.length && src[pos] == '"') {
+        quotes += 1;
+        pos += 1;
+    }
+    while (pos < src.length && (src[pos] == ' ' || src[pos] == '\t' || src[pos] == '\r')) { pos += 1; }
+    if (pos >= src.length || src[pos] != '\n') {
+        fail(start, "A raw text block starts with raw\"\"\" and a new line; write the text on the next line");
+        return;
+    }
+    pos += 1;
+    line += 1;
+    let begin: int32 = pos;
+    while (true) {
+        if (pos >= src.length) {
+            fail(start, "Unterminated raw text block (raw\"\"\")");
+            return;
+        }
+        if (src[pos] == '"' && closes(quotes)) { break; }
+        if (src[pos] == '\n') { line += 1; }
+        pos += 1;
+    }
+    let text: String = stripIndent(src.substring(begin, pos).replace("\r", "")) in default;
+    pos += quotes;
+    // the rest of the compiler reads escapes in texts: write the same text with them
+    let escaped: String = text.replace("\\", "\\\\").replace("$", "\\$") in default;
+    toks.push(Token { kind: TT.Str, text: escaped, line: start } in default);
+}
+
+/** `quotes` quotes in a row at pos. */
+function closes(quotes: int32): bool {
+    for (k in 0..quotes) {
+        if (pos + k >= src.length || src[pos + k] != '"') { return false; }
+    }
+    return true;
+}
+
+public function stripIndent(raw: String in default): String {
+    let lines: String[*] = raw.split("\n");
+    let last: int32 = lines.length - 1;
+    let min: int32 = 2147483647;
+    for (i, l in lines) {
+        if (!blank(l) || i == last) {
+            let n: int32 = indent(l);
+            if (n < min) { min = n; }
+        }
+    }
+    let out: StringBuilder = {} in default;
+    for (i, l in lines) {
+        if (i > 0) { out.add("\n"); }
+        if (blank(l)) { continue; }
+        let t: String = l.substring(min);
+        let end: int32 = t.length;
+        while (end > 0 && (t[end - 1] == ' ' || t[end - 1] == '\t')) { end -= 1; }
+        out.add(t.substring(0, end));
+    }
+    return out.toString();
+}
+
+function blank(l: String): bool { return indent(l) == l.length; }
+
+function indent(l: String): int32 {
+    let n: int32 = 0;
+    while (n < l.length && (l[n] == ' ' || l[n] == '\t')) { n += 1; }
+    return n;
+}
+
+/**
+ * #when windows, #else, #end: chosen when the C is compiled. Each goes alone on its line (a comment
+ * may follow), so it never reads like code of the program. The token of #when holds the platform;
+ * num holds the column: the #else and #end of a #when line up with it, and a deeper one is nested.
+ */
+function directive(): void {
+    let lineStart: int32 = pos;
+    while (lineStart > 0 && (src[lineStart - 1] == ' ' || src[lineStart - 1] == '\t')) { lineStart -= 1; }
+    if (lineStart > 0 && src[lineStart - 1] != '\n') {
+        fail(line, "'#' starts a line of its own: #when, #else or #end");
+        return;
+    }
+    pos += 1;
+    let start: int32 = pos;
+    while (pos < src.length && isNameByte(src[pos])) { pos += 1; }
+    let word: String = src.substring(start, pos);
+    let kind: TT = TT.HashEnd;
+    let text: String = "";
+    if (word == "when") {
+        kind = TT.HashWhen;
+        while (pos < src.length && (src[pos] == ' ' || src[pos] == '\t')) { pos += 1; }
+        let p: int32 = pos;
+        while (pos < src.length && isNameByte(src[pos])) { pos += 1; }
+        text = src.substring(p, pos);
+        if (text == "") {
+            fail(line, "Expected a platform after '#when': windows, macos, linux or unix");
+            return;
+        }
+    } else if (word == "else") {
+        kind = TT.HashElse;
+    } else if (word != "end") {
+        fail(line, "Unknown directive '#${word}': there are only #when <platform>, #else and #end");
+        return;
+    }
+    while (pos < src.length && (src[pos] == ' ' || src[pos] == '\t' || src[pos] == '\r')) { pos += 1; }
+    let alone: bool = pos >= src.length || src[pos] == '\n' || (src[pos] == '/' && peek(1) == '/');
+    if (!alone) {
+        let what: String = word == "when" ? "#when ${text}" : "#${word}";
+        fail(line, "'${what}' goes alone on its line: write what follows on the next one");
+        return;
+    }
+    toks.push(Token { kind, text, line, num: (start - 1 - lineStart) as int64 } in default);   // num: its column
+}
+
+/** 'a', '\n': the character's code (Unicode), as an integer literal. */
+function charLiteral(): void {
+    let start: int32 = line;
+    pos += 1;
+    if (pos >= src.length || src[pos] == '\n') {
+        fail(start, "Unterminated character literal");
+        return;
+    }
+    let cp: int32 = 0;
+    if (src[pos] == '\\') {
+        let e: byte = peek(1);
+        if (e == 'n') {
+            cp = 10;
+        } else if (e == 't') {
+            cp = 9;
+        } else if (e == 'r') {
+            cp = 13;
+        } else if (e == '0') {
+            cp = 0;
+        } else if (e == '\\' || e == '\'' || e == '"') {
+            cp = e as int32;
+        } else {
+            fail(start, "Unknown escape '\\${src.substring(pos + 1, pos + 2)}' in a character literal");
+            return;
+        }
+        pos += 2;
+    } else if (src[pos] == '\'') {
+        fail(start, "Empty character literal ''");
+        return;
+    } else {
+        let b: int32 = src[pos] as int32;
+        let need: int32 = 0;
+        if (b >= 240) {
+            cp = b & 7;
+            need = 3;
+        } else if (b >= 224) {
+            cp = b & 15;
+            need = 2;
+        } else if (b >= 192) {
+            cp = b & 31;
+            need = 1;
+        } else {
+            cp = b;
+        }
+        pos += 1;
+        let k: int32 = 0;
+        while (k < need && pos < src.length) {
+            cp = (cp << 6) | (src[pos] as int32 & 63);
+            pos += 1;
+            k += 1;
+        }
+    }
+    if (pos >= src.length || src[pos] != '\'') {
+        fail(start, "A character literal holds one character; use \"...\" for text");
+        return;
+    }
+    pos += 1;
+    toks.push(Token { kind: TT.Int, text: "${cp}", line: start, num: cp as int64 } in default);
+}
+
+function punctuation(c: byte): void {
+    let one: String = src.substring(pos, pos + 1);
+    let two: String = src.substring(pos, pos + 2 <= src.length ? pos + 2 : pos + 1);
+    if ("+-*/%&|^".contains(one) && peek(1) == '=') {
+        add(TT.OpAssign, one, 2);        // compound assignment: the value is the operator
+        return;
+    }
+    if (two == "=>") {
+        fail(line, "'=>' is not valid, lambdas and switch cases use '->'");
+        return;
+    }
+    if (two == ".." && peek(2) == '.') {
+        add(TT.Ellipsis, "...", 3);
+        return;
+    }
+    let pair: TT? = switch (two) {
+        case "->" -> TT.Arrow;
+        case "==" -> TT.Eq;
+        case "!=" -> TT.Ne;
+        case "<=" -> TT.Le;
+        case "<<" -> TT.Shl;
+        case ">=" -> TT.Ge;
+        case ">>" -> TT.Shr;
+        case "&&" -> TT.And;
+        case "||" -> TT.Or;
+        case "??" -> TT.QQ;
+        case ".." -> TT.DotDot;
+        default -> null;
+    };
+    if (pair != null) {
+        add(pair, two, 2);
+        return;
+    }
+    let single: TT? = switch (c) {
+        case '-' -> TT.Minus;
+        case '=' -> TT.Assign;
+        case '!' -> TT.Not;
+        case '<' -> TT.Lt;
+        case '>' -> TT.Gt;
+        case '&' -> TT.Amp;
+        case '|' -> TT.Pipe;
+        case '?' -> TT.Question;
+        case '.' -> TT.Dot;
+        case '^' -> TT.Caret;
+        case '~' -> TT.Tilde;
+        case '+' -> TT.Plus;
+        case '*' -> TT.Star;
+        case '/' -> TT.Slash;
+        case '%' -> TT.Percent;
+        case ':' -> TT.Colon;
+        case ';' -> TT.Semi;
+        case ',' -> TT.Comma;
+        case '(' -> TT.LParen;
+        case ')' -> TT.RParen;
+        case '{' -> TT.LBrace;
+        case '}' -> TT.RBrace;
+        case '[' -> TT.LBracket;
+        case ']' -> TT.RBracket;
+        default -> null;
+    };
+    if (single == null) {
+        fail(line, "Unexpected character '${one}'");
+        return;
+    }
+    add(single, one, 1);
+}

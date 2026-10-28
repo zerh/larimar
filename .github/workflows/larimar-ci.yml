@@ -1,0 +1,98 @@
+name: Larimar CI/CD
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    name: Build & Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: larimar-linux-x86_64.tar.gz
+            script_type: sh
+          - os: macos-latest
+            artifact_name: larimar-macos-x86_64.tar.gz
+            script_type: sh
+          - os: windows-latest
+            artifact_name: larimar-windows-x86_64.zip
+            script_type: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 1. Compilación y verificación en Linux / macOS
+      - name: Build and Verify (Unix)
+        if: matrix.script_type == 'sh'
+        run: |
+          ./build-bootstrap.sh --verify
+
+      # 2. Compilación y verificación en Windows (con MinGW/GCC)
+      - name: Setup MinGW & Build (Windows)
+        if: matrix.script_type == 'pwsh'
+        shell: pwsh
+        run: |
+          choco install mingw -y
+          $env:Path += ";C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
+          $env:CC = "gcc"
+          $env:CFLAGS = "-std=c99 -O2"
+          
+          .\build-bootstrap.ps1 --verify
+
+      # 3. Empaquetar la carpeta ../larimar resultante
+      - name: Package Larimar Directory (Unix)
+        if: matrix.script_type == 'sh'
+        run: |
+          tar -czf ${{ matrix.artifact_name }} -C .. larimar
+
+      - name: Package Larimar Directory (Windows)
+        if: matrix.script_type == 'pwsh'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "..\larimar" -DestinationPath "${{ matrix.artifact_name }}" -Force
+
+      # 4. Subir artefacto para el job de release
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}
+
+  release:
+    name: Create GitHub Release
+    needs: build-and-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    
+    # 🔑 AQUÍ ES DONDE SE LE DA EL PERMISO AL TOKEN AUTOMÁTICO DE GITHUB
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-artifacts
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir -p final-release
+          find downloaded-artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} final-release/ \;
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            final-release/*
+          generate_release_notes: true

@@ -1,0 +1,10 @@
+// expect: error 'close_thing' releases Thing: call release(x) instead
+c_code { static void close_thing(int t) { (void)t; } static int open_thing(void) { return 1; } }
+extern type Thing = c "int" released by close_thing;
+extern function open_thing(): Thing?;
+extern function close_thing(t: Thing): void;
+function main(): int32 {
+    let t: Thing? = open_thing();
+    close_thing(t!);
+    return 0;
+}

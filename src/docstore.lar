@@ -1,0 +1,72 @@
+// docstore: the texts of the documents open in the editor, by file path (larimar lsp).
+// They live in C memory (malloc), so a text can be freed when the editor sends a new one: the server
+// runs for hours and its documents change on every key. The linker reads a file from here when it is
+// open in the editor (with its changes not saved yet), and from the disk otherwise.
+
+c_code {
+    #include <stdlib.h>
+    typedef struct { char* path; char* text; } LmDoc;
+    static LmDoc* lm_docs;
+    static int32_t lm_doc_n, lm_doc_cap;
+
+    static char* lm_doc_copy(const char* s) {
+        size_t n = strlen(s);
+        char* p = (char*)malloc(n + 1);
+        if (!p) rt_panic("out of memory for the editor's documents", 0);
+        memcpy(p, s, n + 1);
+        return p;
+    }
+    static int32_t lm_doc_find(const char* path) {
+        for (int32_t i = 0; i < lm_doc_n; i++) if (strcmp(lm_docs[i].path, path) == 0) return i;
+        return -1;
+    }
+    static void lm_doc_set(const char* path, const char* text) {
+        int32_t i = lm_doc_find(path);
+        if (i >= 0) {
+            free(lm_docs[i].text);
+            lm_docs[i].text = lm_doc_copy(text);
+            return;
+        }
+        if (lm_doc_n == lm_doc_cap) {
+            lm_doc_cap = lm_doc_cap ? lm_doc_cap * 2 : 16;
+            lm_docs = (LmDoc*)realloc(lm_docs, sizeof(LmDoc) * (size_t)lm_doc_cap);
+            if (!lm_docs) rt_panic("out of memory for the editor's documents", 0);
+        }
+        lm_docs[lm_doc_n].path = lm_doc_copy(path);
+        lm_docs[lm_doc_n].text = lm_doc_copy(text);
+        lm_doc_n++;
+    }
+    static void lm_doc_remove(const char* path) {
+        int32_t i = lm_doc_find(path);
+        if (i < 0) return;
+        free(lm_docs[i].path);
+        free(lm_docs[i].text);
+        lm_docs[i] = lm_docs[--lm_doc_n];
+    }
+    static bool lm_doc_has(const char* path) { return lm_doc_find(path) >= 0; }
+    static const char* lm_doc_text(const char* path) { int32_t i = lm_doc_find(path); return i >= 0 ? lm_docs[i].text : ""; }
+    static int32_t lm_doc_count(void) { return lm_doc_n; }
+    static const char* lm_doc_path(int32_t i) { return i >= 0 && i < lm_doc_n ? lm_docs[i].path : ""; }
+}
+
+extern function lm_doc_set(path: String, text: String): void;
+extern function lm_doc_remove(path: String): void;
+extern function lm_doc_has(path: String): bool;
+extern function lm_doc_text(path: String): String;
+extern function lm_doc_count(): int32;
+extern function lm_doc_path(i: int32): String;
+
+/** Keeps (a copy of) the editor's text of a file. */
+public function setDocument(path: String, text: String): void { lm_doc_set(path, text); }
+
+/** The editor closed the file: from now on it is read from the disk. */
+public function removeDocument(path: String): void { lm_doc_remove(path); }
+
+/** The editor's text of a file, or null when it is not open. */
+public function document(path: String): String? {
+    if (!lm_doc_has(path)) { return null; }
+    return lm_doc_text(path);
+}
+
+public function documentCount(): int32 { return lm_doc_count(); }
+public function documentPath(i: int32): String { return lm_doc_path(i); }

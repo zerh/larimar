@@ -1,0 +1,12 @@
+// expect: run
+// output: 3 log-2
+// Guardar en una lista global desde una función: con 'in default' vive todo el programa.
+let log: String[*] = [] in default;
+function note(i: int32): void {
+    log.push("log-${i}" in default);
+}
+function main(): int32 {
+    for (i in 0..3) { note(i); }
+    println("${log.length} ${log[2]}");
+    return 0;
+}

@@ -1,0 +1,80 @@
+// expect: run
+// output: list: 3 nodes, sum 60
+// output: out params: 7 and 42
+// output: constants: 3 / limit 100 / size 8
+// output: global: 5 -> 6
+// output: names: uno dos
+// output: array as pointer: 10
+// output: platform: ok
+// output: renamed: 9
+// output: maybe: null and "hola"
+// C without c_code-wrappers: pointers to C structs (a linked list), out parameters (&x), constants and
+// macros (extern const), a C global (extern let), C strings in structs, arrays where C takes T*, `when`.
+c_code {
+    typedef struct Node { int value; struct Node* next; const char* name; } Node;
+    static Node nodes[3] = { { 10, &nodes[1], "uno" }, { 20, &nodes[2], "dos" }, { 30, NULL, "tres" } };
+    static Node* first_node(void) { return &nodes[0]; }
+    static void two_results(int* a, int* b) { *a = 7; *b = 42; }
+    #define COUNT 3
+    #define LIMIT (COUNT * 33 + 1)
+    static int counter = 5;
+    static int sum_bytes(const unsigned char* p, int n) { int s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }
+    static int square_it(int x) { return x * x; }
+    static const char* maybe_text(int yes) { return yes ? "hola" : NULL; }
+}
+
+extern type Node = struct "Node" {
+    let value: int32;
+    let next: Node*;
+    let name: String;                 // a C string: read as a view
+};
+extern function first_node(): Node*;
+extern function two_results(a: int32*, b: int32*): void;
+extern const COUNT: int32;
+extern const LIMIT: int32;
+extern const POINTER_SIZE: int32 = c "(int)sizeof(void*)";
+extern let counter: int32;
+extern function sum_bytes(p: byte*, n: int32): int32;
+extern function square(x: int32): int32 = c "square_it";
+extern function maybe_text(yes: int32): String?;
+
+function main(): int32 {
+    let n: int32 = 0;
+    let sum: int32 = 0;
+    let p: Node* = first_node();
+    while (p != null) {
+        n += 1;
+        sum += p.value;
+        p = p.next;
+    }
+    println("list: ${n} nodes, sum ${sum}");
+
+    let a: int32 = 0;
+    let b: int32 = 0;
+    two_results(&a, &b);
+    println("out params: ${a} and ${b}");
+
+    println("constants: ${COUNT} / limit ${LIMIT} / size ${POINTER_SIZE >= 4 ? 8 : 0}");
+
+    let before: int32 = counter;
+    counter = counter + 1;
+    println("global: ${before} -> ${counter}");
+
+    let f: Node* = first_node();
+    println("names: ${f.name} ${f.next.name}");
+
+    let bytes: byte[4] = [1, 2, 3, 4];
+    println("array as pointer: ${sum_bytes(bytes, bytes.length)}");
+
+    #when windows
+        let platform: String = "windows";
+    #when macos
+        let platform: String = "macos";
+    #else
+        let platform: String = "unix";
+    #end
+    println("platform: ${platform != "" ? "ok" : "?"}");
+    println("renamed: ${square(3)}");
+    println("maybe: ${maybe_text(0) == null ? "null" : "?"} and \"${maybe_text(1) ?? ""}\"");
+    return 0;
+}

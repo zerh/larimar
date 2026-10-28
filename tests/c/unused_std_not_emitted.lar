@@ -1,0 +1,15 @@
+// expect: run
+// output: HOLA true
+// c-has: String_startsWith
+// c-lacks: String_trimEnd
+// c-lacks: String_lastIndexOf
+// c-lacks: Opt_i64
+// c-lacks: List_s
+// c-lacks: byte_text_new
+// Solo llega al C lo que el programa usa: ni los métodos de String que no llama, ni los tipos que solo
+// aparecen en sus firmas, ni el c_code de la biblioteca estándar que nadie usa.
+function main(): int32 {
+    let s: String = "hola";
+    println("${s.toUpperCase()} ${s.startsWith("ho")}");
+    return 0;
+}

@@ -1,0 +1,13 @@
+// expect: run
+// output: 0,1,2,3,4,5,6,7,8,9 19
+// StringBuilder que crece dentro de un bucle.
+function main(): int32 {
+    let sb: StringBuilder = {};
+    for (i in 0..10) {
+        if (i > 0) { sb.add(","); }
+        sb.add("${i}");
+    }
+    let s: String = sb.toString();
+    println("${s} ${s.length}");
+    return 0;
+}

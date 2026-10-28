@@ -1,0 +1,7 @@
+// expect: run
+// output: ababab HOLA 7 2
+// Regresión: un programa que nunca escribe la palabra "String" también tiene sus métodos de std.
+function main(): int32 {
+    println("${"ab".repeat(3)} ${"hola".toUpperCase()} ${"0x7".toInt() ?? 0} ${"a-b".indexOf("b") ?? -1}");
+    return 0;
+}

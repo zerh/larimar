@@ -1,0 +1,12 @@
+// expect: run
+// output: 3 item-2
+// clone() copia el valor a la memoria donde se guarda (la de la lista).
+function main(): int32 {
+    let items: String[*] = [];
+    for (i in 0..3) {
+        let tmp: String = "item-${i}";
+        items.push(tmp.clone());
+    }
+    println("${items.length} ${items[2]}");
+    return 0;
+}

@@ -1,0 +1,10 @@
+/** A point in the plane. */
+public struct Point {
+    let x: float64;
+    let y: float64;
+    /** Distance to the origin. */
+    function norm(): float64 { return self.x * self.x + self.y * self.y; }
+}
+
+/** Area of a square. */
+public function area(side: float64): float64 { return side * side; }

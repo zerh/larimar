@@ -1,0 +1,93 @@
+// expect: run
+// output: separator: /
+// output: shared after #end: 3
+// output: local again: 7
+// output: memory: abc
+// output: nested: unix
+// output: returned: 2
+// output: early: 1
+// The platform is chosen when the C is compiled. #when has no block: a name every branch declares,
+// with the same type, stays after #end; what one branch declares alone stays in it.
+
+function separator(): String {
+    #when windows
+        let sep: String = "\\";
+        let local: int32 = 1;
+    #else
+        let sep: String = "/";
+    #end
+    return sep;
+}
+
+function shared(): int32 {
+    #when unix
+        let n: int32 = 3;
+        let onlyHere: bool = true;
+    #when windows
+        let n: int32 = 3;
+    #end
+    return n;
+}
+
+function localAgain(): int32 {
+    #when windows
+        let k: int32 = 5;
+    #else
+        let k: String = "different type: stays in its branch";
+    #end
+    let k: int32 = 7;                      // the branches' k did not stay: declared again
+    return k;
+}
+
+function memory(): String {
+    #when windows
+        let m: byte[*] = [] in heap;            // a memory of its own: freed at the end of the function
+        let a: byte[*] = [] in m;
+        a.push('a');
+        let t: String = "abc";
+    #else
+        let scratch: byte[*] = [] in heap;     // only this branch's memory is freed in this C
+        let x: byte[*] = [] in scratch;
+        x.push('x');
+        let t: String = "abc";
+    #end
+    return t.clone();
+}
+
+function nested(): String {
+    #when windows
+        return "windows";
+    #else
+        #when macos
+            let what: String = "unix";
+        #else
+            let what: String = "unix";
+        #end
+        return what;
+    #end
+}
+
+function returned(): int32 {
+    #when windows
+        return 2;
+    #else
+        return 2;
+    #end
+}
+
+function early(x: int32): int32 {
+    #when unix
+        if (x > 0) { return 1; }
+    #end
+    return 0;
+}
+
+function main(): void {
+    println("separator: ${separator() == "\\" ? "\\" : "/"}");
+    println("shared after #end: ${shared()}");
+    println("local again: ${localAgain()}");
+    println("memory: ${memory()}");
+    println("nested: ${nested()}");
+    println("returned: ${returned()}");
+    println("early: ${early(5) + early(0) * 0 }");
+}

@@ -1,0 +1,1747 @@
+// gen: C99 code generation (Gen.java), part 1: the file, types, classes and interfaces,
+// globals, bodies and statements. Expressions are in genexpr.lar.
+//
+//  - struct     -> C struct, copied by value; methods are plain functions on S*.
+//  - class      -> C struct in a memory, used through pointers. The root struct starts with
+//                  RtObjHead (vtable + memory); a subclass embeds its parent as `_super`.
+//  - interface  -> { void* obj; const I_Table* t; }
+//  - enum       -> { int32_t tag; union { ...payloads } as; }
+//  - closure    -> { fn; union of every environment of that type }, copied by value.
+//  - T[N]       -> { length; items[N] } by value; T[] -> { items*, length };
+//                  T[*] -> pointer to { items*, length, capacity, mem }.
+//  - errors     -> a function that throws takes RtError* err_out; every call checks it.
+//  - memories   -> RtMem; heap memories are freed on every exit of their block.
+
+import ast {
+    ExternTypeDecl,
+    Expr, Stmt, VarDecl, AssignStmt, ReturnStmt, ExprStmt, IfStmt, WhileStmt, ForStmt, BreakStmt, ContinueStmt, ThrowStmt,
+    YieldStmt, TryStmt, SwitchStmt, BlockStmt, Member, Index, Call, IsExpr, SwitchExpr, allStmts, allExprs
+};
+import sema {
+    Type, TyK, NamedK, ArrK, T_STRING, T_VOID, T_ANY, T_BOOL, T_INT32, isError, isClass, isStruct, isInterface, isEnumT,
+    isExternT, isOpt, isArray, optIsPointer, ascii, isCReserved, escapeName, Symbol, SymK, MemK, isMemory,
+    FieldInfo, FunctionInfo, MethodInfo, StructInfo, ClassInfo, InterfaceInfo, VariantInfo, EnumInfo, LambdaInfo,
+    hasCapture, cSuffix, isMemParam, PatternInfo, PatK, SwitchInfo, ForInfo, CatchInfo, CallInfo, CallK, MemberInfo, MbK,
+    includes, usesAny, usesThreads, cCode, files, structs, nativeMethods, classes, interfaces, enums, externTypes, functions, globals,
+    lambdaList, funcTypes, typeOrder, structOf, classOf, interfaceOf, enumOf, parentOf, chain, findMethod, allFields, classDepth, primByName,
+    externInfos, externInfoOf, ExternTypeInfo, cCodeStd, includeWhens, isResource, platformCondition
+};
+import rtselect { selectRuntime };
+import prune { prune, braceDelta };
+import linker { filePaths, FILE_LINES };
+import checkexpr { hasRefs };
+import genexpr {
+    expr, value, hoist, strip, lazyPre, lazy, zero, stringLiteral, addrOf, discard, patternTest, bindPattern,
+    boxDescriptors, cloneFunctions, requireClone, mangle, cType, structName, tname, lvalue, placeMemOf,
+    cloneTypeList, cloneHeader, needsDeepClone, cloneOf, classFieldPath
+};
+
+// =====================================================================================
+// Function context
+// =====================================================================================
+
+public class Block {
+    let cleanups: String[*] = [];
+}
+
+public class TryCtx {
+    let catchLabel: String;
+    let block: Block;
+}
+
+public class ArmCtx {
+    let endLabel: String;
+    let result: String;
+    let block: Block;
+    let used: bool = false;        // a yield jumped to endLabel (else the label is not written: -Wunused-label)
+}
+
+public class Fn {
+    let out: StringBuilder;
+    let indent: int32 = 1;
+    let lambda: LambdaInfo? = null;
+    let ret: Type;
+    let throwsOut: bool = false;
+    let blocks: Block[*] = [];        // the root first, the innermost last
+    let tries: TryCtx[*] = [];
+    let arms: ArmCtx[*] = [];
+    let placeOverride: String = "";   // memory for allocations inside field defaults
+    let temp: Temp? = null;           // the temporaries of the statement being generated (null outside statements)
+    let destUsed: bool = false;       // the function created something in rt_dest (the memory of its call)
+}
+
+/** A statement's temporary memory, declared before the statement only if something used it. */
+public class Temp {
+    let owner: Block;
+    let name: String = "";
+}
+
+public function newFn(): Fn { return Fn { out: {} in default, ret: T_VOID } in default; }
+
+public let fn: Fn = newFn();
+public let counter: int32 = 0;
+public let hasErrors: bool = false;
+
+/** Bugs of the compiler found while generating: reported instead of writing C that would crash. */
+public let generatorErrors: String[*] = [] in default;
+
+public function internalError(line: int32, msg: String): void {
+    generatorErrors.push("Internal Error [Line ${line}]: ${msg} This is a bug of the compiler, not of your program: please report it." in default);
+}
+
+// helpers discovered while generating bodies
+public let samInterfaces: String[*] = [] in default;
+public let samSeen: Any = {} in default;
+public let literalTypes: StringBuilder = {} in default;
+public let literalPrototypes: StringBuilder = {} in default;
+public let literalTables: StringBuilder = {} in default;
+public let literalThunks: StringBuilder = {} in default;
+public let lambdaDefs: String[*] = [] in default;     // by lambda id ("" until generated)
+public let lambdaDone: bool[*] = [] in default;
+public let resizeHelpers: String[*] = [] in default;
+public let resizeSeen: Any = {} in default;
+public let loopBlock: Block? = null;                  // innermost loop body (per function, saved/restored)
+
+// =====================================================================================
+// Debugging (larimar build --debug): the C says which .lar line each part comes from
+// =====================================================================================
+
+/** #line before each statement, so a debugger (lldb, gdb) shows and stops on the .lar lines. */
+public let debugLines: bool = false;
+
+function lineMark(encoded: int32): String {
+    let index: int32 = encoded / FILE_LINES;
+    let ln: int32 = encoded % FILE_LINES;
+    if (index < 0 || index >= filePaths.length || ln <= 0) { return ""; }
+    return "#line ${ln} ${cPathLiteral(filePaths[index])}";
+}
+
+function cPathLiteral(path: String): String { return "\"${path.replace("\\", "/").replace("\"", "\\\"")}\""; }
+
+/**
+ * After generating with debugLines: inside a function, every line of C after a #line gets that same
+ * .lar line (C would count on: N, N+1, N+2...); after the function, the lines are the C file's again,
+ * so the runtime and helpers are shown as the C they are.
+ */
+public function spreadLines(c: String, cFile: String): String {
+    let sb: StringBuilder = {};
+    let written: int32 = 0;
+    let depth: int32 = 0;
+    let current: String = "";
+    let lastWasMark: bool = false;
+    let reset: String = cPathLiteral(cFile);
+    let all: String[*] = c.split("\n");
+    for (k, ln in all) {
+        let t: String = ln.trimStart();
+        if (depth == 0 && current == "" && braceDelta(ln) > 0 && ln.contains("(")) {
+            // a function: its header gets the line of its first mark (its declaration), for "break name"
+            let first: String = firstMark(all, k);
+            if (first != "") {
+                current = first;
+                sb.addLine(first);
+                written += 1;
+                lastWasMark = true;
+            }
+        }
+        if (depth > 0 && t.startsWith("#line ")) {
+            current = t;
+            sb.addLine(ln);
+            written += 1;
+            lastWasMark = true;
+            continue;
+        }
+        if (current != "" && !lastWasMark && t != "") {
+            sb.add(ln.substring(0, ln.length - t.length));      // with the line's indentation
+            sb.addLine(current);
+            written += 1;
+        }
+        sb.addLine(ln);
+        written += 1;
+        lastWasMark = false;
+        depth += braceDelta(ln);
+        if (depth < 0) { depth = 0; }
+        if (depth == 0 && current != "") {
+            current = "";
+            sb.addLine("#line ${written + 2} ${reset}");
+            written += 1;
+        }
+    }
+    return sb.toString().clone();
+}
+
+/** The first #line of the function whose header is all[k] (before the function ends), or "". */
+function firstMark(all: String[*], k: int32): String {
+    let depth: int32 = 0;
+    let i: int32 = k;
+    while (i < all.length) {
+        let t: String = all[i].trimStart();
+        if (i > k && t.startsWith("#line ")) { return t; }
+        depth += braceDelta(all[i]);
+        if (depth <= 0 && i > k) { return ""; }
+        i += 1;
+    }
+    return "";
+}
+
+public function line(s: String): void {
+    let i: int32 = 0;
+    while (i < fn.indent) {
+        fn.out.add("    ");
+        i += 1;
+    }
+    fn.out.addLine(s);
+}
+
+public function tmp(prefix: String): String {
+    let t: String = "${prefix}_${counter}";
+    counter += 1;
+    return t;
+}
+
+/** Adds four spaces to every line (like String.indent(4) in Java). */
+public function indent4(text: String in default): String {
+    if (text.isEmpty()) { return ""; }
+    let sb: StringBuilder = {} in default;
+    let ls: String[*] = text.split("\n");
+    for (i, l in ls) {
+        if (i == ls.length - 1 && l.isEmpty()) { break; }
+        sb.add("    ");
+        sb.addLine(l);
+    }
+    return sb.toString();
+}
+
+function pushBlock(b: Block in default): void { fn.blocks.push(b); }
+
+function popBlock(): void {
+    let rest: Block[*] = [] in default;
+    let i: int32 = 0;
+    while (i < fn.blocks.length - 1) {
+        rest.push(fn.blocks[i]);
+        i += 1;
+    }
+    fn.blocks = rest;
+}
+
+public function topBlock(): Block { return fn.blocks[fn.blocks.length - 1]; }
+public function rootBlock(): Block { return fn.blocks[0]; }
+
+// =====================================================================================
+// Output assembly
+// =====================================================================================
+
+let hasInit: bool = false;
+
+public function generate(): String {
+    for (e in enums) {
+        if (e.thrown) { hasErrors = true; }
+    }
+    for (l in lambdaList) {
+        lambdaDefs.push("");
+        lambdaDone.push(false);
+    }
+    // Bodies first: they discover lambdas, literal objects and helpers.
+    let functionsOut: StringBuilder = {} in default;
+    for (f in functions) {
+        if (f.isExtern) { continue; }
+        functionsOut.add(functionHeader(f));
+        functionsOut.addLine(" {");
+        functionsOut.add(body(f.decl!.body, f.sig!.elem!, f.throwsType != null, null, f.paramSymbols, "", f.line));
+        functionsOut.add("}\n\n");
+    }
+    for (f in functions) {                      // export: the C function C code calls
+        if (f.isExtern || f.exportName == "") { continue; }
+        functionsOut.add("${exportHeader(f, false)} {\n");
+        let xs: String[*] = [] in default;
+        for (i, p in f.sig!.params) { xs.push(p == T_STRING ? "rt_str_c(${exportParam(f, i)})" : exportParam(f, i)); }
+        let callx: String = "${f.cName}(${xs.join(", ")})";
+        functionsOut.add(f.sig!.elem! == T_VOID ? "    ${callx};\n}\n\n" : "    return ${callx};\n}\n\n");
+    }
+    let methods: StringBuilder = {} in default;
+    for (s in structs) {
+        for (m in s.methods) {
+            methods.add(methodHeader(m, true));
+            methods.addLine(" {");
+            if (!m.selfSymbol!.used) { methods.add("    (void)self;\n"); }
+            methods.add(body(m.decl.body, m.sig!.elem!, m.throwsType != null, null, m.paramSymbols, "", m.decl.line));
+            methods.add("}\n\n");
+        }
+    }
+    for (c in classesByDepth()) {
+        if (c.thread) {
+            let run: MethodInfo = interfaceOf("Runnable")!.methods[0];
+            methods.add("static void Thread__entry(void* p) {\n    Thread* self = (Thread*)p;\n    ");
+            methods.add("${ifaceCallName(interfaceOf("Runnable")!, run)}(self->run);\n}\n\n");
+        }
+        for (m in c.methods) {
+            methods.add(methodHeader(m, false));
+            methods.addLine(" {");
+            methods.add("    ${c.name}* self = (${c.name}*)self_;\n");
+            methods.add("    (void)self;\n");
+            if (c.thread && m.name == "start") {
+                methods.add("    rt_thread_start(&self->_thread, rt_obj_mem(self), Thread__entry, self, 0);\n}\n\n");
+                continue;
+            }
+            if (c.thread && m.name == "join") {
+                methods.add("    rt_thread_join(&self->_thread);\n}\n\n");
+                continue;
+            }
+            if (c.builder) {    // the text grows in the builder's memory; toString() is a view of it
+                let p0: String = m.paramSymbols.length > 0 ? m.paramSymbols[0].cName : "";
+                if (m.name == "add") {
+                    methods.add("    rt_builder_add(self, ${p0});\n");
+                } else if (m.name == "addLine") {
+                    methods.add("    rt_builder_add(self, ${p0});\n    rt_sb_add(&self->_sb, \"\\n\", 1);\n");
+                } else if (m.name == "length") {
+                    methods.add("    return self->_sb.len;\n");
+                } else if (m.name == "toString") {
+                    methods.add("    (void)rt_dest;\n    return self->_sb.buf ? rt_str(self->_sb.buf, self->_sb.len) : rt_str(\"\", 0);\n");
+                } else {
+                    methods.add("    self->_sb.buf = NULL;   /* a new buffer: texts already given out stay as they were */\n    self->_sb.len = 0;\n");
+                }
+                methods.add("}\n\n");
+                continue;
+            }
+            let lock: String = c.sync ? "self->_sync" : "";
+            methods.add(body(m.decl.body, m.sig!.elem!, m.throwsType != null, null, m.paramSymbols, lock, m.decl.line));
+            methods.add("}\n\n");
+        }
+    }
+    for (m in nativeMethods) {
+        if (!m.decl.hasBody) { continue; }
+        methods.add(nativeMethodHeader(m));
+        methods.addLine(" {");
+        methods.add("    (void)self;\n");
+        methods.add(body(m.decl.body, m.sig!.elem!, m.throwsType != null, null, m.paramSymbols, "", m.decl.line));
+        methods.add("}\n\n");
+    }
+    let init: String = initGlobals();
+    let main: String = mainWrapper();
+    for (c in classes) {
+        if (!c.sync && !c.thread) {
+            for (f in c.fields) { requireClone(f.type); }
+        }
+    }
+    let boxes: String = boxDescriptors();     // may need clone functions: before generating them
+    let clones: String = cloneFunctions();
+
+    let out: StringBuilder = {} in default;     // the program; the runtime it needs goes before it
+    let incSeen: Any = {} in default;
+    for (ii, inc in includes) {
+        let pw: String = includeWhens[ii];
+        let key: String = "${inc}|${pw}";
+        if (incSeen.contains(key)) { continue; }
+        incSeen[key] = true;
+        if (inc == "<stdint.h>" || inc == "<stdbool.h>" || inc == "<stdio.h>" || inc == "<stdlib.h>" || inc == "<string.h>") { continue; }
+        let text: String = inc.startsWith("<") || inc.startsWith("\"") ? "#include ${inc}" : "#include \"${inc}\"";
+        out.add(pw == "" ? "${text}\n" : "#if ${platformCondition(pw)}\n${text}\n#endif\n");
+    }
+
+    if (cCode.length > 0) {                     // export functions the c_code can already use
+        let early: StringBuilder = {} in default;
+        for (f in functions) {
+            if (!f.isExtern && f.exportName != "" && earlyExport(f)) { early.add("${exportHeader(f, true)};\n"); }
+        }
+        sectionOf(out, "Export functions", early);
+    }
+    for (ci, code in cCode) {
+        section(out, cCodeStd[ci] ? "c_code (std)" : "c_code");
+        out.add(stripIndent(code));
+        out.add("\n");
+    }
+
+    let part: StringBuilder = {} in default;
+    let anyResource: bool = false;
+    for (e in externInfos) {
+        if (e.sig != null) { continue; }
+        for (d in declsOf(e)) {
+            let td: String = "typedef ${d.cType != "" ? d.cType : "void*"} Ext_${e.name};";
+            part.add(d.platform == "" ? "${td}\n" : "#if ${platformCondition(d.platform)}\n${td}\n#endif\n");
+        }
+        if (e.decl.releasedBy != "") {
+            if (!anyResource) {
+                part.add("typedef struct RtRes { int state; void (*release)(struct RtRes*); } RtRes;   /* 1 live, 2 releasing, 0 released */\n");
+                anyResource = true;
+            }
+            part.add("typedef struct { RtRes h; Ext_${e.name} value; } Res_${e.name};\n");
+        }
+    }
+    for (e in externInfos) {                    // pointers to C functions
+        let sg: Type? = e.sig;
+        if (sg == null) { continue; }
+        let ps: String[*] = [] in default;
+        for (p in sg.params) { ps.push(externCType(p)); }
+        if (ps.length == 0) { ps.push("void"); }
+        part.add("typedef ${externCType(sg.elem!)} (*Ext_${e.name})(${ps.join(", ")});\n");
+    }
+    for (t in typeOrder) { forward(part, t); }
+    sectionOf(out, "Forward declarations", part);
+    part = {} in default;
+    for (t in typeOrder) { define(part, t); }
+    sectionOf(out, "Types", part);
+
+    if (hasErrors) {
+        section(out, "Errors");
+        out.add("typedef struct RtError {\n    int32_t kind;\n    union {");
+        for (e in enums) {
+            if (e.thrown) { out.add(" ${tname(e.name)} e_${e.name};"); }
+        }
+        out.add(" char _none; } as;\n} RtError;\n");
+    }
+
+    if (classes.length > 0 || interfaces.length > 0) {
+        section(out, "Virtual tables and interface tables");
+        for (c in classesByDepth()) { vtableStruct(out, c); }
+        for (i in interfaces) { interfaceTableStruct(out, i); }
+    }
+    if (literalTypes.length() > 0 || samInterfaces.length > 0) {
+        section(out, "Objects created from literals and lambdas");
+        out.add(literalTypes.toString());
+        for (i in samInterfaces) {
+            let m: MethodInfo = interfaceOf(i)!.methods[0];
+            out.add("typedef struct ${i}__Sam { ${cType(m.sig!)} fn; } ${i}__Sam;\n");
+        }
+    }
+
+    section(out, "Prototypes");
+    let declared: Any = {} in default;
+    for (f in functions) {
+        if (f.isExtern && f.prototype && !declared.contains(f.cName)) {
+            declared[f.cName] = true;
+            let pw: String = f.ext!.platform;
+            out.add(pw == "" ? "${externPrototype(f)};\n" : "#if ${platformCondition(pw)}\n${externPrototype(f)};\n#endif\n");
+        }
+    }
+    for (f in functions) {
+        if (!f.isExtern) { out.add("${functionHeader(f)};\n"); }
+        if (!f.isExtern && f.exportName != "") { out.add("${exportHeader(f, false)};\n"); }
+    }
+    for (s in structs) {
+        for (m in s.methods) { out.add("${methodHeader(m, true)};\n"); }
+    }
+    for (c in classesByDepth()) {
+        for (m in c.methods) { out.add("${methodHeader(m, false)};\n"); }
+        out.add("static void* ${c.name}__clone(void* self_, RtMem* mem, RtCloneMap* cm);\n");
+    }
+    for (m in nativeMethods) {
+        if (m.decl.hasBody) { out.add("${nativeMethodHeader(m)};\n"); }
+    }
+    for (l in lambdaList) { out.add("${lambdaHeader(l)};\n"); }
+    out.add(clonePrototypes());
+    out.add(literalPrototypes.toString());
+    if (anyResource) { resources(out); }
+
+    if (enums.length > 0) {
+        section(out, "Enum names");
+        for (e in enums) {
+            out.add("const char* const ${e.name}__names[] = { ");
+            for (i, v in e.variants) {
+                if (i > 0) { out.add(", "); }
+                out.add("\"${v.name}\"");
+            }
+            out.add(" };\n");
+        }
+    }
+
+    if (classes.length > 0 || interfaces.length > 0) {
+        section(out, "Class information, vtables and dispatch");
+        for (c in classesByDepth()) {
+            let parent: String = c.superName != "" ? "&rtclass_${c.superName}" : "NULL";
+            out.add("const RtClass rtclass_${c.name} = { \"${c.name}\", ${parent} };\n");
+        }
+        for (c in classesByDepth()) { out.add("const ${c.name}_VTable vtable_${c.name} = { ${vtableInit(c, c)} };\n"); }
+        for (c in classesByDepth()) {
+            for (m in c.methods) {
+                if (m.introducer == c.name) { dispatchHelper(out, c, m); }
+            }
+        }
+        for (i in interfaces) {
+            for (m in i.methods) { interfaceCallHelper(out, i, m); }
+        }
+        interfaceImplementations(out);
+        out.add(literalTables.toString());
+        for (i in samInterfaces) { samTable(out, interfaceOf(i)!); }
+    }
+
+    if (funcTypes.length > 0) {
+        section(out, "Closure calls");
+        for (ft in funcTypes) { closureCallHelper(out, ft); }
+    }
+
+    part = {} in default;
+    for (t in typeOrder) { collectionHelpers(part, t); }
+    part.add(boxes);
+    for (r in resizeHelpers) { part.add(r); }
+    sectionOf(out, "Array and optional helpers", part);
+
+    if (globals.length > 0) {
+        section(out, "Globals");
+        for (v in globals) {
+            let s: Symbol = v.symbol!;
+            if (s.memKind == MemK.FixedStatic) {
+                let n: int64 = s.type.size;
+                if (n < 1) { n = 1; }
+                out.add("static uint8_t ${s.cName}__buf[${n}];\n");
+                out.add("RtMem ${s.cName};\n");
+            } else if (isMemory(s)) {
+                out.add("RtMem ${s.cName};\n");
+            } else {
+                out.add("${cType(s.type)} ${s.cName};\n");
+            }
+        }
+    }
+
+    section(out, "Functions");
+    out.add(functionsOut.toString());
+    let anyBuilder: bool = false;
+    for (c in classes) {
+        if (c.builder) { anyBuilder = true; }
+    }
+    if (anyBuilder) {
+        section(out, "StringBuilder");
+        out.add("static inline void rt_builder_add(StringBuilder* b, RtString s) {\n");
+        out.add("    if (!b->_sb.buf) b->_sb = rt_sb_mem(rt_obj_mem(b), 0);\n    rt_sb_str(&b->_sb, s);\n}\n");
+    }
+    if (methods.length() > 0) {
+        section(out, "Methods");
+        out.add(methods.toString());
+    }
+    let anyLambda: bool = false;
+    for (d in lambdaDone) {
+        if (d) { anyLambda = true; }
+    }
+    if (anyLambda) {
+        section(out, "Lambdas");
+        for (i, d in lambdaDefs) {
+            if (lambdaDone[i]) { out.add(d); }
+        }
+    }
+    if (literalThunks.length() > 0 || classes.length > 0) {
+        section(out, "Interface thunks and cloning");
+        out.add(literalThunks.toString());
+        for (i in samInterfaces) { samThunk(out, interfaceOf(i)!); }
+        for (c in classesByDepth()) { classClone(out, c); }
+    }
+    out.add(clones);
+    section(out, "Entry point");
+    out.add(init);
+    out.add(main);
+
+    let roots: String[*] = ["main"] in default;
+    for (f in functions) {
+        if (!f.isExtern && f.exportName != "") { roots.push(f.exportName); }
+    }
+    let program: String = prune(out.toString(), roots);     // only what main, the exports and the c_code reach
+    let head: StringBuilder = {} in default;
+    head.add("/* Generated by the transpiler. Runtime first, then the program. */\n");
+    let ownC: bool = cCode.length > 0 || includes.length > 0;
+    for (f in functions) {
+        if (f.isExtern) { ownC = true; }
+    }
+    let runtime: String = selectRuntime(program, usesThreads, files.length > 0, ownC);
+    if (runtime.contains("RT_FILES")) {
+        head.add("#define RT_FILES ");
+        for (i, f in files) {
+            if (i > 0) { head.add(", "); }
+            head.add("\"${f.replace("\\", "/")}\"");
+        }
+        head.add("\n");
+    }
+    // POSIX functions (threads, and those C code calls) are only declared when asked for
+    if (usesThreads || cCode.length > 0 || includes.length > 0) { head.add("#if !defined(_WIN32) && !defined(_XOPEN_SOURCE)\n#define _XOPEN_SOURCE 700\n#endif\n"); }
+    if (usesThreads) { head.add("#define RT_THREADS\n"); }
+    head.add(runtime);
+    head.add(program);
+    return head.toString();
+}
+
+/** An extern type's declarations: the one for every platform, or one per platform. */
+function declsOf(e: ExternTypeInfo in default): ExternTypeDecl[*] {
+    let all: ExternTypeDecl[*] = [e.decl] in default;
+    for (a in e.alts) { all.push(a); }
+    return all;
+}
+
+/**
+ * Resources (extern type X released by f): a value lives in a cell of the memory it was made in, with its
+ * state; the memory releases it when it is freed, unless release(x) already did.
+ */
+function resources(out: StringBuilder): void {
+    section(out, "Resources");
+    out.add("static void rt_res_final(void* p) {\n    RtRes* r = (RtRes*)p;\n");
+    out.add("    if (r->state == 1) { r->state = 2; r->release(r); r->state = 0; }\n}\n");
+    out.add("static inline void rt_res_release(void* p) { if (p) rt_res_final(p); }\n");
+    for (e in externInfos) {
+        if (e.decl.releasedBy == "" || e.sig != null) { continue; }
+        let n: String = e.name;
+        let only: String = "";                      // a resource of one platform: its releaser's
+        for (k, d in declsOf(e)) {
+            let f: FunctionInfo? = k < e.releasers.length ? e.releasers[k] : null;
+            if (f == null) { continue; }
+            let pw: String = d.platform;
+            if (pw == "" && f.isExtern && f.ext!.platform != "") {
+                pw = f.ext!.platform;
+                only = pw;
+            }
+            if (pw != "") { out.add("#if ${platformCondition(pw)}\n"); }
+            let call: String = f.isExtern ? "${f.cName}(((Res_${n}*)r)->value)" : "${f.cName}((Res_${n}*)r)";
+            out.add("static void ${n}__release(RtRes* r) { ${call}; }\n");
+            let pointer: bool = d.cType == "" || d.cType.trim().endsWith("*") || d.cType.trim() == "HANDLE";
+            let valid: String = pointer ? "v != NULL && (intptr_t)v != -1" : "(intmax_t)(v) >= 0";   // -1: INVALID_HANDLE_VALUE, MAP_FAILED
+            out.add("static Res_${n}* ${n}__new(RtMem* m, Ext_${n} v, int line) {\n");
+            out.add("    if (!(${valid})) return NULL;          /* C failed: no resource */\n");
+            out.add("    Res_${n}* c = (Res_${n}*)rt_mem_alloc(m, sizeof(Res_${n}), line);\n");
+            out.add("    c->h.state = 1;\n    c->h.release = ${n}__release;\n    c->value = v;\n");
+            out.add("    rt_mem_on_free(m, rt_res_final, c, line);\n    return c;\n}\n");
+            if (pw != "") { out.add("#endif\n"); }
+        }
+        if (only != "") { out.add("#if ${platformCondition(only)}\n"); }
+        out.add("static inline Ext_${n} ${n}__get(Res_${n}* c, int line) {\n");
+        out.add("    if (!c || c->h.state == 0) rt_panic(\"a released ${shortName(n)} was used\", line);\n");
+        out.add("    return c->value;\n}\n");
+        if (only != "") { out.add("#endif\n"); }
+    }
+}
+
+/** A name without its module prefix: std__net__Socket -> Socket. */
+function shortName(n: String): String {
+    let i: int32? = n.lastIndexOf("__");
+    return i != null ? n.substring(i! + 2) : n;
+}
+
+function sectionOf(out: StringBuilder, title: String, content: StringBuilder): void {
+    if (content.length() == 0) { return; }
+    section(out, title);
+    out.add(content.toString());
+}
+
+public function section(out: StringBuilder, title: String): void {
+    let n: int32 = 70 - title.length;
+    if (n < 3) { n = 3; }
+    out.add("\n/* ---- ${title} ${"-".repeat(n)} */\n");
+}
+
+/** Like Java's stripIndent().strip(): removes the common indentation and the blank lines around. */
+function stripIndent(code: String in default): String {
+    let ls: String[*] = code.split("\n");
+    let minIndent: int32 = 1000000;
+    for (i, l in ls) {
+        let trimmedRight: String = l.trimEnd();
+        let last: bool = i == ls.length - 1;
+        if (trimmedRight.isEmpty() && !last) { continue; }
+        let n: int32 = 0;
+        while (n < l.length && (l[n] == 32 || l[n] == 9)) { n += 1; }
+        if (trimmedRight.isEmpty()) { n = l.length; }
+        if (n < minIndent) { minIndent = n; }
+    }
+    if (minIndent == 1000000) { minIndent = 0; }
+    let sb: StringBuilder = {} in default;
+    for (i, l in ls) {
+        let s: String = l.trimEnd();
+        s = s.length >= minIndent ? s.substring(minIndent) : "";
+        if (i > 0) { sb.add("\n"); }
+        sb.add(s);
+    }
+    return sb.toString().trim();
+}
+
+public function classesByDepth(): ClassInfo[*] {
+    let list: ClassInfo[*] = [] in default;
+    for (c in classes) {
+        let d: int32 = classDepth(c.name);
+        let i: int32 = list.length;
+        list.push(c);
+        while (i > 0 && classDepth(list[i - 1].name) > d) {
+            list[i] = list[i - 1];
+            i -= 1;
+        }
+        list[i] = c;
+    }
+    return list;
+}
+
+// =====================================================================================
+// Types
+// =====================================================================================
+
+/** C functions receive String as a NUL-terminated const char*. */
+function externPrototype(f: FunctionInfo in default): String {
+    let ps: String[*] = [] in default;
+    for (i, p in f.sig!.params) {
+        if (isMemParam(f.memParams, i)) {
+            ps.push("RtMem*");
+        } else if (p.kind == TyK.Array && p.ak == ArrK.Slice) {
+            ps.push("${cType(p.elem!)}*");             // T[]: the elements and their count
+            ps.push("int32_t");
+        } else {
+            ps.push(externCType(p));
+        }
+    }
+    if (f.varargs) { ps.push("..."); }
+    if (ps.length == 0) { ps.push("void"); }
+    // char*, not const char*: it also matches the standard headers the runtime already includes (getenv, strerror).
+    let ret: String = externCType(f.sig!.elem!);
+    if (f.sig!.elem! == T_STRING) { ret = "char*"; }
+    return "${ret} ${f.cName}(${ps.join(", ")})";
+}
+
+function externCType(t: Type): String {
+    if (t == T_STRING || (isOpt(t) && t.elem! == T_STRING)) { return "const char*"; }
+    if (isResource(t)) { return "Ext_${t.name}"; }                              // the C value itself
+    if (isOpt(t) && isResource(t.elem!)) { return "Ext_${t.elem!.name}"; }
+    return t == T_VOID ? "void" : cType(t);
+}
+
+/** export function: the C function C code calls (C types), which calls the Larimar one. */
+function exportHeader(f: FunctionInfo, early: bool): String {
+    let ps: String[*] = [] in default;
+    for (i, p in f.sig!.params) { ps.push("${abiType(p, early)} ${exportParam(f, i)}"); }
+    if (ps.length == 0) { ps.push("void"); }
+    return "${abiType(f.sig!.elem!, early)} ${f.exportName}(${ps.join(", ")})";
+}
+
+function exportParam(f: FunctionInfo, i: int32): String { return "${escapeName(f.params[i].name)}_c"; }
+
+/** A type as C code sees it. Early (before the c_code): an opaque extern type is still void*. */
+function abiType(t: Type, early: bool): String {
+    if (early && isExternT(t)) { return "void*"; }
+    return externCType(t);
+}
+
+/** Its prototype can go before the c_code: numbers, bool, const char* and opaque extern types only. */
+function earlyExport(f: FunctionInfo): bool {
+    for (p in f.sig!.params) {
+        if (!plainC(p)) { return false; }
+    }
+    return plainC(f.sig!.elem!);
+}
+
+function plainC(t: Type): bool {
+    if (t.kind == TyK.Prim) { return true; }
+    if (!isExternT(t)) { return false; }
+    let e: ExternTypeInfo? = externInfoOf(t.name);
+    return e != null && e.decl.cType == "" && e.sig == null;
+}
+
+/** A C struct (extern type X = struct { ... }): C defines it, Larimar does not. */
+function cStruct(t: Type): bool {
+    if (t.kind != TyK.Named || t.nk != NamedK.Struct) { return false; }
+    let so: StructInfo? = structOf(t.name);
+    return so != null && so.decl.cName != "";
+}
+
+function forward(out: StringBuilder, t: Type): void {
+    if (t.kind == TyK.Opt && optIsPointer(t)) { return; }
+    if (t.kind == TyK.Named) {
+        if (t.nk == NamedK.Extern || cStruct(t)) { return; }
+        let name: String = tname(t.name);
+        out.add("typedef struct ${name} ${name};\n");
+        if (t.nk == NamedK.Class) { out.add("typedef struct ${name}_VTable ${name}_VTable;\n"); }
+        if (t.nk == NamedK.Interface) { out.add("typedef struct ${name}_Table ${name}_Table;\n"); }
+        return;
+    }
+    let name: String = structName(t);
+    out.add("typedef struct ${name} ${name};");
+    if (t.kind == TyK.Func) { out.add("  /* ${t.text} */"); }
+    out.add("\n");
+}
+
+function define(out: StringBuilder, t: Type): void {
+    if (cStruct(t)) { return; }
+    if (t.kind == TyK.Named) {
+        if (t.nk == NamedK.Struct) {
+            let s: StructInfo = structOf(t.name)!;
+            out.add("struct ${tname(s.name)} {\n");
+            for (f in s.fields) { out.add("    ${cType(f.type)} ${escapeName(f.name)};\n"); }
+            if (s.fields.length == 0) { out.add("    char _none;\n"); }
+            out.add("};\n\n");
+        } else if (t.nk == NamedK.Enum) {
+            let e: EnumInfo = enumOf(t.name)!;
+            out.add("enum ${e.name}_Tag { ");            // named, so a debugger shows the variant's name
+            for (i, v in e.variants) {
+                if (i > 0) { out.add(", "); }
+                out.add("${e.name}_${v.name} = ${v.index}");
+            }
+            out.add(" };\n");
+            out.add("struct ${tname(e.name)} {\n    enum ${e.name}_Tag tag;\n    union {");
+            for (v in e.variants) {
+                if (!v.hasPayload || v.fields.length == 0) { continue; }
+                out.add(" struct {");
+                for (f in v.fields) { out.add(" ${cType(f.type)} ${escapeName(f.name)};"); }
+                out.add(" } ${v.name};");
+            }
+            out.add(" char _none; } as;\n};\n\n");
+        } else if (t.nk == NamedK.Class) {
+            let c: ClassInfo = classOf(t.name)!;
+            out.add("struct ${tname(c.name)} {\n");
+            if (c.superName == "") {
+                out.add("    RtObjHead _h;\n");
+            } else {
+                out.add("    ${tname(c.superName)} _super;\n");
+            }
+            if (c.sync) { out.add("    RtSync* _sync;\n"); }
+            for (f in c.fields) { out.add("    ${cType(f.type)} ${escapeName(f.name)};\n"); }
+            if (c.thread) { out.add("    RtThread _thread;\n"); }
+            if (c.builder) { out.add("    RtSb _sb;\n"); }
+            out.add("};\n\n");
+        } else if (t.nk == NamedK.Interface) {
+            let i: String = tname(t.name);
+            out.add("struct ${i} { void* obj; const ${i}_Table* t; };\n\n");
+        }
+        return;
+    }
+    if (t.kind == TyK.Func) {
+        let id: int32 = t.funcId;
+        let withEnv: LambdaInfo[*] = [] in default;
+        for (l in lambdaList) {
+            if (l.type == t && l.captures.length > 0) { withEnv.push(l); }
+        }
+        for (l in withEnv) {
+            out.add("typedef struct Env_${l.id} {");
+            for (s in l.captures) { out.add(" ${cType(s.type)} ${envField(s)};"); }
+            out.add(" } Env_${l.id};\n");
+        }
+        out.add("struct Closure_${id} {  /* ${t.text} */\n");
+        out.add("    ${cType(t.elem!)} (*fn)(void* env");
+        if (returnsData(t.elem!)) { out.add(", RtMem*"); }
+        for (p in t.params) { out.add(", ${cType(p)}"); }
+        out.add(");\n    union {");
+        for (l in withEnv) { out.add(" Env_${l.id} l_${l.id};"); }
+        out.add(" char _none; } env;\n};\n\n");
+        return;
+    }
+    if (t.kind == TyK.Array) {
+        let name: String = structName(t);
+        let e: String = cType(t.elem!);
+        if (t.ak == ArrK.Fixed) {
+            let n: int64 = t.size;
+            if (n < 1) { n = 1; }
+            out.add("struct ${name} { int32_t length; ${e} items[${n}]; };\n");
+        } else if (t.ak == ArrK.Slice) {
+            out.add("struct ${name} { ${e}* items; int32_t length; };\n");
+        } else {
+            out.add("struct ${name} { ${e}* items; int32_t length; int32_t capacity; RtMem* mem; };\n");
+        }
+        return;
+    }
+    if (t.kind == TyK.Opt && !optIsPointer(t)) {
+        out.add("struct ${structName(t)} { bool has; ${cType(t.elem!)} value; };\n");
+    }
+}
+
+public function envField(s: Symbol): String { return "${s.name}_${s.id}"; }
+
+// =====================================================================================
+// Classes, interfaces, closures: declarations and helpers
+// =====================================================================================
+
+function errParam(throwsOut: bool): String {
+    return throwsOut ? ", RtError* err_out" : "";
+}
+
+/** Returning something that points to memory: the function creates it in the memory of the call. */
+public function returnsData(ret: Type): bool { return hasRefs(ret); }
+
+function params(ps: Symbol[*], memParams: bool[*]): String {
+    let out: String[*] = [] in default;
+    for (i, s in ps) {
+        if (isMemParam(memParams, i)) { out.push("RtMem* ${s.cName}"); } else { out.push("${cType(s.type)} ${s.cName}"); }
+    }
+    return out.join(", ");
+}
+
+public function functionHeader(f: FunctionInfo): String {
+    let ps: String = params(f.paramSymbols, f.memParams);
+    if (returnsData(f.sig!.elem!)) { ps = ps.isEmpty() ? "RtMem* rt_dest" : "RtMem* rt_dest, ${ps}"; }
+    let err: String = "";
+    if (f.throwsType != null) { err = ps.isEmpty() ? "RtError* err_out" : ", RtError* err_out"; }
+    let all: String = "${ps}${err}";
+    if (all.isEmpty()) { all = "void"; }
+    let st: String = f.cName == "user_main" ? "static " : "";
+    return "${st}${cType(f.sig!.elem!)} ${f.cName}(${all})";
+}
+
+public function methodName(m: MethodInfo): String {
+    // a native type may have two methods with the same name and a different number of parameters
+    for (o in nativeMethods) {
+        if (o != m && o.owner == m.owner && o.name == m.name && o.decl.hasBody && m.decl.hasBody && !m.isOperator
+            && o.sig != null && m.sig != null && o.sig!.params.length != m.sig!.params.length) {
+            return "${m.owner}_${cSuffix(m)}_${m.sig!.params.length}";
+        }
+    }
+    return "${m.owner}_${cSuffix(m)}";
+}
+
+function methodHeader(m: MethodInfo, isStructMethod: bool): String {
+    let ps: String = params(m.paramSymbols, m.memParams);
+    if (returnsData(m.sig!.elem!)) { ps = ps.isEmpty() ? "RtMem* rt_dest" : "RtMem* rt_dest, ${ps}"; }
+    let recv: String = "${tname(m.introducer)}* self_";
+    if (isStructMethod) { recv = "${tname(m.owner)}* self"; }
+    let st: String = isStructMethod ? "" : "static ";
+    let rest: String = !ps.isEmpty() ? ", ${ps}" : "";
+    return "${st}${cType(m.sig!.elem!)} ${methodName(m)}(${recv}${rest}${errParam(m.throwsType != null)})";
+}
+
+function nativeMethodHeader(m: MethodInfo): String {
+    let ps: String = params(m.paramSymbols, m.memParams);
+    if (returnsData(m.sig!.elem!)) { ps = ps.isEmpty() ? "RtMem* rt_dest" : "RtMem* rt_dest, ${ps}"; }
+    let rest: String = !ps.isEmpty() ? ", ${ps}" : "";
+    return "${cType(m.sig!.elem!)} ${methodName(m)}(${cType(primByName(m.owner)!)} self${rest}${errParam(m.throwsType != null)})";
+}
+
+public function lambdaHeader(l: LambdaInfo): String {
+    let ps: String[*] = [];
+    if (returnsData(l.type.elem!)) { ps.push("RtMem* rt_dest"); }
+    for (s in l.params) { ps.push("${cType(s.type)} ${s.cName}"); }
+    let rest: String = ps.length > 0 ? ", ${ps.join(", ")}" : "";
+    return "static ${cType(l.type.elem!)} lambda_${l.id}(void* env_${rest})";
+}
+
+/** The C parameters after self: the memory of the call first when it returns data. */
+public function paramCTypes(m: MethodInfo in default): String[*] {
+    let out: String[*] = [];
+    if (returnsData(m.sig!.elem!)) { out.push("RtMem*"); }
+    for (i, p in m.sig!.params) {
+        if (isMemParam(m.memParams, i)) { out.push("RtMem*"); } else { out.push(cType(p)); }
+    }
+    return out;
+}
+
+function vtableStruct(out: StringBuilder, c: ClassInfo in default): void {
+    out.add("struct ${c.name}_VTable {\n");
+    if (c.superName == "") {
+        out.add("    RtVTableHead _h;\n");
+    } else {
+        out.add("    ${c.superName}_VTable _super;\n");
+    }
+    for (m in c.methods) {
+        if (m.introducer != c.name) { continue; }
+        out.add("    ${cType(m.sig!.elem!)} (*${cSuffix(m)})(${c.name}*");
+        for (p in paramCTypes(m)) { out.add(", ${p}"); }
+        if (m.throwsType != null) { out.add(", RtError*"); }
+        out.add(");\n");
+    }
+    out.add("};\n\n");
+}
+
+function vtableInit(concrete: ClassInfo in default, level: ClassInfo): String {
+    let parts: String[*] = [] in default;
+    if (level.superName == "") {
+        parts.push("._h = { &rtclass_${concrete.name}, ${concrete.name}__clone }");
+    } else {
+        parts.push("._super = { ${vtableInit(concrete, parentOf(level)!)} }");
+    }
+    for (m in level.methods) {
+        if (m.introducer != level.name) { continue; }
+        let impl: MethodInfo = findMethod(concrete.name, m.name, m.isOperator, m.sig!.params.length)!;
+        parts.push(".${cSuffix(m)} = ${methodName(impl)}");
+    }
+    return parts.join(", ");
+}
+
+public function dispatchName(intro: String, m: MethodInfo): String { return "${intro}_${cSuffix(m)}__dispatch"; }
+
+function argsDecl(pt: String[*], throwsOut: bool): String {
+    let sb: StringBuilder = {} in default;
+    for (i, p in pt) { sb.add(", ${p} a${i}"); }
+    if (throwsOut) { sb.add(", RtError* err_out"); }
+    return sb.toString();
+}
+
+function argsPass(n: int32, throwsOut: bool): String {
+    let sb: StringBuilder = {} in default;
+    let i: int32 = 0;
+    while (i < n) {
+        sb.add(", a${i}");
+        i += 1;
+    }
+    if (throwsOut) { sb.add(", err_out"); }
+    return sb.toString();
+}
+
+function retWord(t: Type): String {
+    return t == T_VOID ? "" : "return ";
+}
+
+function dispatchHelper(out: StringBuilder, c: ClassInfo, m: MethodInfo in default): void {
+    let pt: String[*] = paramCTypes(m);
+    let th: bool = m.throwsType != null;
+    out.add("static inline ${cType(m.sig!.elem!)} ${dispatchName(c.name, m)}(${c.name}* self${argsDecl(pt, th)}) {\n    ");
+    out.add("${retWord(m.sig!.elem!)}((const ${c.name}_VTable*)rt_obj_vt(self))->${cSuffix(m)}(self${argsPass(pt.length, th)});\n}\n");
+}
+
+function interfaceTableStruct(out: StringBuilder, i: InterfaceInfo in default): void {
+    out.add("struct ${i.name}_Table {\n    const RtClass* cls;\n");
+    for (m in i.methods) {
+        out.add("    ${cType(m.sig!.elem!)} (*${m.name})(void*");
+        for (p in paramCTypes(m)) { out.add(", ${p}"); }
+        if (m.throwsType != null) { out.add(", RtError*"); }
+        out.add(");\n");
+    }
+    if (i.methods.length == 0) { out.add("    char _none;\n"); }
+    out.add("};\n\n");
+}
+
+public function ifaceCallName(i: InterfaceInfo, m: MethodInfo): String { return "${i.name}_${m.name}__call"; }
+
+function interfaceCallHelper(out: StringBuilder, i: InterfaceInfo, m: MethodInfo in default): void {
+    let pt: String[*] = paramCTypes(m);
+    let th: bool = m.throwsType != null;
+    out.add("static inline ${cType(m.sig!.elem!)} ${ifaceCallName(i, m)}(${i.name} v${argsDecl(pt, th)}) { ");
+    out.add("${retWord(m.sig!.elem!)}v.t->${m.name}(v.obj${argsPass(pt.length, th)}); }\n");
+}
+
+/** For each class that declares `implements I`: thunks plus a table. */
+function interfaceImplementations(out: StringBuilder): void {
+    for (c in classesByDepth()) {
+        for (iname in c.interfaces) {
+            let i: InterfaceInfo = interfaceOf(iname)!;
+            for (im in i.methods) {
+                let m: MethodInfo = findMethod(c.name, im.name, false, 0)!;
+                let pt: String[*] = paramCTypes(im);
+                let th: bool = im.throwsType != null;
+                out.add("static ${cType(im.sig!.elem!)} ${c.name}__${iname}__${im.name}(void* self${argsDecl(pt, th)}) { ");
+                out.add("${retWord(im.sig!.elem!)}${dispatchName(m.introducer, m)}((${m.introducer}*)self${argsPass(pt.length, th)}); }\n");
+            }
+            out.add("const ${iname}_Table ${c.name}__${iname}_table = { &rtclass_${c.name}");
+            for (im in i.methods) { out.add(", ${c.name}__${iname}__${im.name}"); }
+            out.add(" };\n");
+        }
+    }
+}
+
+function samTable(out: StringBuilder, i: InterfaceInfo in default): void {
+    let m: MethodInfo = i.methods[0];
+    out.add("static ${cType(m.sig!.elem!)} ${i.name}__sam_${m.name}(void* self");
+    for (k, p in paramCTypes(m)) { out.add(", ${p} a${k}"); }
+    out.add(");\n");
+    out.add("const ${i.name}_Table ${i.name}__sam_table = { NULL, ${i.name}__sam_${m.name} };\n");
+}
+
+function samThunk(out: StringBuilder, i: InterfaceInfo in default): void {
+    let m: MethodInfo = i.methods[0];
+    let pt: String[*] = paramCTypes(m);
+    out.add("static ${cType(m.sig!.elem!)} ${i.name}__sam_${m.name}(void* self${argsDecl(pt, false)}) { ");
+    out.add("${retWord(m.sig!.elem!)}call_Closure_${m.sig!.funcId}(((${i.name}__Sam*)self)->fn${argsPass(pt.length, false)}); }\n");
+}
+
+function closureCallHelper(out: StringBuilder, ft: Type): void {
+    let id: int32 = ft.funcId;
+    let ps: StringBuilder = {};
+    let args: StringBuilder = {};
+    if (returnsData(ft.elem!)) {
+        ps.add(", RtMem* rt_dest");
+        args.add(", rt_dest");
+    }
+    for (i, p in ft.params) {
+        ps.add(", ${cType(p)} a${i}");
+        args.add(", a${i}");
+    }
+    out.add("static inline ${cType(ft.elem!)} call_Closure_${id}(Closure_${id} c${ps.toString()}) { ");
+    out.add("${retWord(ft.elem!)}c.fn(&c.env${args.toString()}); }\n");
+}
+
+function collectionHelpers(out: StringBuilder, t: Type): void {
+    if (isArray(t, ArrK.Growable)) {
+        let n: String = structName(t);
+        let e: String = cType(t.elem!);
+        out.add("static inline ${n}* ${n}_new(RtMem* mem, int line) { ${n}* l = (${n}*)rt_mem_alloc(mem, sizeof(${n}), line); l->mem = mem; return l; }\n");
+        out.add("static inline bool ${n}_push(${n}* l, ${e} v) {\n");
+        out.add("    if (l->length == l->capacity) {\n");
+        out.add("        int32_t nc = l->capacity ? (l->capacity < 0x3fffffff ? l->capacity * 2 : 0x7fffffff) : 8;\n");
+        out.add("        if (nc == l->capacity) return false;\n");
+        out.add("        ${e}* ni = (${e}*)rt_mem_try_realloc(l->mem, l->items, sizeof(${e}) * (size_t)l->capacity, sizeof(${e}) * (size_t)nc);\n");
+        out.add("        if (!ni) return false;\n        l->items = ni;\n        l->capacity = nc;\n    }\n");
+        out.add("    l->items[l->length++] = v;\n    return true;\n}\n");
+        out.add("static inline void ${n}_add(${n}* l, ${e} v, int line) { if (!${n}_push(l, v)) rt_panic(\"memory is full\", line); }\n");
+    } else if (isArray(t, ArrK.Fixed)) {
+        let n: String = structName(t);
+        let e: String = cType(t.elem!);
+        out.add("static inline bool ${n}_push(${n}* a, ${e} v) { if (a->length >= ${t.size}) return false; a->items[a->length++] = v; return true; }\n");
+    } else if (t.kind == TyK.Opt && !optIsPointer(t)) {
+        let n: String = structName(t);
+        out.add("static inline ${cType(t.elem!)} ${n}_unwrap(${n} o, int line) { if (!o.has) rt_panic(\"'!' used on a null value\", line); return o.value; }\n");
+    }
+}
+
+// =====================================================================================
+// Globals and entry point
+// =====================================================================================
+
+function initGlobals(): String {
+    fn = newFn();
+    pushBlock(Block {} in default);
+    for (v in globals) {
+        let s: Symbol = v.symbol!;
+        if (s.memKind == MemK.FixedStatic) {
+            line("${s.cName} = rt_mem_fixed(${s.cName}__buf, sizeof ${s.cName}__buf);");
+        } else if (s.memKind == MemK.HeapGrowable) {
+            line("${s.cName} = rt_mem_growable();");
+        } else if (s.memKind == MemK.HeapFixed) {
+            let size: String = expr(v.type.size!);
+            line("${s.cName} = rt_mem_heap((int64_t)(${size}), ${v.line});");
+        } else {
+            let val: String = value(v.init!);
+            line("${s.cName} = ${val};");
+        }
+    }
+    let body: String = fn.out.toString();
+    hasInit = !body.isEmpty();
+    return !hasInit ? "" : "static void init_globals(void) {\n${body}}\n\n";
+}
+
+function mainWrapper(): String {
+    let mo: FunctionInfo? = null;
+    for (f in functions) {
+        if (f.name == "main") { mo = f; }
+    }
+    if (mo == null || mo.isExtern) { return ""; }
+    let main: FunctionInfo = mo;
+    let withArgs: bool = main.sig!.params.length > 0;
+    let sb: StringBuilder = {} in default;
+    if (withArgs) { sb.add("int main(int argc, char** argv) {\n"); } else { sb.add("int main(void) {\n"); }
+    if (hasInit) { sb.add("    init_globals();\n"); }
+    if (withArgs) {     // the program's arguments, without its own name, as a String[]
+        sb.add("    RtString* args = (RtString*)rt_mem_alloc(&rt_default_mem, sizeof(RtString) * (size_t)(argc > 1 ? argc - 1 : 1), 0);\n");
+        sb.add("    for (int i = 1; i < argc; i++) args[i - 1] = rt_str_c(argv[i]);\n");
+        sb.add("    Slice_s arg_slice = { args, argc > 1 ? (int32_t)(argc - 1) : 0 };\n");
+    }
+    let throwsOut: bool = main.throwsType != null;
+    if (throwsOut) { sb.add("    RtError err;\n    err.kind = 0;\n"); }
+    let a: String = withArgs ? "arg_slice" : "";
+    if (withArgs && throwsOut) { a = "${a}, "; }
+    if (throwsOut) { a = "${a}&err"; }
+    let call: String = "user_main(${a})";
+    if (main.sig!.elem! == T_VOID) { sb.add("    ${call};\n"); } else { sb.add("    int32_t result = ${call};\n"); }
+    if (usesThreads) {
+        sb.add("    rt_mem_finalize(&rt_default_mem);\n");
+        for (v in globals) {
+            let g: Symbol = v.symbol!;
+            if (isMemory(g)) { sb.add("    rt_mem_finalize(&${g.cName});\n"); }
+        }
+    }
+    if (throwsOut) {
+        let en: String = main.throwsType!.name;
+        sb.add("    if (err.kind != 0) {\n        fflush(stdout);\n        fprintf(stderr, \"uncaught error: ${en}.%s\\n\", ${en}__names[err.as.e_${en}.tag]);\n        return 1;\n    }\n");
+    }
+    if (main.sig!.elem! == T_VOID) { sb.add("    return 0;\n"); } else { sb.add("    return (int)result;\n"); }
+    sb.add("}\n");
+    return sb.toString();
+}
+
+// =====================================================================================
+// Bodies and statements
+// =====================================================================================
+
+function usesErrors(body: Stmt[*] in default): bool {
+    if (!hasErrors) { return false; }
+    let ss: Stmt[*] = [] in default;
+    allStmts(body, ss);
+    for (s in ss) {
+        if (s is ThrowStmt || s is TryStmt) { return true; }
+    }
+    let es: Expr[*] = [] in default;
+    allExprs(body, false, es);
+    for (e in es) {
+        if (e is Call && e.throwing) { return true; }
+        if (e is SwitchExpr sw) {
+            for (c in sw.cases) {
+                if (c.throwStmt != null) { return true; }
+            }
+        }
+    }
+    return false;
+}
+
+/** lock != "": a method of a synchronized class, locked for its whole run (unlocked on every exit). */
+public function body(stmts: Stmt[*] in default, ret: Type in default, throwsOut: bool, lambda: LambdaInfo? in default,
+                     ps: Symbol[*], lock: String, declLine: int32): String {
+    let saved: Fn = fn;
+    fn = newFn();
+    fn.ret = ret;
+    fn.throwsOut = throwsOut;
+    fn.lambda = lambda;
+    let root: Block = Block {} in default;
+    pushBlock(root);
+    if (debugLines) {                               // the start of the function is its declaration's line
+        let mark: String = lineMark(declLine);
+        if (mark != "") { line(mark); }
+    }
+    if (lock != "") {
+        line("rt_sync_lock(${lock});");
+        root.cleanups.push("rt_sync_unlock(${lock});");
+    }
+    for (p in ps) {
+        if (!p.used) { line("(void)${p.cName};"); }
+    }
+    let all: Expr[*] = [] in default;           // the names bound by `is` live for the whole function
+    allExprs(stmts, false, all);
+    for (e in all) {
+        let b: Symbol? = e is IsExpr ? e.symbol : null;
+        if (b != null) {
+            line("${cType(b.type)} ${b.cName} = NULL;");
+            if (!b.used) { line("(void)${b.cName};"); }
+        }
+    }
+    if (usesErrors(stmts)) {
+        line("RtError err;");
+        line("err.kind = 0;");
+    } else if (throwsOut) {
+        line("(void)err_out;");
+    }
+    openMemory(stmts);
+    for (s in stmts) { stmt(s); }
+    if (!endsWithJump(stmts)) {
+        emitCleanups(root);
+        // The language proved every path returns (loops forever, try/catch, switch);
+        // C cannot see it, so close the function explicitly.
+        if (ret != T_VOID) { line("return ${zero(ret)};"); }
+    }
+    let out: String = fn.out.toString();
+    if (returnsData(ret) && !fn.destUsed) { out = "    (void)rt_dest;\n${out}" in default; }
+    fn = saved;
+    return out;
+}
+
+public function endsWithJump(stmts: Stmt[*]): bool {
+    if (stmts.length == 0) { return false; }
+    let last: Stmt = stmts[stmts.length - 1];
+    return last is ReturnStmt || last is ThrowStmt;
+}
+
+function emitCleanups(b: Block): void {
+    let i: int32 = b.cleanups.length - 1;
+    while (i >= 0) {
+        line(b.cleanups[i]);
+        i -= 1;
+    }
+}
+
+public function block(stmts: Stmt[*] in default): void {
+    let b: Block = Block {} in default;
+    pushBlock(b);
+    openMemory(stmts);
+    for (s in stmts) { stmt(s); }
+    popBlock();
+    if (!endsWithJump(stmts)) { emitCleanups(b); }
+}
+
+/** A block between braces, one level in. */
+function bracedBlock(stmts: Stmt[*] in default): void {
+    fn.indent += 1;
+    block(stmts);
+    fn.indent -= 1;
+}
+
+/** Emits the cleanups of every block from the innermost up to `stop` (inclusive). */
+public function cleanupsUntil(stop: Block): void {
+    let i: int32 = fn.blocks.length - 1;
+    while (i >= 0) {
+        let b: Block = fn.blocks[i];
+        emitCleanups(b);
+        if (b == stop) { return; }
+        i -= 1;
+    }
+}
+
+function anyCleanups(stop: Block): bool {
+    let i: int32 = fn.blocks.length - 1;
+    while (i >= 0) {
+        let b: Block = fn.blocks[i];
+        if (b.cleanups.length > 0) { return true; }
+        if (b == stop) { return false; }
+        i -= 1;
+    }
+    return false;
+}
+
+/** A statement; what it creates without a place lives in its temporary memory, freed when it ends. */
+public function stmt(s: Stmt in default): void {
+    if (debugLines) {
+        let mark: String = lineMark(s.line);
+        if (mark != "") { line(mark); }
+    }
+    let saved: Temp? = fn.temp;
+    let t: Temp = Temp { owner: topBlock() } in default;
+    fn.temp = t;
+    let outer: StringBuilder = fn.out;
+    fn.out = {} in default;                  // the statement, to put its memory before it if it used one
+    stmtInner(s);
+    let text: String = fn.out.toString();
+    fn.out = outer;
+    fn.temp = saved;
+    if (t.name == "") {
+        fn.out.add(text);
+        return;
+    }
+    line("RtMem ${t.name} = rt_mem_growable();");
+    fn.out.add(text);
+    let free: String = "rt_mem_free(&${t.name});";
+    let kept: String[*] = [] in default;
+    let removed: bool = false;
+    for (c in t.owner.cleanups) {
+        if (!removed && c == free) { removed = true; } else { kept.push(c); }
+    }
+    t.owner.cleanups = kept;
+    let one: Stmt[*] = [s];
+    if (!endsWithJump(one)) { line(free); }
+}
+
+/** A block whose variables hold data gets its memory, freed when the block ends. */
+public function openMemory(stmts: Stmt[*] in default): void {
+    if (stmts.length == 0 || stmts[0].blockMemory == "") { return; }
+    let m: String = stmts[0].blockMemory;
+    line("RtMem ${m} = rt_mem_growable();");
+    topBlock().cleanups.push("rt_mem_free(&${m});");
+}
+
+/** The current statement's temporary memory (declared before it the first time it is used). */
+public function tempMem(): String {
+    let t: Temp? = fn.temp;
+    if (t == null) { return "&rt_default_mem"; }      // outside statements: initializing globals
+    if (t.name == "") {
+        t.name = tmp("tmp");
+        t.owner.cleanups.push("rt_mem_free(&${t.name});");   // also on return, break or an error
+    }
+    return "&${t.name}";
+}
+
+function stmtInner(s: Stmt in default): void {
+    switch (s) {
+        case VarDecl v -> varDecl(v);
+        case AssignStmt a -> assign(a);
+        case BlockStmt b -> {
+            line("{");
+            bracedBlock(b.body);
+            line("}");
+        }
+        case ReturnStmt r -> ret(r);
+        case ExprStmt e -> discard(expr(e.expr));
+        case IfStmt i -> ifStmt(i);
+        case WhileStmt w -> whileStmt(w);
+        case ForStmt f -> forStmt(f);
+        case BreakStmt, ContinueStmt -> {
+            if (loopBlock != null) { cleanupsUntil(loopBlock!); }
+            line(s is BreakStmt ? "break;" : "continue;");
+        }
+        case ThrowStmt t -> throwStmt(t);
+        case YieldStmt y -> {
+            let arm: ArmCtx = fn.arms[fn.arms.length - 1];
+            line("${arm.result} = ${value(y.value)};");
+            cleanupsUntil(arm.block);
+            line("goto ${arm.endLabel};");
+            arm.used = true;
+        }
+        case TryStmt t -> tryStmt(t);
+        case SwitchStmt sw -> switchCode(sw.switchExpr, false);
+        default -> {}
+    }
+}
+
+function assign(s: AssignStmt in default): void {
+    let target: Expr = s.target;
+    let mi: MemberInfo? = target.member;
+    if (target is Member m && mi != null && mi.kind == MbK.AnyKey) {
+        let obj: String = hoist("RtAny", expr(m.object));
+        line("rt_any_set(${obj}, ${stringLiteral(mi.key)}, ${value(s.value)}, ${s.line});");
+        return;
+    }
+    if (target is Index x && x.object.ty == T_ANY) {
+        let obj: String = hoist("RtAny", expr(x.object));
+        let key: String = expr(x.index);
+        let v: String = value(s.value);
+        if (x.index.ty == T_STRING) {
+            line("rt_any_set(${obj}, ${key}, ${v}, ${s.line});");
+        } else {
+            line("rt_any_set_at(${obj}, (int64_t)(${key}), ${v}, ${s.line});");
+        }
+        return;
+    }
+    let t: String = lvalue(target);
+    line("${t} = ${value(s.value)};");
+}
+
+function varDecl(v: VarDecl in default): void {
+    let s: Symbol = v.symbol!;
+    switch (s.memKind) {
+        case HeapGrowable -> {
+            line("RtMem ${s.cName} = rt_mem_growable();");
+            topBlock().cleanups.push("rt_mem_free(&${s.cName});");
+        }
+        case HeapFixed -> {
+            let size: String = expr(v.type.size!);
+            line("RtMem ${s.cName} = rt_mem_heap((int64_t)(${size}), ${v.line});");
+            topBlock().cleanups.push("rt_mem_free(&${s.cName});");
+        }
+        case FixedLocal -> {
+            line("uint8_t ${s.cName}__buf[${s.type.size < 1 ? 1 : s.type.size}];");
+            line("RtMem ${s.cName} = rt_mem_fixed(${s.cName}__buf, sizeof ${s.cName}__buf);");
+            topBlock().cleanups.push("rt_mem_finalize(&${s.cName});");   // a File, a socket, a thread living here
+        }
+        default -> {
+            let init: String = value(v.init!);
+            line("${cType(s.type)} ${s.cName} = ${init};");
+            if (!s.used) { line("(void)${s.cName};"); }
+        }
+    }
+}
+
+function ret(r: ReturnStmt in default): void {
+    let a: Expr? = r.value;
+    if (a == null) {
+        cleanupsUntil(rootBlock());
+        line("return;");
+        return;
+    }
+    let v: String = value(a);
+    if (anyCleanups(rootBlock())) {
+        let t: String = tmp("ret");
+        line("${cType(fn.ret)} ${t} = ${v};");
+        cleanupsUntil(rootBlock());
+        line("return ${t};");
+    } else {
+        line("return ${v};");
+    }
+}
+
+function ifStmt(i: IfStmt in default): void {
+    if (i.platform != "") {
+        whenStmt(i);
+        return;
+    }
+    let c: String = expr(i.cond);
+    line("if (${strip(c)}) {");
+    bracedBlock(i.thenBody);
+    if (i.hasElse) {
+        line("} else {");
+        bracedBlock(i.elseBody);
+    }
+    line("}");
+}
+
+/**
+ * #when windows ... #when macos ... #else ... #end: C's #if / #elif / #else / #endif, with no braces,
+ * so what a branch declares stays for the code after it. Every branch is written (the C compiler keeps
+ * one); what a branch leaves to free at the end of the block is freed only where that branch is kept.
+ */
+function whenStmt(i: IfStmt in default): void {
+    let above: String[*] = [] in default;            // the conditions of the branches above
+    let cur: IfStmt = i;
+    while (true) {
+        let c: String = platformCondition(cur.platform);
+        line("${above.length == 0 ? "#if" : "#elif"} ${c}");
+        whenBranch(cur.thenBody, keptWhen(c, above));
+        above.push(c);
+        if (!cur.hasElse) { break; }
+        if (cur.elseBody.length == 1 && cur.elseBody[0] is IfStmt n && n.chained) {
+            cur = n;
+            continue;
+        }
+        line("#else");
+        whenBranch(cur.elseBody, keptWhen("1", above));
+        break;
+    }
+    line("#endif");
+}
+
+/** When the C compiler keeps a branch: its condition, and none of the ones above. */
+function keptWhen(c: String, above: String[*]): String {
+    if (above.length == 0) { return c; }
+    return "(${c}) && !(${above.join(" || ")})";
+}
+
+function whenBranch(stmts: Stmt[*] in default, kept: String): void {
+    let top: Block = topBlock();
+    let before: int32 = top.cleanups.length;
+    for (s in stmts) { stmt(s); }
+    for (k in before..top.cleanups.length) {
+        top.cleanups[k] = "#if ${kept}\n${top.cleanups[k]}\n#endif" in default;
+    }
+}
+
+/** Opens the block of a loop body. */
+function loopBlockOpen(): Block {
+    let b: Block = Block {} in default;
+    pushBlock(b);
+    loopBlock = b;
+    return b;
+}
+
+function loopBody(body: Stmt[*] in default, b: Block in default): void {
+    openMemory(body);
+    for (s in body) { stmt(s); }
+    popBlock();
+    if (!endsWithJump(body)) { emitCleanups(b); }
+}
+
+function whileStmt(w: WhileStmt in default): void {
+    let saved: Block? = loopBlock;
+    let cond: String = lazy(w.cond);
+    let pre: String = lazyPre;
+    line(pre.isEmpty() ? "while (${strip(cond)}) {" : "while (1) {");
+    fn.indent += 1;
+    let b: Block = loopBlockOpen();
+    if (!pre.isEmpty()) {
+        fn.out.add(indent4(pre));      // pre-lines were generated one level out
+        line("if (!(${strip(cond)})) break;");
+    }
+    loopBody(w.body, b);
+    fn.indent -= 1;
+    line("}");
+    loopBlock = saved;
+}
+
+/** `int32_t i = idx;` for the index variable of a for, if it has one. */
+function indexVar(ix: Symbol? in default, value: String): void {
+    if (ix == null) { return; }
+    line("${ix.type == T_STRING ? "RtString" : "int32_t"} ${ix.cName} = ${value};");
+    if (!ix.used) { line("(void)${ix.cName};"); }
+}
+
+function forStmt(f: ForStmt in default): void {
+    let info: ForInfo = f.forInfo!;
+    let saved: Block? = loopBlock;
+    line("{");
+    fn.indent += 1;
+    let outer: Block = Block {} in default;
+    pushBlock(outer);
+    let v: Symbol = info.value!;
+    if (info.range) {
+        let ct: String = cType(info.elemType!);
+        let start: String = tmp("from");
+        let end: String = tmp("to");
+        line("${ct} ${start} = ${expr(f.iterable)};");
+        line("${ct} ${end} = ${expr(f.rangeEnd!)};");
+        line("for (${ct} ${v.cName} = ${start}; ${v.cName} < ${end}; ${v.cName}++) {");
+        if (!v.used) { line("    (void)${v.cName};"); }
+    } else if (info.any != 0) {
+        let named: bool = info.any == 2;
+        let src: Expr = named && f.iterable is Member m ? m.object : f.iterable;
+        let tb: String = tmp("table");
+        let n: String = tmp("n");
+        let idx: String = tmp("i");
+        let count: String = named ? "count" : "length";
+        line("RtAny ${tb}_v = ${expr(src)};");
+        line("RtTable* ${tb} = ${tb}_v.kind == RT_ANY_TABLE ? ${tb}_v.as.t : NULL;");
+        line("int32_t ${n} = ${tb} ? ${tb}->${count} : 0;");
+        line("for (int32_t ${idx} = 0; ${idx} < ${n}; ${idx}++) {");
+        fn.indent += 1;
+        line("if (${tb}->${count} != ${n}) rt_panic(\"an Any table cannot gain or lose entries while it is being iterated\", ${f.line});");
+        indexVar(info.index, named ? "${tb}->keys[${idx}]" : idx);
+        line("RtAny ${v.cName} = ${tb}->${named ? "values" : "items"}[${idx}];");
+        if (!v.used) { line("(void)${v.cName};"); }
+        fn.indent -= 1;
+    } else if (f.iterable.ty != null && f.iterable.ty! == T_STRING) {
+        let text: String = tmp("text");
+        let idx: String = tmp("i");
+        line("RtString ${text} = ${expr(f.iterable)};");
+        line("for (int32_t ${idx} = 0; ${idx} < ${text}.len; ${idx}++) {");
+        fn.indent += 1;
+        indexVar(info.index, idx);
+        line("uint8_t ${v.cName} = (uint8_t)${text}.ptr[${idx}];");
+        if (!v.used) { line("(void)${v.cName};"); }
+        fn.indent -= 1;
+    } else {
+        let at: Type = f.iterable.ty!;
+        let idx: String = tmp("i");
+        let p: String = tmp(switch (at.ak) {
+            case Fixed -> "arr";
+            case Slice -> "view";
+            default -> "list";
+        });
+        if (at.ak == ArrK.Fixed) {
+            line("${cType(at)}* ${p} = ${addrOf(f.iterable)};");
+        } else {
+            line("${cType(at)} ${p} = ${expr(f.iterable)};");
+        }
+        let arrow: String = at.ak == ArrK.Slice ? "." : "->";
+        line("for (int32_t ${idx} = 0; ${idx} < ${p}${arrow}length; ${idx}++) {");
+        fn.indent += 1;
+        let ix: Symbol? = info.index;
+        if (ix != null) { line("int32_t ${ix.cName} = ${idx};"); }
+        line("${cType(info.elemType!)} ${v.cName} = ${p}${arrow}items[${idx}];");
+        if (ix != null && !ix.used) { line("(void)${ix.cName};"); }
+        if (!v.used) { line("(void)${v.cName};"); }
+        fn.indent -= 1;
+    }
+    fn.indent += 1;
+    let b: Block = loopBlockOpen();
+    loopBody(f.body, b);
+    fn.indent -= 1;
+    line("}");
+    popBlock();
+    fn.indent -= 1;
+    line("}");
+    loopBlock = saved;
+}
+
+public function throwStmt(t: ThrowStmt in default): void {
+    let e: Type = t.value.ty!;
+    let v: String = value(t.value);
+    line("err.kind = ${enumOf(e.name)!.errorId};");
+    line("err.as.e_${e.name} = ${v};");
+    propagate();
+}
+
+/** Sends the current error to the innermost try, or to the caller. */
+public function propagate(): void {
+    if (fn.tries.length > 0) {
+        let t: TryCtx = fn.tries[fn.tries.length - 1];
+        cleanupsUntil(t.block);
+        line("goto ${t.catchLabel};");
+        return;
+    }
+    cleanupsUntil(rootBlock());
+    if (fn.throwsOut) {
+        line("*err_out = err;");
+        line(fn.ret == T_VOID ? "return;" : "return ${zero(fn.ret)};");
+    } else {
+        line("rt_panic(\"uncaught error\", 0);");
+    }
+}
+
+function tryStmt(t: TryStmt in default): void {
+    let catchL: String = tmp("try_catch") in default;      // (kept in fn.tries while its body is generated)
+    let endL: String = tmp("try_end");
+    line("{");
+    fn.indent += 1;
+    let b: Block = Block {} in default;
+    pushBlock(b);
+    fn.tries.push(TryCtx { catchLabel: catchL, block: b } in default);
+    openMemory(t.body);
+    for (s in t.body) { stmt(s); }
+    fn.tries.pop();
+    popBlock();
+    if (!endsWithJump(t.body)) { emitCleanups(b); }
+    fn.indent -= 1;
+    line("}");
+    line("goto ${endL};");
+    line("${catchL}:");
+    for (i, c in t.catches) {
+        let ci: CatchInfo = c.catchInfo!;
+        let e: EnumInfo = ci.error!;
+        line("${i == 0 ? "" : "} else "}if (err.kind == ${e.errorId}) {");
+        fn.indent += 1;
+        line("${tname(e.name)} ${ci.variable!.cName} = err.as.e_${e.name};");
+        line("(void)${ci.variable!.cName};");
+        line("err.kind = 0;");
+        block(c.body);
+        fn.indent -= 1;
+    }
+    line("} else {");
+    fn.indent += 1;
+    propagate();
+    fn.indent -= 1;
+    line("}");
+    line("${endL}: ;");
+}
+
+// =====================================================================================
+// Switch
+// =====================================================================================
+
+public function switchCode(sw: SwitchExpr in default, isExpr: bool): String {
+    let si: SwitchInfo = sw.sw!;
+    let st: Type = si.subjectType;
+    let subj: String = tmp("subject");
+    line("${cType(st)} ${subj} = ${expr(sw.subject)};");
+    let res: String = "";
+    if (isExpr) {
+        res = tmp("value") in default;     // (kept in fn.arms while the arms are generated)
+        line("${cType(si.resultType!)} ${res};");
+        line("memset(&${res}, 0, sizeof ${res});");
+    }
+    let end: String = tmp("switch_end") in default;
+    let jumped: bool = false;              // some goto to end was written
+    let inner: Type = isOpt(st) ? st.elem! : st;
+    let innerVal: String = isOpt(st) && !optIsPointer(st) ? "${subj}.value" : subj;
+    for (c in sw.cases) {
+        let pis: PatternInfo[*] = c.patternInfos;
+        let tests: String[*] = [];
+        for (pi in pis) { tests.push(patternTest(pi, st, inner, subj, innerVal)); }
+        line("{");
+        fn.indent += 1;
+        line("if (${tests.join(" || ")}) {");
+        fn.indent += 1;
+        if (pis.length == 1) { bindPattern(pis[0], inner, subj, innerVal); }
+        let guard: Expr? = c.guard;
+        if (guard != null) {
+            let g: String = expr(guard);
+            line("if (${strip(g)}) {");
+            fn.indent += 1;
+        }
+        let ae: Expr? = c.expr;
+        if (c.throwStmt != null) {
+            throwStmt(c.throwStmt!);
+        } else if (ae != null) {
+            if (isExpr) {
+                let v: String = value(ae);
+                line("${res} = ${v};");
+            } else {
+                discard(expr(ae));
+            }
+            line("goto ${end};");
+            jumped = true;
+        } else {
+            line("{");
+            fn.indent += 1;
+            let b: Block = Block {} in default;
+            pushBlock(b);
+            if (isExpr) { fn.arms.push(ArmCtx { endLabel: end, result: res, block: b } in default); }
+            openMemory(c.block);
+            for (s in c.block) { stmt(s); }
+            if (isExpr) {
+                if (fn.arms[fn.arms.length - 1].used) { jumped = true; }
+                fn.arms.pop();
+            }
+            popBlock();
+            let jumps: bool = endsWithJump(c.block) || (isExpr && c.block.length > 0 && c.block[c.block.length - 1] is YieldStmt);
+            if (!jumps) { emitCleanups(b); }
+            fn.indent -= 1;
+            line("}");
+            if (!isExpr) {
+                line("goto ${end};");
+                jumped = true;
+            }
+        }
+        if (guard != null) {
+            fn.indent -= 1;
+            line("}");
+        }
+        fn.indent -= 1;
+        line("}");
+        fn.indent -= 1;
+        line("}");
+    }
+    if (isExpr) { line("rt_panic(\"no case of the switch matched\", ${sw.line});"); }
+    if (jumped) { line("${end}: ;"); }
+    return res;
+}
+
+// =====================================================================================
+// Clone functions and class cloning (the type-level part)
+// =====================================================================================
+
+function clonePrototypes(): String {
+    let sb: StringBuilder = {} in default;
+    for (t in cloneTypeList()) { sb.add("${cloneHeader(t)};\n"); }
+    return sb.toString();
+}
+
+function classClone(out: StringBuilder, c: ClassInfo in default): void {
+    out.add("static void* ${c.name}__clone(void* self_, RtMem* mem, RtCloneMap* cm) {\n");
+    if (c.sync || c.thread) {      // shared by reference: a copy would not share the lock or the thread
+        out.add("    (void)mem;\n    (void)cm;\n    return self_;\n}\n\n");
+        return;
+    }
+    out.add("    ${c.name}* o = (${c.name}*)self_;\n");
+    out.add("    void* done = rt_clone_get(cm, o);\n    if (done) return done;\n");
+    out.add("    ${c.name}* n = (${c.name}*)rt_mem_alloc(mem, sizeof(${c.name}), 0);\n");
+    out.add("    *n = *o;\n    ((RtObjHead*)n)->mem = mem;\n    rt_clone_put(cm, o, n);\n");
+    for (f in allFields(c.name)) {
+        if (!needsDeepClone(f.type)) { continue; }
+        let path: String = "n->${classFieldPath(c.name, f)}";
+        out.add("    ${path} = ${cloneOf(f.type, path)};\n");
+    }
+    out.add("    return n;\n}\n\n");
+}

@@ -1,0 +1,142 @@
+// std.io.file: an open file with byte and text operations.
+//
+//   import std.io.file { File, open };
+//   let f: File = open("notes.txt");
+//   while (true) { let line: String? = f.readLine(); if (line == null) { break; } ... }
+//
+// A File closes itself when the memory it lives in is freed (the end of the block that keeps it),
+// so it is never left open. Written in Larimar over C's stdio (fopen, fread, fwrite, fclose).
+
+import std.io.files { IoError, raise };
+import std.io.streams { InputStream, OutputStream };
+
+c_include "<errno.h>";
+
+/** A C FILE*: closed (fclose) when the memory it lives in is freed. */
+extern type CFile = c "FILE*" released by fclose;
+extern function fclose(f: CFile): int32;
+extern function fopen(path: String, mode: String): CFile?;
+extern function fread(into: byte*, size: uint64, count: uint64, f: CFile): uint64;
+extern function fwrite(from: byte*, size: uint64, count: uint64, f: CFile): uint64;
+extern function fflush(f: CFile): int32;
+extern function ferror(f: CFile): int32;
+extern function fgetc(f: CFile): int32;
+extern type Untyped;
+extern function fgets(into: byte*, size: int32, f: CFile): Untyped?;
+extern function strlen(text: byte*): uint64;
+extern let errno: int32;
+extern const ENOENT: int32;
+extern const EACCES: int32;
+extern const EPERM: int32;
+extern const EOF: int32;
+
+/** What went wrong with the last call, as a code of raise: 1 not found, 2 denied, 3 failed. */
+function code(): int32 {
+    let e: int32 = errno;
+    if (e == ENOENT) { return 1; }
+    if (e == EACCES || e == EPERM) { return 2; }
+    return 3;
+}
+
+/** An open file. */
+public class File implements InputStream, OutputStream {
+    let file: CFile? = null;
+    let path: String;
+    let lineBuffer: byte[*] = [];             // for readLine (fgets): made the first time, kept
+
+    /** The C file, or an IoError if it was closed. */
+    function live(): CFile throws IoError {
+        if (self.file == null) { throw IoError.Failed("${self.path} (closed)"); }
+        return self.file!;
+    }
+
+    /** Fills buffer from its start (one fread); how many bytes, 0 at the end. */
+    function read(buffer: byte[]): int32 throws IoError {
+        let f: CFile = self.live();
+        if (buffer.length == 0) { return 0; }
+        let n: uint64 = fread(buffer, 1, buffer.length as uint64, f);
+        if (n == 0 && ferror(f) != 0) { raise(3, self.path); }
+        return n as int32;
+    }
+
+    /** The next line, without its end (\n, or \r\n); null at the end of the file. */
+    function readLine(): String? throws IoError {
+        let f: CFile = self.live();
+        let b: byte[*] = self.lineBuffer;
+        if (b.length == 0) {
+            for (i in 0..4096) { b.push(0); }
+        }
+        if (fgets(b, b.length, f) == null) {             // nothing left
+            if (ferror(f) != 0) { raise(3, self.path); }
+            return null;
+        }
+        let n: int32 = strlen(b) as int32;
+        if (n > 0 && b[n - 1] == '\n') {                 // the whole line: one copy, at its size
+            let stop: int32 = n > 1 && b[n - 2] == '\r' ? n - 2 : n - 1;
+            return stringOfRange(b, 0, stop);
+        }
+        let line: byte[*] = [];                          // longer than the buffer: gathered
+        for (i in 0..n) { line.push(b[i]); }
+        while (fgets(b, b.length, f) != null) {
+            let k: int32 = strlen(b) as int32;
+            for (i in 0..k) { line.push(b[i]); }
+            if (k > 0 && b[k - 1] == '\n') { break; }
+        }
+        if (line.length > 0 && line[line.length - 1] == '\n') { line.pop(); }
+        if (line.length > 0 && line[line.length - 1] == '\r') { line.pop(); }
+        return stringOfRange(line, 0, line.length);
+    }
+
+    /** What is left of the file, as text. */
+    function readAll(): String throws IoError {
+        let f: CFile = self.live();
+        let all: byte[*] = [];
+        let chunk: byte[*] = [];
+        for (i in 0..65536) { chunk.push(0); }
+        while (true) {
+            let n: uint64 = fread(chunk, 1, chunk.length as uint64, f);
+            if (n == 0) { break; }
+            for (i in 0..n as int32) { all.push(chunk[i]); }
+        }
+        if (ferror(f) != 0) { raise(3, self.path); }
+        return stringOfRange(all, 0, all.length);
+    }
+
+    function write(bytes: byte[]): void throws IoError {
+        let f: CFile = self.live();
+        if (bytes.length == 0) { return; }
+        if (fwrite(bytes, 1, bytes.length as uint64, f) != bytes.length as uint64) { raise(3, self.path); }
+    }
+
+    function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+
+    /** Writes what is waiting in C's buffer: an error here is an error writing the file. */
+    function flush(): void throws IoError {
+        if (fflush(self.live()) != 0) { raise(3, self.path); }
+    }
+
+    /** Closes the file now (what is in the buffer is written first); otherwise it is closed when its memory is freed. */
+    function close(): void throws IoError {
+        if (self.file == null) { return; }
+        let ok: bool = fflush(self.file!) == 0;
+        release(self.file);
+        self.file = null;
+        if (!ok) { raise(3, self.path); }
+    }
+}
+
+/** Opens a file to read it. */
+public function open(path: String): File throws IoError { return openWith(path, "rb"); }
+
+/** Creates a file to write it (replacing it if it exists). */
+public function create(path: String): File throws IoError { return openWith(path, "wb"); }
+
+/** Opens a file to write at its end (creating it if needed). */
+public function append(path: String): File throws IoError { return openWith(path, "ab"); }
+
+function openWith(path: String, mode: String): File throws IoError {
+    let f: File = { path: path.clone() };
+    f.file = fopen(path, mode);
+    if (f.file == null) { raise(code(), path); }
+    return f;
+}

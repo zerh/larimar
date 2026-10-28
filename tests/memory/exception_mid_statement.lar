@@ -1,0 +1,24 @@
+// expect: run
+// output: error 3
+// output: ok 4
+// output: done 2
+// Una excepción a mitad de una instrucción con temporales vivos: se liberan al salir.
+enum Fail { Odd(n: int32) }
+function check(n: int32): String throws Fail {
+    if (n % 2 == 1) { throw Fail.Odd { n }; }
+    return "ok ${n}";
+}
+function main(): int32 {
+    let done: int32 = 0;
+    for (i in 3..5) {
+        try {
+            println("${"x".toUpperCase()}${check(i)}".substring(1));
+            done += 1;
+        } catch (Fail f) {
+            switch (f) { case Odd { n } -> println("error ${n}"); }
+            done += 1;
+        }
+    }
+    println("done ${done}");
+    return 0;
+}

@@ -1,0 +1,118 @@
+// expect: run
+// output: 200 OK text/plain | hola
+// output: chunked: hola mundo!!
+// output: redirect: 200 hola (http://127.0.0.1/hello)
+// output: post: Ana 31
+// output: 404 Not Found ok=false
+// output: until close: sin longitud
+// output: big: 100000 bytes
+// output: head: 200 ''
+// output: https refused: network: connection refused
+// output: bad url: ftp://x
+// output: refused: network: connection refused
+// std.net.http: a client against a local server (in a thread) that answers with Content-Length, chunked,
+// a redirection, an echo of a POST, a 404, a body that ends when the connection closes, a big body.
+import std.net.http { get, post, send, Client, Request, Response, Header, HttpError, message };
+import std.net { TcpSocket, TcpListener, NetError };
+import std.io.streams { Reader, MemoryOutputStream, copy, buffer };
+import std.io.files { IoError };
+
+const ANSWERS: int32 = 9;              // connections the server answers (the redirection is two)
+
+/** One request: its line, its headers, its body (by Content-Length); then the answer for its path. */
+function answer(conn: TcpSocket, port: int32): void throws IoError {
+    let from: Reader = { from: conn };
+    let first: String = from.readLine() ?? "";
+    let length: int32 = 0;
+    while (true) {
+        let line: String = from.readLine() ?? "";
+        if (line.length == 0) { break; }
+        if (line.toLowerCase().startsWith("content-length:")) {
+            length = (line.substring(15).trim().toInt() ?? 0) as int32;
+        }
+    }
+    let body: byte[*] = buffer(length);
+    let got: int32 = 0;
+    while (got < length) {
+        let n: int32 = from.readInto(body, length - got);   // (small bodies: one read)
+        if (n == 0) { break; }
+        got += n;
+    }
+    let parts: String[*] = first.split(" ");
+    let path: String = parts.length > 1 ? parts[1] : "";
+    if (path == "/hello") {
+        conn.writeText("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 4\r\n\r\nhola");
+    } else if (path == "/chunked") {
+        conn.writeText("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhola \r\n7;x=1\r\nmundo!!\r\n0\r\nX-End: 1\r\n\r\n");
+    } else if (path == "/old") {
+        conn.writeText("HTTP/1.1 301 Moved Permanently\r\nLocation: /hello\r\nContent-Length: 0\r\n\r\n");
+    } else if (path == "/echo") {
+        let text: String = stringOf(body);
+        conn.writeText("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${text.length}\r\n\r\n${text}");
+    } else if (path == "/raw") {
+        conn.writeText("HTTP/1.0 200 OK\r\n\r\nsin longitud");
+    } else if (path == "/big") {
+        conn.writeText("HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\n");
+        conn.writeText("0123456789".repeat(10000));
+    } else if (path == "/head") {
+        conn.writeText("HTTP/1.1 200 OK\r\nContent-Length: 50\r\n\r\n");
+    } else {
+        conn.writeText("HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found");
+    }
+    conn.close();
+}
+
+function client(base: String, port: int32): void {
+    try {
+        let r: Response = get("${base}/hello");
+        println("${r.status} ${r.reason} ${r.header("content-type") ?? "?"} | ${r.text()}");
+
+        println("chunked: ${get("${base}/chunked").text()}");
+
+        let moved: Response = get("${base}/old");
+        println("redirect: ${moved.status} ${moved.text()} (${moved.url.replace(":${port}", "")})");
+
+        let echo: Response = post("${base}/echo", "{\"name\": \"Ana\", \"age\": 31}", "application/json");
+        let data: Any = echo.json();
+        println("post: ${data.name} ${data.age}");
+
+        let missing: Response = get("${base}/missing");
+        println("${missing.status} ${missing.reason} ok=${missing.ok()}");
+
+        println("until close: ${get("${base}/raw").text()}");
+
+        let api: Client = { timeout: 5000, headers: [Header { name: "Accept", value: "*/*" }] };
+        let big: Response = api.send({ url: "${base}/big" });
+        let out: MemoryOutputStream = {};
+        copy(big.body, out);
+        println("big: ${out.toByteArray().length} bytes");
+
+        let h: Response = api.send({ method: "HEAD", url: "${base}/head" });
+        println("head: ${h.status} '${h.text()}'");
+    } catch (HttpError e) {
+        println("client: ${message(e)}");
+    } catch (IoError e) {
+        println("client: io");
+    }
+    try { get("https://127.0.0.1:1/"); } catch (HttpError e) { println("https refused: ${message(e)}"); }
+    try { get("ftp://x"); } catch (HttpError e) { println(message(e)); }
+}
+
+function main(): int32 throws NetError {
+    let server: TcpListener = TcpListener.bind("127.0.0.1", 0);
+    let port: int32 = server.port();
+    let base: String = "http://127.0.0.1:${port}";
+    {
+        let threads: byte[*] = [] in heap;
+        let t: Thread = { run: () -> { client(base, port); } } in threads;
+        t.start();
+        for (i in 0..ANSWERS) {
+            let conn: TcpSocket = server.accept();     // closed at the end of each turn
+            conn.setTimeout(5000);
+            try { answer(conn, port); } catch (IoError e) { println("server: io"); }
+        }
+    }   // waits for the client thread
+    try { server.close(); } catch (IoError e) {}
+    try { get(base); } catch (HttpError e) { println("refused: ${message(e)}"); }
+    return 0;
+}

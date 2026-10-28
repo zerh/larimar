@@ -1,0 +1,529 @@
+// ast: the syntax tree (Ast.java). One class per kind of node; the analyzer writes what it
+// finds into the fields of Node, and the generator reads them from there.
+
+import sema {
+    Type, Region, Conversion, Symbol, CallInfo, MemberInfo, Place, LambdaInfo, SwitchInfo, ForInfo,
+    CatchInfo, MethodInfo, VariantInfo, PatternInfo, ClassInfo
+};
+
+/** Placements (Placed.mode) and patterns (Pattern.kind). */
+public const PL_MEMORY: int32 = 0;
+public const PL_HEAP: int32 = 1;
+public const PL_STACK: int32 = 2;
+public const PL_DEFAULT: int32 = 3;
+
+public const PT_NAME: int32 = 0;          // Foo
+public const PT_TYPE: int32 = 1;          // Foo f
+public const PT_DESTRUCTURE: int32 = 2;   // Foo { a, b: c } [f]
+public const PT_CONSTANT: int32 = 3;      // 1, "x"
+public const PT_NULL: int32 = 4;          // null
+
+public class Node {
+    let line: int32;
+    // ---- filled by the linker
+    let builtin: bool = false;
+    let rewritten: bool = false;            // already renamed (a += b shares the target with the value)
+    // ---- filled by the analyzer
+    let ty: Type? = null;
+    let region: Region? = null;
+    let conv: Conversion? = null;
+    let symbol: Symbol? = null;
+    let narrowed: bool = false;
+    let call: CallInfo? = null;
+    let member: MemberInfo? = null;
+    let place: Place? = null;
+    let lambda: LambdaInfo? = null;
+    let sw: SwitchInfo? = null;
+    let forInfo: ForInfo? = null;
+    let catchInfo: CatchInfo? = null;
+    let opMethod: MethodInfo? = null;
+    let memArg: Symbol? = null;
+    let throwing: bool = false;
+    let method: MethodInfo? = null;
+    let tested: ClassInfo? = null;          // IsExpr: the class tested
+    let variant: VariantInfo? = null;
+    let boxPlace: Place? = null;
+    let anyFields: bool = false;
+    let patternInfos: PatternInfo[*] = [];
+}
+
+public class Expr extends Node { }
+public class Stmt extends Node {
+    /** The first statement of a block that has a memory: its C name (the analyzer sets it). */
+    let blockMemory: String = "";
+}
+
+// ---- types as written: int32, Point, (int32) -> bool, T[16], T[], T[*], T?, T* (C) ---------
+
+public enum TK { Named, Func, Fixed, Infer, Growable, Opt, Ptr }
+
+public class TypeRef extends Node {
+    let kind: TK;
+    let name: String = "";              // Named
+    let params: TypeRef[*] = [];        // Func
+    let inner: TypeRef? = null;         // the element, the return type (Func) or the optional's type
+    let size: Expr? = null;             // Fixed
+}
+
+public function typeNamed(name: String in default, line: int32): TypeRef { return TypeRef { line, kind: TK.Named, name } in default; }
+
+// ---- declarations ----------------------------------------------------------------------
+
+public class Program extends Node {
+    let decls: Node[*] = [];
+    let imports: ImportDecl[*] = [];
+    let publics: String[*] = [];
+}
+
+/** import a.b;  import a.b as x;  import a.b { n1, n2 }; */
+public class ImportDecl extends Node {
+    let path: String;
+    let alias: String = "";             // "" with a list of names
+    let names: String[*] = [];
+    let hasNames: bool = false;
+}
+
+/** platform: "" (every one), "windows", "macos", "linux" or "unix": written inside `#when windows ... #end`. */
+public class CIncludeDecl extends Node {
+    let header: String;
+    let platform: String = "";
+}
+public class CCodeDecl extends Node {
+    let code: String;
+    let fromStd: bool = false;          // the standard library's: only what is used reaches the C
+}
+/** extern type X;  = c "T";  = (A, B) -> R  (a C function pointer);  ... released by f;  (inside #when for one platform) */
+public class ExternTypeDecl extends Node {
+    let name: String;
+    let cType: String = "";             // c "T": the C type ("" is void*)
+    let func: TypeRef? = null;          // a pointer to a C function
+    let releasedBy: String = "";        // a resource: the function that releases it when its memory is freed
+    let platform: String = "";
+}
+
+/** cName: the C function called (it stays when a module renames the declaration); prototype: no c_include. */
+public class ExternFunctionDecl extends Node {
+    let name: String;
+    let params: Param[*] = [];
+    let ret: TypeRef;
+    let varargs: bool = false;
+    let cName: String;
+    let prototype: bool = false;
+    let platform: String = "";
+}
+
+/** extern const NAME: T;  extern let NAME: T;  a C constant (or macro) or a C global variable. */
+public class ExternValueDecl extends Node {
+    let name: String;
+    let type: TypeRef;
+    let isConst: bool;
+    let cName: String;
+    let cExpr: String = "";             // extern const N: T = c "sizeof(struct stat)";  a C expression
+    let platform: String = "";
+}
+
+public class ConstDecl extends Node {
+    let name: String;
+    let type: TypeRef;
+    let value: Expr;
+}
+
+/** lives: "", "default", "self" or another parameter (`k: Node in p`). */
+public class Param extends Node {
+    let name: String;
+    let type: TypeRef? = null;          // lambdas may leave it out
+    let lives: String = "";
+}
+
+/** Functions, methods, operators and interface signatures (hasBody false). */
+public class FunctionDecl extends Node {
+    let name: String;
+    let params: Param[*] = [];
+    let ret: TypeRef;
+    let throwsType: TypeRef? = null;
+    let body: Stmt[*] = [];
+    let isOverride: bool = false;
+    let isOperator: bool = false;
+    let hasBody: bool = false;
+    let returnLives: String = "";
+    let isStatic: bool = false;         // static methods don't receive 'self'
+    let typeName: String = "";          // for "function Type.method()" external syntax
+    let exportName: String = "";        // export function: its name in C (the linker does not rename it)
+    /** wait until (cond): a method of a synchronized class that runs only when cond holds (the caller waits). */
+    let waitUntil: Expr? = null;
+}
+
+public class FieldDecl extends Node {
+    let name: String;
+    let type: TypeRef;
+    let defaultValue: Expr? = null;
+}
+
+public class StructDecl extends Node {
+    let name: String;
+    let cName: String = "";             // extern type X = struct { ... }: the C struct it describes
+    let fields: FieldDecl[*] = [];
+    let methods: FunctionDecl[*] = [];
+}
+
+public class ClassDecl extends Node {
+    let name: String;
+    let superName: String = "";
+    let interfaces: String[*] = [];
+    let fields: FieldDecl[*] = [];
+    let methods: FunctionDecl[*] = [];
+    let isSynchronized: bool = false;
+}
+
+public class InterfaceDecl extends Node {
+    let name: String;
+    let methods: FunctionDecl[*] = [];
+}
+
+public class NativeTypeDecl extends Node {
+    let name: String;
+    let methods: FunctionDecl[*] = [];
+}
+
+public class EnumVariant extends Node {
+    let name: String;
+    let fields: Param[*] = [];
+    let hasPayload: bool = false;       // written with parentheses
+}
+
+public class EnumDecl extends Node {
+    let name: String;
+    let variants: EnumVariant[*] = [];
+}
+
+/** The name a declaration introduces, or "". */
+public function declName(d: Node): String {
+    return switch (d) {
+        case FunctionDecl f -> f.typeName != "" ? "" : f.name;      // a static function belongs to its type
+        case ConstDecl c -> c.name;
+        case VarDecl v -> v.name;
+        case StructDecl s -> s.name;
+        case ClassDecl c -> c.name;
+        case InterfaceDecl i -> i.name;
+        case NativeTypeDecl t -> t.name;
+        case EnumDecl e -> e.name;
+        case ExternTypeDecl t -> t.name;
+        case ExternFunctionDecl f -> f.name;
+        case ExternValueDecl v -> v.name;
+        default -> "";
+    };
+}
+
+public function isTypeDecl(d: Node): bool {
+    return d is StructDecl || d is ClassDecl || d is InterfaceDecl || d is NativeTypeDecl || d is EnumDecl || d is ExternTypeDecl;
+}
+
+// ---- statements ---------------------------------------------------------------------------
+
+public class VarDecl extends Stmt {
+    let name: String;
+    let type: TypeRef;
+    let init: Expr? = null;
+}
+
+public class AssignStmt extends Stmt {
+    let target: Expr;
+    let value: Expr;
+}
+
+public class ReturnStmt extends Stmt { let value: Expr? = null; }
+public class ExprStmt extends Stmt { let expr: Expr; }
+
+/**
+ * platform != "": `#when windows ... #when macos ... #else ... #end`, chosen when the C is compiled
+ * (#if), not when it runs. No block: what a branch declares stays for the code after #end. Each
+ * further `#when` is an IfStmt in elseBody with `chained`; `#else` is the last elseBody.
+ */
+public class IfStmt extends Stmt {
+    let cond: Expr;
+    let thenBody: Stmt[*] = [];
+    let elseBody: Stmt[*] = [];
+    let hasElse: bool = false;
+    let platform: String = "";
+    let chained: bool = false;
+}
+
+public class WhileStmt extends Stmt {
+    let cond: Expr;
+    let body: Stmt[*] = [];
+}
+
+/** for (x in e), for (i, x in e), for (i in a..b) */
+public class ForStmt extends Stmt {
+    let indexName: String = "";
+    let varName: String;
+    let iterable: Expr;
+    let rangeEnd: Expr? = null;
+    let body: Stmt[*] = [];
+}
+
+public class BreakStmt extends Stmt { }
+public class ContinueStmt extends Stmt { }
+public class ThrowStmt extends Stmt { let value: Expr; }
+public class YieldStmt extends Stmt { let value: Expr; }
+
+public class CatchClause extends Node {
+    let typeName: String;
+    let varName: String;
+    let body: Stmt[*] = [];
+}
+
+public class TryStmt extends Stmt {
+    let body: Stmt[*] = [];
+    let catches: CatchClause[*] = [];
+}
+
+public class SwitchStmt extends Stmt { let switchExpr: SwitchExpr; }
+
+/** { ... } as a statement: a scope (memories declared inside are freed at its end). */
+public class BlockStmt extends Stmt { let body: Stmt[*] = []; }
+
+// ---- expressions ------------------------------------------------------------------------------
+
+/** big: the value is num as uint64 (above int64); huge: it does not fit in 64 bits (text has it). */
+public class IntLit extends Expr {
+    let num: int64 = 0;
+    let big: bool = false;
+    let huge: bool = false;
+    let text: String = "";
+}
+
+public class FloatLit extends Expr { let text: String; }
+
+/** texts.length == exprs.length + 1; the texts keep their escapes. */
+public class StringLit extends Expr {
+    let texts: String[*] = [];
+    let exprs: Expr[*] = [];
+}
+
+public class BoolLit extends Expr { let value: bool; }
+public class NullLit extends Expr { }
+public class Ident extends Expr { let name: String; }
+public class SelfExpr extends Expr { }
+public class SuperMember extends Expr { let name: String; }
+
+public class Member extends Expr {
+    let object: Expr;
+    let name: String;
+    let replaced: Expr? = null;             // linker: module.name became the name itself
+}
+
+public class Index extends Expr {
+    let object: Expr;
+    let index: Expr;
+}
+
+public class Call extends Expr {
+    let callee: Expr;
+    let args: Expr[*] = [];
+}
+
+public class Unary extends Expr {
+    let op: String;
+    let operand: Expr;
+    let waitUntil: bool = false;            // the !(c) of a `wait until (c)` method
+}
+
+public class Binary extends Expr {
+    let op: String;
+    let left: Expr;
+    let right: Expr;
+}
+
+public class Ternary extends Expr {
+    let cond: Expr;
+    let then: Expr;
+    let otherwise: Expr;
+}
+
+/** expr is Type [binding] */
+public class IsExpr extends Expr {
+    let expr: Expr;
+    let typeName: String;
+    let binding: String = "";
+}
+
+public class Cast extends Expr {
+    let expr: Expr;
+    let type: TypeRef;
+}
+
+public class Unwrap extends Expr { let expr: Expr; }
+
+public class Lambda extends Expr {
+    let params: Param[*] = [];
+    let body: Stmt[*] = [];
+}
+
+/** name "": a positional entry ({ 1, 2 } in an Any). shorthand: written { x } for { x: x }. */
+public class FieldInit extends Node {
+    let name: String = "";
+    let value: Expr;
+    let shorthand: bool = false;
+}
+
+public class ObjectLit extends Expr {
+    let typeName: String = "";
+    let fields: FieldInit[*] = [];
+}
+
+public class ArrayLit extends Expr { let elems: Expr[*] = []; }
+
+/** e in m, in heap, in byte[N], in default */
+public class Placed extends Expr {
+    let expr: Expr;
+    let mode: int32;
+    let memory: Expr? = null;           // PL_MEMORY
+    let buffer: TypeRef? = null;        // PL_STACK
+}
+
+/** fields[i] is bound to bindings[i]; binding is the name for the whole value. */
+public class Pattern extends Node {
+    let kind: int32;
+    let name: String = "";
+    let binding: String = "";
+    let fields: String[*] = [];
+    let bindings: String[*] = [];
+    let constant: Expr? = null;
+}
+
+/** One of expr, block (hasBlock) or throwStmt is the arm. */
+public class SwitchCase extends Node {
+    let patterns: Pattern[*] = [];
+    let isDefault: bool = false;
+    let guard: Expr? = null;
+    let expr: Expr? = null;
+    let block: Stmt[*] = [];
+    let hasBlock: bool = false;
+    let throwStmt: ThrowStmt? = null;
+}
+
+public class SwitchExpr extends Expr {
+    let subject: Expr;
+    let cases: SwitchCase[*] = [];
+}
+
+// ---- walking ---------------------------------------------------------------------------
+// Statements and expressions in order, like AstWalk in the Java version: callers loop over them.
+
+/** Every statement of a body, nested ones included (not inside lambdas). */
+public function allStmts(body: Stmt[*] in out, out: Stmt[*]): void {
+    for (s in body) {
+        out.push(s);
+        switch (s) {
+            case IfStmt i -> {
+                allStmts(i.thenBody, out);
+                allStmts(i.elseBody, out);
+            }
+            case WhileStmt w -> allStmts(w.body, out);
+            case ForStmt f -> allStmts(f.body, out);
+            case BlockStmt b -> allStmts(b.body, out);
+            case TryStmt t -> {
+                allStmts(t.body, out);
+                for (c in t.catches) { allStmts(c.body, out); }
+            }
+            case SwitchStmt sw -> {
+                for (c in sw.switchExpr.cases) { allStmts(c.block, out); }
+            }
+            default -> {}
+        }
+    }
+}
+
+/** Every expression of a body (into lambda bodies when `lambdas`). */
+public function allExprs(body: Stmt[*] in out, lambdas: bool, out: Expr[*]): void {
+    for (s in body) {
+        switch (s) {
+            case VarDecl v -> exprAll(v.init, lambdas, out);
+            case AssignStmt a -> {
+                exprAll(a.target, lambdas, out);
+                exprAll(a.value, lambdas, out);
+            }
+            case ReturnStmt r -> exprAll(r.value, lambdas, out);
+            case ExprStmt e -> exprAll(e.expr, lambdas, out);
+            case ThrowStmt t -> exprAll(t.value, lambdas, out);
+            case YieldStmt y -> exprAll(y.value, lambdas, out);
+            case SwitchStmt sw -> exprAll(sw.switchExpr, lambdas, out);
+            case IfStmt i -> {
+                exprAll(i.cond, lambdas, out);
+                allExprs(i.thenBody, lambdas, out);
+                allExprs(i.elseBody, lambdas, out);
+            }
+            case WhileStmt w -> {
+                exprAll(w.cond, lambdas, out);
+                allExprs(w.body, lambdas, out);
+            }
+            case ForStmt f -> {
+                exprAll(f.iterable, lambdas, out);
+                exprAll(f.rangeEnd, lambdas, out);
+                allExprs(f.body, lambdas, out);
+            }
+            case TryStmt t -> {
+                allExprs(t.body, lambdas, out);
+                for (c in t.catches) { allExprs(c.body, lambdas, out); }
+            }
+            case BlockStmt b -> allExprs(b.body, lambdas, out);
+            default -> {}
+        }
+    }
+}
+
+public function exprAll(e: Expr? in out, lambdas: bool, out: Expr[*]): void {
+    if (e == null) { return; }
+    out.push(e);
+    switch (e) {
+        case StringLit s -> {
+            for (x in s.exprs) { exprAll(x, lambdas, out); }
+        }
+        case ArrayLit a -> {
+            for (x in a.elems) { exprAll(x, lambdas, out); }
+        }
+        case Member m -> exprAll(m.object, lambdas, out);
+        case Unary u -> exprAll(u.operand, lambdas, out);
+        case Cast c -> exprAll(c.expr, lambdas, out);
+        case Unwrap u -> exprAll(u.expr, lambdas, out);
+        case IsExpr x -> exprAll(x.expr, lambdas, out);
+        case Index i -> {
+            exprAll(i.object, lambdas, out);
+            exprAll(i.index, lambdas, out);
+        }
+        case Binary b -> {
+            exprAll(b.left, lambdas, out);
+            exprAll(b.right, lambdas, out);
+        }
+        case Ternary t -> {
+            exprAll(t.cond, lambdas, out);
+            exprAll(t.then, lambdas, out);
+            exprAll(t.otherwise, lambdas, out);
+        }
+        case Call c -> {
+            exprAll(c.callee, lambdas, out);
+            for (x in c.args) { exprAll(x, lambdas, out); }
+        }
+        case Lambda l -> {
+            if (lambdas) { allExprs(l.body, lambdas, out); }
+        }
+        case ObjectLit o -> {
+            for (f in o.fields) { exprAll(f.value, lambdas, out); }
+        }
+        case Placed p -> {
+            exprAll(p.expr, lambdas, out);
+            exprAll(p.memory, lambdas, out);
+        }
+        case SwitchExpr sw -> {
+            exprAll(sw.subject, lambdas, out);
+            for (c in sw.cases) {
+                exprAll(c.guard, lambdas, out);
+                exprAll(c.expr, lambdas, out);
+                allExprs(c.block, lambdas, out);
+                if (c.throwStmt != null) { exprAll(c.throwStmt!.value, lambdas, out); }
+            }
+        }
+        default -> {}
+    }
+}

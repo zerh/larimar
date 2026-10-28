@@ -1,0 +1,6 @@
+// expect: panic null
+function find(): String? { return null; }
+function main(): int32 {
+    println(find()!);
+    return 0;
+}

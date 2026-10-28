@@ -1,0 +1,419 @@
+// larimar: the Larimar tool and compiler, written in Larimar (Larimar.java + Transpiler.java).
+//
+//   larimar new <name>              creates a project
+//   larimar build [folder]          larimar.toml -> build/<name>.c -> executable
+//   larimar run [folder] [-- args]  builds, then runs the program
+//   larimar build --debug           -g -O0 and #line to the .lar files (debuggers; also run, and file.lar -o)
+//   larimar check [file|folder]     the errors, without generating C (--json for tools)
+//   larimar lsp                     the language server for editors (LSP on stdin/stdout)
+//   larimar dap                     the debugger for editors (DAP on stdin/stdout, over lldb-dap)
+//   larimar c <file.lar>            prints the C of a file (imports are looked up next to it)
+//   larimar <file.lar> [-o out.c]   the same, written to a file (how the compiler is used by scripts)
+
+import std.os;
+import std.text { isIdentifierPart, isDigit };
+import std.path as Paths;
+import std.io.files as Files;
+import std.io.files { IoError };
+import std.io.console as Console;
+import ast { Program };
+import linker { linkErrors, decode, readSource };
+import analyzer { analysisErrors };
+import session { analyzeFile, readErrors, stdDir, checkCommand };
+import lsp { serve, worker };
+import dap { serveDebugger };
+import gen { generate, generatorErrors, debugLines, spreadLines };
+import debugmap { debugMap };
+import toml { TomlK, TomlValue, TomlSection, parseToml, tomlError, sectionOf, valueOf };
+
+const VERSION: String = "0.1.0";
+
+/** Set when a command fails; main prints it as "larimar: ...". */
+let toolError: String = "";
+
+/** Compile errors (already in their final form), printed one per line. */
+let compileErrors: String[*] = [] in default;
+
+function main(args: String[]): int32 {
+    if (args.length == 0) {
+        usage();
+        return 2;
+    }
+    let code: int32 = command(args);
+    if (compileErrors.length > 0) {
+        for (e in compileErrors) { Console.printError(e); }
+        return 1;
+    }
+    if (toolError != "") {
+        Console.printError("larimar: ${toolError}");
+        return 1;
+    }
+    return code;
+}
+
+/** build/demo.c -> build/demo.debug.json: what larimar dap needs to show the program as Larimar. */
+function debugMapPath(cFile: String): String {
+    let base: String = cFile.endsWith(".c") ? cFile.substring(0, cFile.length - 2) : cFile;
+    return "${base}.debug.json";
+}
+
+/** --debug: #line for the debugger, -g -O0 */
+let debugBuild: bool = false;
+
+function fail(msg: String in default): int32 {
+    toolError = msg;
+    return 1;
+}
+
+function command(args: String[]): int32 {
+    let rest: String[*] = [];
+    let programArgs: String[*] = [];
+    let dashed: bool = false;
+    let i: int32 = 1;
+    while (i < args.length) {
+        if (dashed) {
+            programArgs.push(args[i]);
+        } else if (args[i] == "--") {
+            dashed = true;
+        } else if (args[i] == "--debug") {
+            debugBuild = true;
+        } else {
+            rest.push(args[i]);
+        }
+        i += 1;
+    }
+    let cmd: String = args[0];
+    if (cmd == "new") { return rest.length != 1 ? fail("usage: larimar new <name>") : create(rest[0]); }
+    if (cmd == "build" || cmd == "run") {
+        if (rest.length > 1) { return fail("expected at most one folder, got [${rest.join(", ")}]"); }
+        let dir: String = rest.length == 1 ? rest[0] : ".";
+        let p: Project? = load(Paths.absolute(dir));
+        if (p == null) { return 1; }
+        let exe: String = build(p, debugBuild);
+        if (exe == "") { return 1; }
+        return cmd == "build" ? 0 : execute(exe, programArgs);
+    }
+    if (cmd == "check") { return checkCommand(rest); }
+    if (cmd == "lsp") { return serve(); }
+    if (cmd == "dap") { return serveDebugger(rest); }
+    if (cmd == "lsp-worker") { return rest.length == 2 ? worker(rest[0], rest[1]) : fail("usage: larimar lsp-worker <request.json> <response.json>"); }
+    if (cmd == "c") {
+        if (rest.length != 1) { return fail("usage: larimar c <file.lar>"); }
+        let c: String = compileFile(rest[0], ".");
+        if (compileErrors.length > 0) { return 1; }
+        print(c);
+        return 0;
+    }
+    if (cmd == "version" || cmd == "--version") {
+        println("larimar ${VERSION}");
+        return 0;
+    }
+    if (cmd == "help" || cmd == "--help" || cmd == "-h") {
+        usage();
+        return 0;
+    }
+    return cmd.endsWith(".lar") ? compileTo(args) : fail("unknown command '${cmd}'. Run 'larimar help'.");
+}
+
+function usage(): void {
+    println("larimar ${VERSION}");
+    println("");
+    println("  larimar new <name>            create a project in a new folder");
+    println("  larimar build [folder]        compile the project (larimar.toml) to an executable");
+    println("  larimar run [folder] [-- args] build, then run it with the arguments");
+    println("  larimar build --debug         with -g -O0 and the .lar lines, for a debugger (lldb, gdb, VS Code)");
+    println("  larimar check [file|folder]   find the errors without generating C (--json for tools)");
+    println("  larimar lsp                   language server for editors (speaks LSP on stdin/stdout)");
+    println("  larimar dap [--backend <lldb-dap>]  debugger for editors (DAP on stdin/stdout, over lldb-dap)");
+    println("  larimar c <file.lar>          print the generated C of a file");
+    println("  larimar <file.lar> -o <out.c> write the generated C of a file");
+    println("");
+}
+
+/** larimar main.lar [-o out.c] */
+function compileTo(args: String[]): int32 {
+    let input: String = args[0];
+    let output: String = "";
+    let i: int32 = 1;
+    while (i < args.length) {
+        if (args[i] == "-o" && i + 1 < args.length) {
+            output = args[i + 1];
+            i += 2;
+        } else if (args[i] == "--debug") {
+            debugLines = true;
+            i += 1;
+        } else {
+            return fail("unexpected '${args[i]}' (usage: larimar <file.lar> [-o <out.c>])");
+        }
+    }
+    let generated: String = compileFile(input, ".");
+    if (compileErrors.length > 0) { return 1; }
+    let c: String = debugLines ? spreadLines(generated, Paths.normalize(Paths.absolute(output != "" ? output : "out.c"))) : generated;
+    if (output == "") {
+        print(c);
+        return 0;
+    }
+    try {
+        Files.writeString(output, c);
+        if (debugLines) { Files.writeString(debugMapPath(output), debugMap()); }
+    } catch (IoError e) {
+        return fail("cannot write ${output}");
+    }
+    return 0;
+}
+
+// =========================================================================
+// compiling (Transpiler.java)
+// =========================================================================
+
+/** The C of a main file; `import a.b` reads a/b.lar next to it. Messages name files relative to `shownFrom`. */
+function compileFile(main: String, shownFrom: String): String {
+    let ok: bool = analyzeFile(main, shownFrom);
+    for (e in readErrors) { compileErrors.push(e); }
+    for (e in linkErrors) { compileErrors.push(decode(e)); }
+    for (e in analysisErrors) { compileErrors.push(decode(e)); }
+    if (!ok) { return ""; }
+    let c: String = generate();
+    if (generatorErrors.length > 0) {
+        for (e in generatorErrors) { compileErrors.push(decode(e)); }
+        return "";
+    }
+    return c;
+}
+
+// =========================================================================
+// larimar.toml
+// =========================================================================
+
+class Project {
+    let dir: String;
+    let name: String;
+    let main: String;
+    let output: String;
+    let buildDir: String;
+    let compiler: String;
+    let flags: String[*];
+    let libraries: String[*];
+    let libraryPaths: String[*];
+    let includePaths: String[*];
+    let sources: String[*];
+}
+
+function windows(): bool { return os.platform() == "windows"; }
+function mac(): bool { return os.platform() == "macos"; }
+
+function load(dir: String): Project? {
+    let source: String? = readSource(Paths.join(dir, "larimar.toml"));
+    if (source == null) {
+        toolError = "no larimar.toml in ${dir}. Create a project with 'larimar new <name>'." in default;
+        return null;
+    }
+    let sections: TomlSection[*] = parseToml(source, "larimar.toml");
+    if (tomlError != "") {
+        compileErrors.push(tomlError);
+        return null;
+    }
+    return project(dir, sections);
+}
+
+let problems: String[*] = [] in default;
+
+const PROJECT_KEYS: String = "[build_dir, main, name, output, version]";
+const C_KEYS: String = "[compiler, flags, include_paths, libraries, library_paths, sources]";
+
+function allowedKey(section: String, key: String): bool {
+    return section == "project" ? key == "name" || key == "version" || key == "main" || key == "output" || key == "build_dir" : key == "compiler" || key == "flags" || key == "libraries" || key == "library_paths" || key == "include_paths" || key == "sources";
+}
+
+function project(dir: String, toml: TomlSection[*]): Project? {
+    for (s in toml) {
+        if (s.name == "") {
+            if (s.keys.length > 0) { problems.push("keys must go inside [project] or [c]: [${s.keys.join(", ")}]"); }
+            continue;
+        }
+        if (s.name != "project" && s.name != "c") {
+            problems.push("unknown section [${s.name}] (sections: [project], [c])");
+            continue;
+        }
+        let allowed: String = s.name == "project" ? PROJECT_KEYS : C_KEYS;
+        for (k in s.keys) {
+            if (!allowedKey(s.name, k)) { problems.push("unknown key '${k}' in [${s.name}] (keys: ${allowed})"); }
+        }
+    }
+    let p: TomlSection? = sectionOf(toml, "project");
+    let c: TomlSection? = sectionOf(toml, "c");
+    let name: String = text(p, "name", "");
+    if (name == "") {
+        problems.push("[project] needs a name: name = \"my-program\"");
+    } else if (!validName(name)) {
+        problems.push("the project name can only use letters, digits, '_', '-' and '.'");
+    }
+    let main: String = text(p, "main", "src/main.lar");
+    let buildDir: String = text(p, "build_dir", "build");
+    let exeSuffix: String = windows() ? ".exe" : "";
+    let output: String = text(p, "output", "${buildDir}/${name}${exeSuffix}");
+    let cc: String = os.env("CC") ?? "";
+    if (cc.isBlank()) {
+        cc = "cc";
+        if (windows()) { cc = "gcc"; }
+    }
+    let compiler: String = text(c, "compiler", cc);
+    let flags: String[*] = list(c, "flags", ["-O2"]);
+    let libraries: String[*] = list(c, "libraries", []);
+    let libraryPaths: String[*] = list(c, "library_paths", []);
+    let includePaths: String[*] = list(c, "include_paths", []);
+    let sources: String[*] = list(c, "sources", []);
+    if (problems.length > 0) {
+        for (m in problems) { compileErrors.push("Project Error [larimar.toml]: ${m}"); }
+        return null;
+    }
+    return Project { dir, name, main, output, buildDir, compiler, flags, libraries, libraryPaths, includePaths, sources };
+}
+
+function text(t: TomlSection?, key: String, def: String): String {
+    let v: TomlValue? = valueOf(t, key);
+    if (v == null) { return def; }
+    if (v.kind == TomlK.Text) { return v.text; }
+    problems.push("'${key}' must be a \"string\"");
+    return def;
+}
+
+function list(t: TomlSection?, key: String, def: String[*]): String[*] {
+    let v: TomlValue? = valueOf(t, key);
+    if (v == null) { return def; }
+    if (v.kind == TomlK.List) { return v.items; }
+    problems.push("'${key}' must be a list: ${key} = [\"...\"]");
+    return def;
+}
+
+function validName(name: String): bool {
+    if (name.isEmpty()) { return false; }
+    for (b in name) {
+        if (!isIdentifierPart(b) && b != '-' && b != '.') { return false; }
+    }
+    return true;
+}
+
+// =========================================================================
+// build
+// =========================================================================
+
+/** Quotes an argument for the shell. */
+function quote(a: String): String {
+    return windows() ? "\"${a}\"" : "'${a.replace("'", "'\\''")}'";
+}
+
+/** A path of the project: relative to its folder, or absolute. */
+function resolve(dir: String, p: String): String { return Paths.normalize(Paths.join(dir, p)); }
+
+/** Builds the project; returns the executable, or "" on failure. */
+function build(p: Project, debug: bool): String {
+    let dir: String = p.dir;
+    let main: String = resolve(dir, p.main);
+    if (!Files.isFile(main)) {
+        toolError = "the main file ${p.main} does not exist (set it with main = \"...\" in [project])" in default;
+        return "";
+    }
+    debugLines = debug;
+    let generated: String = compileFile(main, dir);
+    if (compileErrors.length > 0) { return ""; }
+    let cFile: String = resolve(Paths.join(dir, p.buildDir), "${p.name}.c");
+    let c: String = debug ? spreadLines(generated, Paths.normalize(Paths.absolute(cFile))) : generated;
+    let exe: String = resolve(dir, p.output);
+    try {
+        Files.createDirectories(Paths.parent(cFile));
+        Files.createDirectories(Paths.parent(exe));
+        Files.writeString(cFile, c);
+        if (debug) { Files.writeString(debugMapPath(cFile), debugMap()); }
+    } catch (IoError e) {
+        toolError = "cannot write ${cFile}" in default;
+        return "";
+    }
+    let cmd: String[*] = [p.compiler, "-std=c99"];
+    for (f in p.flags) {
+        if (!debug || !(f.startsWith("-O") || f == "-s")) { cmd.push(f); }     // --debug: no optimizing
+    }
+    if (debug) {
+        cmd.push("-g");
+        cmd.push("-O0");
+    }
+    cmd.push("-o");
+    cmd.push(exe);
+    cmd.push(cFile);
+    for (s in p.sources) { cmd.push(resolve(dir, s)); }
+    for (ip in p.includePaths) { cmd.push("-I${resolve(dir, ip)}"); }
+    for (lp in p.libraryPaths) { cmd.push("-L${resolve(dir, lp)}"); }
+    for (l in p.libraries) { cmd.push("-l${l}"); }
+    // Dynamic libraries stay where they are (nothing is copied): the executable is told to look for them
+    // there when it runs (Linux and macOS; on Windows a DLL is found next to the .exe or in the PATH).
+    if (!windows()) {
+        for (lp in p.libraryPaths) { cmd.push("-Wl,-rpath,${resolve(dir, lp)}"); }
+    }
+    if (c.contains("#define RT_THREADS") && !windows()) { cmd.push("-pthread"); }   // the program uses threads
+    if ((c.contains("#define LM_NET_SOCKETS") || c.contains("#include <ws2tcpip.h>")) && windows()) { cmd.push("-lws2_32"); }  // Winsock
+    if (c.contains("#define LM_NET_TLS")) {                  // std.net.http.tls: the system's TLS
+        if (windows()) {
+            cmd.push("-lsecur32");                           // SChannel
+        } else if (mac()) {
+            cmd.push("-framework");                          // Network.framework (and Security: sec_protocol_*)
+            cmd.push("Network");
+            cmd.push("-framework");
+            cmd.push("Security");
+        } else {
+            cmd.push("-ldl");                                // OpenSSL, loaded when first used
+        }
+    }
+    let quoted: String[*] = [];
+    for (a in cmd) { quoted.push(quote(a)); }
+    let code: int32 = os.run(quoted.join(" "));
+    if (code == 127) {
+        toolError = "cannot run the C compiler '${p.compiler}'. Install gcc or clang, or set compiler = \"...\" in [c]." in default;
+        return "";
+    }
+    if (code != 0) {
+        toolError = "the C compiler failed (exit ${code}). Command: ${cmd.join(" ")}\nThe generated C is in ${Paths.relative(dir, cFile)}" in default;
+        return "";
+    }
+    Console.printError(debug ? "built ${Paths.relative(dir, exe)} (debug)" : "built ${Paths.relative(dir, exe)}");
+    return exe;
+}
+
+function execute(exe: String, args: String[*]): int32 {
+    let parts: String[*] = [quote(exe)];
+    for (a in args) { parts.push(quote(a)); }
+    return os.run(parts.join(" "));
+}
+
+// =========================================================================
+// new
+// =========================================================================
+
+function create(path: String): int32 {
+    let name: String = Paths.fileName(Paths.normalize(path));
+    if (!validName(name)) { return fail("the project name can only use letters, digits, '_', '-' and '.'"); }
+    if (Files.exists(path)) { return fail("${path} already exists"); }
+    try {
+        Files.createDirectories(Paths.join(path, "src"));
+        Files.writeString(Paths.join(path, "larimar.toml"), """
+            [project]
+            name = "${name}"
+            version = "0.1.0"
+            main = "src/main.lar"
+
+            [c]
+            flags = ["-O2"]
+            libraries = []
+            """);
+        Files.writeString(Paths.join(path, "src/main.lar"), """
+            function main(): int32 {
+                println("Hello from ${name}!");
+                return 0;
+            }
+            """);
+        Files.writeString(Paths.join(path, ".gitignore"), "build/\n");
+    } catch (IoError e) {
+        return fail("cannot create ${path}");
+    }
+    println("created ${path}\n  cd ${path}\n  larimar run");
+    return 0;
+}

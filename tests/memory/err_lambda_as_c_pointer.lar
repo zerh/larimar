@@ -1,0 +1,4 @@
+// expect: error a lambda is not one
+extern type Op = (int32, int32) -> int32;
+extern function apply(f: Op, a: int32, b: int32): int32;
+function main(): int32 { return apply((a: int32, b: int32) -> { return a * b; }, 1, 2); }

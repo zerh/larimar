@@ -1,0 +1,19 @@
+// expect: run
+// output: 3000
+// Una export function llamada miles de veces desde C: cada llamada libera lo que crea.
+c_code {
+    static int32_t call_many(int32_t n) {
+        int32_t total = 0;
+        for (int32_t i = 0; i < n; i++) total += measure("abc");
+        return total;
+    }
+}
+extern function call_many(n: int32): int32;
+export function measure(text: String): int32 {
+    let big: String = "${text.toUpperCase()}${text}".substring(0, 3);
+    return big.length;
+}
+function main(): int32 {
+    println("${call_many(1000)}");
+    return 0;
+}

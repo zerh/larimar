@@ -1,0 +1,29 @@
+// expect: run
+// output: 4 ABCD
+// output: 3 ABC
+// output: 10
+// A T[] of numbers given to C arrives as a pointer to the elements and their count, and C can write in it.
+c_code {
+    static int32_t fill_it(uint8_t* items, int32_t length) {
+        for (int32_t i = 0; i < length; i++) items[i] = (uint8_t)(65 + i);
+        return length;
+    }
+    static int64_t total(const int32_t* items, int32_t length) {
+        int64_t t = 0;
+        for (int32_t i = 0; i < length; i++) t += items[i];
+        return t;
+    }
+}
+extern function fill_it(buffer: byte[]): int32;
+extern function total(values: int32[]): int64;
+
+function main(): int32 {
+    let list: byte[*] = [0, 0, 0, 0];
+    println("${fill_it(list)} ${stringOf(list)}");
+    let fixed: byte[8] = [];
+    for (i in 0..3) { fixed.push(0); }
+    println("${fill_it(fixed)} ${stringOf(fixed)}");
+    let nums: int32[*] = [1, 2, 3, 4];
+    println("${total(nums)}");
+    return 0;
+}

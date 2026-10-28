@@ -1,0 +1,3 @@
+// expect: error put the declaration inside '#when <platform>'
+extern function getpid(): int32 when unix;
+function main(): void {}

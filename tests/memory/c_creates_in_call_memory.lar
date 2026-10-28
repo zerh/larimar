@@ -1,0 +1,20 @@
+// expect: run
+// output: HELLO! KEPT!
+// C que crea texto en la memoria de la llamada (su primer parámetro).
+c_code {
+    #include <ctype.h>
+    static const char* shout(RtMem* m, const char* text) {
+        size_t n = strlen(text);
+        char* out = (char*)rt_mem_alloc(m, n + 2, 0);
+        for (size_t i = 0; i < n; i++) out[i] = (char)toupper((unsigned char)text[i]);
+        out[n] = '!';
+        return out;
+    }
+}
+extern function shout(m: byte[*], text: String): String;
+function main(): int32 {
+    let memory: byte[*] = [] in heap;
+    let kept: String = shout("kept") in memory;
+    println("${shout("hello")} ${kept}");
+    return 0;
+}

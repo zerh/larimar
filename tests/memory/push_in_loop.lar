@@ -1,0 +1,11 @@
+// expect: run
+// output: 1000 item-999 item-0
+// Lo que se crea directamente al añadirlo a una lista vive en la memoria de la lista.
+function main(): int32 {
+    let items: String[*] = [];
+    for (i in 0..1000) {
+        items.push("item-${i}");
+    }
+    println("${items.length} ${items[999]} ${items[0]}");
+    return 0;
+}

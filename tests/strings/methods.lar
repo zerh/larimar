@@ -1,0 +1,88 @@
+// expect: run
+// output: indexOf hola: 12
+// output: indexOf o 3: 9
+// output: indexOf neg: 0
+// output: indexOf past: null
+// output: indexOf empty: 4
+// output: indexOf at end: 16
+// output: indexOf none: null
+// output: lastIndexOf: 13
+// output: contains: true false
+// output: count: 3 0 2
+// output: compareTo: -1 0 1 -1 1 1
+// output: upper: HOLA MUNDO, HOLA lower: hola mundo, hola ñANDú
+// output: repeat: [ababab] [] []
+// output: replace: H0la Mund0, h0la | Hola Mundo,  | Hola Mundo, hola | ba
+// output: pad: [007] [7aba] [long] [x] [12312ab]
+// output: split ,: 5 <a><b><><c><>
+// output: split ab: 3 <x><y><z>
+// output: split empty sep: 3 <a><b><c>
+// output: split empty: 1 <>
+// output: split none: 1 <abc>
+// output: lines: 4 <uno><dos><><tres>
+// output: lines empty: 0 
+// output: lines one: 1 <solo>
+// output: lines nl: 1 <>
+// output: toInt: 123 -7 5 255 10 1000
+// output: toInt bad: -1 -1 -1 -1 -1 -1
+// output: toInt limits: 9223372036854775807 -9223372036854775808 -1 -1
+// output: toFloat: 1.5 -2000.0 -1.0 -1.0 -1.0 3.0
+// output: toBool: true false true
+// output: codePointCount: 4 0
+// output: codePoints: 97 241 8364 128512
+// output: trim: [x y] [x] [x] true true
+// output: starts/ends: true true true false
+// output: equalsIgnoreCase: true false
+// output: kept: ABC Mundo 5
+// Todos los métodos de String, con sus casos límite. La salida es la del compilador anterior,
+// donde estos métodos estaban escritos en C: la versión en Larimar debe dar exactamente lo mismo.
+function show(label: String, v: int32?): void { println("${label}: ${v == null ? "null" : "${v!}"}"); }
+function showList(label: String, xs: String[*]): void {
+    let parts: String[*] = [];
+    for (x in xs) { parts.push("<${x}>"); }
+    println("${label}: ${xs.length} ${parts.join("")}");
+}
+function main(): int32 {
+    let s: String = "Hola Mundo, hola";
+    show("indexOf hola", s.indexOf("hola"));
+    show("indexOf o 3", s.indexOf("o", 3));
+    show("indexOf neg", s.indexOf("H", -5));
+    show("indexOf past", s.indexOf("", 100));
+    show("indexOf empty", s.indexOf("", 4));
+    show("indexOf at end", s.indexOf("", 16));
+    show("indexOf none", s.indexOf("xyz"));
+    show("lastIndexOf", s.lastIndexOf("o"));
+    println("contains: ${s.contains("Mundo")} ${s.contains("mundo")}");
+    println("count: ${s.count("o")} ${s.count("")} ${"aaaa".count("aa")}");
+    println("compareTo: ${"abc".compareTo("abd")} ${"abc".compareTo("abc")} ${"abcd".compareTo("abc")} ${"ab".compareTo("abc")} ${"b".compareTo("a")} ${"é".compareTo("z")}");
+    println("upper: ${s.toUpperCase()} lower: ${s.toLowerCase()} ${"ñandú".toUpperCase()}");
+    println("repeat: [${"ab".repeat(3)}] [${"ab".repeat(0)}] [${"".repeat(5)}]");
+    println("replace: ${s.replace("o", "0")} | ${s.replace("hola", "")} | ${s.replace("", "X")} | ${"aaa".replace("aa", "b")}");
+    println("pad: [${"7".padStart(3, "0")}] [${"7".padEnd(4, "ab")}] [${"long".padStart(2, "x")}] [${"x".padStart(5, "")}] [${"ab".padStart(7, "123")}]");
+    showList("split ,", "a,b,,c,".split(","));
+    showList("split ab", "xabyabz".split("ab"));
+    showList("split empty sep", "abc".split(""));
+    showList("split empty", "".split(","));
+    showList("split none", "abc".split(";"));
+    showList("lines", "uno\ndos\r\n\ntres\n".lines());
+    showList("lines empty", "".lines());
+    showList("lines one", "solo".lines());
+    showList("lines nl", "\n".lines());
+    println("toInt: ${"123".toInt() ?? -1} ${"-7".toInt() ?? -1} ${"+5".toInt() ?? -1} ${"0xFF".toInt() ?? -1} ${"0b1010".toInt() ?? -1} ${"1_000".toInt() ?? -1}");
+    println("toInt bad: ${"".toInt() ?? -1} ${"12a".toInt() ?? -1} ${"_1".toInt() ?? -1} ${" 1".toInt() ?? -1} ${"0x".toInt() ?? -1} ${"-".toInt() ?? -1}");
+    println("toInt limits: ${"9223372036854775807".toInt() ?? -1} ${"-9223372036854775808".toInt() ?? -1} ${"9223372036854775808".toInt() ?? -1} ${"99999999999999999999".toInt() ?? -1}");
+    println("toFloat: ${"1.5".toFloat() ?? -1.0} ${"-2e3".toFloat() ?? -1.0} ${"x".toFloat() ?? -1.0} ${" 1".toFloat() ?? -1.0} ${"".toFloat() ?? -1.0} ${"3".toFloat() ?? -1.0}");
+    println("toBool: ${"true".toBool() ?? false} ${"false".toBool() ?? true} ${"True".toBool() == null}");
+    println("codePointCount: ${"añ€😀".codePointCount()} ${"".codePointCount()}");
+    let cps: int32[*] = "añ€😀".codePoints();
+    let cpt: String[*] = [];
+    for (c in cps) { cpt.push("${c}"); }
+    println("codePoints: ${cpt.join(" ")}");
+    println("trim: [${"  x y  ".trim()}] [${"  x".trimStart()}] [${"x  ".trimEnd()}] ${"   ".isBlank()} ${"".isEmpty()}");
+    println("starts/ends: ${s.startsWith("Hola")} ${s.endsWith("hola")} ${s.startsWith("")} ${"a".endsWith("ab")}");
+    println("equalsIgnoreCase: ${"HoLa".equalsIgnoreCase("hOlA")} ${"a".equalsIgnoreCase("b")}");
+    let up: String = "abc".toUpperCase() in default;
+    let sub: String = s.substring(5, 10);
+    println("kept: ${up} ${sub} ${sub.toUpperCase().length}");
+    return 0;
+}

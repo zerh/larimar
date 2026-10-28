@@ -1,0 +1,8 @@
+// expect: error '#end' does not line up with
+function main(): void {
+    #when windows
+        println("windows");
+    #else
+        println("other");
+      #end
+}

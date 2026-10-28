@@ -1,0 +1,22 @@
+// expect: run
+// output: big small
+// output: 7 0 yes
+// output: 3 small
+// After `as T`, a '?' followed by the start of an expression is the ternary's, not T? (the type).
+const MAX: int32 = 10;
+
+function label(n: int64): String { return n > MAX as int64 ? "big" : "small"; }
+
+function main(): int32 {
+    println("${label(20)} ${label(5)}");
+    let data: Any = { a: 7, b: "x" };
+    let a: int64 = data.a as int64 ?? 0;
+    let b: int64 = data.b as int64 ?? 0;
+    let s: Any = "text";
+    println("${a} ${b} ${s as String != null ? "yes" : "no"}");
+    let small: int32 = 3;
+    let pick: int32 = small < MAX as int32 ? small : MAX;
+    let f: float64 = 2.5;
+    println("${pick} ${f as int32 > 5 ? "big" : f as int64 < 100 as int64 ? "small" : "?"}");
+    return 0;
+}

@@ -1,0 +1,24 @@
+// expect: run
+// output: 42.0 7 15
+// Structs de C por valor en listas y punteros a función.
+c_code {
+    typedef struct Rect { float w, h; } Rect;
+    typedef int32_t (*op_fn)(int32_t, int32_t);
+    static float area(Rect r) { return r.w * r.h; }
+    static int32_t apply(op_fn f, int32_t a, int32_t b) { return f(a, b); }
+    static int32_t add(int32_t a, int32_t b) { return a + b; }
+}
+extern type Rect = struct { let w: float32; let h: float32; };
+extern type Op = (int32, int32) -> int32;
+extern function area(r: Rect): float32;
+extern function apply(f: Op, a: int32, b: int32): int32;
+extern function add(a: int32, b: int32): int32;
+export function times(a: int32, b: int32): int32 { return a * b; }
+function main(): int32 {
+    let rs: Rect[*] = [{ w: 3, h: 4 }, { w: 5, h: 6 }];
+    let total: float32 = 0;
+    for (r in rs) { total += area(r); }
+    let op: Op = times;
+    println("${total} ${apply(add, 3, 4)} ${op(3, 5)}");
+    return 0;
+}

@@ -1,0 +1,462 @@
+// std.lang: the part of the language written in Larimar. Every program sees its public names
+// without an import, and only what a program mentions (and what that needs) reaches the C.
+
+// What a Thread runs.
+public interface Runnable { function run(): void; }
+
+// A thread of the operating system: Thread { run: ... } in memory, then start() and join().
+public class Thread {
+    let run: Runnable;
+    let name: String = "";
+    native function start(): void;
+    native function join(): void;
+}
+
+public native type Any {
+    native function length(): int32;
+    native function push(x: Any in self): void;
+    native function containsKey(name: String): bool;
+    native function contains(x: Any): bool;
+    native function remove(name: String): bool;
+    native function removeAt(i: int64): void;
+    native function clear(): void;
+
+    function removeIf(f: (Any) -> bool): int32 {
+        let removed: int32 = 0;
+        let i: int32 = self.length - 1;
+        while (i >= 0) {
+            if (f(self[i])) { self.removeAt(i); removed += 1; }
+            i -= 1;
+        }
+        let keys: String[*] = [];
+        for (key, value in self.fields) { if (f(value)) { keys.push(key); } }
+        for (key in keys) { if (self.remove(key)) { removed += 1; } }
+        return removed;
+    }
+}
+
+public native type String {
+    // The core: the compiler knows these. Cuts are views (they share the bytes of the text).
+    native function length(): int32;
+    native operator [](i: int32): byte;
+    native function substring(from: int32, to: int32): String in self;
+    native function bytes(): byte[0];
+    // split and lines give views of the text in a new list: the caller checks that the text lives as long
+    // as the list, a rule a Larimar signature cannot say yet, so the compiler writes them.
+    native function split(sep: String): String[*];
+    native function lines(): String[*];
+
+    // Everything else is written here, in Larimar.
+
+    function isEmpty(): bool { return self.length() == 0; }
+
+    function isBlank(): bool { return self.trim().isEmpty(); }
+
+    function substring(from: int32): String in self { return self.substring(from, self.length()); }
+
+    /** Where s starts, looking from `from` on (a negative `from` is 0); null if it is not there. */
+    function indexOf(s: String, from: int32): int32? {
+        let n: int32 = self.length();
+        let m: int32 = s.length();
+        let i: int32 = from < 0 ? 0 : from;
+        if (i > n) { return null; }
+        while (i <= n - m) {
+            let j: int32 = 0;
+            while (j < m && self[i + j] == s[j]) { j += 1; }
+            if (j == m) { return i; }
+            i += 1;
+        }
+        return null;
+    }
+
+    function indexOf(s: String): int32? { return self.indexOf(s, 0); }
+
+    function contains(s: String): bool { return self.indexOf(s, 0) != null; }
+
+    function startsWith(prefix: String): bool {
+        return prefix.length() <= self.length() && self.substring(0, prefix.length()) == prefix;
+    }
+
+    function endsWith(suffix: String): bool {
+        let slen: int32 = self.length();
+        let plen: int32 = suffix.length();
+        if (plen > slen) { return false; }
+        return self.substring(slen - plen) == suffix;
+    }
+
+    function trim(): String in self {
+        let from: int32 = 0;
+        let to: int32 = self.length();
+        while (from < to && isSpace(self[from])) { from += 1; }
+        while (to > from && isSpace(self[to - 1])) { to -= 1; }
+        return self.substring(from, to);
+    }
+
+    function trimStart(): String in self {
+        let i: int32 = 0;
+        while (i < self.length() && isSpace(self[i])) { i += 1; }
+        return self.substring(i);
+    }
+
+    function trimEnd(): String in self {
+        let i: int32 = self.length();
+        while (i > 0 && isSpace(self[i - 1])) { i -= 1; }
+        return self.substring(0, i);
+    }
+
+    function lastIndexOf(needle: String): int32? {
+        let i: int32 = self.length() - needle.length();
+        while (i >= 0) {
+            let j: int32 = 0;
+            while (j < needle.length() && self[i + j] == needle[j]) { j += 1; }
+            if (j == needle.length()) { return i; }
+            i -= 1;
+        }
+        return null;
+    }
+
+    function count(needle: String): int32 {
+        if (needle.isEmpty()) { return 0; }
+        let cnt: int32 = 0;
+        let at: int32? = self.indexOf(needle, 0);
+        while (at != null) {
+            cnt += 1;
+            at = self.indexOf(needle, at! + needle.length());
+        }
+        return cnt;
+    }
+
+    /** -1, 0 or 1, comparing the bytes. */
+    function compareTo(s: String): int32 {
+        if (self == s) { return 0; }
+        return self < s ? -1 : 1;
+    }
+
+    function equalsIgnoreCase(other: String): bool {
+        if (self.length() != other.length()) { return false; }
+        for (i, c in self) {
+            if (asciiLower(c) != asciiLower(other[i])) { return false; }
+        }
+        return true;
+    }
+
+    /** A copy with a-z as A-Z (other bytes stay). */
+    function toUpperCase(): String {
+        let t: ByteText = byte_text_sized(self.length());
+        for (c in self) { byte_text_add(t, asciiUpper(c)); }
+        return byte_text_view(t);
+    }
+
+    /** A copy with A-Z as a-z (other bytes stay). */
+    function toLowerCase(): String {
+        let t: ByteText = byte_text_sized(self.length());
+        for (c in self) { byte_text_add(t, asciiLower(c)); }
+        return byte_text_view(t);
+    }
+
+    function repeat(n: int32): String {
+        if (n < 0) { panic("repeat() needs a count of 0 or more"); }
+        let total: int64 = (self.length() as int64) * (n as int64);
+        if (total > 0x7ffffff0) { panic("the repeated text would be too long"); }
+        let t: ByteText = byte_text_sized(total as int32);
+        for (k in 0..n) {
+            for (c in self) { byte_text_add(t, c); }
+        }
+        return byte_text_view(t);
+    }
+
+    /** A copy with every `from` changed to `to` (an empty `from` changes nothing). */
+    function replace(from: String, to: String): String {
+        let n: int32 = self.length();
+        let fl: int32 = from.length();
+        let found: int32 = fl == 0 ? 0 : self.count(from);
+        let t: ByteText = byte_text_sized(n + found * (to.length() - fl));
+        let start: int32 = 0;
+        let at: int32? = fl == 0 ? null : self.indexOf(from, 0);
+        while (at != null) {
+            addBytes(t, self, start, at!);
+            addBytes(t, to, 0, to.length());
+            start = at! + fl;
+            at = self.indexOf(from, start);
+        }
+        addBytes(t, self, start, n);
+        return byte_text_view(t);
+    }
+
+    /** Filled on the left with `fill` (repeated, and cut) up to `width` bytes. */
+    function padStart(width: int32, fill: String): String { return padded(self, width, fill, true); }
+
+    /** Filled on the right with `fill` (repeated, and cut) up to `width` bytes. */
+    function padEnd(width: int32, fill: String): String { return padded(self, width, fill, false); }
+
+    /** "123", "-7", "+5", "0xFF", "0b1010", "1_000"; null if it is not a whole int64. */
+    function toInt(): int64? {
+        let n: int32 = self.length();
+        let i: int32 = 0;
+        let negative: bool = false;
+        if (i < n && (self[i] == '-' || self[i] == '+')) {
+            negative = self[i] == '-';
+            i += 1;
+        }
+        let base: uint64 = 10;
+        if (i + 1 < n && self[i] == '0' && (self[i + 1] == 'x' || self[i + 1] == 'X')) {
+            base = 16;
+            i += 2;
+        } else if (i + 1 < n && self[i] == '0' && (self[i + 1] == 'b' || self[i + 1] == 'B')) {
+            base = 2;
+            i += 2;
+        }
+        let v: uint64 = 0;
+        let digits: bool = false;
+        while (i < n) {
+            let c: byte = self[i];
+            i += 1;
+            if (c == '_' && digits) { continue; }
+            let d: uint64 = digitValue(c);
+            if (d >= base) { return null; }
+            if (v > (U64_MAX - d) / base) { return null; }
+            v = v * base + d;
+            digits = true;
+        }
+        if (!digits) { return null; }
+        if (negative) {
+            if (v > I64_LIMIT) { return null; }
+            if (v == I64_LIMIT) { return I64_MIN; }
+            return -(v as int64);
+        }
+        if (v >= I64_LIMIT) { return null; }
+        return v as int64;
+    }
+
+    /** A number as C's strtod reads it (the whole text, no spaces around); null if it is not one. */
+    function toFloat(): float64? {
+        if (!text_is_float(self, self.length())) { return null; }
+        return text_to_float(self);
+    }
+
+    function toBool(): bool? {
+        if (self == "true") { return true; }
+        if (self == "false") { return false; }
+        return null;
+    }
+
+    /** How many characters (UTF-8 code points). */
+    function codePointCount(): int32 {
+        let n: int32 = 0;
+        for (c in self) {
+            if ((c & 0xC0) != 0x80) { n += 1; }
+        }
+        return n;
+    }
+
+    /** The characters as numbers (UTF-8 decoded; a broken sequence gives 0xFFFD and moves one byte). */
+    function codePoints(): int32[*] {
+        let out: int32[*] = [];
+        let n: int32 = self.length();
+        let i: int32 = 0;
+        while (i < n) {
+            let c: int32 = self[i] as int32;
+            let need: int32 = c < 0x80 ? 0 : (c & 0xE0) == 0xC0 ? 1 : (c & 0xF0) == 0xE0 ? 2 : (c & 0xF8) == 0xF0 ? 3 : -1;
+            if (need < 0 || i + need >= n + (need == 0 ? 1 : 0)) {
+                out.push(need == 0 ? c : 0xFFFD);
+                i += 1;
+                continue;
+            }
+            let cp: int32 = need == 0 ? c : need == 1 ? (c & 0x1F) : need == 2 ? (c & 0x0F) : (c & 0x07);
+            let ok: bool = true;
+            for (k in 1..need + 1) {
+                let d: int32 = self[i + k] as int32;
+                if ((d & 0xC0) != 0x80) { ok = false; }
+                cp = (cp << 6) | (d & 0x3F);
+            }
+            if (!ok) {
+                out.push(0xFFFD);
+                i += 1;
+                continue;
+            }
+            out.push(cp);
+            i += need + 1;
+        }
+        return out;
+    }
+}
+
+const U64_MAX: uint64 = 18446744073709551615;
+const I64_LIMIT: uint64 = 9223372036854775808;          // 2^63: one more than the largest int64
+const I64_MIN: int64 = -9223372036854775807 - 1;
+
+function isSpace(c: byte): bool {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == 12 || c == 11;
+}
+
+function asciiUpper(c: byte): byte { return c >= 'a' && c <= 'z' ? c - 32 : c; }
+
+function asciiLower(c: byte): byte { return c >= 'A' && c <= 'Z' ? c + 32 : c; }
+
+/** 0-15 for a digit of base 2, 10 or 16; 99 for anything else. */
+function digitValue(c: byte): uint64 {
+    if (c >= '0' && c <= '9') { return (c - '0') as uint64; }
+    if (c >= 'a' && c <= 'f') { return (c - 'a' + 10) as uint64; }
+    if (c >= 'A' && c <= 'F') { return (c - 'A' + 10) as uint64; }
+    return 99;
+}
+
+/** The bytes from..to of s, added to t. */
+function addBytes(t: ByteText, s: String, from: int32, to: int32): void {
+    let i: int32 = from;
+    while (i < to) {
+        byte_text_add(t, s[i]);
+        i += 1;
+    }
+}
+
+function padded(s: String, width: int32, fill: String, atStart: bool): String {
+    let missing: int32 = fill.length() > 0 && width > s.length() ? width - s.length() : 0;
+    let t: ByteText = byte_text_sized(s.length() + missing);
+    if (!atStart) { addBytes(t, s, 0, s.length()); }
+    for (k in 0..missing) { byte_text_add(t, fill[k % fill.length()]); }
+    if (atStart) { addBytes(t, s, 0, s.length()); }
+    return byte_text_view(t);
+}
+
+// Reading a float needs C's strtod.
+c_code {
+    #include <stdlib.h>
+
+    static bool text_is_float(const char* s, int32_t n) {
+        char* end = NULL;
+        if (n == 0 || n >= 64 || (int32_t)strlen(s) != n) return false;
+        if (s[0] == ' ' || s[0] == '\t' || s[0] == '\n' || s[0] == '\r' || s[0] == '\f' || s[0] == '\v') return false;
+        (void)strtod(s, &end);
+        return end == s + n;
+    }
+
+    static double text_to_float(const char* s) { return strtod(s, NULL); }
+}
+
+extern function text_is_float(s: String, n: int32): bool;
+extern function text_to_float(s: String): float64;
+
+// Text built piece by piece in the memory of the builder; toString() is a view of it.
+c_code {
+    typedef struct { RtMem* mem; char* buf; int32_t len, cap; } TextBuf;
+
+    TextBuf* text_buf_new(RtMem* m) {
+        TextBuf* b = (TextBuf*)rt_mem_alloc(m, sizeof(TextBuf), 0);
+        b->mem = m;
+        b->cap = 32;
+        b->buf = (char*)rt_mem_alloc(m, (size_t)b->cap, 0);
+        return b;
+    }
+
+    void text_buf_add(TextBuf* b, const char* text) {
+        int32_t n = (int32_t)strlen(text);
+        if (n > INT32_MAX - b->len) rt_panic("text is too large", 0);
+        int32_t need = b->len + n + 1;
+        if (need > b->cap) {
+            int32_t cap = b->cap;
+            while (cap < need) {
+                if (cap > INT32_MAX / 2) { cap = need; break; }
+                cap *= 2;
+            }
+            char* next = (char*)rt_mem_alloc(b->mem, (size_t)cap, 0);
+            if (b->len > 0) memcpy(next, b->buf, (size_t)b->len);
+            b->buf = next;
+            b->cap = cap;
+        }
+        if (n > 0) memcpy(b->buf + b->len, text, (size_t)n);
+        b->len += n;
+        b->buf[b->len] = 0;
+    }
+
+    void text_buf_add_line(TextBuf* b, const char* text) {
+        text_buf_add(b, text);
+        text_buf_add(b, "\n");
+    }
+
+    int32_t text_buf_length(TextBuf* b) { return b->len; }
+    const char* text_buf_view(TextBuf* b) { return b->buf; }
+    void text_buf_clear(TextBuf* b) { b->len = 0; if (b->buf) b->buf[0] = 0; }
+}
+
+extern type TextBuf;
+extern function text_buf_new(m: byte[*]): TextBuf;
+extern function text_buf_add(b: TextBuf, text: String): void;
+extern function text_buf_add_line(b: TextBuf, text: String): void;
+extern function text_buf_length(b: TextBuf): int32;
+extern function text_buf_view(b: TextBuf): String;
+extern function text_buf_clear(b: TextBuf): void;
+
+public class StringBuilder {
+    let buf: TextBuf = text_buf_new();
+    native function add(text: String): void = text_buf_add(self.buf, text);
+    native function addLine(text: String): void = text_buf_add_line(self.buf, text);
+    native function length(): int32 = text_buf_length(self.buf);
+    native function toString(): String in self = text_buf_view(self.buf);
+    native function clear(): void = text_buf_clear(self.buf);
+}
+
+// ByteText: builds a String from bytes
+c_code {
+    typedef struct { RtMem* mem; char* bytes; int32_t length; int32_t capacity; } ByteText;
+
+    static ByteText* byte_text_new(RtMem* m) {
+        ByteText* t = (ByteText*)rt_mem_alloc(m, sizeof(ByteText), 0);
+        t->mem = m;
+        t->capacity = 64;
+        t->bytes = (char*)rt_mem_alloc(m, (size_t)t->capacity, 0);
+        return t;
+    }
+
+    /* room for n bytes (and the final 0) from the start: no copies while it fills */
+    static ByteText* byte_text_sized(RtMem* m, int32_t n) {
+        ByteText* t = (ByteText*)rt_mem_alloc(m, sizeof(ByteText), 0);
+        t->mem = m;
+        t->capacity = (n > 0 ? n : 0) + 1;
+        t->bytes = (char*)rt_mem_alloc(m, (size_t)t->capacity, 0);
+        return t;
+    }
+
+    static void byte_text_add(ByteText* t, uint8_t b) {
+        if (t->length + 2 > t->capacity) {                 /* +1 for the byte, +1 for the final 0 */
+            int32_t capacity = t->capacity * 2;
+            char* bytes = (char*)rt_mem_alloc(t->mem, (size_t)capacity, 0);
+            memcpy(bytes, t->bytes, (size_t)t->length);
+            t->bytes = bytes;
+            t->capacity = capacity;
+        }
+        t->bytes[t->length++] = (char)b;
+        t->bytes[t->length] = 0;
+    }
+
+    static const char* byte_text_view(ByteText* t) { return t->bytes; }
+}
+
+extern type ByteText;
+extern function byte_text_new(m: byte[*]): ByteText;
+extern function byte_text_sized(m: byte[*], n: int32): ByteText;
+extern function byte_text_add(t: ByteText, b: byte): void;
+extern function byte_text_view(t: ByteText): String;
+
+/** A String with a copy of these bytes (UTF-8 expected, not checked). A byte 0 ends the text. */
+public function stringOf(bytes: byte[]): String {
+    let t: ByteText = byte_text_new();
+    for (b in bytes) { byte_text_add(t, b); }
+    return byte_text_view(t);
+}
+
+/**
+ * A String with a copy of bytes[from..to) (UTF-8 expected, not checked): one allocation of the exact
+ * size, where the caller's result goes (`reader.readLine() in scratch` puts it in scratch).
+ */
+public function stringOfRange(bytes: byte[], from: int32, to: int32): String {
+    let a: int32 = from < 0 ? 0 : from;
+    let b: int32 = to > bytes.length ? bytes.length : to;
+    let t: ByteText = byte_text_sized(b > a ? b - a : 0);
+    let i: int32 = a;
+    while (i < b) {
+        byte_text_add(t, bytes[i]);
+        i += 1;
+    }
+    return byte_text_view(t);
+}

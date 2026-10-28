@@ -1,0 +1,13 @@
+// expect: run
+// output: guardado: ABC
+// clone() copia un valor a la memoria donde se guarda.
+let saved: String = "";
+function keep(s: String): void { saved = s.clone() in default; }
+function main(): int32 {
+    {
+        let tmp: String = "abc".toUpperCase();
+        keep(tmp);
+    }
+    println("guardado: ${saved}");
+    return 0;
+}

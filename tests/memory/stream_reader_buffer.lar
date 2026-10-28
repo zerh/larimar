@@ -1,0 +1,20 @@
+// expect: run
+// output: <uno>
+// output: <dos>
+// output: <tres>
+// output: copiado
+// Regresión: Reader y copy usaban un byte[4096] de longitud 0 y no leían nada.
+import std.io.streams { MemoryInputStream, MemoryOutputStream, Reader, copy };
+import std.io.files { IoError };
+function main(): int32 throws IoError {
+    let r: Reader = { from: MemoryInputStream { data: "uno\ndos\r\ntres" } };
+    while (true) {
+        let l: String? = r.readLine();
+        if (l == null) { break; }
+        println("<${l}>");
+    }
+    let out: MemoryOutputStream = {};
+    copy(MemoryInputStream { data: "copiado" }, out);
+    println(out.toString());
+    return 0;
+}

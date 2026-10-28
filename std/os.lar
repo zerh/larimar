@@ -1,0 +1,112 @@
+// std.os: the environment the program runs in.
+//
+//   import std.os;
+//   let home: String = os.env("HOME") ?? "/";
+//
+// Written in Larimar over the C functions of the system (getenv, getcwd, system; on Windows, the
+// equivalents of Win32 and its C library).
+
+#when unix
+    c_include "<unistd.h>";
+#when windows
+    c_include "<winsock2.h>";        // before windows.h (it includes it): no clash with the old winsock.h
+    c_include "<windows.h>";
+    c_include "<direct.h>";
+#end
+#when macos
+    c_include "<mach-o/dyld.h>";
+#end
+
+extern type CStream = c "FILE*";
+extern const stdout: CStream;
+extern type Untyped;
+extern function getenv(name: String): String?;
+extern function fflush(f: CStream): int32;
+extern function system(command: String): int32;
+extern function strlen(text: byte*): uint64;
+extern function cExit(code: int32): void = c "exit";
+#when unix
+    extern function getcwd(into: byte*, size: uint64): Untyped?;
+#when windows
+    extern function _getcwd(into: byte*, size: int32): Untyped?;
+    extern function GetModuleFileNameA(module: Untyped?, into: byte*, size: uint32): uint32;
+#end
+#when linux
+    extern function readlink(path: String, into: byte*, size: uint64): int64;
+#when macos
+    extern function _NSGetExecutablePath(into: byte*, size: uint32*): int32;
+#end
+
+/** The value of an environment variable, or null if it is not set. */
+public function env(name: String): String? { return getenv(name); }
+
+/** A zeroed buffer for C to write a path into. */
+function pathBuffer(): byte[*] {
+    let b: byte[*] = [];
+    for (i in 0..4096) { b.push(0); }
+    return b;
+}
+
+/** What C wrote into a buffer: up to its first zero byte. */
+function cText(b: byte[]): String {
+    return stringOfRange(b, 0, strlen(b) as int32);
+}
+
+/** The folder the program runs in. */
+public function cwd(): String {
+    let b: byte[*] = pathBuffer();
+    let ok: bool = false;
+    #when windows
+        ok = _getcwd(b, 4095) != null;
+    #else
+        ok = getcwd(b, 4095) != null;
+    #end
+    return ok ? cText(b) : ".";
+}
+
+/** Runs a command with the system's shell and gives its exit code. */
+public function run(command: String): int32 {
+    fflush(stdout);
+    let r: int32 = system(command);
+    #when unix
+        if (r != -1 && (r & 0x7f) == 0) { r = (r >> 8) & 0xff; }        // the exit status, not the wait status
+    #end
+    return r;
+}
+
+/** The folder this program's executable is in, or "" if it cannot be known. */
+public function programDir(): String {
+    let b: byte[*] = pathBuffer();
+    #when windows
+        GetModuleFileNameA(null, b, 4095);
+    #when linux
+        readlink("/proc/self/exe", b, 4095);
+    #when macos
+        let size: uint32 = 4095;
+        _NSGetExecutablePath(b, &size);
+    #end
+    let path: String = cText(b);
+    let cut: int32? = path.lastIndexOf("/");
+    let back: int32? = path.lastIndexOf("\\");
+    if (back != null && (cut == null || back! > cut!)) { cut = back; }
+    return cut != null ? path.substring(0, cut!).clone() : "";
+}
+
+/** Ends the program now with this exit code (memories are not freed first). */
+public function exit(code: int32): void {
+    fflush(stdout);
+    cExit(code);
+}
+
+/** "windows", "linux", "macos" or "other". */
+public function platform(): String {
+    #when windows
+        return "windows";
+    #when macos
+        return "macos";
+    #when linux
+        return "linux";
+    #else
+        return "other";
+    #end
+}

@@ -1,0 +1,8 @@
+// expect: error '#when macos' is never chosen: '#when unix'
+function main(): void {
+    #when unix
+        println("unix");
+    #when macos
+        println("macos");
+    #end
+}

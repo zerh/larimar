@@ -1,0 +1,11 @@
+// expect: panic demasiado: 3
+// panic("...") detiene el programa con ese mensaje y la línea donde se llamó.
+function check(n: int32): int32 {
+    if (n > 2) { panic("demasiado: ${n}"); }
+    return n;
+}
+function main(): int32 {
+    println("${check(1)}");
+    println("${check(3)}");
+    return 0;
+}

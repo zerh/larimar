@@ -1,0 +1,6 @@
+// expect: error The condition of 'wait until' must be bool, got int32
+synchronized class Box {
+    let n: int32 = 0;
+    function take(): void wait until (self.n) {}
+}
+function main(): void {}

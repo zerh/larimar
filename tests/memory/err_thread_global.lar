@@ -1,0 +1,9 @@
+// expect: error This thread can reach global 'count'
+// Un hilo no puede usar una variable global que puede cambiar.
+let count: int32 = 0;
+function main(): int32 {
+    let t: Thread = { run: () -> { count += 1; } };
+    t.start();
+    t.join();
+    return 0;
+}

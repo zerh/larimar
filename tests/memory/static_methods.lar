@@ -1,0 +1,20 @@
+// expect: run
+// output: 3,0 Green counter 20
+// Funciones estáticas que crean su resultado.
+struct Point {
+    let x: int32;
+    let y: int32;
+    static function origin(): Point { return Point { x: 0, y: 0 }; }
+    function moved(dx: int32): Point { return Point { x: self.x + dx, y: self.y }; }
+}
+enum Color { Red, Green }
+function Color.parse(text: String): Color { return text == "green" ? Color.Green : Color.Red; }
+class Counter {
+    let n: int32 = 0;
+    static function label(n: int32): String { return "counter ${n}"; }
+}
+function main(): int32 {
+    let p: Point = Point.origin().moved(3);
+    println("${p.x},${p.y} ${Color.parse("green")} ${Counter.label(20)}");
+    return 0;
+}

@@ -1,0 +1,254 @@
+// std.io.files: whole files and folders in one call, like Java's Files.
+//
+//   import std.io.files as Files;
+//   let text: String = Files.readString("notes.txt");
+//   Files.writeString("copy.txt", text);
+//
+// What these functions give lives where the call says (Files.readString(path) in memory), or in
+// the memory of the block that keeps it. Everything that can fail throws IoError. Written in Larimar
+// over the C functions of the system (stdio, stat, mkdir, opendir; FindFirstFile on Windows).
+
+c_include "<errno.h>";
+c_include "<sys/stat.h>";
+#when unix
+    c_include "<unistd.h>";
+    c_include "<dirent.h>";
+#when windows
+    c_include "<winsock2.h>";        // before windows.h (it includes it): no clash with the old winsock.h
+    c_include "<windows.h>";
+    c_include "<direct.h>";
+    c_include "<io.h>";
+#end
+
+/** A C FILE*, closed when its memory is freed. */
+extern type FileHandle = c "FILE*" released by fclose;
+extern function fclose(f: FileHandle): int32;
+extern function fopen(path: String, mode: String): FileHandle?;
+extern function fread(into: byte*, size: uint64, count: uint64, f: FileHandle): uint64;
+extern function fwrite(from: byte*, size: uint64, count: uint64, f: FileHandle): uint64;
+extern function fflush(f: FileHandle): int32;
+extern function ferror(f: FileHandle): int32;
+
+extern type Stat = struct "struct stat" { let st_mode: uint32; };
+extern function stat(path: String, into: Stat*): int32;
+extern function remove(path: String): int32;
+#when unix
+    extern function mkdir(path: String, mode: uint32): int32;
+    extern function rmdir(path: String): int32;
+    extern function chmod(path: String, mode: uint32): int32;
+#when windows
+    extern function _mkdir(path: String): int32;
+    extern function _rmdir(path: String): int32;
+    extern function _chmod(path: String, mode: int32): int32;
+    extern const _S_IWRITE: int32;
+#end
+
+/** A folder being read (Unix), closed when its memory is freed. */
+extern type Dir released by closedir;
+extern type DirEntry = struct "struct dirent" { let d_name: String; };
+extern function opendir(path: String): Dir?;
+extern function readdir(d: Dir): DirEntry*;
+#when unix
+    extern function closedir(d: Dir): int32;
+#end
+
+/** A folder being read (Windows), closed when its memory is freed. */
+extern type FindHandle released by FindClose;                    // a HANDLE (void*)
+extern type FindData = struct "WIN32_FIND_DATAA" { let cFileName: String; };
+extern function FindFirstFileA(pattern: String, data: FindData*): FindHandle?;
+#when windows
+    extern function FindNextFileA(h: FindHandle, data: FindData*): int32;
+    extern function FindClose(h: FindHandle): int32;
+#end
+
+extern let errno: int32;
+extern const ENOENT: int32;
+extern const ENOTDIR: int32;
+extern const EACCES: int32;
+extern const EPERM: int32;
+extern const EEXIST: int32;
+extern const S_IFMT: uint32;
+extern const S_IFDIR: uint32;
+
+/** What went wrong with a file or folder. */
+public enum IoError {
+    NotFound(path: String),
+    Denied(path: String),
+    Failed(path: String)
+}
+
+/** "not found: notes.txt", "denied: ..." or "failed: ...". */
+public function message(e: IoError): String {
+    return switch (e) {
+        case NotFound { path } -> "not found: ${path}";
+        case Denied { path } -> "denied: ${path}";
+        case Failed { path } -> "failed: ${path}";
+    };
+}
+
+/** Throws the IoError of a result code: 1 not found, 2 denied, 3 failed (0 is fine). */
+public function raise(code: int32, path: String): void throws IoError {
+    switch (code) {
+        case 0 -> {}
+        case 1 -> throw IoError.NotFound(path.clone());
+        case 2 -> throw IoError.Denied(path.clone());
+        default -> throw IoError.Failed(path.clone());
+    }
+}
+
+/** What went wrong with the last call, as a code of raise. */
+function code(): int32 {
+    let e: int32 = errno;
+    if (e == ENOENT || e == ENOTDIR) { return 1; }
+    if (e == EACCES || e == EPERM) { return 2; }
+    return 3;
+}
+
+/** A buffer of n zero bytes, for fread. */
+function bytes(n: int32): byte[*] {
+    let b: byte[*] = [];
+    for (i in 0..n) { b.push(0); }
+    return b;
+}
+
+/** The whole file as text. */
+public function readString(path: String): String throws IoError {
+    let f: FileHandle? = fopen(path, "rb");
+    if (f == null) { raise(code(), path); }
+    let all: byte[*] = [];
+    let chunk: byte[*] = bytes(65536);
+    while (true) {
+        let n: uint64 = fread(chunk, 1, chunk.length as uint64, f!);
+        if (n == 0) { break; }
+        for (i in 0..n as int32) { all.push(chunk[i]); }
+    }
+    let failed: bool = ferror(f!) != 0;
+    release(f);
+    if (failed) { raise(3, path); }
+    return stringOfRange(all, 0, all.length);
+}
+
+function writeFile(path: String, text: String, mode: String): void throws IoError {
+    let f: FileHandle? = fopen(path, mode);
+    if (f == null) { raise(code(), path); }
+    let n: uint64 = text.length as uint64;
+    let ok: bool = n == 0 || fwrite(text.bytes(), 1, n, f!) == n;
+    ok = fflush(f!) == 0 && ok;
+    release(f);
+    if (!ok) { raise(3, path); }
+}
+
+/** Replaces the file with `text`, creating it if needed. */
+public function writeString(path: String, text: String): void throws IoError { writeFile(path, text, "wb"); }
+
+/** Adds `text` at the end of the file, creating it if needed. */
+public function appendString(path: String, text: String): void throws IoError { writeFile(path, text, "ab"); }
+
+/** 0: nothing there; 1: a file; 2: a folder. */
+function kind(path: String): int32 {
+    let st: Stat = {};
+    if (stat(path, &st) != 0) { return 0; }
+    return (st.st_mode & S_IFMT) == S_IFDIR ? 2 : 1;
+}
+
+/** Is there a file or a folder with that path? */
+public function exists(path: String): bool { return kind(path) != 0; }
+
+public function isFile(path: String): bool { return kind(path) == 1; }
+
+public function isDirectory(path: String): bool { return kind(path) == 2; }
+
+/** The names of what a folder holds (files and folders, in no particular order). */
+public function list(path: String): String[*] throws IoError {
+    let names: String[*] = [];
+    #when windows
+        let data: FindData = {};
+        let h: FindHandle? = FindFirstFileA("${path}\\*", &data);
+        if (h == null) { raise(isDirectory(path) ? 2 : 1, path); }
+        while (true) {
+            let n: String = data.cFileName;               // a view of C's text: copied below
+            if (n != "." && n != "..") { names.push(n.clone()); }
+            if (FindNextFileA(h!, &data) == 0) { break; }
+        }
+        release(h);
+    #else
+        let d: Dir? = opendir(path);
+        if (d == null) { raise(isDirectory(path) ? 2 : 1, path); }
+        while (true) {
+            let e: DirEntry* = readdir(d!);
+            if (e == null) { break; }
+            let n: String = e.d_name;                      // a view of C's text: copied below
+            if (n != "." && n != "..") { names.push(n.clone()); }
+        }
+        release(d);
+    #end
+    return names;
+}
+
+/** Creates one folder; fine if it is already there. */
+function makeDirectory(path: String): int32 {
+    let r: int32 = 0;
+    #when windows
+        r = _mkdir(path);
+    #else
+        r = mkdir(path, 511);                             // 0777, less what the umask takes away
+    #end
+    if (r == 0) { return 0; }
+    return errno == EEXIST && kind(path) == 2 ? 0 : code();
+}
+
+/** Creates the folder, and the folders above it that are missing. */
+public function createDirectories(path: String): void throws IoError {
+    let text: String = path.replace("\\", "/");
+    for (i, b in text) {
+        if (b == '/' && i > 0 && !isDirectory(text.substring(0, i))) { raise(makeDirectory(text.substring(0, i)), path); }
+    }
+    raise(makeDirectory(text), path);
+}
+
+/**
+ * Copies a file (replacing `to` if it exists, even a read-only one, like cp -f); on Unix an executable
+ * stays executable.
+ */
+public function copy(from: String, to: String): void throws IoError {
+    let input: FileHandle? = fopen(from, "rb");
+    if (input == null) { raise(code(), from); }
+    if (kind(to) == 1) {                       // a copy kept read-only (Homebrew's libraries): a new file instead
+        #when windows
+            _chmod(to, _S_IWRITE);
+        #end
+        remove(to);
+    }
+    let output: FileHandle? = fopen(to, "wb");
+    if (output == null) { raise(code(), to); }
+    let chunk: byte[*] = bytes(65536);
+    let ok: bool = true;
+    while (ok) {
+        let n: uint64 = fread(chunk, 1, chunk.length as uint64, input!);
+        if (n == 0) { break; }
+        ok = fwrite(chunk, 1, n, output!) == n;
+    }
+    ok = fflush(output!) == 0 && ok;
+    release(input);
+    release(output);
+    if (!ok) { raise(3, from); }
+    #when unix
+        let st: Stat = {};
+        if (stat(from, &st) == 0) { chmod(to, st.st_mode & 4095); }   // the permissions (07777)
+    #end
+}
+
+/** Deletes a file, or an empty folder. */
+public function delete(path: String): void throws IoError {
+    let r: int32 = 0;
+    if (kind(path) == 2) {
+        #when windows
+            r = _rmdir(path);
+        #else
+            r = rmdir(path);
+        #end
+    } else {
+        r = remove(path);
+    }
+    if (r != 0) { raise(code(), path); }
+}

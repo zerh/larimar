@@ -1,0 +1,21 @@
+// expect: run
+// output: 4000
+// Hilos que comparten un objeto synchronized; la memoria de los hilos espera a que terminen.
+synchronized class Counter {
+    let total: int64 = 0;
+    function add(n: int64): void { self.total += n; }
+    function get(): int64 { return self.total; }
+}
+function main(): int32 {
+    let shared: byte[*] = [] in heap;
+    let counter: Counter = {} in shared;
+    {
+        let workers: byte[*] = [] in heap;
+        for (w in 0..4) {
+            let t: Thread = { run: () -> { for (k in 0..1000) { counter.add(1); } } } in workers;
+            t.start();
+        }
+    }
+    println("${counter.get()}");
+    return 0;
+}

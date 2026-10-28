@@ -1,0 +1,59 @@
+// The client of tests/tls/tls_test.py: https:// against its local server (a certificate of its own).
+// args: the HTTPS port, the HTTP port.
+import std.net { Connection, NetError };
+import std.net.http { Client, Response, Header, HttpError, message, get };
+import std.net.http.tls { TlsProvider, SystemTls };
+import std.io.streams { MemoryOutputStream, copy };
+import std.io.files { IoError };
+
+/** A TlsProvider of its own: it counts the connections and leaves the TLS to SystemTls. */
+class Counting implements TlsProvider {
+    let inner: SystemTls = { verify: false };
+    let count: int32 = 0;
+
+    function connect(host: String, port: int32, timeout: int32): Connection throws NetError {
+        self.count += 1;
+        return self.inner.connect(host, port, timeout);
+    }
+}
+
+function main(args: String[]): int32 {
+    let base: String = "https://127.0.0.1:${args[0]}";
+    try {
+        get("${base}/a");
+        println("verified?");
+    } catch (HttpError e) {
+        println("default: ${message(e)}");             // the certificate is not one the system trusts
+    }
+    try {
+        let local: Client = { tls: SystemTls { verify: false }, timeout: 5000 };
+        let r: Response = local.get("${base}/a");
+        println("${r.status} ${r.text()}");
+        println("chunked: ${local.get("${base}/chunked").text()}");
+
+        let big: Response = local.get("${base}/big");
+        let out: MemoryOutputStream = {};
+        copy(big.body, out);
+        println("big: ${out.toByteArray().length}");
+
+        let echo: Response = local.send({
+            method: "POST",
+            url: "${base}/echo",
+            headers: [Header { name: "Content-Type", value: "text/plain" }],
+            body: "ñandú por tls"
+        });
+        println("post: ${echo.text()}");
+
+        let moved: Response = local.get("http://127.0.0.1:${args[1]}/go");
+        println("redirect: ${moved.status} ${moved.text()} ${moved.url.startsWith("https://")}");
+
+        let counting: Counting = {};
+        let own: Client = { tls: counting };
+        println("custom: ${own.get("${base}/c").text()} (${counting.count} connection)");
+    } catch (HttpError e) {
+        println("client: ${message(e)}");
+    } catch (IoError e) {
+        println("client: io");
+    }
+    return 0;
+}

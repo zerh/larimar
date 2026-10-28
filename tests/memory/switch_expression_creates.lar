@@ -1,0 +1,14 @@
+// expect: run
+// output: uno! dos! otro-7!
+// Un switch como expresión que crea su resultado en cada rama.
+function name(n: int32): String {
+    return switch (n) {
+        case 1 -> "uno";
+        case 2 -> "dos".clone();
+        default -> "otro-${n}";
+    };
+}
+function main(): int32 {
+    println("${name(1)}! ${name(2)}! ${name(7)}!");
+    return 0;
+}
