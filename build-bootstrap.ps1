@@ -15,7 +15,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 Set-Location $ScriptDir
 
 $CC = if ($env:CC) { $env:CC } else { "gcc" }
-$CFLAGS = if ($env:CFLAGS) { $env:CFLAGS } else { "-std=c99 -O2" }
+$CFLAGS = if ($env:CFLAGS) { $env:CFLAGS.Split(" ") } else { @("-std=c99", "-O2") }
 $PREFIX = if ($env:LARIMAR_PREFIX) { $env:LARIMAR_PREFIX } else { "../out/larimar" }
 $Output = "bin/larimarc.exe"
 
@@ -24,7 +24,8 @@ if (!(Test-Path "bin")) {
     New-Item -ItemType Directory -Path "bin" | Out-Null
 }
 
-$requiredFiles = @("larimarc_bootstrap.c", "std/lang.lar", "MANUAL.md", "bin/larimar")
+# Validación adaptada para incluir larimar.cmd en lugar del script bash
+$requiredFiles = @("larimarc_bootstrap.c", "std/lang.lar", "MANUAL.md", "bin/larimar.cmd")
 foreach ($f in $requiredFiles) {
     if (!(Test-Path $f)) {
         Write-Error "ERROR: $f not found in $ScriptDir"
@@ -35,13 +36,13 @@ foreach ($f in $requiredFiles) {
 $env:LARIMAR_HOME = $ScriptDir
 
 Write-Host "=== Building the Larimar compiler ==="
-Write-Host "C compiler: $CC $CFLAGS"
+Write-Host "C compiler: $CC $($CFLAGS -join ' ')"
 Write-Host ""
 
 $lines = (Get-Content "larimarc_bootstrap.c" | Measure-Object -Line).Lines
 Write-Host "Step 1: compiling larimarc_bootstrap.c ($lines lines)..."
 
-& $CC $CFLAGS larimarc_bootstrap.c -o $Output
+& $CC @CFLAGS larimarc_bootstrap.c -o $Output
 Write-Host "  -> ./$Output"
 
 if ($Verify) {
@@ -52,10 +53,10 @@ if ($Verify) {
     }
 
     & $Output "src/main.lar" -o "build/stage1.c"
-    & $CC $CFLAGS "build/stage1.c" -o "build/larimarc_stage1.exe"
+    & $CC @CFLAGS "build/stage1.c" -o "build/larimarc_stage1.exe"
 
     & "build/larimarc_stage1.exe" "src/main.lar" -o "build/stage2.c"
-    & $CC $CFLAGS "build/stage2.c" -o "build/larimarc_stage2.exe"
+    & $CC @CFLAGS "build/stage2.c" -o "build/larimarc_stage2.exe"
 
     & "build/larimarc_stage2.exe" "src/main.lar" -o "build/stage3.c"
 
@@ -106,8 +107,9 @@ if (-not $NoInstall) {
         Write-Host "  (Source and destination are identical, skipping larimarc copy)"
     }
 
-    if (Test-Path "bin/larimar") {
-        Copy-Item "bin/larimar" "$binDir/larimar" -Force
+    # Copiar el wrapper larimar.cmd a la carpeta de binarios destino
+    if (Test-Path "bin/larimar.cmd") {
+        Copy-Item "bin/larimar.cmd" "$binDir/larimar.cmd" -Force
     }
 
     if (Test-Path $stdDir) { Remove-Item $stdDir -Recurse -Force }
