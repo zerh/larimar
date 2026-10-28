@@ -45,7 +45,7 @@ jobs:
           $env:CC = "gcc"
           $env:CFLAGS = "-std=c99 -O2"
           
-          .\build-bootstrap.ps1 --verify
+          .\build-bootstrap.ps1 -verify
 
       # 3. Empaquetar el contenido de ../out/larimar
       - name: Package Larimar Directory (Unix)
