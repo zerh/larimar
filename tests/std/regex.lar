@@ -1,0 +1,69 @@
+// expect: run
+// output: find: ana@mail.com user=ana host=mail
+// output: matches: true false true false
+// output: findAll: 12 7 2026
+// output: replace: 2026-10-26 -> 26/10/2026
+// output: split: a|b|c|d
+// output: classes: true true false true
+// output: lazy: <b> greedy: <b>x</b>
+// output: alternation: cat dog cow
+// output: counted: true false true false
+// output: anchors: true false
+// output: boundary: 2
+// output: optional group: null
+// output: utf8: café niño
+// output: no blow-up: false
+// output: error: missing ')' at 3
+// output: error: '*' with nothing to repeat at 0
+import std.text.regex { Regex, Match, RegexError, message };
+
+function main(): void throws RegexError {
+    let email: Regex = Regex.compile("([a-z]+)@([a-z]+)\\.com");
+    let m: Match? = email.find("write to ana@mail.com today");
+    if (m != null) { println("find: ${m.value} user=${m.group(1) ?? ""} host=${m.group(2) ?? ""}"); }
+
+    let digits: Regex = Regex.compile("\\d+");
+    println("matches: ${digits.matches("123")} ${digits.matches("12a")} ${Regex.compile("a|ab").matches("ab")} ${digits.matches("")}");
+
+    let nums: String[*] = [];
+    for (x in digits.findAll("on 12 of 7, 2026")) { nums.push(x.value.clone()); }
+    println("findAll: ${nums.join(" ")}");
+
+    let date: Regex = Regex.compile("(\\d{4})-(\\d{2})-(\\d{2})");
+    println("replace: 2026-10-26 -> ${date.replace("2026-10-26", "$3/$2/$1")}");
+
+    println("split: ${Regex.compile("\\s*,\\s*").split("a , b,c ,d").join("|")}");
+
+    let hex: Regex = Regex.compile("[0-9a-fA-F]+");
+    let notQuote: Regex = Regex.compile("\"[^\"]*\"");
+    println("classes: ${hex.matches("1fA9")} ${notQuote.matches("\"hi there\"")} ${hex.matches("xyz")} ${Regex.compile("[]a]+").matches("]a]")}");
+
+    let html: String = "<b>x</b>";
+    println("lazy: ${Regex.compile("<.+?>").find(html)!.value} greedy: ${Regex.compile("<.+>").find(html)!.value}");
+
+    let animals: String[*] = [];
+    for (x in Regex.compile("cat|dog|cow").findAll("a cat, a dog and a cow")) { animals.push(x.value.clone()); }
+    println("alternation: ${animals.join(" ")}");
+
+    let three: Regex = Regex.compile("^a{2,3}$");
+    println("counted: ${three.matches("aa")} ${three.matches("a")} ${three.matches("aaa")} ${three.matches("aaaa")}");
+
+    println("anchors: ${Regex.compile("^hello").contains("hello world")} ${Regex.compile("world$").contains("world hello")}");
+
+    println("boundary: ${Regex.compile("\\bis\\b").findAll("this is it, is it").length}");
+
+    let opt: Match = Regex.compile("a(b)?c").find("ac")!;
+    println("optional group: ${opt.group(1) ?? "null"}");
+
+    let words: String[*] = [];
+    for (x in Regex.compile("[^ ]+").findAll("café niño")) { words.push(x.value.clone()); }
+    println("utf8: ${words.join(" ")}");
+
+    // (a*)*b on many a's without a b: exponential for a plain backtracker, quick here
+    let longA: StringBuilder = {};
+    for (i in 0..2000) { longA.add("a"); }
+    println("no blow-up: ${Regex.compile("(a*)*b").contains(longA.toString())}");
+
+    try { Regex.compile("(ab"); } catch (RegexError e) { println("error: ${message(e)}"); }
+    try { Regex.compile("*a"); } catch (RegexError e) { println("error: ${message(e)}"); }
+}

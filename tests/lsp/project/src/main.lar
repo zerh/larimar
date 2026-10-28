@@ -1,0 +1,16 @@
+import geo.shapes as shapes;
+import geo.shapes { Point };
+
+// Greets someone.
+function greet(name: String, times: int32): String {
+    let msg: String = "hi ${name}";
+    return msg.repeat(times);
+}
+
+function main(): int32 {
+    let p: Point = Point { x: 1.0, y: 2.0 };
+    println("${p.norm()} ${shapes.area(2.0)}");
+    println(greet("ana", 2));
+    let n: int32 = "x";
+    return 0;
+}

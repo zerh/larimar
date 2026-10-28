@@ -1,0 +1,7 @@
+// expect: error Expected '#end' to close the '#when'
+function main(): void {
+    #when windows
+        println("windows");
+    #else
+        println("other");
+}

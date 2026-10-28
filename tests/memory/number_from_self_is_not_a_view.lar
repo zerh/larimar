@@ -1,0 +1,36 @@
+// expect: run
+// output: 2 3.0 2
+// A result built from numbers read from self does not point to self: it is created where the caller
+// says (here, in a field of another object) without clone().
+class Tex { let id: int32; let w: float32; }
+
+class Gfx {
+    let count: int32 = 0;
+    let names: String[*] = [];
+    function load(name: String): Tex {
+        self.count += 1;
+        return { id: self.count, w: 3.0 };
+    }
+    function add(name: String): Tex {
+        self.names.push(name.clone());
+        return { id: self.names.length, w: 0.0 };      // the length of a list of self: a number too
+    }
+}
+
+class Game {
+    let t: Tex? = null;
+    let u: Tex? = null;
+    function create(g: Gfx): void {
+        self.t = g.load("a");
+        self.t = g.load("abc");
+        self.u = g.add("x");
+        self.u = g.add("y");
+    }
+}
+
+function main(): void {
+    let g: Gfx = {};
+    let game: Game = {};
+    game.create(g);
+    println("${game.t!.id} ${game.t!.w} ${game.u!.id}");
+}

@@ -1,0 +1,1068 @@
+// runtime: the C a program may need, written as plain C (a raw text block: no escapes, no ${...}).
+// The compiler does not run it: it writes it into the C of each program, and rtselect keeps only the
+// parts that program uses (a part is kept when it defines a name the program, or a kept part, uses).
+
+public const RUNTIME: String = raw"""
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifdef RT_THREADS
+/* ---- runtime: threads (POSIX or Windows) ------------------------------ */
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+typedef CRITICAL_SECTION RtMutex;                 /* recursive */
+typedef CONDITION_VARIABLE RtCond;
+typedef HANDLE RtThreadHandle;
+static inline void rt_mutex_init(RtMutex* m) { InitializeCriticalSection(m); }
+static inline void rt_mutex_destroy(RtMutex* m) { DeleteCriticalSection(m); }
+static inline void rt_mutex_lock(RtMutex* m) { EnterCriticalSection(m); }
+static inline void rt_mutex_unlock(RtMutex* m) { LeaveCriticalSection(m); }
+static inline void rt_cond_init(RtCond* c) { InitializeConditionVariable(c); }
+static inline void rt_cond_destroy(RtCond* c) { (void)c; }
+static inline void rt_cond_wait(RtCond* c, RtMutex* m) { SleepConditionVariableCS(c, m, INFINITE); }
+static inline void rt_cond_broadcast(RtCond* c) { WakeAllConditionVariable(c); }
+static SRWLOCK rt_shared_mutex = SRWLOCK_INIT;
+static inline void rt_shared_lock(void) { AcquireSRWLockExclusive(&rt_shared_mutex); }
+static inline void rt_shared_unlock(void) { ReleaseSRWLockExclusive(&rt_shared_mutex); }
+#else
+#include <pthread.h>
+typedef pthread_mutex_t RtMutex;                  /* recursive */
+typedef pthread_cond_t RtCond;
+typedef pthread_t RtThreadHandle;
+static inline void rt_mutex_init(RtMutex* m) {
+    pthread_mutexattr_t a;
+    pthread_mutexattr_init(&a);
+    pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(m, &a);
+    pthread_mutexattr_destroy(&a);
+}
+static inline void rt_mutex_destroy(RtMutex* m) { pthread_mutex_destroy(m); }
+static inline void rt_mutex_lock(RtMutex* m) { pthread_mutex_lock(m); }
+static inline void rt_mutex_unlock(RtMutex* m) { pthread_mutex_unlock(m); }
+static inline void rt_cond_init(RtCond* c) { pthread_cond_init(c, NULL); }
+static inline void rt_cond_destroy(RtCond* c) { pthread_cond_destroy(c); }
+static inline void rt_cond_wait(RtCond* c, RtMutex* m) { pthread_cond_wait(c, m); }
+static inline void rt_cond_broadcast(RtCond* c) { pthread_cond_broadcast(c); }
+static pthread_mutex_t rt_shared_mutex = PTHREAD_MUTEX_INITIALIZER;
+static inline void rt_shared_lock(void) { pthread_mutex_lock(&rt_shared_mutex); }
+static inline void rt_shared_unlock(void) { pthread_mutex_unlock(&rt_shared_mutex); }
+#endif
+#endif
+
+/* ---- runtime: panics -------------------------------------------------- */
+
+static inline void rt_panic(const char* msg, int line) {
+    fflush(stdout);
+#ifdef RT_FILES
+    static const char* const files[] = { RT_FILES };
+    if (line > 0) fprintf(stderr, "panic [%s:%d]: %s\n", files[line / 1000000], line % 1000000, msg);
+#else
+    if (line > 0) fprintf(stderr, "panic [line %d]: %s\n", line, msg);
+#endif
+    else fprintf(stderr, "panic: %s\n", msg);
+    exit(101);
+}
+
+static inline int32_t rt_index(int64_t i, int32_t len, int line) {
+    if (i < 0 || i >= (int64_t)len) {
+        char msg[96];
+        snprintf(msg, sizeof msg, "index %lld out of range (length %d)", (long long)i, (int)len);
+        rt_panic(msg, line);
+    }
+    return (int32_t)i;
+}
+
+static inline int32_t rt_pop(int32_t* length, int line) {
+    if (*length <= 0) rt_panic("pop() on an empty list", line);
+    return --*length;
+}
+
+/* ---- runtime: memories ------------------------------------------------ */
+
+#define RT_ALIGN 16
+
+/* Memory checks. With AddressSanitizer (-fsanitize=address) the unused part of every heap block is
+   poisoned, each allocation unpoisons exactly its bytes, and growable memories leave a poisoned gap
+   after each allocation: reading or writing past what was asked for stops at that line. RT_DEBUG_MEMORY
+   adds the gaps without ASan and fills freed blocks with 0xDD, so a dangling value reads as garbage. */
+#if defined(__SANITIZE_ADDRESS__)
+#define RT_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define RT_ASAN 1
+#endif
+#endif
+#ifdef RT_ASAN
+void __asan_poison_memory_region(void* addr, size_t size);      /* the ASan API (as void*: no false warning) */
+void __asan_unpoison_memory_region(void* addr, size_t size);
+#define RT_POISON(p, n) __asan_poison_memory_region((p), (n))
+#define RT_UNPOISON(p, n) __asan_unpoison_memory_region((p), (n))
+#else
+#define RT_POISON(p, n) ((void)(p), (void)(n))
+#define RT_UNPOISON(p, n) ((void)(p), (void)(n))
+#endif
+#if defined(RT_ASAN) || defined(RT_DEBUG_MEMORY)
+#define RT_REDZONE 32
+#else
+#define RT_REDZONE 0
+#endif
+
+typedef struct RtChunk { struct RtChunk* prev; size_t cap; } RtChunk;
+
+/* Work to do before a memory is freed: wait for its threads, release its synchronized objects. */
+typedef struct RtFinal { void (*fn)(void*); void* p; struct RtFinal* next; } RtFinal;
+
+typedef struct RtMem {
+    uint8_t* base;      /* current block */
+    size_t cap;         /* size of the current block */
+    size_t used;        /* bytes used in the current block */
+    size_t total;       /* bytes in use across all blocks */
+    size_t peak;        /* highest value of total */
+    size_t reserved;    /* bytes obtained for the memory (capacity) */
+    RtChunk* chunks;    /* heap blocks owned by this memory */
+    void* last;         /* last allocation, can grow in place */
+    size_t lastSize;
+    bool growable;
+    RtFinal* finals;    /* run (newest first) before the memory is freed */
+    bool shared;        /* used by several threads: the default memory */
+} RtMem;
+
+static inline size_t rt_align_up(size_t n) {
+    return (n + (RT_ALIGN - 1)) & ~(size_t)(RT_ALIGN - 1);
+}
+
+static inline RtMem rt_mem_empty(void) {
+    RtMem m;
+    memset(&m, 0, sizeof m);
+    return m;
+}
+
+/* A memory backed by a buffer that the caller owns (stack or static). */
+static inline RtMem rt_mem_fixed(void* buf, size_t cap) {
+    RtMem m = rt_mem_empty();
+    uintptr_t p = (uintptr_t)buf;
+    uintptr_t a = (p + (RT_ALIGN - 1)) & ~(uintptr_t)(RT_ALIGN - 1);
+    size_t skip = (size_t)(a - p);
+    m.base = (uint8_t*)a;
+    m.cap = cap > skip ? cap - skip : 0;
+    m.reserved = m.cap;
+    return m;
+}
+
+static inline RtChunk* rt_chunk_new(size_t dataSize) {
+    size_t hdr = rt_align_up(sizeof(RtChunk));
+    RtChunk* c = (RtChunk*)malloc(hdr + dataSize);
+    if (!c) rt_panic("out of memory: the system refused the heap request", 0);
+    c->prev = NULL;
+    c->cap = dataSize;
+    RT_POISON((uint8_t*)c + hdr, dataSize);       /* nothing allocated yet */
+    return c;
+}
+
+static inline uint8_t* rt_chunk_data(RtChunk* c) {
+    return (uint8_t*)c + rt_align_up(sizeof(RtChunk));
+}
+
+/* byte[N] in heap: one block requested from the system. */
+static inline RtMem rt_mem_heap(int64_t cap, int line) {
+    if (cap < 0) rt_panic("negative memory size", line);
+    RtMem m = rt_mem_empty();
+    RtChunk* c = rt_chunk_new((size_t)cap);
+    m.chunks = c;
+    m.base = rt_chunk_data(c);
+    m.cap = (size_t)cap;
+    m.reserved = (size_t)cap;
+    return m;
+}
+
+/* byte[*] in heap: grows by requesting more blocks. */
+static inline RtMem rt_mem_growable(void) {
+    RtMem m = rt_mem_empty();
+    m.growable = true;
+    return m;
+}
+
+/* Runs the finalizers: threads living here are waited for, synchronized objects released. */
+static inline void rt_mem_finalize(RtMem* m) {
+    for (;;) {
+#ifdef RT_THREADS
+        if (m->shared) rt_shared_lock();
+#endif
+        RtFinal* f = m->finals;
+        if (f) m->finals = f->next;
+#ifdef RT_THREADS
+        if (m->shared) rt_shared_unlock();
+#endif
+        if (!f) return;
+        f->fn(f->p);
+    }
+}
+
+static inline void rt_mem_free(RtMem* m) {
+    rt_mem_finalize(m);
+    RtChunk* c = m->chunks;
+    while (c) {
+        RtChunk* prev = c->prev;
+#if defined(RT_DEBUG_MEMORY) && !defined(RT_ASAN)
+        memset(c, 0xDD, rt_align_up(sizeof(RtChunk)) + c->cap);     /* what lived here reads as garbage */
+#endif
+        free(c);
+        c = prev;
+    }
+    *m = rt_mem_empty();
+}
+
+static inline void rt_mem_track(RtMem* m, size_t add) {
+    m->total += add;
+    if (m->total > m->peak) m->peak = m->total;
+}
+
+/* Returns NULL when a fixed memory is full. */
+static inline void* rt_mem_try_alloc_raw(RtMem* m, size_t size) {
+    size_t need = rt_align_up(size ? size : 1);
+    size_t span = need + (m->growable ? RT_REDZONE : 0);      /* with checks: a poisoned gap after it */
+    if (m->base == NULL || m->cap - m->used < span) {
+        if (!m->growable) return NULL;
+        size_t chunk = 64 * 1024;
+        if (m->cap * 2 > chunk && m->cap < ((size_t)64 << 20)) chunk = m->cap * 2;
+        while (chunk < span) chunk *= 2;
+        RtChunk* c = rt_chunk_new(chunk);
+        c->prev = m->chunks;
+        m->chunks = c;
+        m->base = rt_chunk_data(c);
+        m->cap = chunk;
+        m->used = 0;
+        m->reserved += chunk;
+    }
+    void* p = m->base + m->used;
+    m->used += span;
+    m->last = p;
+    m->lastSize = need;
+    rt_mem_track(m, need);
+    RT_UNPOISON(p, size ? size : 1);
+    return p;
+}
+
+static inline void* rt_mem_try_alloc(RtMem* m, size_t size) {
+#ifdef RT_THREADS
+    if (m->shared) {
+        rt_shared_lock();
+        void* p = rt_mem_try_alloc_raw(m, size);
+        rt_shared_unlock();
+        return p;
+    }
+#endif
+    return rt_mem_try_alloc_raw(m, size);
+}
+
+static inline void* rt_mem_alloc(RtMem* m, size_t size, int line) {
+    if (!m) rt_panic("internal error: something was created without a memory (a bug of the compiler, please report it)", line);
+    void* p = rt_mem_try_alloc(m, size);
+    if (!p) rt_panic("memory is full", line);
+    memset(p, 0, size);
+    return p;
+}
+
+/* Grows the last allocation in place when possible, otherwise copies. */
+static inline void* rt_mem_try_realloc_raw(RtMem* m, void* old, size_t oldSize, size_t newSize) {
+    if (old == NULL) return rt_mem_try_alloc_raw(m, newSize);
+    if (old == m->last) {
+        size_t need = rt_align_up(newSize);
+        size_t gap = m->growable ? RT_REDZONE : 0;
+        size_t off = (size_t)((uint8_t*)old - m->base);
+        if (need >= m->lastSize && off + need + gap <= m->cap) {
+            rt_mem_track(m, need - m->lastSize);
+            m->used = off + need + gap;
+            m->lastSize = need;
+            RT_UNPOISON(old, newSize);
+            return old;
+        }
+    }
+    void* p = rt_mem_try_alloc_raw(m, newSize);
+    if (!p) return NULL;
+    memcpy(p, old, oldSize < newSize ? oldSize : newSize);
+    return p;
+}
+
+static inline void* rt_mem_try_realloc(RtMem* m, void* old, size_t oldSize, size_t newSize) {
+#ifdef RT_THREADS
+    if (m->shared) {
+        rt_shared_lock();
+        void* p = rt_mem_try_realloc_raw(m, old, oldSize, newSize);
+        rt_shared_unlock();
+        return p;
+    }
+#endif
+    return rt_mem_try_realloc_raw(m, old, oldSize, newSize);
+}
+
+/* Registers work to do when the memory is freed. */
+static inline void rt_mem_on_free(RtMem* m, void (*fn)(void*), void* p, int line) {
+    RtFinal* f = (RtFinal*)rt_mem_alloc(m, sizeof(RtFinal), line);
+    f->fn = fn;
+    f->p = p;
+#ifdef RT_THREADS
+    if (m->shared) rt_shared_lock();
+#endif
+    f->next = m->finals;
+    m->finals = f;
+#ifdef RT_THREADS
+    if (m->shared) rt_shared_unlock();
+#endif
+}
+
+/* The default memory: grows, lives for the whole program. */
+RtMem rt_default_mem = { NULL, 0, 0, 0, 0, 0, NULL, NULL, 0, true, NULL, true };
+
+#ifdef RT_THREADS
+/* ---- runtime: Thread and synchronized objects ------------------------- */
+
+typedef struct RtThread {
+    RtThreadHandle handle;
+    void (*fn)(void*);
+    void* arg;
+    int32_t state;      /* 0 created, 1 running, 2 joined */
+} RtThread;
+
+#ifdef _WIN32
+static inline DWORD WINAPI rt_thread_main(LPVOID p) { RtThread* t = (RtThread*)p; t->fn(t->arg); return 0; }
+#else
+static inline void* rt_thread_main(void* p) { RtThread* t = (RtThread*)p; t->fn(t->arg); return NULL; }
+#endif
+
+static inline void rt_thread_join(RtThread* t) {
+    if (t->state != 1) return;
+#ifdef _WIN32
+    WaitForSingleObject(t->handle, INFINITE);
+    CloseHandle(t->handle);
+#else
+    pthread_join(t->handle, NULL);
+#endif
+    t->state = 2;
+}
+
+static inline void rt_thread_final(void* p) { rt_thread_join((RtThread*)p); }
+
+/* The thread is waited for before the memory of its Thread object is freed. */
+static inline void rt_thread_start(RtThread* t, RtMem* mem, void (*fn)(void*), void* arg, int line) {
+    if (t->state != 0) rt_panic("this thread was already started", line);
+    t->fn = fn;
+    t->arg = arg;
+#ifdef _WIN32
+    t->handle = CreateThread(NULL, 0, rt_thread_main, t, 0, NULL);
+    if (t->handle == NULL) rt_panic("the system could not create a thread", line);
+#else
+    if (pthread_create(&t->handle, NULL, rt_thread_main, t) != 0) rt_panic("the system could not create a thread", line);
+#endif
+    t->state = 1;
+    rt_mem_on_free(mem, rt_thread_final, t, line);
+}
+
+/* A synchronized object: a recursive lock, a condition, and its own memory for its fields. */
+typedef struct RtSync {
+    RtMutex m;
+    RtCond c;
+    int32_t depth;
+    int32_t waiting;            /* threads in rt_sync_wait (wait until) */
+    RtMem own;
+} RtSync;
+
+static inline void rt_sync_final(void* p) {
+    RtSync* s = (RtSync*)p;
+    rt_mem_free(&s->own);
+    rt_cond_destroy(&s->c);
+    rt_mutex_destroy(&s->m);
+}
+
+static inline RtSync* rt_sync_new(RtMem* mem, int line) {
+    RtSync* s = (RtSync*)rt_mem_alloc(mem, sizeof(RtSync), line);
+    rt_mutex_init(&s->m);
+    rt_cond_init(&s->c);
+    s->depth = 0;
+    s->waiting = 0;
+    s->own = rt_mem_growable();
+    rt_mem_on_free(mem, rt_sync_final, s, line);
+    return s;
+}
+
+static inline void rt_sync_lock(RtSync* s) { rt_mutex_lock(&s->m); s->depth++; }
+/* Leaving the last method of the object: whoever waits (wait until) looks at its condition again. */
+static inline void rt_sync_unlock(RtSync* s) {
+    s->depth--;
+    if (s->depth == 0 && s->waiting > 0) rt_cond_broadcast(&s->c);
+    rt_mutex_unlock(&s->m);
+}
+
+/* wait until: releases the lock completely while waiting (the others it held may have changed the
+ * object: they look again too), and takes it back as it was. */
+static inline void rt_sync_wait(RtSync* s) {
+    int32_t d = s->depth;
+    if (s->waiting > 0) rt_cond_broadcast(&s->c);
+    for (int32_t i = 1; i < d; i++) rt_mutex_unlock(&s->m);
+    s->depth = 0;
+    s->waiting++;
+    rt_cond_wait(&s->c, &s->m);
+    s->waiting--;
+    for (int32_t i = 1; i < d; i++) rt_mutex_lock(&s->m);
+    s->depth = d;
+}
+#endif
+
+/* ---- runtime: strings (immutable, always NUL-terminated) -------------- */
+
+typedef struct RtString { const char* ptr; int32_t len; } RtString;
+
+static inline RtString rt_str(const char* p, int32_t len) {
+    RtString s;
+    s.ptr = p;
+    s.len = len;
+    return s;
+}
+
+static inline RtString rt_str_c(const char* p) {
+    return p ? rt_str(p, (int32_t)strlen(p)) : rt_str("", 0);
+}
+
+/* panic("...") written in Larimar */
+static inline void rt_panic_str(RtString msg, int line) {
+    char buf[512];
+    int n = msg.len < (int32_t)sizeof buf - 1 ? msg.len : (int32_t)sizeof buf - 1;
+    memcpy(buf, msg.ptr, (size_t)n);
+    buf[n] = 0;
+    rt_panic(buf, line);
+}
+
+static inline bool rt_str_eq(RtString a, RtString b) {
+    return a.len == b.len && (a.len == 0 || memcmp(a.ptr, b.ptr, (size_t)a.len) == 0);
+}
+
+static inline RtString rt_str_clone(RtString s, RtMem* m, int line) {
+    char* p = (char*)rt_mem_alloc(m, (size_t)s.len + 1, line);
+    memcpy(p, s.ptr, (size_t)s.len);
+    p[s.len] = 0;
+    return rt_str(p, s.len);
+}
+
+static inline void rt_print(RtString s) { fwrite(s.ptr, 1, (size_t)s.len, stdout); }
+static inline void rt_println(RtString s) { rt_print(s); fputc('\n', stdout); }
+
+/* String builder used by interpolation. mem == NULL: fixed buffer, truncates. */
+typedef struct RtSb { RtMem* mem; char* buf; int32_t len; int32_t cap; int line; } RtSb;
+
+static inline RtSb rt_sb_mem(RtMem* m, int line) {
+    RtSb b;
+    b.mem = m;
+    b.len = 0;
+    b.cap = 32;
+    b.line = line;
+    b.buf = (char*)rt_mem_alloc(m, 32, line);
+    return b;
+}
+
+static inline RtSb rt_sb_fixed(char* buf, int32_t cap) {
+    RtSb b;
+    b.mem = NULL;
+    b.buf = buf;
+    b.len = 0;
+    b.cap = cap;
+    b.line = 0;
+    buf[0] = 0;
+    return b;
+}
+
+static inline void rt_sb_add(RtSb* b, const char* s, int32_t n) {
+    if (n <= 0) return;
+    if ((int64_t)b->len + n + 1 > (int64_t)b->cap) {
+        if (b->mem == NULL) {
+            n = b->cap - 1 - b->len;
+            if (n <= 0) return;
+        } else {
+            int32_t nc = b->cap;
+            while ((int64_t)b->len + n + 1 > (int64_t)nc) nc *= 2;
+            char* nb = (char*)rt_mem_try_realloc(b->mem, b->buf, (size_t)b->cap, (size_t)nc);
+            if (!nb) rt_panic("memory is full", b->line);
+            b->buf = nb;
+            b->cap = nc;
+        }
+    }
+    memcpy(b->buf + b->len, s, (size_t)n);
+    b->len += n;
+    b->buf[b->len] = 0;
+}
+
+static inline void rt_sb_str(RtSb* b, RtString s) { rt_sb_add(b, s.ptr, s.len); }
+static inline void rt_sb_cstr(RtSb* b, const char* s) { rt_sb_add(b, s, (int32_t)strlen(s)); }
+
+static inline void rt_sb_i64(RtSb* b, int64_t v) {
+    char t[32];
+    int n = snprintf(t, sizeof t, "%lld", (long long)v);
+    rt_sb_add(b, t, n);
+}
+
+static inline void rt_sb_u64(RtSb* b, uint64_t v) {
+    char t[32];
+    int n = snprintf(t, sizeof t, "%llu", (unsigned long long)v);
+    rt_sb_add(b, t, n);
+}
+
+static inline void rt_sb_f64(RtSb* b, double v) {
+    char t[64];
+    int n = snprintf(t, sizeof t, "%.15g", v);
+    if (n > 0 && n < 60 && strpbrk(t, ".eEni") == NULL) { t[n++] = '.'; t[n++] = '0'; t[n] = 0; }
+    rt_sb_add(b, t, n);
+}
+
+static inline void rt_sb_bool(RtSb* b, bool v) { rt_sb_cstr(b, v ? "true" : "false"); }
+
+static inline RtString rt_sb_finish(RtSb* b) { return rt_str(b->buf, b->len); }
+
+/* ---- runtime: String methods ------------------------------------------ */
+
+/* Cuts (substring, trim, split) are views: they share the bytes of the original text.
+   Everything the runtime creates ends with a 0 byte, so the byte after a view can always be read. */
+
+/* A NUL-terminated copy for C, only when the text is a view that does not end there. */
+static inline const char* rt_str_cz(RtString s, RtMem* tmp, int line) {
+    if (s.ptr[s.len] == 0) return s.ptr;
+    return rt_str_clone(s, tmp, line).ptr;
+}
+
+static inline uint8_t rt_str_byte(RtString s, int64_t i, int line) { return (uint8_t)s.ptr[rt_index(i, s.len, line)]; }
+
+static inline int32_t rt_str_find(RtString s, RtString t, int64_t from) {
+    if (from < 0) from = 0;
+    if (from > s.len) return -1;
+    for (int64_t i = from; i + t.len <= s.len; i++) {
+        if (memcmp(s.ptr + i, t.ptr, (size_t)t.len) == 0) return (int32_t)i;
+    }
+    return -1;
+}
+
+static inline RtString rt_str_sub(RtString s, int64_t from, int64_t to, int line) {
+    if (from < 0 || to > s.len || from > to) {
+        char msg[128];
+        snprintf(msg, sizeof msg, "substring(%lld, %lld) is out of range (length %d)", (long long)from, (long long)to, (int)s.len);
+        rt_panic(msg, line);
+    }
+    return rt_str(s.ptr + from, (int32_t)(to - from));
+}
+
+static inline int32_t rt_str_cmp(RtString a, RtString b) {
+    int32_t n = a.len < b.len ? a.len : b.len;
+    int c = memcmp(a.ptr, b.ptr, (size_t)n);
+    if (c != 0) return c < 0 ? -1 : 1;
+    return a.len == b.len ? 0 : a.len < b.len ? -1 : 1;
+}
+
+static inline RtString rt_str_join(const RtString* items, int32_t n, RtString sep, RtMem* m, int line) {
+    RtSb sb = rt_sb_mem(m, line);
+    for (int32_t i = 0; i < n; i++) {
+        if (i > 0) rt_sb_str(&sb, sep);
+        rt_sb_str(&sb, items[i]);
+    }
+    return rt_sb_finish(&sb);
+}
+
+/* ---- runtime: integer arithmetic without undefined behavior ----------- */
+
+static inline int8_t rt_div_i8(int8_t a, int8_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return (int8_t)(0u - (uint32_t)a);
+    return (int8_t)(a / b);
+}
+
+static inline int8_t rt_mod_i8(int8_t a, int8_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return 0;
+    return (int8_t)(a % b);
+}
+
+static inline int16_t rt_div_i16(int16_t a, int16_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return (int16_t)(0u - (uint32_t)a);
+    return (int16_t)(a / b);
+}
+
+static inline int16_t rt_mod_i16(int16_t a, int16_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return 0;
+    return (int16_t)(a % b);
+}
+
+static inline int32_t rt_div_i32(int32_t a, int32_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return (int32_t)(0u - (uint32_t)a);
+    return (int32_t)(a / b);
+}
+
+static inline int32_t rt_mod_i32(int32_t a, int32_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return 0;
+    return (int32_t)(a % b);
+}
+
+static inline int64_t rt_div_i64(int64_t a, int64_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return (int64_t)(0u - (uint64_t)a);
+    return (int64_t)(a / b);
+}
+
+static inline int64_t rt_mod_i64(int64_t a, int64_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return 0;
+    return (int64_t)(a % b);
+}
+
+static inline uint8_t rt_div_u8(uint8_t a, uint8_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint8_t)(a / b);
+}
+
+static inline uint8_t rt_mod_u8(uint8_t a, uint8_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint8_t)(a % b);
+}
+
+static inline uint16_t rt_div_u16(uint16_t a, uint16_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint16_t)(a / b);
+}
+
+static inline uint16_t rt_mod_u16(uint16_t a, uint16_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint16_t)(a % b);
+}
+
+static inline uint32_t rt_div_u32(uint32_t a, uint32_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint32_t)(a / b);
+}
+
+static inline uint32_t rt_mod_u32(uint32_t a, uint32_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint32_t)(a % b);
+}
+
+static inline uint64_t rt_div_u64(uint64_t a, uint64_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint64_t)(a / b);
+}
+
+static inline uint64_t rt_mod_u64(uint64_t a, uint64_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint64_t)(a % b);
+}
+
+static inline int64_t rt_f2i(double d, int64_t lo, int64_t hi) {
+    if (d != d) return 0;
+    if (d <= (double)lo) return lo;
+    if (d >= (double)hi) return hi;
+    return (int64_t)d;
+}
+
+static inline uint64_t rt_f2u(double d, uint64_t hi) {
+    if (d != d || d <= 0.0) return 0;
+    if (d >= (double)hi) return hi;
+    return (uint64_t)d;
+}
+
+/* ---- runtime: classes ------------------------------------------------- */
+
+typedef struct RtClass { const char* name; const struct RtClass* parent; } RtClass;
+
+static inline bool rt_is_a(const RtClass* c, const RtClass* target) {
+    for (; c; c = c->parent) if (c == target) return true;
+    return false;
+}
+
+/* Remembers already cloned objects so that cyclic graphs clone correctly. */
+typedef struct RtCloneMap { void** keys; void** vals; int32_t len; int32_t cap; } RtCloneMap;
+
+static inline RtCloneMap rt_clone_map(void) {
+    RtCloneMap m;
+    m.keys = NULL;
+    m.vals = NULL;
+    m.len = 0;
+    m.cap = 0;
+    return m;
+}
+
+static inline void* rt_clone_get(RtCloneMap* m, void* key) {
+    for (int32_t i = 0; i < m->len; i++) if (m->keys[i] == key) return m->vals[i];
+    return NULL;
+}
+
+static inline void rt_clone_put(RtCloneMap* m, void* key, void* val) {
+    if (m->len == m->cap) {
+        int32_t nc = m->cap ? m->cap * 2 : 16;
+        void** k = (void**)realloc(m->keys, sizeof(void*) * (size_t)nc);
+        void** v = (void**)realloc(m->vals, sizeof(void*) * (size_t)nc);
+        if (!k || !v) rt_panic("out of memory while cloning", 0);
+        m->keys = k;
+        m->vals = v;
+        m->cap = nc;
+    }
+    m->keys[m->len] = key;
+    m->vals[m->len] = val;
+    m->len++;
+}
+
+static inline void rt_clone_done(RtCloneMap* m) {
+    free(m->keys);
+    free(m->vals);
+}
+
+/* Every class object starts with this header, and every vtable with RtVTableHead. */
+typedef struct RtVTableHead {
+    const RtClass* cls;
+    void* (*clone)(void* self, RtMem* mem, RtCloneMap* cm);
+} RtVTableHead;
+
+typedef struct RtObjHead { const void* vt; RtMem* mem; } RtObjHead;
+
+static inline const RtVTableHead* rt_obj_vt(const void* obj) {
+    return (const RtVTableHead*)((const RtObjHead*)obj)->vt;
+}
+
+static inline const RtClass* rt_obj_class(const void* obj) { return rt_obj_vt(obj)->cls; }
+
+static inline RtMem* rt_obj_mem(const void* obj) { return ((const RtObjHead*)obj)->mem; }
+
+/* The object if it is of class c (or a subclass), NULL otherwise. */
+static inline void* rt_as_class(void* obj, const RtClass* c) {
+    return obj && rt_is_a(rt_obj_class(obj), c) ? obj : NULL;
+}
+
+static inline void* rt_unwrap(void* p, int line) {
+    if (!p) rt_panic("'!' used on a null value", line);
+    return p;
+}
+""";
+
+// Any: kept apart because few programs need it.
+public const RUNTIME_ANY: String = raw"""
+/* ---- runtime: Any ---------------------------------------------------- */
+
+enum { RT_ANY_NULL, RT_ANY_I8, RT_ANY_I16, RT_ANY_I32, RT_ANY_I64, RT_ANY_U8, RT_ANY_U16, RT_ANY_U32, RT_ANY_U64,
+       RT_ANY_F32, RT_ANY_F64, RT_ANY_BOOL, RT_ANY_STR, RT_ANY_TABLE, RT_ANY_OBJ, RT_ANY_VAL };
+
+static const char* const rt_any_kinds[] = { "null", "int8", "int16", "int32", "int64", "byte", "uint16", "uint32",
+    "uint64", "float32", "float64", "bool", "String", "a table", "an object", "a struct or enum" };
+
+/* A struct or enum stored in an Any is copied into a box; this describes the box. */
+typedef struct RtValType {
+    const char* name;
+    void* (*clone)(const void* v, RtMem* mem, RtCloneMap* cm);
+} RtValType;
+
+typedef struct RtTable RtTable;
+typedef struct RtAny {
+    int32_t kind;
+    union { int64_t i; uint64_t u; double f; bool b; RtString s; RtTable* t; struct { void* ptr; const void* type; } box; } as;
+} RtAny;
+
+/* Positions (items) and named entries (keys/values, in insertion order, with a hash index). */
+struct RtTable {
+    RtMem* mem;
+    RtAny* items; int32_t length, capacity;
+    RtString* keys; RtAny* values; int32_t count, cap;
+    int32_t* slots; int32_t nslots;          /* slot -> entry + 1; 0 is empty */
+};
+
+static inline RtAny rt_any_null(void) { RtAny a; memset(&a, 0, sizeof a); return a; }
+static inline RtAny rt_any_i(int64_t v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.i = v; return a; }
+static inline RtAny rt_any_u(uint64_t v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.u = v; return a; }
+static inline RtAny rt_any_f(double v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.f = v; return a; }
+static inline RtAny rt_any_b(bool v) { RtAny a = rt_any_null(); a.kind = RT_ANY_BOOL; a.as.b = v; return a; }
+static inline RtAny rt_any_s(RtString v) { RtAny a = rt_any_null(); a.kind = RT_ANY_STR; a.as.s = v; return a; }
+static inline RtAny rt_any_t(RtTable* v) { RtAny a = rt_any_null(); a.kind = RT_ANY_TABLE; a.as.t = v; return a; }
+/* A class object: stored by reference, with its class (for case Dog d). */
+static inline RtAny rt_any_obj(void* o) {
+    RtAny a = rt_any_null();
+    if (!o) return a;
+    a.kind = RT_ANY_OBJ;
+    a.as.box.ptr = o;
+    a.as.box.type = rt_obj_class(o);
+    return a;
+}
+static inline RtAny rt_any_val(void* box, const RtValType* type) {
+    RtAny a = rt_any_null();
+    a.kind = RT_ANY_VAL;
+    a.as.box.ptr = box;
+    a.as.box.type = type;
+    return a;
+}
+static inline bool rt_any_is_obj(RtAny a, const RtClass* c) {
+    return a.kind == RT_ANY_OBJ && rt_is_a((const RtClass*)a.as.box.type, c);
+}
+static inline bool rt_any_is_val(RtAny a, const RtValType* t) { return a.kind == RT_ANY_VAL && a.as.box.type == t; }
+
+static inline RtTable* rt_table_new(RtMem* mem, int line) {
+    RtTable* t = (RtTable*)rt_mem_alloc(mem, sizeof(RtTable), line);
+    t->mem = mem;
+    return t;
+}
+
+static inline RtTable* rt_any_table(RtAny a, int line) {
+    if (a.kind != RT_ANY_TABLE) {
+        char msg[96];
+        snprintf(msg, sizeof msg, "this Any is not a table (it holds %s)", rt_any_kinds[a.kind]);
+        rt_panic(msg, line);
+    }
+    return a.as.t;
+}
+
+static inline RtMem* rt_any_mem(RtAny a, int line) { return rt_any_table(a, line)->mem; }
+
+static inline void rt_table_push(RtTable* t, RtAny v, int line) {
+    if (t->length == t->capacity) {
+        int32_t nc = t->capacity ? t->capacity * 2 : 8;
+        RtAny* ni = (RtAny*)rt_mem_try_realloc(t->mem, t->items, sizeof(RtAny) * (size_t)t->capacity, sizeof(RtAny) * (size_t)nc);
+        if (!ni) rt_panic("memory is full", line);
+        t->items = ni;
+        t->capacity = nc;
+    }
+    t->items[t->length++] = v;
+}
+
+static inline uint32_t rt_str_hash(RtString s) {
+    uint32_t h = 2166136261u;
+    for (int32_t i = 0; i < s.len; i++) { h ^= (uint8_t)s.ptr[i]; h *= 16777619u; }
+    return h;
+}
+
+static inline int32_t rt_table_find(const RtTable* t, RtString key) {
+    if (t->nslots == 0) return -1;
+    uint32_t mask = (uint32_t)t->nslots - 1;
+    for (uint32_t i = rt_str_hash(key) & mask;; i = (i + 1) & mask) {
+        int32_t e = t->slots[i];
+        if (e == 0) return -1;
+        if (rt_str_eq(t->keys[e - 1], key)) return e - 1;
+    }
+}
+
+static inline void rt_table_index(RtTable* t, int32_t nslots, int line) {
+    int32_t* slots = (int32_t*)rt_mem_alloc(t->mem, sizeof(int32_t) * (size_t)nslots, line);
+    uint32_t mask = (uint32_t)nslots - 1;
+    for (int32_t e = 0; e < t->count; e++) {
+        uint32_t i = rt_str_hash(t->keys[e]) & mask;
+        while (slots[i] != 0) i = (i + 1) & mask;
+        slots[i] = e + 1;
+    }
+    t->slots = slots;
+    t->nslots = nslots;
+}
+
+/* The key is copied into the table's memory, so it lives as long as the table. */
+static inline void rt_table_set(RtTable* t, RtString key, RtAny v, int line) {
+    int32_t e = rt_table_find(t, key);
+    if (e >= 0) { t->values[e] = v; return; }
+    if (t->count == t->cap) {
+        int32_t nc = t->cap ? t->cap * 2 : 8;
+        RtString* nk = (RtString*)rt_mem_try_realloc(t->mem, t->keys, sizeof(RtString) * (size_t)t->cap, sizeof(RtString) * (size_t)nc);
+        RtAny* nv = nk ? (RtAny*)rt_mem_try_realloc(t->mem, t->values, sizeof(RtAny) * (size_t)t->cap, sizeof(RtAny) * (size_t)nc) : NULL;
+        if (!nk || !nv) rt_panic("memory is full", line);
+        t->keys = nk;
+        t->values = nv;
+        t->cap = nc;
+    }
+    e = t->count++;
+    t->keys[e] = rt_str_clone(key, t->mem, line);
+    t->values[e] = v;
+    if (t->count * 2 > t->nslots) {
+        rt_table_index(t, t->nslots ? t->nslots * 2 : 16, line);
+    } else {
+        uint32_t mask = (uint32_t)t->nslots - 1;
+        uint32_t i = rt_str_hash(key) & mask;
+        while (t->slots[i] != 0) i = (i + 1) & mask;
+        t->slots[i] = e + 1;
+    }
+}
+
+/* Reading never fails: a missing entry, or reading from something that is not a table, gives null. */
+static inline RtAny rt_any_get(RtAny a, RtString key) {
+    if (a.kind != RT_ANY_TABLE) return rt_any_null();
+    int32_t e = rt_table_find(a.as.t, key);
+    return e < 0 ? rt_any_null() : a.as.t->values[e];
+}
+
+static inline RtAny rt_any_at(RtAny a, int64_t i) {
+    if (a.kind != RT_ANY_TABLE || i < 0 || i >= a.as.t->length) return rt_any_null();
+    return a.as.t->items[i];
+}
+
+static inline void rt_any_set(RtAny a, RtString key, RtAny v, int line) { rt_table_set(rt_any_table(a, line), key, v, line); }
+
+static inline void rt_any_set_at(RtAny a, int64_t i, RtAny v, int line) {
+    RtTable* t = rt_any_table(a, line);
+    t->items[rt_index(i, t->length, line)] = v;
+}
+
+static inline void rt_any_push(RtAny a, RtAny v, int line) { rt_table_push(rt_any_table(a, line), v, line); }
+
+/* Rebuilds the name index in place (after entries were removed). */
+static inline void rt_table_rehash(RtTable* t) {
+    if (t->nslots == 0) return;
+    memset(t->slots, 0, sizeof(int32_t) * (size_t)t->nslots);
+    uint32_t mask = (uint32_t)t->nslots - 1;
+    for (int32_t e = 0; e < t->count; e++) {
+        uint32_t i = rt_str_hash(t->keys[e]) & mask;
+        while (t->slots[i] != 0) i = (i + 1) & mask;
+        t->slots[i] = e + 1;
+    }
+}
+
+/* Removes a named entry, keeping the order of the others. */
+static inline bool rt_any_remove(RtAny a, RtString key, int line) {
+    RtTable* t = rt_any_table(a, line);
+    int32_t e = rt_table_find(t, key);
+    if (e < 0) return false;
+    for (int32_t k = e + 1; k < t->count; k++) { t->keys[k - 1] = t->keys[k]; t->values[k - 1] = t->values[k]; }
+    t->count--;
+    rt_table_rehash(t);
+    return true;
+}
+
+/* Removes a position; the following ones move back by one. */
+static inline void rt_any_remove_at(RtAny a, int64_t i, int line) {
+    RtTable* t = rt_any_table(a, line);
+    int32_t k = rt_index(i, t->length, line);
+    for (; k + 1 < t->length; k++) t->items[k] = t->items[k + 1];
+    t->length--;
+}
+
+static inline void rt_any_clear(RtAny a, int line) {
+    RtTable* t = rt_any_table(a, line);
+    t->length = 0;
+    t->count = 0;
+    rt_table_rehash(t);
+}
+static inline int32_t rt_any_length(RtAny a) { return a.kind == RT_ANY_TABLE ? a.as.t->length : 0; }
+static inline int32_t rt_any_count(RtAny a) { return a.kind == RT_ANY_TABLE ? a.as.t->count : 0; }
+static inline bool rt_any_is_null(RtAny a) { return a.kind == RT_ANY_NULL; }
+
+/* `a as int32`: any integer that fits (as raw bits in *out). */
+static inline bool rt_any_to_int(RtAny a, int64_t lo, uint64_t hi, uint64_t* out) {
+    if (a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_I64) {
+        if (a.as.i < lo || (a.as.i > 0 && (uint64_t)a.as.i > hi)) return false;
+        *out = (uint64_t)a.as.i;
+        return true;
+    }
+    if (a.kind >= RT_ANY_U8 && a.kind <= RT_ANY_U64) {
+        if (a.as.u > hi) return false;
+        *out = a.as.u;
+        return true;
+    }
+    return false;
+}
+
+/* `a as float64`: decimals, and integers converted. */
+static inline bool rt_any_to_float(RtAny a, double* out) {
+    if (a.kind == RT_ANY_F32 || a.kind == RT_ANY_F64) { *out = a.as.f; return true; }
+    if (a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_I64) { *out = (double)a.as.i; return true; }
+    if (a.kind >= RT_ANY_U8 && a.kind <= RT_ANY_U64) { *out = (double)a.as.u; return true; }
+    return false;
+}
+
+/* contains(): numbers by value (1 is 1.0), bool and String by value, the rest by identity. */
+static inline bool rt_any_equals(RtAny a, RtAny b) {
+    bool an = a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_F64, bn = b.kind >= RT_ANY_I8 && b.kind <= RT_ANY_F64;
+    if (an || bn) {
+        if (!an || !bn) return false;
+        if (a.kind >= RT_ANY_F32 || b.kind >= RT_ANY_F32) {
+            double x, y;
+            rt_any_to_float(a, &x);
+            rt_any_to_float(b, &y);
+            return x == y;
+        }
+        bool as = a.kind <= RT_ANY_I64, bs = b.kind <= RT_ANY_I64;
+        if (as == bs) return a.as.u == b.as.u;
+        int64_t i = as ? a.as.i : b.as.i;
+        return i >= 0 && (uint64_t)i == (as ? b.as.u : a.as.u);
+    }
+    if (a.kind != b.kind) return false;
+    switch (a.kind) {
+        case RT_ANY_NULL: return true;
+        case RT_ANY_BOOL: return a.as.b == b.as.b;
+        case RT_ANY_STR: return rt_str_eq(a.as.s, b.as.s);
+        case RT_ANY_TABLE: return a.as.t == b.as.t;
+        default: return a.as.box.ptr == b.as.box.ptr;
+    }
+}
+
+/* x is the name of an entry, or equal to an element by position. */
+static inline bool rt_any_contains(RtAny a, RtAny x) {
+    if (a.kind != RT_ANY_TABLE) return false;
+    const RtTable* t = a.as.t;
+    if (x.kind == RT_ANY_STR && rt_table_find(t, x.as.s) >= 0) return true;
+    for (int32_t i = 0; i < t->length; i++) if (rt_any_equals(t->items[i], x)) return true;
+    return false;
+}
+
+static inline bool rt_any_contains_key(RtAny a, RtString key) { return a.kind == RT_ANY_TABLE && rt_table_find(a.as.t, key) >= 0; }
+
+static inline void rt_sb_any_at(RtSb* b, RtAny a, int depth, bool quoted) {
+    switch (a.kind) {
+        case RT_ANY_NULL: rt_sb_cstr(b, "null"); break;
+        case RT_ANY_I8: case RT_ANY_I16: case RT_ANY_I32: case RT_ANY_I64: rt_sb_i64(b, a.as.i); break;
+        case RT_ANY_U8: case RT_ANY_U16: case RT_ANY_U32: case RT_ANY_U64: rt_sb_u64(b, a.as.u); break;
+        case RT_ANY_F32: case RT_ANY_F64: rt_sb_f64(b, a.as.f); break;
+        case RT_ANY_BOOL: rt_sb_bool(b, a.as.b); break;
+        case RT_ANY_OBJ: case RT_ANY_VAL:
+            rt_sb_cstr(b, "<");
+            rt_sb_cstr(b, a.kind == RT_ANY_OBJ ? ((const RtClass*)a.as.box.type)->name : ((const RtValType*)a.as.box.type)->name);
+            rt_sb_cstr(b, ">");
+            break;
+        case RT_ANY_STR:
+            if (quoted) rt_sb_cstr(b, "\"");
+            rt_sb_str(b, a.as.s);
+            if (quoted) rt_sb_cstr(b, "\"");
+            break;
+        default: {
+            const RtTable* t = a.as.t;
+            if (depth >= 8) { rt_sb_cstr(b, "{...}"); break; }
+            rt_sb_cstr(b, "{");
+            for (int32_t i = 0; i < t->length; i++) {
+                if (i > 0) rt_sb_cstr(b, ", ");
+                rt_sb_any_at(b, t->items[i], depth + 1, true);
+            }
+            for (int32_t e = 0; e < t->count; e++) {
+                if (e > 0 || t->length > 0) rt_sb_cstr(b, ", ");
+                rt_sb_str(b, t->keys[e]);
+                rt_sb_cstr(b, ": ");
+                rt_sb_any_at(b, t->values[e], depth + 1, true);
+            }
+            rt_sb_cstr(b, "}");
+        }
+    }
+}
+
+static inline void rt_sb_any(RtSb* b, RtAny a) { rt_sb_any_at(b, a, 0, false); }
+
+/* A deep copy; tables that appear several times (or in cycles) are copied once. */
+static inline RtAny rt_any_clone(RtAny a, RtMem* mem, RtCloneMap* cm) {
+    if (a.kind == RT_ANY_STR) { a.as.s = rt_str_clone(a.as.s, mem, 0); return a; }
+    if (a.kind == RT_ANY_OBJ) { a.as.box.ptr = rt_obj_vt(a.as.box.ptr)->clone(a.as.box.ptr, mem, cm); return a; }
+    if (a.kind == RT_ANY_VAL) { a.as.box.ptr = ((const RtValType*)a.as.box.type)->clone(a.as.box.ptr, mem, cm); return a; }
+    if (a.kind != RT_ANY_TABLE) return a;
+    RtTable* done = (RtTable*)rt_clone_get(cm, a.as.t);
+    if (done) return rt_any_t(done);
+    const RtTable* src = a.as.t;
+    RtTable* t = rt_table_new(mem, 0);
+    rt_clone_put(cm, a.as.t, t);
+    for (int32_t i = 0; i < src->length; i++) rt_table_push(t, rt_any_clone(src->items[i], mem, cm), 0);
+    for (int32_t e = 0; e < src->count; e++) rt_table_set(t, src->keys[e], rt_any_clone(src->values[e], mem, cm), 0);
+    return rt_any_t(t);
+}
+""";

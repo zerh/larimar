@@ -1,0 +1,7 @@
+// expect: panic index 5 out of range (length 3)
+function main(): int32 {
+    let xs: int32[*] = [1, 2, 3];
+    let i: int32 = 5;
+    println("${xs[i]}");
+    return 0;
+}

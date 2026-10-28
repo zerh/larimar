@@ -1,0 +1,19 @@
+// expect: run
+// output: 3 5
+// name.length is a number: the result does not point to the parameter, so it is stored without clone().
+class Size { let n: int32; }
+class Box {
+    let s: Size? = null;
+    let t: Size? = null;
+    function measure(name: String): Size { return { n: name.length }; }
+    function fill(text: String, items: int32[*]): void {
+        self.s = self.measure(text);
+        self.t = count(items);
+    }
+}
+function count(items: int32[*]): Size { return { n: items.length }; }
+function main(): void {
+    let b: Box = {};
+    b.fill("abc", [1, 2, 3, 4, 5]);
+    println("${b.s!.n} ${b.t!.n}");
+}

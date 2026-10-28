@@ -1,0 +1,3 @@
+// not imported by main
+function helper(n: int32): int32 { return n * 2; }
+function main(): int32 { let ñandú: int32 = helper(2); return ñandú; }

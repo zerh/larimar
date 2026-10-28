@@ -1,0 +1,8 @@
+// expect: error There is no wait(): put 'wait until (condition)' on the method
+synchronized class Box {
+    let full: bool = false;
+    function take(): void {
+        while (!self.full) { self.wait(); }
+    }
+}
+function main(): void {}

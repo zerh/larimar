@@ -1,0 +1,52 @@
+// expect: run
+// output: opened 3, closed 3 (at the end of each turn)
+// output: release: closed 4
+// output: twice: closed 4
+// output: failed: null
+// output: in an object: closed 5 after its memory
+// output: memory scratch: closed 6
+// A resource (extern type released by f): released when the memory it lives in is freed, or before with
+// release(x) (only once); a C function that fails gives null.
+c_code {
+    static int opened = 0, closed = 0;
+    static int open_thing(int ok) { if (!ok) return -1; return ++opened; }
+    static void close_thing(int t) { (void)t; closed++; }
+    static int count_closed(void) { return closed; }
+    static int count_opened(void) { return opened; }
+}
+
+extern type Thing = c "int" released by close_thing;
+extern function open_thing(ok: int32): Thing?;
+extern function close_thing(t: Thing): void;
+extern function count_closed(): int32;
+extern function count_opened(): int32;
+
+class Holder {
+    let thing: Thing? = null;
+}
+
+function main(): int32 {
+    for (i in 0..3) {
+        let t: Thing? = open_thing(1);
+    }
+    println("opened ${count_opened()}, closed ${count_closed()} (at the end of each turn)");
+    let t: Thing? = open_thing(1);
+    release(t);
+    println("release: closed ${count_closed()}");
+    release(t);
+    println("twice: closed ${count_closed()}");
+    let bad: Thing? = open_thing(0);
+    println("failed: ${bad == null ? "null" : "?"}");
+    {
+        let h: Holder = {};
+        h.thing = open_thing(1);
+    }
+    println("in an object: closed ${count_closed()} after its memory");
+    let scratch: byte[*] = [] in heap;
+    {
+        let s: Thing? = open_thing(1) in scratch;
+    }
+    release(open_thing(1) in scratch);
+    println("memory scratch: closed ${count_closed()}");
+    return 0;
+}

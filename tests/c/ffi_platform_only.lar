@@ -1,0 +1,7 @@
+// expect: error 'only_windows' exists only on windows: call it between '#when windows' and '#end'
+#when windows
+    extern function only_windows(): int32;
+#end
+function main(): int32 {
+    return only_windows();
+}

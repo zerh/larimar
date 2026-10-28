@@ -1,0 +1,6 @@
+// expect: error Write 'wait until' (two words)
+synchronized class Box {
+    let full: bool = false;
+    function take(): void wait_until (self.full) {}
+}
+function main(): void {}

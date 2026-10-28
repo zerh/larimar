@@ -1,0 +1,144 @@
+// session: one analysis of a program, without generating C (larimar check, larimar lsp).
+// It links and analyzes like a compilation; the errors stay in linkErrors and analysisErrors (with the
+// line numbers that also say the file), and the analyzed program stays in `program` for the questions
+// of the editor (ide.lar).
+
+import std.os;
+import std.path as Paths;
+import std.io.files as Files;
+import std.json as Json;
+import std.io.console as Console;
+import ast { Program };
+import linker { link, linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES };
+import sema { files };
+import analyzer { analyze, analysisErrors };
+import toml { TomlK, TomlValue, TomlSection, parseToml, tomlError, sectionOf, valueOf };
+
+/** The program of the last analysis (empty when it could not be linked). */
+public let program: Program = Program { line: 1 } in default;
+
+/** Errors found before analyzing (a file that cannot be read). */
+public let readErrors: String[*] = [] in default;
+
+/** Links and analyzes a main file. true: no errors. Messages name files relative to `shownFrom`. */
+public function analyzeFile(main: String, shownFrom: String): bool {
+    let mainName: String = Paths.relative(shownFrom, main).clone() in default;
+    let source: String? = readSource(main);
+    if (source == null) {
+        readErrors.push("Cannot read ${mainName}: no such file" in default);
+        return false;
+    }
+    showFrom = Paths.absolute(shownFrom).clone() in default;
+    let mainPath: String = Paths.normalize(Paths.absolute(main)).clone() in default;
+    program = link(mainName, source, Paths.parent(Paths.absolute(main)).clone() in default, stdDir(), mainPath);
+    if (linkErrors.length > 0) { return false; }
+    for (f in fileNames) { files.push(f); }
+    analyze(program);
+    return analysisErrors.length == 0;
+}
+
+/** Where std/ is: $LARIMAR_HOME/std, or next to the tool (bin/larimar -> std/). */
+public function stdDir(): String {
+    let home: String = os.env("LARIMAR_HOME") ?? "";
+    if (!home.isBlank()) { return Paths.normalize(Paths.absolute(Paths.join(home, "std"))); }
+    // next to the tool, one folder up (bin/) or two (compiler/build/ while developing)
+    let dir: String = os.programDir();
+    while (dir != "") {
+        if (Files.isDirectory(Paths.join(dir, "std"))) { return Paths.join(dir, "std"); }
+        dir = Paths.parent(dir);
+    }
+    return "std";
+}
+
+/** An error of the analysis, with its file and line. */
+public class Diagnostic {
+    let file: String;          // absolute path ("" when unknown)
+    let line: int32;           // from 1 (0 when unknown)
+    let message: String;
+    let kind: String;          // "Syntax Error", "Semantic Error", ...
+}
+
+/** The errors of the last analysis. */
+public function diagnostics(): Diagnostic[*] {
+    let out: Diagnostic[*] = [];
+    for (e in readErrors) { out.push(Diagnostic { file: "", line: 0, message: e.clone(), kind: "Error" }); }
+    for (e in linkErrors) { out.push(diagnostic(e)); }
+    for (e in analysisErrors) { out.push(diagnostic(e)); }
+    return out;
+}
+
+/** "Semantic Error [Line 1000012]: message" -> file 1, line 12. */
+function diagnostic(raw: String): Diagnostic {
+    let at: int32? = raw.indexOf(" [Line ");
+    let close: int32? = at != null ? raw.indexOf("]: ", at!) : null;
+    if (at == null || close == null) { return Diagnostic { file: "", line: 0, message: decode(raw).clone(), kind: "Error" }; }
+    let encoded: int64 = raw.substring(at! + 7, close!).toInt() ?? 0;
+    let index: int32 = (encoded / (FILE_LINES as int64)) as int32;
+    let file: String = index >= 0 && index < filePaths.length ? filePaths[index] : "";
+    return Diagnostic {
+        file: file.clone(),
+        line: (encoded % (FILE_LINES as int64)) as int32,
+        message: decode(raw.substring(close! + 3)).clone(),
+        kind: raw.substring(0, at!).clone()
+    };
+}
+
+/** The main file of the project a file belongs to (larimar.toml above it), or the file itself. */
+public function projectMain(file: String): String {
+    let dir: String = Paths.parent(file);
+    while (dir != "") {
+        let toml: String = Paths.join(dir, "larimar.toml");
+        if (Files.isFile(toml)) {
+            let main: String = tomlMain(toml);
+            if (main != "") { return Paths.normalize(Paths.join(dir, main)); }
+        }
+        let up: String = Paths.parent(dir);
+        if (up == dir) { break; }
+        dir = up;
+    }
+    return file;
+}
+
+/** [project] main of a larimar.toml ("src/main.lar" when it does not say). */
+function tomlMain(path: String): String {
+    let source: String? = readSource(path);
+    if (source == null) { return ""; }
+    let sections: TomlSection[*] = parseToml(source!, "larimar.toml");
+    if (tomlError != "") { return ""; }
+    let v: TomlValue? = valueOf(sectionOf(sections, "project"), "main");
+    if (v != null && v.kind == TomlK.Text) { return v.text; }
+    return "src/main.lar";
+}
+
+/**
+ * larimar check [file.lar | folder] [--json]: the errors of a program, without generating C.
+ * A folder means its larimar.toml. With --json, a list of { file, line, message, kind }. Exit code 1
+ * when there are errors.
+ */
+public function checkCommand(rest: String[*]): int32 {
+    let json: bool = false;
+    let target: String = ".";
+    for (a in rest) {
+        if (a == "--json") { json = true; } else { target = a; }
+    }
+    let main: String = Paths.normalize(Paths.absolute(target));
+    if (Files.isDirectory(main)) { main = projectMain(Paths.join(main, "larimar.toml")); }
+    let ok: bool = analyzeFile(main, os.cwd());
+    let found: Diagnostic[*] = diagnostics();
+    if (json) {
+        let sb: StringBuilder = {};
+        sb.add("[");
+        for (i, d in found) {
+            if (i > 0) { sb.add(","); }
+            sb.add("{\"file\":${Json.quote(d.file)},\"line\":${d.line},\"message\":${Json.quote(d.message)},\"kind\":${Json.quote(d.kind)}}");
+        }
+        sb.add("]");
+        println(sb.toString());
+    } else {
+        for (e in readErrors) { Console.printError(e); }
+        for (e in linkErrors) { Console.printError(decode(e)); }
+        for (e in analysisErrors) { Console.printError(decode(e)); }
+        if (ok) { Console.printError("no errors"); }
+    }
+    return ok ? 0 : 1;
+}

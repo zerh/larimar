@@ -1,0 +1,78 @@
+// std.path: paths as text, with / or \ between folders.
+//
+//   import std.path as Paths;
+//   let config: String = Paths.join(Paths.parent(file), "larimar.toml");
+//
+// The paths these functions create are short and go to the default memory.
+
+import std.os;
+
+/** "a/b/c.lar" -> "a/b"; "" when there is no folder. */
+public function parent(path: String): String {
+    let i: int32? = path.replace("\\", "/").lastIndexOf("/");
+    return i == null ? "" : path.substring(0, i);
+}
+
+/** "a/b/c.lar" -> "c.lar". */
+public function fileName(path: String): String {
+    return path.substring((path.replace("\\", "/").lastIndexOf("/") ?? -1) + 1);
+}
+
+/** "a/b/c.lar" -> "c" (a name that starts with a dot keeps it: ".config"). */
+public function stem(path: String): String {
+    let name: String = fileName(path);
+    let dot: int32 = name.lastIndexOf(".") ?? 0;
+    return dot > 0 ? name.substring(0, dot) : name;
+}
+
+/** "a/b/c.lar" -> "lar"; "" when there is none. */
+public function extension(path: String): String {
+    let name: String = fileName(path);
+    let dot: int32 = name.lastIndexOf(".") ?? 0;
+    return dot > 0 ? name.substring(dot + 1) : "";
+}
+
+/** `file` inside the folder `dir`; an absolute `file` stays as it is. */
+public function join(dir: String, file: String): String {
+    if (dir == "" || dir == "." || isAbsolute(file)) { return file; }
+    return dir.endsWith("/") || dir.endsWith("\\") ? "${dir}${file}" : "${dir}/${file}";
+}
+
+/** "/x", "\x" and "C:/x" are absolute. */
+public function isAbsolute(path: String): bool {
+    return path.startsWith("/") || path.startsWith("\\") || (path.length >= 3 && path[1] == ':' && (path[2] == '/' || path[2] == '\\'));
+}
+
+/** The absolute, normalized form (a relative path is taken from the current folder). */
+public function absolute(path: String): String {
+    return normalize(isAbsolute(path) ? path : join(os.cwd(), path));
+}
+
+/** Without "." and "folder/.." parts, with / between folders; "." when nothing is left. */
+public function normalize(path: String): String {
+    let text: String = path.replace("\\", "/");
+    let pieces: String[*] = text.split("/");
+    let parts: String[*] = [];
+    for (part in pieces) {
+        if (part == "..") {
+            if (parts.length > 0 && parts[parts.length - 1] != "..") {
+                parts.pop();
+                continue;
+            }
+        } else if (part == "" || part == ".") {
+            continue;
+        }
+        parts.push(part);
+    }
+    let r: String = "${text.startsWith("/") ? "/" : ""}${parts.join("/")}";
+    return r == "" ? "." : r;
+}
+
+/** `file` relative to the folder `base` when it is inside it; absolute otherwise. */
+public function relative(base: String, file: String): String {
+    let b: String = absolute(base);
+    let f: String = absolute(file);
+    if (f == b) { return ""; }
+    if (b == "/") { return f.substring(1); }
+    return f.startsWith("${b}/") ? f.substring(b.length + 1) : f;
+}

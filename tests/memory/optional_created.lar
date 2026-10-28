@@ -1,0 +1,13 @@
+// expect: run
+// output: found-2 none
+// Una función que devuelve un opcional creado.
+function find(n: int32): String? {
+    if (n > 1) { return "found-${n}"; }
+    return null;
+}
+function main(): int32 {
+    let a: String? = find(2);
+    let b: String? = find(0);
+    println("${a ?? "none"} ${b ?? "none"}");
+    return 0;
+}

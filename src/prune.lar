@@ -1,0 +1,237 @@
+// prune: only the generated C the program reaches. The same idea as rtselect, applied to the program:
+// the C is cut into declarations (a function, a type, a helper, a prototype, a global), and a
+// declaration is kept when it defines a name that a kept declaration uses. The roots are main, the
+// export functions, and what the program wrote in C itself (c_include, c_code), which stays whole.
+// The c_code of the standard library ("c_code (std)") is cut like the rest: only what is used stays.
+// So unused functions and methods of std, the types only their signatures mention, the helpers of
+// those types, and the runtime only they needed, all leave the C.
+
+import rtselect { tokens, isName };
+
+/** A declaration of the generated C, or a section heading. */
+class Piece {
+    let text: String;
+    let section: int32;                 // the heading it is under (-1: before any)
+    let heading: bool = false;
+    let root: bool = false;
+    let blankAfter: bool = false;
+    let defines: String[*] = [];
+    let uses: String[*] = [];
+}
+
+/** Sections written by the program itself: they stay whole, and what they use is kept. */
+function rootSection(title: String): bool {
+    return title == "" || title == "c_code" || title == "Export functions" || title == "Entry point";
+}
+
+/** The generated program without what it does not reach. roots: main and the export functions. */
+public function prune(program: String, roots: String[*]): String {
+    let pieces: Piece[*] = [];
+    let cur: String[*] = [];
+    let depth: int32 = 0;
+    let section: int32 = -1;
+    let title: String = "";
+    let lines: String[*] = program.split("\n");
+    for (ln in lines) {
+        let t: String = ln.trim();
+        if (depth == 0 && t.startsWith("/* ---- ") && t.endsWith("*/")) {
+            flush(pieces, cur, section, rootSection(title));
+            cur.clear();
+            title = sectionTitle(t);
+            pieces.push(newPiece(ln, pieces.length, true));
+            section = pieces.length - 1;
+            continue;
+        }
+        if (depth == 0 && t.isEmpty()) {
+            if (cur.length > 0) {
+                flush(pieces, cur, section, rootSection(title));
+                cur.clear();
+            }
+            if (pieces.length > 0) { pieces[pieces.length - 1].blankAfter = true; }
+            continue;
+        }
+        cur.push(ln);
+        if (rootSection(title)) { continue; }               // whole, up to the next heading
+        depth += braceDelta(ln);
+        if (depth == 0 && (t.endsWith(";") || t.endsWith("}") || t.startsWith("#"))) {
+            flush(pieces, cur, section, t.startsWith("#"));
+            cur.clear();
+        }
+    }
+    flush(pieces, cur, section, rootSection(title));
+
+    // name -> the pieces that define it
+    let byName: Any = {};
+    let defs: int32[*] = [];
+    let next: int32[*] = [];
+    let heads: int32[*] = [];
+    for (i, p in pieces) {
+        for (d in p.defines) {
+            let slot: int32 = (byName[d] as int32 ?? -1);
+            if (slot < 0) {
+                slot = heads.length;
+                heads.push(-1);
+                byName[d] = slot;
+            }
+            defs.push(i);
+            next.push(heads[slot]);
+            heads[slot] = defs.length - 1;
+        }
+    }
+    let keep: bool[*] = [];
+    for (p in pieces) { keep.push(false); }
+    let work: int32[*] = [];
+    for (i, p in pieces) {
+        if (p.root) {
+            keep[i] = true;
+            work.push(i);
+        }
+    }
+    for (r in roots) { mark(r, byName, heads, defs, next, keep, work); }
+    let w: int32 = 0;
+    while (w < work.length) {
+        for (u in pieces[work[w]].uses) { mark(u, byName, heads, defs, next, keep, work); }
+        w += 1;
+    }
+
+    let out: StringBuilder = {};
+    for (i, p in pieces) {
+        let emit: bool = keep[i];
+        if (p.heading) {                                     // a heading goes with what is kept under it
+            let j: int32 = i + 1;
+            while (j < pieces.length && !pieces[j].heading) {
+                if (keep[j]) { emit = true; }
+                j += 1;
+            }
+            if (emit) { out.add("\n"); }
+        }
+        if (!emit) { continue; }
+        out.add(p.text);
+        out.add("\n");
+        if (p.blankAfter && !p.heading) { out.add("\n"); }
+    }
+    return out.toString();
+}
+
+function sectionTitle(t: String): String {
+    let s: String = t.substring(8);                          // after "/* ---- "
+    let end: int32 = s.indexOf(" -") ?? s.length;
+    return s.substring(0, end);
+}
+
+function flush(pieces: Piece[*], lines: String[*], section: int32, root: bool): void {
+    if (lines.length == 0) { return; }
+    pieces.push(newPiece(lines.join("\n"), section, false));
+    let p: Piece = pieces[pieces.length - 1];
+    p.root = root;
+    describe(p);
+}
+
+/** A piece, created where the caller puts it. */
+function newPiece(text: String, section: int32, heading: bool): Piece {
+    return Piece { text: text.clone(), section, heading };
+}
+
+function mark(name: String, byName: Any, heads: int32[*], defs: int32[*], next: int32[*], keep: bool[*], work: int32[*]): void {
+    let slot: int32 = (byName[name] as int32 ?? -1);
+    if (slot < 0) { return; }
+    let e: int32 = heads[slot];
+    while (e >= 0) {
+        let i: int32 = defs[e];
+        if (!keep[i]) {
+            keep[i] = true;
+            work.push(i);
+        }
+        e = next[e];
+    }
+}
+
+/** The braces a line opens minus those it closes (strings and comments left out). */
+public function braceDelta(ln: String): int32 {
+    let d: int32 = 0;
+    for (t in tokens(ln)) {
+        if (t == "{") { d += 1; } else if (t == "}") { d -= 1; }
+    }
+    return d;
+}
+
+/** What a declaration defines (at its top level) and every name it uses. */
+function describe(p: Piece): void {
+    let toks: String[*] = tokens(p.text);
+    let seen: Any = {};
+    for (t in toks) {
+        if (isName(t) && !seen.contains(t)) {
+            seen[t] = true;
+            p.uses.push(t.clone());
+        }
+    }
+    let braces: int32 = 0;
+    let parens: int32 = 0;
+    let i: int32 = 0;
+    while (i < toks.length) {
+        let t: String = toks[i];
+        let prev: String = i > 0 ? toks[i - 1] : "";
+        let after: String = i + 1 < toks.length ? toks[i + 1] : "";
+        if (t == "{") {
+            braces += 1;
+        } else if (t == "}") {
+            braces -= 1;
+        } else if (t == "(") {
+            parens += 1;
+        } else if (t == ")") {
+            parens -= 1;
+        }
+        if (braces != 0 || parens != 0 || !isName(t)) {
+            i += 1;
+            continue;
+        }
+        if (t == "typedef") {                                // typedef struct A ... B;  typedef X B;
+            if (after == "struct" && i + 2 < toks.length) { define(p, toks[i + 2]); }
+            let d: int32 = 0;
+            let j: int32 = i + 1;
+            while (j < toks.length) {
+                let x: String = toks[j];
+                if (x == "{") {
+                    d += 1;
+                } else if (x == "}") {
+                    d -= 1;
+                } else if (x == ";" && d == 0) {
+                    break;
+                }
+                j += 1;
+            }
+            if (j < toks.length && isName(toks[j - 1])) { define(p, toks[j - 1]); }
+            let k: int32 = i + 1;                            // typedef R (*Name)(...);
+            while (k + 3 < j) {
+                if (toks[k] == "(" && toks[k + 1] == "*" && isName(toks[k + 2]) && toks[k + 3] == ")") {
+                    define(p, toks[k + 2]);
+                    break;
+                }
+                k += 1;
+            }
+            i = j;
+        } else if (t == "struct" && isName(after) && i + 2 < toks.length && toks[i + 2] == "{") {
+            define(p, after);
+        } else if (t == "enum" && (after == "{" || isName(after) && i + 2 < toks.length && toks[i + 2] == "{")) {
+            // enum { A = 0, B = 1 };  enum Shape_Tag { Shape_Circle = 0, ... };
+            let j: int32 = after == "{" ? i + 2 : i + 3;
+            if (after != "{") { define(p, after); }
+            while (j < toks.length && toks[j] != "}") {
+                let x: String = toks[j];
+                let y: String = j + 1 < toks.length ? toks[j + 1] : "";
+                if (isName(x) && (y == "," || y == "}" || y == "=")) { define(p, x); }
+                j += 1;
+            }
+        } else if ((after == "(" || after == "=" || after == "[" || after == ";") && (isName(prev) || prev == "*") && prev != "return") {
+            define(p, t);
+        }
+        i += 1;
+    }
+}
+
+function define(p: Piece, name: String): void {
+    for (d in p.defines) {
+        if (d == name) { return; }
+    }
+    p.defines.push(name.clone());
+}

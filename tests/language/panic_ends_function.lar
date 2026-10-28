@@ -1,0 +1,11 @@
+// expect: run
+// output: uno
+// Una función puede terminar con panic(...) en lugar de return: el compilador sabe que no sigue.
+function name(n: int32): String {
+    if (n == 1) { return "uno"; }
+    panic("no sé decir ${n}");
+}
+function main(): int32 {
+    println(name(1));
+    return 0;
+}

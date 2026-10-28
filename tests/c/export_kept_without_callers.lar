@@ -1,0 +1,9 @@
+// expect: run
+// output: listo
+// c-has: lm_api_version
+// Una export function se queda aunque nadie la llame desde el programa: es para C de fuera.
+export function lm_api_version(): int32 { return 1; }
+function main(): int32 {
+    println("listo");
+    return 0;
+}

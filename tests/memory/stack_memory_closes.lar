@@ -1,0 +1,24 @@
+// expect: run
+// output: closed: uno dos
+// What closes itself (a File here; a socket too) closes when a byte[N] memory on the stack is freed, as
+// with any other memory: the text is in the file (flushed) right after the block, without close().
+import std.io.file { File, create };
+import std.io.files as Files;
+import std.io.files { IoError };
+
+function main(): int32 throws IoError {
+    let path: String = "stack_memory_closes.tmp";
+    {
+        let scratch: byte[2048] = [];
+        let f: File = create(path) in scratch;
+        f.writeText("uno ");
+    }
+    {
+        let f: File = create("stack_memory_closes2.tmp") in byte[512];
+        f.writeText("dos");
+    }
+    println("closed: ${Files.readString(path)}${Files.readString("stack_memory_closes2.tmp")}");
+    Files.delete(path);
+    Files.delete("stack_memory_closes2.tmp");
+    return 0;
+}

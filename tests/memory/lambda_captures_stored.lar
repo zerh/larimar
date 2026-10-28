@@ -1,0 +1,17 @@
+// expect: run
+// output: a:1 b:2 c:3
+// Lambdas que capturan y se guardan en una lista que vive todo el programa.
+let actions: (() -> String)[*] = [] in default;
+function register(name: String, n: int32): void {
+    let label: String = "${name}:${n}" in default;
+    actions.push(() -> { return label; });
+}
+function main(): int32 {
+    register("a", 1);
+    register("b", 2);
+    register("c", 3);
+    let parts: String[*] = [];
+    for (f in actions) { parts.push(f()); }
+    println(parts.join(" "));
+    return 0;
+}

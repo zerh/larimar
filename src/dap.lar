@@ -1,0 +1,1359 @@
+// dap: larimar dap, the debugger for editors (Debug Adapter Protocol on stdin and stdout).
+//
+// It sits between the editor and lldb-dap (LLVM's debug adapter, which runs the program under lldb):
+//
+//     VS Code  <-- DAP -->  larimar dap  <-- DAP -->  lldb-dap  -->  the program (built with --debug)
+//
+// Most messages pass through as they are (launch, breakpoints, continue, step...). What makes it Larimar
+// is answered here, with the debug map the compiler writes next to the C (debugmap.lar):
+//
+//   - the call stack shows Larimar names (main, Dog.bark, geo.shapes.area), and the runtime's frames
+//     are de-emphasized;
+//   - the variables are those of the Larimar code, with their Larimar names (total, not total_12),
+//     without the compiler's temporaries, and each value is read and shown as Larimar shows it: String
+//     as text, lists with their elements, optionals, enums as Variant(fields), objects with their real
+//     class, Any with what it holds. The values are read with C expressions lldb evaluates
+//     ((long long)(x).len, memory read ...): nothing to install in lldb;
+//   - the debug console and hovers understand Larimar paths (a.name, list[2], data.inner);
+//   - function breakpoints take Larimar names, "step into" skips the runtime, and "Panics" stops where
+//     a panic happens.
+
+import std.os;
+import std.path as Paths;
+import std.io.files as Files;
+import std.io.files { IoError };
+import std.io.console as Console;
+import std.json as Json;
+import std.json { JsonError };
+
+c_code {
+    #include <stdlib.h>
+    #include <string.h>
+    #ifdef _WIN32
+    #include <windows.h>
+    #include <io.h>
+    #else
+    #include <unistd.h>
+    #include <poll.h>
+    #include <signal.h>
+    #include <sys/types.h>
+    #include <sys/wait.h>
+    #endif
+
+    /* two input streams: 0 the editor (stdin), 1 the backend (lldb-dap's stdout) */
+    typedef struct { char* buf; size_t len, cap; bool eof; } LmDapIn;
+    static LmDapIn lm_dap_in[2];
+    #ifdef _WIN32
+    static HANDLE lm_dap_child_in, lm_dap_child_out, lm_dap_proc;
+    #else
+    static int lm_dap_child_in = -1, lm_dap_child_out = -1;
+    static pid_t lm_dap_pid = -1;
+    #endif
+
+    /* starts the backend with pipes for its input and output; false if it cannot */
+    static bool lm_dap_spawn(const char* path) {
+    #ifdef _WIN32
+        SECURITY_ATTRIBUTES sa = { sizeof sa, NULL, TRUE };
+        HANDLE inR, inW, outR, outW;
+        if (!CreatePipe(&inR, &inW, &sa, 0) || !CreatePipe(&outR, &outW, &sa, 0)) return false;
+        SetHandleInformation(inW, HANDLE_FLAG_INHERIT, 0);
+        SetHandleInformation(outR, HANDLE_FLAG_INHERIT, 0);
+        STARTUPINFOA si; PROCESS_INFORMATION pi;
+        memset(&si, 0, sizeof si); memset(&pi, 0, sizeof pi);
+        si.cb = sizeof si;
+        si.dwFlags = STARTF_USESTDHANDLES;
+        si.hStdInput = inR; si.hStdOutput = outW; si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+        char cmd[4096];
+        snprintf(cmd, sizeof cmd, "\"%s\"", path);
+        if (!CreateProcessA(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) return false;
+        CloseHandle(inR); CloseHandle(outW); CloseHandle(pi.hThread);
+        lm_dap_child_in = inW; lm_dap_child_out = outR; lm_dap_proc = pi.hProcess;
+        _setmode(_fileno(stdin), 0x8000); _setmode(_fileno(stdout), 0x8000);   /* _O_BINARY */
+        return true;
+    #else
+        int in[2], out[2];
+        if (pipe(in) != 0 || pipe(out) != 0) return false;
+        pid_t p = fork();
+        if (p < 0) return false;
+        if (p == 0) {
+            dup2(in[0], 0);
+            dup2(out[1], 1);
+            close(in[0]); close(in[1]); close(out[0]); close(out[1]);
+            execlp(path, path, (char*)NULL);
+            _exit(127);
+        }
+        close(in[0]); close(out[1]);
+        lm_dap_child_in = in[1]; lm_dap_child_out = out[0]; lm_dap_pid = p;
+        signal(SIGPIPE, SIG_IGN);
+        return true;
+    #endif
+    }
+
+    static void lm_dap_kill(void) {
+    #ifdef _WIN32
+        if (lm_dap_proc) TerminateProcess(lm_dap_proc, 0);
+    #else
+        if (lm_dap_pid > 0) { kill(lm_dap_pid, SIGTERM); waitpid(lm_dap_pid, NULL, 0); lm_dap_pid = -1; }
+    #endif
+    }
+
+    static void lm_dap_append(int which, const char* data, size_t n) {
+        LmDapIn* in = &lm_dap_in[which];
+        if (in->len + n + 1 > in->cap) {
+            in->cap = (in->len + n + 1) * 2;
+            in->buf = (char*)realloc(in->buf, in->cap);
+            if (!in->buf) rt_panic("out of memory (larimar dap)", 0);
+        }
+        memcpy(in->buf + in->len, data, n);
+        in->len += n;
+        in->buf[in->len] = 0;
+    }
+
+    /* reads what is ready on either stream, waiting up to ms milliseconds (-1: until something comes) */
+    static void lm_dap_fill(int32_t ms) {
+        char tmp[65536];
+    #ifdef _WIN32
+        HANDLE hs[2] = { GetStdHandle(STD_INPUT_HANDLE), lm_dap_child_out };
+        DWORD waited = 0;
+        for (;;) {
+            bool got = false;
+            for (int i = 0; i < 2; i++) {
+                if (lm_dap_in[i].eof) continue;
+                DWORD avail = 0;
+                if (!PeekNamedPipe(hs[i], NULL, 0, NULL, &avail, NULL)) { lm_dap_in[i].eof = true; got = true; continue; }
+                if (avail > 0) {
+                    DWORD n = 0;
+                    if (ReadFile(hs[i], tmp, avail < sizeof tmp ? avail : sizeof tmp, &n, NULL) && n > 0) lm_dap_append(i, tmp, n);
+                    else lm_dap_in[i].eof = true;
+                    got = true;
+                }
+            }
+            if (got || (ms >= 0 && (int32_t)waited >= ms) || (lm_dap_in[0].eof && lm_dap_in[1].eof)) return;
+            Sleep(2);
+            waited += 2;
+        }
+    #else
+        struct pollfd p[2];
+        p[0].fd = lm_dap_in[0].eof ? -1 : 0;
+        p[1].fd = lm_dap_in[1].eof ? -1 : lm_dap_child_out;
+        p[0].events = p[1].events = POLLIN;
+        p[0].revents = p[1].revents = 0;
+        if (poll(p, 2, ms) <= 0) return;
+        for (int i = 0; i < 2; i++) {
+            if (!(p[i].revents & (POLLIN | POLLHUP | POLLERR))) continue;
+            ssize_t n = read(p[i].fd, tmp, sizeof tmp);
+            if (n > 0) lm_dap_append(i, tmp, (size_t)n); else lm_dap_in[i].eof = true;
+        }
+    #endif
+    }
+
+    static bool lm_dap_eof(int32_t which) { return lm_dap_in[which].eof && lm_dap_in[which].len == 0; }
+
+    /* the body of the next complete message of a stream, or "" (and lm_dap_took() false) */
+    static bool lm_dap_got;
+    static const char* lm_dap_take(RtMem* m, int32_t which) {
+        LmDapIn* in = &lm_dap_in[which];
+        lm_dap_got = false;
+        if (in->len == 0) return "";
+        char* end = strstr(in->buf, "\r\n\r\n");
+        if (!end) return "";
+        long length = -1;
+        for (char* h = in->buf; h < end; ) {
+            char* eol = strstr(h, "\r\n");
+            if (!eol || eol > end) eol = end;
+            if (eol - h > 15 && (strncmp(h, "Content-Length:", 15) == 0 || strncmp(h, "content-length:", 15) == 0)) length = atol(h + 15);
+            h = eol + 2;
+        }
+        size_t head = (size_t)(end - in->buf) + 4;
+        if (length < 0) {                          /* not a message: drop the header */
+            memmove(in->buf, in->buf + head, in->len - head + 1);
+            in->len -= head;
+            return "";
+        }
+        if (in->len < head + (size_t)length) return "";
+        char* body = (char*)rt_mem_alloc(m, (size_t)length + 1, 0);
+        memcpy(body, in->buf + head, (size_t)length);
+        body[length] = 0;
+        memmove(in->buf, in->buf + head + length, in->len - head - (size_t)length + 1);
+        in->len -= head + (size_t)length;
+        lm_dap_got = true;
+        return body;
+    }
+    static bool lm_dap_took(void) { return lm_dap_got; }
+
+    /* writes one message: 0 to the editor, 1 to the backend */
+    static void lm_dap_write(int32_t which, const char* body, int32_t len) {
+        char head[64];
+        int hn = snprintf(head, sizeof head, "Content-Length: %d\r\n\r\n", len);
+        if (which == 0) {
+            fwrite(head, 1, (size_t)hn, stdout);
+            fwrite(body, 1, (size_t)len, stdout);
+            fflush(stdout);
+            return;
+        }
+    #ifdef _WIN32
+        DWORD n;
+        WriteFile(lm_dap_child_in, head, (DWORD)hn, &n, NULL);
+        WriteFile(lm_dap_child_in, body, (DWORD)len, &n, NULL);
+    #else
+        size_t done = 0;
+        while (done < (size_t)hn) { ssize_t k = write(lm_dap_child_in, head + done, (size_t)hn - done); if (k <= 0) return; done += (size_t)k; }
+        done = 0;
+        while (done < (size_t)len) { ssize_t k = write(lm_dap_child_in, body + done, (size_t)len - done); if (k <= 0) return; done += (size_t)k; }
+    #endif
+    }
+
+    /* handles the editor gets for variables: what each one shows (freed at every stop) */
+    typedef struct { int32_t kind, frame, ref; char* expr; char* type; } LmDapHandle;
+    static LmDapHandle* lm_dap_h;
+    static int32_t lm_dap_hn, lm_dap_hcap;
+    static char* lm_dap_dup(const char* s) { size_t n = strlen(s); char* p = (char*)malloc(n + 1); if (p) memcpy(p, s, n + 1); return p; }
+    static int32_t lm_dap_handle(int32_t kind, int32_t frame, int32_t ref, const char* expr, const char* type) {
+        if (lm_dap_hn == lm_dap_hcap) {
+            lm_dap_hcap = lm_dap_hcap ? lm_dap_hcap * 2 : 256;
+            lm_dap_h = (LmDapHandle*)realloc(lm_dap_h, sizeof(LmDapHandle) * (size_t)lm_dap_hcap);
+            if (!lm_dap_h) rt_panic("out of memory (larimar dap)", 0);
+        }
+        LmDapHandle* h = &lm_dap_h[lm_dap_hn++];
+        h->kind = kind; h->frame = frame; h->ref = ref; h->expr = lm_dap_dup(expr); h->type = lm_dap_dup(type);
+        return lm_dap_hn;                          /* from 1: 0 means "no children" */
+    }
+    static void lm_dap_clear(void) {
+        for (int32_t i = 0; i < lm_dap_hn; i++) { free(lm_dap_h[i].expr); free(lm_dap_h[i].type); }
+        lm_dap_hn = 0;
+    }
+    static bool lm_dap_valid(int32_t id) { return id >= 1 && id <= lm_dap_hn; }
+    static int32_t lm_dap_h_kind(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].kind : 0; }
+    static int32_t lm_dap_h_frame(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].frame : 0; }
+    static int32_t lm_dap_h_ref(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].ref : 0; }
+    static const char* lm_dap_h_expr(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].expr : ""; }
+    static const char* lm_dap_h_type(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].type : ""; }
+}
+
+extern function lm_dap_spawn(path: String): bool;
+extern function lm_dap_kill(): void;
+extern function lm_dap_fill(ms: int32): void;
+extern function lm_dap_eof(which: int32): bool;
+extern function lm_dap_take(m: byte[*], which: int32): String;
+extern function lm_dap_took(): bool;
+extern function lm_dap_write(which: int32, body: String, length: int32): void;
+extern function lm_dap_handle(kind: int32, frame: int32, ref: int32, expr: String, type: String): int32;
+extern function lm_dap_clear(): void;
+extern function lm_dap_h_kind(id: int32): int32;
+extern function lm_dap_h_frame(id: int32): int32;
+extern function lm_dap_h_ref(id: int32): int32;
+extern function lm_dap_h_expr(id: int32): String;
+extern function lm_dap_h_type(id: int32): String;
+
+const EDITOR: int32 = 0;
+const BACKEND: int32 = 1;
+
+// handle kinds
+const H_LOCALS: int32 = 1;       // the Larimar variables of a frame
+const H_GLOBALS: int32 = 2;
+const H_VALUE: int32 = 3;        // a value: expr (C) and type (debug map JSON)
+const H_BACKEND: int32 = 4;      // lldb-dap's own variables reference (ref)
+const H_CSCOPE: int32 = 5;       // the C view of a frame (lldb-dap's locals)
+
+const MAX_CHILDREN: int32 = 1000;
+const MAX_TEXT: int32 = 2000;
+
+/** The step-in filter: what "step into" skips (the runtime and generated helpers). */
+const STEP_AVOID: String = "^(rt_|List_|Slice_|Arr_|Opt_|Any_|text_|byte_text|std_|lm_|.*__dispatch$|.*__call$|.*__clone$|.*_unwrap$)";
+
+// =====================================================================================
+// State
+// =====================================================================================
+
+let map: Any = {} in default;               // the debug map
+let functionsByDisplay: Any = {} in default; // "Dog.bark" -> "Dog_bark"
+let nextSeq: int32 = 1;
+let toBackend: Any = {} in default;          // our seq to the backend -> the editor's seq (forwarded requests)
+let toEditor: Any = {} in default;           // our seq to the editor -> the backend's seq (reverse requests)
+let panicBreakpoint: bool = false;
+let panicId: int32 = 0;                       // lldb's id of the breakpoint on rt_panic
+let backendPath: String = "";
+
+function log(text: String): void { Console.printError("[larimar dap] ${text}"); }
+
+// =====================================================================================
+// Messages
+// =====================================================================================
+
+/** A JSON text with the top-level numeric field `key` set to `value` (added when missing). */
+function withNumber(json: String, key: String, value: int32): String {
+    let depth: int32 = 0;
+    let i: int32 = 0;
+    let quoted: String = "\"${key}\"";
+    while (i < json.length) {
+        let c: byte = json[i];
+        if (c == '"') {
+            let start: int32 = i;
+            i += 1;
+            while (i < json.length && json[i] != '"') {
+                if (json[i] == '\\') { i += 1; }
+                i += 1;
+            }
+            if (depth == 1 && json.substring(start, i + 1) == quoted) {
+                let j: int32 = i + 1;
+                while (j < json.length && (json[j] == ' ' || json[j] == ':')) { j += 1; }
+                let k: int32 = j;
+                while (k < json.length && (json[k] == '-' || (json[k] >= '0' && json[k] <= '9'))) { k += 1; }
+                return "${json.substring(0, j)}${value}${json.substring(k)}";
+            }
+        } else if (c == '{' || c == '[') {
+            depth += 1;
+        } else if (c == '}' || c == ']') {
+            depth -= 1;
+        }
+        i += 1;
+    }
+    let open: int32 = json.indexOf("{") ?? 0;
+    return "${json.substring(0, open + 1)}${quoted}:${value},${json.substring(open + 1)}";
+}
+
+function toEditorRaw(body: String): void { lm_dap_write(EDITOR, body, body.length); }
+
+/** A message to the editor with our sequence number. */
+function emit(body: String): void {
+    let s: int32 = nextSeq;
+    nextSeq += 1;
+    toEditorRaw(withNumber(body, "seq", s));
+}
+
+function respond(req: Any, body: String): void {
+    let cmd: String = req.command as String ?? "";
+    let rs: int32 = (req.seq as int64 ?? 0) as int32;
+    emit("{\"seq\":0,\"type\":\"response\",\"request_seq\":${rs},\"success\":true,\"command\":${Json.quote(cmd)},\"body\":${body}}");
+}
+
+function respondError(req: Any, message: String): void {
+    let cmd: String = req.command as String ?? "";
+    let rs: int32 = (req.seq as int64 ?? 0) as int32;
+    emit("{\"seq\":0,\"type\":\"response\",\"request_seq\":${rs},\"success\":false,\"command\":${Json.quote(cmd)},\"message\":${Json.quote(message)},\"body\":{\"error\":{\"id\":1,\"format\":${Json.quote(message)}}}}");
+}
+
+function output(text: String): void {
+    emit("{\"seq\":0,\"type\":\"event\",\"event\":\"output\",\"body\":{\"category\":\"console\",\"output\":${Json.quote(text)}}}");
+}
+
+function parse(text: String): Any {
+    try {
+        return Json.parse(text);
+    } catch (JsonError e) {
+        return {};
+    }
+}
+
+/** Sends a request of ours to the backend; returns its seq. */
+function sendBackend(command: String, args: String): int32 {
+    let s: int32 = nextSeq;
+    nextSeq += 1;
+    let body: String = "{\"seq\":${s},\"type\":\"request\",\"command\":${Json.quote(command)},\"arguments\":${args}}";
+    lm_dap_write(BACKEND, body, body.length);
+    return s;
+}
+
+/**
+ * A request of ours to the backend, and its response (as JSON text). What arrives meanwhile from the
+ * backend (events, answers to forwarded requests) goes on to the editor; the editor's messages wait.
+ */
+function call(command: String, args: String): String {
+    let s: int32 = sendBackend(command, args);
+    while (true) {
+        let body: String = lm_dap_take(BACKEND);
+        if (!lm_dap_took()) {
+            if (lm_dap_eof(BACKEND)) { return "{\"success\":false}"; }
+            lm_dap_fill(-1);
+            continue;
+        }
+        let msg: Any = parse(body);
+        if ((msg.type as String ?? "") == "response" && (msg.request_seq as int64 ?? -1) == s as int64) {
+            return body.clone();
+        }
+        fromBackend(body, msg);
+    }
+    return "{\"success\":false}";
+}
+
+/** A C expression's value in a frame, or null when lldb cannot evaluate it. */
+function eval(frame: int32, expr: String): String? {
+    let r: Any = parse(call("evaluate", "{\"expression\":${Json.quote(expr)},\"frameId\":${frame},\"context\":\"watch\"}"));
+    if (!(r.success as bool ?? false)) { return null; }
+    return (r.body.result as String ?? "").clone();
+}
+
+function evalInt(frame: int32, expr: String): int64? {
+    let v: String? = eval(frame, "(long long)(${expr})");
+    if (v == null) { return null; }
+    return v!.trim().toInt();
+}
+
+function evalAddress(frame: int32, expr: String): int64? {
+    let v: String? = eval(frame, "(unsigned long long)(${expr})");
+    if (v == null) { return null; }
+    let t: String = v!.trim();
+    if (t.startsWith("0x")) { return hexValue(t.substring(2)); }
+    let n: int64? = t.toInt();
+    if (n != null) { return n; }
+    // above int64: a pointer with the top bit set, written in decimal
+    return -1;
+}
+
+/** An lldb command in a frame; its output. */
+function command(frame: int32, text: String): String {
+    let r: Any = parse(call("evaluate", "{\"expression\":${Json.quote("`${text}")},\"frameId\":${frame},\"context\":\"repl\"}"));
+    return (r.body.result as String ?? "").clone();
+}
+
+/** A table of the debug map (or an empty one when it is missing). */
+function tableOf(v: Any): Any {
+    switch (v) {
+        case Any t -> { return t; }
+        default -> { return {}; }
+    }
+}
+
+function atMost(n: int64, limit: int32): int32 { return n > (limit as int64) ? limit : (n as int32); }
+
+function hexValue(s: String): int64 {
+    let n: int64 = 0;
+    for (c in s) {
+        let d: int64 = c >= '0' && c <= '9' ? (c - '0') as int64 : c >= 'a' && c <= 'f' ? (c - 'a') as int64 + 10 : c >= 'A' && c <= 'F' ? (c - 'A') as int64 + 10 : -1;
+        if (d < 0) { break; }
+        n = n * 16 + d;
+    }
+    return n;
+}
+
+/** `count` bytes at an address, as text (UTF-8). */
+function readBytes(frame: int32, address: int64, count: int32): String? {
+    if (count <= 0) { return ""; }
+    let out: String = command(frame, "memory read -s1 -fx -c ${count} ${address}");
+    let bytes: byte[*] = [];
+    for (line in out.split("\n")) {
+        let colon: int32? = line.indexOf(": ");
+        if (colon == null || !line.startsWith("0x")) { continue; }
+        for (w in line.substring(colon! + 2).split(" ")) {
+            let t: String = w.trim();
+            if (t.startsWith("0x")) { bytes.push(hexValue(t.substring(2)) as byte); }
+        }
+    }
+    if (bytes.length == 0) { return null; }
+    return stringOf(bytes).clone();
+}
+
+/** A C string (a class's name) at the address an expression gives. */
+function readCString(frame: int32, expr: String): String? {
+    let out: String = command(frame, "memory read -f s -c 1 `${expr}`");
+    let q: int32? = out.indexOf(": \"");
+    if (q == null) { return null; }
+    let end: int32? = out.indexOf("\"", q! + 3);
+    if (end == null) { return null; }
+    return out.substring(q! + 3, end!).clone();
+}
+
+// =====================================================================================
+// Values
+// =====================================================================================
+
+/** What the editor shows for one value: its text, and its children (a handle) when it has them. */
+class Shown {
+    let value: String = "";
+    let ref: int32 = 0;
+    let indexed: int32 = -1;          // lists: how many elements
+    let type: String = "";
+}
+
+function typeEntry(name: String): Any { return tableOf(map.types[name]); }
+
+function typeText(t: Any): String {
+    let k: String = t.k as String ?? "raw";
+    switch (k) {
+        case "int" -> { return t.name as String ?? "int"; }
+        case "float" -> { return "float64"; }
+        case "bool" -> { return "bool"; }
+        case "String" -> { return "String"; }
+        case "any" -> { return "Any"; }
+        case "list", "slice", "array" -> { return t.text as String ?? "[]"; }
+        case "opt" -> { return "${typeText(t.elem)}?"; }
+        case "struct", "class", "interface", "enum" -> {
+            return (typeEntry(t.name as String ?? "").display as String ?? (t.name as String ?? "")).clone();
+        }
+        default -> { return t.text as String ?? ""; }
+    }
+}
+
+function quoteText(s: String): String { return Json.quote(s); }
+
+/** The text of a String value at expr (an RtString). */
+function stringValue(frame: int32, expr: String): String? {
+    let length: int64? = evalInt(frame, "(${expr}).len");
+    if (length == null) { return null; }
+    if (length! <= 0) { return "\"\""; }
+    let address: int64? = evalAddress(frame, "(${expr}).ptr");
+    if (address == null || address! == 0) { return "\"\""; }
+    let n: int32 = atMost(length!, MAX_TEXT);
+    let text: String? = readBytes(frame, address!, n);
+    if (text == null) { return "<unreadable>"; }
+    return (n as int64) < length! ? "${quoteText(text!)}…" : quoteText(text!);
+}
+
+/** The class (C name) of the object at a pointer expression, or "". */
+function classOfObject(frame: int32, pointer: String): String {
+    return readCString(frame, "((const RtClass*)((const RtVTableHead*)((RtObjHead*)(${pointer}))->vt)->cls)->name") ?? "";
+}
+
+/** How the editor shows the value of `expr` (a C expression) of type `t`. preview: a short text only. */
+function show(frame: int32, expr: String, t: Any, preview: bool): Shown? {
+    let s: Shown = Shown {} in default;
+    s.type = typeText(t).clone() in default;
+    let k: String = t.k as String ?? "raw";
+    switch (k) {
+        case "int" -> {
+            let name: String = t.name as String ?? "";
+            let unsigned: bool = name.startsWith("uint") || name == "byte";
+            let v: String? = eval(frame, unsigned ? "(unsigned long long)(${expr})" : "(long long)(${expr})");
+            if (v == null) { return null; }
+            s.value = v!.trim().clone() in default;
+        }
+        case "float" -> {
+            let v: String? = eval(frame, "(double)(${expr})");
+            if (v == null) { return null; }
+            s.value = v!.trim().clone() in default;
+        }
+        case "bool" -> {
+            let v: int64? = evalInt(frame, expr);
+            if (v == null) { return null; }
+            s.value = v! != 0 ? "true" : "false";
+        }
+        case "String" -> {
+            let v: String? = stringValue(frame, expr);
+            if (v == null) { return null; }
+            s.value = v!.clone() in default;
+        }
+        case "opt" -> {
+            let ptr: bool = t.ptr as bool ?? false;
+            if (ptr) {
+                let a: int64? = evalAddress(frame, expr);
+                if (a == null) { return null; }
+                if (a! == 0) {
+                    s.value = "null";
+                    return s;
+                }
+                return show(frame, expr, t.elem, preview);
+            }
+            let has: int64? = evalInt(frame, "(${expr}).has");
+            if (has == null) { return null; }
+            if (has! == 0) {
+                s.value = "null";
+                return s;
+            }
+            let inner: Shown? = show(frame, "(${expr}).value", t.elem, preview);
+            if (inner != null) { inner!.type = s.type; }
+            return inner;
+        }
+        case "list", "slice", "array" -> {
+            let pointer: bool = k == "list";
+            if (pointer) {
+                let a: int64? = evalAddress(frame, expr);
+                if (a == null) { return null; }
+                if (a! == 0) {
+                    s.value = "null";
+                    return s;
+                }
+            }
+            let base: String = pointer ? "(${expr})->" : "(${expr}).";
+            let n: int64? = evalInt(frame, "${base}length");
+            if (n == null) { return null; }
+            s.value = "[${n!}]";
+            if (!preview) {
+                let elemKind: String = t.elem.k as String ?? "";
+                if (n! > 0 && (elemKind == "int" || elemKind == "float" || elemKind == "bool" || elemKind == "String")) {
+                    let parts: String[*] = [];
+                    let shownCount: int64 = n! < 5 ? n! : 5;
+                    for (i in 0..shownCount as int32) {
+                        let e: Shown? = show(frame, "${base}items[${i}]", t.elem, true);
+                        parts.push((e != null ? e!.value : "?").clone());
+                    }
+                    s.value = "[${n!}] [${parts.join(", ")}${n! > 5 ? ", …" : ""}]" in default;
+                }
+                s.indexed = n! as int32;
+                if (n! > 0) { s.ref = lm_dap_handle(H_VALUE, frame, 0, expr, Json.stringify(t)); }
+            }
+        }
+        case "struct" -> {
+            let entry: Any = typeEntry(t.name as String ?? "");
+            s.value = fieldsPreview(frame, entry, "(${expr}).", preview, entry.display as String ?? "").clone() in default;
+            if (!preview) { s.ref = lm_dap_handle(H_VALUE, frame, 0, expr, Json.stringify(t)); }
+        }
+        case "class" -> {
+            let a: int64? = evalAddress(frame, expr);
+            if (a == null) { return null; }
+            if (a! == 0) {
+                s.value = "null";
+                return s;
+            }
+            let real: String = classOfObject(frame, expr);
+            if (real == "") { real = (t.name as String ?? "").clone() in default; }
+            let entry: Any = typeEntry(real);
+            let display: String = entry.display as String ?? real;
+            s.value = fieldsPreview(frame, entry, "((${real}*)(${expr}))->", preview, display).clone() in default;
+            if (!preview) {
+                let objectType: String = "{\"k\":\"object\",\"name\":${Json.quote(real)}}";
+                s.ref = lm_dap_handle(H_VALUE, frame, 0, "((${real}*)(${expr}))", objectType);
+            }
+        }
+        case "interface" -> {
+            let inner: Shown? = show(frame, "(${expr}).obj", { k: "class", name: "" }, preview);
+            if (inner != null) { inner!.type = s.type; }
+            return inner;
+        }
+        case "enum" -> {
+            let entry: Any = typeEntry(t.name as String ?? "");
+            let tag: int64? = evalInt(frame, "(${expr}).tag");
+            if (tag == null) { return null; }
+            let variant: Any = {};
+            let variants: Any = tableOf(entry.variants);
+            for (v in variants) {
+                if ((v.index as int64 ?? -1) == tag!) { variant = v; }
+            }
+            let vname: String = variant.name as String ?? "${tag!}";
+            let fields: Any = tableOf(variant["fields"]);
+            if (fields.length == 0) {
+                s.value = vname.clone() in default;
+            } else {
+                let parts: String[*] = [];
+                for (f in fields) {
+                    let e: Shown? = preview ? null : show(frame, "(${expr}).as.${vname}.${f.c as String ?? ""}", f.type, true);
+                    parts.push("${f.name as String ?? ""}=${e != null ? e!.value : "…"}");
+                }
+                s.value = "${vname}(${parts.join(", ")})" in default;
+                if (!preview) {
+                    let payloadType: String = "{\"k\":\"payload\",\"enum\":${Json.quote(t.name as String ?? "")},\"variant\":${Json.quote(vname)}}";
+                    s.ref = lm_dap_handle(H_VALUE, frame, 0, "(${expr}).as.${vname}", payloadType);
+                }
+            }
+        }
+        case "any" -> {
+            let inner: Shown? = showAny(frame, expr, preview, s);
+            if (inner != null) { inner!.type = "Any"; }
+            return inner;
+        }
+        case "table" -> {
+            let a: int64? = evalAddress(frame, expr);
+            if (a == null) { return null; }
+            if (a! == 0) {
+                s.value = "null";
+                return s;
+            }
+            let n: int64 = evalInt(frame, "(${expr})->length") ?? 0;
+            let c: int64 = evalInt(frame, "(${expr})->count") ?? 0;
+            s.value = (c == 0 ? "{ ${n} items }" : n == 0 ? "{ ${c} entries }" : "{ ${n} items, ${c} entries }").clone() in default;
+            if (!preview && n + c > 0) { s.ref = lm_dap_handle(H_VALUE, frame, 0, expr, "{\"k\":\"table\"}"); }
+        }
+        default -> {
+            let v: String? = eval(frame, expr);
+            if (v == null) { return null; }
+            s.value = v!.clone() in default;
+        }
+    }
+    return s;
+}
+
+function showAny(frame: int32, expr: String, preview: bool, s: Shown): Shown? {
+    let kind: int64? = evalInt(frame, "(${expr}).kind");
+    if (kind == null) { return null; }
+    let k: int64 = kind!;
+    if (k == 0) {
+        s.value = "null";
+        return s;
+    }
+    if (k >= 1 && k <= 4) { return show(frame, "(${expr}).as.i", { k: "int", name: "int64" }, preview); }
+    if (k >= 5 && k <= 8) { return show(frame, "(${expr}).as.u", { k: "int", name: "uint64" }, preview); }
+    if (k == 9 || k == 10) { return show(frame, "(${expr}).as.f", { k: "float" }, preview); }
+    if (k == 11) { return show(frame, "(${expr}).as.b", { k: "bool" }, preview); }
+    if (k == 12) { return show(frame, "(${expr}).as.s", { k: "String" }, preview); }
+    if (k == 13) { return show(frame, "(${expr}).as.t", { k: "table" }, preview); }
+    if (k == 14) {
+        let name: String = readCString(frame, "((const RtClass*)(${expr}).as.box.type)->name") ?? "";
+        return show(frame, "((${name}*)(${expr}).as.box.ptr)", { k: "class", name }, preview);
+    }
+    if (k == 15) {
+        let name: String = readCString(frame, "((const RtValType*)(${expr}).as.box.type)->name") ?? "";
+        let entry: Any = typeEntry(name);
+        let tk: String = entry.containsKey("variants") ? "enum" : "struct";
+        return show(frame, "(*(${name}*)(${expr}).as.box.ptr)", { k: tk, name }, preview);
+    }
+    s.value = "?";
+    return s;
+}
+
+/** Point {x=1, y=2}: the first scalar fields, read with `access` + their C path. */
+function fieldsPreview(frame: int32, entry: Any, access: String, preview: bool, display: String): String {
+    let fields: Any = tableOf(entry["fields"]);
+    if (preview) { return display.clone(); }
+    let parts: String[*] = [];
+    let count: int32 = 0;
+    for (f in fields) {
+        if (count == 4) {
+            parts.push("…");
+            break;
+        }
+        let fk: String = f.type.k as String ?? "";
+        if (fk == "int" || fk == "float" || fk == "bool" || fk == "String") {
+            let e: Shown? = show(frame, "${access}${f.c as String ?? ""}", f.type, true);
+            parts.push("${f.name as String ?? ""}=${e != null ? e!.value : "?"}");
+        } else {
+            parts.push("${f.name as String ?? ""}=…");
+        }
+        count += 1;
+    }
+    return "${display} {${parts.join(", ")}}".clone();
+}
+
+/** The JSON of one variable for the editor. */
+function variableJson(name: String, s: Shown, evaluateName: String): String {
+    let indexed: String = s.indexed >= 0 ? ",\"indexedVariables\":${s.indexed}" : "";
+    let ev: String = evaluateName != "" ? ",\"evaluateName\":${Json.quote(evaluateName)}" : "";
+    return "{\"name\":${Json.quote(name)},\"value\":${Json.quote(s.value)},\"type\":${Json.quote(s.type)},\"variablesReference\":${s.ref}${indexed}${ev}}";
+}
+
+/** The children of a value handle. */
+function children(id: int32, start: int32, count: int32): String[*] {
+    let out: String[*] = [];
+    let frame: int32 = lm_dap_h_frame(id);
+    let expr: String = lm_dap_h_expr(id).clone();
+    let t: Any = parse(lm_dap_h_type(id));
+    let k: String = t.k as String ?? "";
+    switch (k) {
+        case "list", "slice", "array" -> {
+            let base: String = k == "list" ? "(${expr})->" : "(${expr}).";
+            let n: int64 = evalInt(frame, "${base}length") ?? 0;
+            let from: int32 = start;
+            let to: int32 = count > 0 ? start + count : atMost(n, MAX_CHILDREN);
+            if (to as int64 > n) { to = n as int32; }
+            for (i in from..to) {
+                let e: Shown? = show(frame, "${base}items[${i}]", t.elem, false);
+                if (e != null) { out.push(variableJson("[${i}]", e!, "")); }
+            }
+        }
+        case "struct" -> {
+            let entry: Any = typeEntry(t.name as String ?? "");
+            fieldVariables(frame, tableOf(entry["fields"]), "(${expr}).", out);
+        }
+        case "object" -> {
+            let entry: Any = typeEntry(t.name as String ?? "");
+            fieldVariables(frame, tableOf(entry["fields"]), "${expr}->", out);
+        }
+        case "payload" -> {
+            let entry: Any = typeEntry(t["enum"] as String ?? "");
+            let variants: Any = tableOf(entry.variants);
+            for (v in variants) {
+                if ((v.name as String ?? "") == (t.variant as String ?? "")) { fieldVariables(frame, tableOf(v["fields"]), "(${expr}).", out); }
+            }
+        }
+        case "table" -> {
+            let n: int64 = evalInt(frame, "(${expr})->length") ?? 0;
+            let c: int64 = evalInt(frame, "(${expr})->count") ?? 0;
+            let any: Any = { k: "any" };
+            for (i in 0..atMost(n, MAX_CHILDREN)) {
+                let e: Shown? = show(frame, "(${expr})->items[${i}]", any, false);
+                if (e != null) { out.push(variableJson("[${i}]", e!, "")); }
+            }
+            for (j in 0..atMost(c, MAX_CHILDREN)) {
+                let key: String = stringValue(frame, "(${expr})->keys[${j}]") ?? "?";
+                let bare: String = key.startsWith("\"") && key.endsWith("\"") && key.length >= 2 ? key.substring(1, key.length - 1) : key;
+                let e: Shown? = show(frame, "(${expr})->values[${j}]", any, false);
+                if (e != null) { out.push(variableJson(bare, e!, "")); }
+            }
+        }
+        default -> {}
+    }
+    return out;
+}
+
+function fieldVariables(frame: int32, fields: Any, access: String, out: String[*]): void {
+    for (f in fields) {
+        let e: Shown? = show(frame, "${access}${f.c as String ?? ""}", f.type, false);
+        if (e != null) { out.push(variableJson(f.name as String ?? "", e!, "")); }
+    }
+}
+
+// =====================================================================================
+// Frames
+// =====================================================================================
+
+/** frame id -> (C function, line), from the last stackTrace. */
+let frameFunction: Any = {} in default;
+let frameLine: Any = {} in default;
+
+function hasFunction(cName: String): bool { return tableOf(map.functions).containsKey(cName); }
+function functionEntry(cName: String): Any { return tableOf(tableOf(map.functions)[cName]).clone(); }
+
+/** The Larimar variables of a frame. */
+function localVariables(frame: int32): String[*] {
+    let out: String[*] = [];
+    let fn: String = frameFunction["${frame}"] as String ?? "";
+    if (!hasFunction(fn)) { return out; }
+    let entry: Any = functionEntry(fn);
+    let line: int64 = frameLine["${frame}"] as int64 ?? 0;
+    let vars: Any = tableOf(entry.vars);
+    let seen: Any = {};
+    // the latest declaration of a name wins (an inner variable with the same name hides the outer one)
+    let i: int32 = vars.length - 1;
+    let picked: Any = {};
+    while (i >= 0) {
+        let v: Any = vars[i];
+        let name: String = v.name as String ?? "";
+        let declared: int64 = v.line as int64 ?? 0;
+        if (!picked.contains(name) && (declared == 0 || declared <= line)) {
+            let s: Shown? = show(frame, v.c as String ?? "", v.type, false);
+            if (s != null) {
+                picked[name] = true;
+                seen[name] = variableJson(name, s!, name);
+            }
+        }
+        i -= 1;
+    }
+    for (v in vars) {                         // in the order they are declared
+        let name: String = v.name as String ?? "";
+        let j: String? = seen[name] as String;
+        if (j != null) {
+            out.push(j!.clone());
+            seen.remove(name);
+        }
+    }
+    return out;
+}
+
+function globalVariables(frame: int32): String[*] {
+    let out: String[*] = [];
+    let gs: Any = tableOf(map.globals);
+    for (g in gs) {
+        let s: Shown? = show(frame, g.c as String ?? "", g.type, false);
+        if (s != null) { out.push(variableJson(g.name as String ?? "", s!, g.name as String ?? "")); }
+    }
+    return out;
+}
+
+// =====================================================================================
+// Larimar paths in the debug console and hovers: a.name, list[2], data.inner
+// =====================================================================================
+
+class Resolved {
+    let expr: String = "";
+    let type: Any = {};
+    let ok: bool = false;
+}
+
+function resolvePath(frame: int32, text: String): Resolved {
+    let r: Resolved = Resolved {} in default;
+    let parts: String[*] = splitPath(text.trim());
+    if (parts.length == 0) { return r; }
+    // the first name: a variable of the frame, or a global
+    let fn: String = frameFunction["${frame}"] as String ?? "";
+    let entry: Any = functionEntry(fn);
+    let first: String = parts[0];
+    let found: bool = false;
+    let line: int64 = frameLine["${frame}"] as int64 ?? 0;
+    if (hasFunction(fn)) {
+        let vars: Any = tableOf(entry.vars);
+        for (v in vars) {
+            let declared: int64 = v.line as int64 ?? 0;
+            if ((v.name as String ?? "") == first && (declared == 0 || declared <= line)) {
+                r.expr = (v.c as String ?? "").clone() in default;
+                r.type = v.type.clone() in default;
+                found = true;
+            }
+        }
+    }
+    if (!found) {
+        let gs: Any = tableOf(map.globals);
+        for (g in gs) {
+            if ((g.name as String ?? "") == first) {
+                r.expr = (g.c as String ?? "").clone() in default;
+                r.type = g.type.clone() in default;
+                found = true;
+            }
+        }
+    }
+    if (!found) { return r; }
+    let k: int32 = 1;
+    while (k < parts.length) {
+        if (!step(frame, r, parts[k])) { return r; }
+        k += 1;
+    }
+    r.ok = true;
+    return r;
+}
+
+/** "a.b[2].c" -> ["a", ".b", "[2]", ".c"]; [] when it is not a path. */
+function splitPath(text: String): String[*] {
+    let out: String[*] = [];
+    let i: int32 = 0;
+    while (i < text.length) {
+        let c: byte = text[i];
+        if (c == '.' || i == 0) {
+            let from: int32 = c == '.' ? i + 1 : i;
+            let j: int32 = from;
+            while (j < text.length && (isNameByte(text[j]))) { j += 1; }
+            if (j == from) { return [] in default; }
+            out.push((c == '.' ? ".${text.substring(from, j)}" : text.substring(from, j)) in default);
+            i = j;
+        } else if (c == '[') {
+            let end: int32? = text.indexOf("]", i);
+            if (end == null) { return [] in default; }
+            let inside: String = text.substring(i + 1, end!).trim();
+            if (inside.toInt() == null && !(inside.startsWith("\"") && inside.endsWith("\""))) { return [] in default; }
+            out.push("[${inside}]" in default);
+            i = end! + 1;
+        } else {
+            return [] in default;
+        }
+    }
+    return out;
+}
+
+function isNameByte(c: byte): bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c >= 128;
+}
+
+/** One step of a path: .field or [index]. */
+function step(frame: int32, r: Resolved, part: String): bool {
+    let k: String = r.type.k as String ?? "";
+    if (k == "opt") {
+        r.type = r.type.elem;
+        if ((r.type.k as String ?? "") != "class") { r.expr = "(${r.expr}).value" in default; }
+        k = r.type.k as String ?? "";
+    }
+    if (part.startsWith("[")) {
+        let index: String = part.substring(1, part.length - 1);
+        if (k == "list") { r.expr = "(${r.expr})->items[${index}]" in default; r.type = r.type.elem; return true; }
+        if (k == "slice" || k == "array") { r.expr = "(${r.expr}).items[${index}]" in default; r.type = r.type.elem; return true; }
+        return false;
+    }
+    let name: String = part.substring(1);
+    if (name == "length" && (k == "list" || k == "slice" || k == "array")) {
+        r.expr = (k == "list" ? "(${r.expr})->length" : "(${r.expr}).length") in default;
+        r.type = { k: "int", name: "int32" };
+        return true;
+    }
+    if (k == "struct") {
+        for (f in tableOf(typeEntry(r.type.name as String ?? "")["fields"])) {
+            if ((f.name as String ?? "") == name) {
+                r.expr = "(${r.expr}).${f.c as String ?? ""}" in default;
+                r.type = f.type.clone() in default;
+                return true;
+            }
+        }
+        return false;
+    }
+    if (k == "class" || k == "interface") {
+        let pointer: String = k == "interface" ? "(${r.expr}).obj" : r.expr;
+        let real: String = classOfObject(frame, pointer);
+        for (f in tableOf(typeEntry(real)["fields"])) {
+            if ((f.name as String ?? "") == name) {
+                r.expr = "((${real}*)(${pointer}))->${f.c as String ?? ""}" in default;
+                r.type = f.type.clone() in default;
+                return true;
+            }
+        }
+        return false;
+    }
+    return false;
+}
+
+// =====================================================================================
+// From the editor
+// =====================================================================================
+
+function fromEditor(body: String): bool {
+    let msg: Any = parse(body);
+    let type: String = msg.type as String ?? "";
+    if (type == "response") {                 // to a reverse request of the backend (runInTerminal)
+        let ours: int32 = (msg.request_seq as int64 ?? 0) as int32;
+        let theirs: int32 = (toEditor["${ours}"] as int64 ?? ours as int64) as int32;
+        let fixed: String = withNumber(body, "request_seq", theirs);
+        lm_dap_write(BACKEND, fixed, fixed.length);
+        return true;
+    }
+    let cmd: String = msg.command as String ?? "";
+    switch (cmd) {
+        case "initialize" -> {
+            let r: Any = parse(call("initialize", Json.stringify(msg.arguments)));
+            respond(msg, capabilities(r));
+        }
+        case "launch" -> { forward(body, msg, launchArguments(msg)); }
+        case "stackTrace" -> { stackTrace(msg); }
+        case "scopes" -> { scopes(msg); }
+        case "variables" -> { variables(msg); }
+        case "evaluate" -> { evaluate(body, msg); }
+        case "setFunctionBreakpoints" -> { forward(body, msg, functionBreakpoints(msg)); }
+        case "setExceptionBreakpoints" -> { exceptionBreakpoints(msg); }
+        case "setVariable" -> { respondError(msg, "Changing values is not supported yet."); }
+        case "exceptionInfo" -> { exceptionInfo(msg); }
+        case "disconnect" -> {
+            forward(body, msg, "");
+            return false;
+        }
+        default -> { forward(body, msg, ""); }
+    }
+    return true;
+}
+
+/** Passes a request on to the backend (with new arguments when `args` is not ""). */
+function forward(body: String, msg: Any, args: String): void {
+    let s: int32 = nextSeq;
+    nextSeq += 1;
+    toBackend["${s}"] = msg.seq as int64 ?? 0;
+    let text: String = args == "" ? withNumber(body, "seq", s)
+        : "{\"seq\":${s},\"type\":\"request\",\"command\":${Json.quote(msg.command as String ?? "")},\"arguments\":${args}}";
+    lm_dap_write(BACKEND, text, text.length);
+}
+
+function capabilities(r: Any): String {
+    let caps: Any = tableOf(r.body);
+    let keep: String[*] = [];
+    for (k, v in caps.fields) {
+        if (k == "exceptionBreakpointFilters" || k == "supportsSetVariable" || k == "completionTriggerCharacters"
+            || k == "supportsCompletionsRequest") { continue; }
+        keep.push("${Json.quote(k)}:${Json.stringify(v)}");
+    }
+    keep.push("\"supportsSetVariable\":false");
+    keep.push("\"exceptionBreakpointFilters\":[{\"filter\":\"panic\",\"label\":\"Panics\",\"description\":\"Stop where the program panics (index out of range, '!' on null, panic(...))\",\"default\":true}]");
+    return "{${keep.join(",")}}";
+}
+
+/** launch for lldb-dap: the program, and lldb set up for Larimar. */
+function launchArguments(msg: Any): String {
+    let a: Any = tableOf(msg.arguments);
+    let mapPath: String = a.debugMap as String ?? "";
+    let program: String = a.program as String ?? "";
+    if (mapPath == "" && program != "") { mapPath = "${program}.debug.json"; }
+    loadMap(mapPath);
+    let args: String = a.containsKey("args") ? Json.stringify(a.args) : "[]";
+    if (args == "{}") { args = "[]"; }
+    let env: String[*] = [];
+    let e: Any = tableOf(a.env);
+    for (k, v in e.fields) { env.push(Json.quote("${k}=${v as String ?? ""}")); }
+    let cwd: String = a.cwd as String ?? Paths.parent(program);
+    let pre: String[*] = [];
+    if (a.stopOnEntry as bool ?? false) { pre.push(Json.quote("breakpoint set --one-shot true --name user_main")); }
+    let init: String[*] = [Json.quote("settings set target.process.thread.step-avoid-regexp ${STEP_AVOID}")];
+    let terminal: String = (a.console as String ?? "") == "integratedTerminal" ? ",\"runInTerminal\":true" : "";
+    return "{\"program\":${Json.quote(program)},\"args\":${args},\"cwd\":${Json.quote(cwd)},\"env\":[${env.join(",")}],\"initCommands\":[${init.join(",")}],\"preRunCommands\":[${pre.join(",")}]${terminal}}";
+}
+
+function loadMap(path: String): void {
+    try {
+        map = Json.parse(Files.readString(path)) in default;
+    } catch (IoError e) {
+        log("no debug map at ${path}: variables are shown as C (build with larimar build --debug)");
+        return;
+    } catch (JsonError e) {
+        log("the debug map ${path} is not valid JSON");
+        return;
+    }
+    let fns: Any = tableOf(map.functions);
+    for (c, f in fns.fields) { functionsByDisplay[f.name as String ?? c] = c.clone() in default; }
+}
+
+/** Function breakpoints by Larimar name: main -> user_main, Dog.bark -> Dog_bark. */
+function functionBreakpoints(msg: Any): String {
+    let bps: Any = tableOf(msg.arguments.breakpoints);
+    let parts: String[*] = [];
+    for (b in bps) {
+        let name: String = b.name as String ?? "";
+        let c: String = functionsByDisplay[name] as String ?? name;
+        let cond: String = b.containsKey("condition") ? ",\"condition\":${Json.quote(b.condition as String ?? "")}" : "";
+        parts.push("{\"name\":${Json.quote(c)}${cond}}");
+    }
+    return "{\"breakpoints\":[${parts.join(",")}]}";
+}
+
+function exceptionBreakpoints(msg: Any): void {
+    let filters: Any = tableOf(msg.arguments.filters);
+    let want: bool = false;
+    for (f in filters) {
+        if ((f as String ?? "") == "panic") { want = true; }
+    }
+    if (want && !panicBreakpoint) {
+        let r: Any = parse(call("evaluate", "{\"expression\":\"`breakpoint set --name rt_panic --breakpoint-name larimar_panic\",\"context\":\"repl\"}"));
+        let out: String = r.body.result as String ?? "";
+        let at: int32? = out.indexOf("Breakpoint ");
+        if (at != null) {
+            let colon: int32? = out.indexOf(":", at!);
+            if (colon != null) { panicId = (out.substring(at! + 11, colon!).toInt() ?? 0) as int32; }
+        }
+        panicBreakpoint = true;
+    } else if (!want && panicBreakpoint) {
+        call("evaluate", "{\"expression\":\"`breakpoint delete larimar_panic\",\"context\":\"repl\"}");
+        panicBreakpoint = false;
+        panicId = 0;
+    }
+    respond(msg, "{}");
+}
+
+/** The call stack with Larimar names; the runtime's frames de-emphasized. */
+function stackTrace(msg: Any): void {
+    let r: Any = parse(call("stackTrace", Json.stringify(msg.arguments)));
+    if (!(r.success as bool ?? false)) {
+        respondError(msg, r.message as String ?? "no stack");
+        return;
+    }
+    let frames: Any = tableOf(r.body.stackFrames);
+    let parts: String[*] = [];
+    for (f in frames) {
+        let id: int64 = f.id as int64 ?? 0;
+        let cName: String = f.name as String ?? "";
+        let line: int64 = f.line as int64 ?? 0;
+        frameFunction["${id}"] = cName.clone() in default;
+        frameLine["${id}"] = line;
+        // a frame of the runtime or of C: marked, so the C main is not mistaken for the Larimar one
+        let name: String = (hasFunction(cName) ? (functionEntry(cName).name as String ?? cName) : "${cName} [C]").clone();
+        let path: String = f.source.path as String ?? "";
+        let larimar: bool = path.endsWith(".lar");
+        let source: String = path != ""
+            ? ",\"source\":{\"name\":${Json.quote(Paths.fileName(path))},\"path\":${Json.quote(path)}${larimar ? "" : ",\"presentationHint\":\"deemphasize\""}}"
+            : "";
+        let hint: String = larimar ? "" : ",\"presentationHint\":\"subtle\"";
+        let ip: String = f.containsKey("instructionPointerReference") ? ",\"instructionPointerReference\":${Json.quote(f.instructionPointerReference as String ?? "")}" : "";
+        parts.push("{\"id\":${id},\"name\":${Json.quote(name)},\"line\":${line},\"column\":${f.column as int64 ?? 0}${source}${hint}${ip}}");
+    }
+    let total: String = r.body.containsKey("totalFrames") ? ",\"totalFrames\":${r.body.totalFrames as int64 ?? 0}" : "";
+    respond(msg, "{\"stackFrames\":[${parts.join(",")}]${total}}");
+}
+
+function scopes(msg: Any): void {
+    let frame: int32 = (msg.arguments.frameId as int64 ?? 0) as int32;
+    let fn: String = frameFunction["${frame}"] as String ?? "";
+    let list: String[*] = [];
+    if (hasFunction(fn)) {
+        list.push("{\"name\":\"Locals\",\"presentationHint\":\"locals\",\"variablesReference\":${lm_dap_handle(H_LOCALS, frame, 0, "", "")},\"expensive\":false}");
+        let gs: Any = tableOf(map.globals);
+        if (gs.length > 0) {
+            list.push("{\"name\":\"Globals\",\"variablesReference\":${lm_dap_handle(H_GLOBALS, frame, 0, "", "")},\"expensive\":false}");
+        }
+    }
+    // the C view: everything lldb sees (the runtime's frames only have this one)
+    list.push("{\"name\":\"C\",\"variablesReference\":${lm_dap_handle(H_CSCOPE, frame, 0, "", "")},\"expensive\":true}");
+    respond(msg, "{\"scopes\":[${list.join(",")}]}");
+}
+
+function variables(msg: Any): void {
+    let id: int32 = (msg.arguments.variablesReference as int64 ?? 0) as int32;
+    let start: int32 = (msg.arguments.start as int64 ?? 0) as int32;
+    let count: int32 = (msg.arguments.count as int64 ?? 0) as int32;
+    let kind: int32 = lm_dap_h_kind(id);
+    let frame: int32 = lm_dap_h_frame(id);
+    let vars: String[*] = [];
+    if (kind == H_LOCALS) {
+        vars = localVariables(frame);
+    } else if (kind == H_GLOBALS) {
+        vars = globalVariables(frame);
+    } else if (kind == H_VALUE) {
+        vars = children(id, start, count);
+    } else if (kind == H_CSCOPE || kind == H_BACKEND) {
+        let ref: int32 = lm_dap_h_ref(id);
+        if (kind == H_CSCOPE) {
+            let sc: Any = parse(call("scopes", "{\"frameId\":${frame}}"));
+            let list: Any = tableOf(sc.body.scopes);
+            ref = list.length > 0 ? (list[0].variablesReference as int64 ?? 0) as int32 : 0;
+        }
+        vars = backendVariables(frame, ref);
+    }
+    respond(msg, "{\"variables\":[${vars.join(",")}]}");
+}
+
+/** lldb-dap's own variables (the C view), with our handles for their children. */
+function backendVariables(frame: int32, ref: int32): String[*] {
+    let out: String[*] = [];
+    if (ref == 0) { return out; }
+    let r: Any = parse(call("variables", "{\"variablesReference\":${ref}}"));
+    let list: Any = tableOf(r.body.variables);
+    for (v in list) {
+        let child: int32 = (v.variablesReference as int64 ?? 0) as int32;
+        let mine: int32 = child != 0 ? lm_dap_handle(H_BACKEND, frame, child, "", "") : 0;
+        out.push("{\"name\":${Json.quote(v.name as String ?? "")},\"value\":${Json.quote(v.value as String ?? "")},\"type\":${Json.quote(v.type as String ?? "")},\"variablesReference\":${mine}}");
+    }
+    return out;
+}
+
+/** The debug console, hovers and watches: Larimar paths here; the rest (C, lldb commands) to lldb. */
+function evaluate(body: String, msg: Any): void {
+    let expr: String = msg.arguments.expression as String ?? "";
+    let frame: int32 = (msg.arguments.frameId as int64 ?? 0) as int32;
+    if (!expr.startsWith("`") && frame != 0) {
+        let r: Resolved = resolvePath(frame, expr);
+        if (r.ok) {
+            let s: Shown? = show(frame, r.expr, r.type, false);
+            if (s != null) {
+                let indexed: String = s!.indexed >= 0 ? ",\"indexedVariables\":${s!.indexed}" : "";
+                respond(msg, "{\"result\":${Json.quote(s!.value)},\"type\":${Json.quote(s!.type)},\"variablesReference\":${s!.ref}${indexed}}");
+                return;
+            }
+        }
+        if ((msg.arguments.context as String ?? "") == "hover") {
+            respondError(msg, "not available");
+            return;
+        }
+    }
+    // C expressions and lldb commands: lldb answers; its children references become ours
+    let r2: Any = parse(call("evaluate", Json.stringify(msg.arguments)));
+    if (!(r2.success as bool ?? false)) {
+        respondError(msg, r2.message as String ?? "cannot evaluate");
+        return;
+    }
+    let child: int32 = (r2.body.variablesReference as int64 ?? 0) as int32;
+    let mine: int32 = child != 0 ? lm_dap_handle(H_BACKEND, frame, child, "", "") : 0;
+    respond(msg, "{\"result\":${Json.quote(r2.body.result as String ?? "")},\"type\":${Json.quote(r2.body.type as String ?? "")},\"variablesReference\":${mine}}");
+}
+
+// =====================================================================================
+// From the backend
+// =====================================================================================
+
+function isPanicStop(msg: Any): bool {
+    if ((msg.body.reason as String ?? "") != "breakpoint") { return false; }
+    let ids: Any = tableOf(msg.body.hitBreakpointIds);
+    for (i in ids) {
+        if ((i as int64 ?? 0) == panicId as int64) { return true; }
+    }
+    let d: String = msg.body.description as String ?? "";
+    return d.contains("breakpoint ${panicId}.");
+}
+
+/** The panic's message: the msg argument of rt_panic, at the top of the thread's stack. */
+function exceptionInfo(msg: Any): void {
+    let tid: int64 = msg.arguments.threadId as int64 ?? 0;
+    let st: Any = parse(call("stackTrace", "{\"threadId\":${tid},\"startFrame\":0,\"levels\":1}"));
+    let frames: Any = tableOf(st.body.stackFrames);
+    if (frames.length == 0 || (frames[0].name as String ?? "") != "rt_panic") {
+        respondError(msg, "no exception");
+        return;
+    }
+    let frame: int32 = (frames[0].id as int64 ?? 0) as int32;
+    let text: String = readCString(frame, "msg") ?? "panic";
+    respond(msg, "{\"exceptionId\":\"panic\",\"description\":${Json.quote(text)},\"breakMode\":\"always\"}");
+}
+
+function fromBackend(body: String, msg: Any): void {
+    let type: String = msg.type as String ?? "";
+    if (type == "response") {
+        let ours: String = "${msg.request_seq as int64 ?? 0}";
+        let editorSeq: int64? = toBackend[ours] as int64;
+        if (editorSeq == null) { return; }                  // an answer to one of our requests, already handled
+        toBackend.remove(ours);
+        emit(withNumber(body, "request_seq", editorSeq! as int32));
+        return;
+    }
+    if (type == "event") {
+        let ev: String = msg.event as String ?? "";
+        if (ev == "stopped" || ev == "continued") {
+            lm_dap_clear();                  // the handles of the last stop are no longer valid
+            frameFunction = {} in default;
+            frameLine = {} in default;
+        }
+        if (ev == "stopped" && panicId > 0 && isPanicStop(msg)) {
+            // a panic: shown as an exception, with its message (exceptionInfo)
+            let tid: int64 = msg.body.threadId as int64 ?? 0;
+            emit("{\"seq\":0,\"type\":\"event\",\"event\":\"stopped\",\"body\":{\"reason\":\"exception\",\"description\":\"Panic\",\"threadId\":${tid},\"allThreadsStopped\":true}}");
+            return;
+        }
+        emit(body);
+        return;
+    }
+    if (type == "request") {                // reverse requests (runInTerminal)
+        let s: int32 = nextSeq;
+        nextSeq += 1;
+        toEditor["${s}"] = msg.seq as int64 ?? 0;
+        toEditorRaw(withNumber(body, "seq", s));
+    }
+}
+
+// =====================================================================================
+// larimar dap [--backend <lldb-dap>]
+// =====================================================================================
+
+/** lldb-dap: the one given, $LARIMAR_LLDB_DAP, on the PATH, or Xcode's (xcrun). */
+function findBackend(given: String): String {
+    if (given != "") { return given; }
+    let env: String = os.env("LARIMAR_LLDB_DAP") ?? "";
+    if (env != "") { return env; }
+    let exe: String = os.platform() == "windows" ? ".exe" : "";
+    let path: String = os.env("PATH") ?? "";
+    let sep: String = os.platform() == "windows" ? ";" : ":";
+    let names: String[] = ["lldb-dap", "lldb-dap-20", "lldb-dap-19", "lldb-dap-18", "lldb-vscode"];
+    for (name in names) {
+        for (dir in path.split(sep)) {
+            if (dir == "") { continue; }
+            let candidate: String = Paths.join(dir, "${name}${exe}");
+            if (Files.isFile(candidate)) { return candidate.clone(); }
+        }
+    }
+    if (os.platform() == "macos") {
+        let places: String[] = ["/Library/Developer/CommandLineTools/usr/bin/lldb-dap", "/Applications/Xcode.app/Contents/Developer/usr/bin/lldb-dap",
+                                "/opt/homebrew/opt/llvm/bin/lldb-dap", "/usr/local/opt/llvm/bin/lldb-dap"];
+        for (candidate in places) {
+            if (Files.isFile(candidate)) { return candidate; }
+        }
+    }
+    return "";
+}
+
+public function serveDebugger(args: String[*]): int32 {
+    let given: String = "";
+    let i: int32 = 0;
+    while (i < args.length) {
+        if (args[i] == "--backend" && i + 1 < args.length) {
+            given = args[i + 1];
+            i += 1;
+        }
+        i += 1;
+    }
+    backendPath = findBackend(given).clone() in default;
+    Console.binaryMode();
+    if (backendPath == "" || !lm_dap_spawn(backendPath)) {
+        // answer the editor's first request with the reason, then end
+        let why: String = backendPath == ""
+            ? "lldb-dap was not found. Install LLVM's lldb (macOS: Xcode command line tools, xcode-select --install; Linux: the lldb package; Windows: LLVM), or set larimar.lldbDap / LARIMAR_LLDB_DAP."
+            : "lldb-dap (${backendPath}) could not be started.";
+        log(why);
+        while (!lm_dap_eof(EDITOR)) {
+            let body: String = lm_dap_take(EDITOR);
+            if (lm_dap_took()) {
+                let msg: Any = parse(body);
+                if ((msg.type as String ?? "") == "request") { respondError(msg, why); }
+                if ((msg.command as String ?? "") == "disconnect") { return 1; }
+                continue;
+            }
+            lm_dap_fill(-1);
+        }
+        return 1;
+    }
+    log("lldb-dap: ${backendPath}");
+    let running: bool = true;
+    let idle: int32 = 0;                      // after disconnect: quiet rounds before ending
+    while (true) {
+        let fromEd: String = lm_dap_take(EDITOR);
+        if (lm_dap_took()) {
+            if (running && !fromEditor(fromEd)) { running = false; }
+            continue;
+        }
+        let fromBe: String = lm_dap_take(BACKEND);
+        if (lm_dap_took()) {
+            idle = 0;
+            fromBackend(fromBe, parse(fromBe));
+            continue;
+        }
+        if (lm_dap_eof(BACKEND) || lm_dap_eof(EDITOR)) { break; }
+        if (!running) {
+            idle += 1;
+            if (idle > 4) { break; }          // what the backend still had to say has been said
+        }
+        lm_dap_fill(running ? -1 : 250);
+    }
+    lm_dap_kill();
+    return 0;
+}

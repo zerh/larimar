@@ -1,0 +1,10 @@
+// expect: run
+// output: <<<a-b>>> 9
+// Llamadas anidadas: cada resultado intermedio vive en la memoria temporal de la instrucción.
+function join2(a: String, b: String): String { return "${a}-${b}"; }
+function angle(s: String): String { return "<${s}>"; }
+function main(): int32 {
+    let r: String = angle(angle(angle(join2("a", "b"))));
+    println("${r} ${r.length}");
+    return 0;
+}

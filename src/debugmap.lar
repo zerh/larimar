@@ -1,0 +1,222 @@
+// debugmap: with larimar build --debug, what the debugger (larimar dap) needs to show the program as
+// Larimar: for each C function, its Larimar name and the variables it has (their Larimar names, their
+// names in C and their types), the globals, and the shape of every type (fields with their C paths,
+// enum variants, classes). Written next to the C as <name>.debug.json.
+//
+// A type is described as JSON: {"k": "int"|"float"|"bool"|"String"|"any"|"list"|"slice"|"array"|"opt"|
+// "struct"|"class"|"interface"|"enum"|"raw", ...}; structs, classes, interfaces and enums by name, in
+// "types", so a type that contains itself is no problem.
+
+import std.json as Json;
+import ast { Stmt, Expr, VarDecl, ForStmt, TryStmt, SwitchStmt, IsExpr, SwitchExpr, allStmts, allExprs };
+import sema {
+    Type, TyK, NamedK, ArrK, T_STRING, T_ANY, Symbol, FunctionInfo, MethodInfo, LambdaInfo, ClassInfo, StructInfo, EnumInfo,
+    InterfaceInfo, FieldInfo, functions, structs, classes, interfaces, enums, nativeMethods, globals, lambdaList,
+    structOf, classOf, interfaceOf, enumOf, optIsPointer, escapeName, hasCapture
+};
+import linker { filePaths, FILE_LINES, decode };
+import gen { methodName, envField };
+
+let typesOut: String[*] = [] in default;     // "name": {...} entries of "types"
+let typesSeen: Any = {} in default;
+
+/** The debug map of the program just generated, as JSON. */
+public function debugMap(): String {
+    // every type: an Animal variable may hold a Dog, and an Any any struct or enum
+    for (c in classes) { describe(c.name, NamedK.Class); }
+    for (s in structs) { describe(s.name, NamedK.Struct); }
+    for (e in enums) { describe(e.name, NamedK.Enum); }
+    let fns: String[*] = [];
+    for (f in functions) {
+        if (f.isExtern || f.decl == null || f.prototype) { continue; }
+        let d: String = f.decl!.typeName != "" ? "${decode(f.decl!.typeName)}.${f.decl!.name}" : decode(f.name);
+        fns.push(fnJson(f.cName, d, f.line, f.paramSymbols, null, f.decl!.body, null));
+    }
+    for (s in structs) {
+        for (m in s.methods) { fns.push(methodJson(m, true)); }
+    }
+    for (c in classes) {
+        for (m in c.methods) { fns.push(methodJson(m, false)); }
+    }
+    for (m in nativeMethods) {
+        if (m.decl.hasBody) { fns.push(methodJson(m, false)); }
+    }
+    for (l in lambdaList) {
+        let at: int32 = l.node.line % FILE_LINES;
+        fns.push(fnJson("lambda_${l.id}", "lambda (line ${at})", l.node.line, l.params, null, l.node.body, l));
+    }
+    let gs: String[*] = [];
+    for (g in globals) {
+        if (g.symbol != null) {
+            let s: Symbol = g.symbol!;
+            gs.push(varJson(decode(s.name), s.cName, s.type, s.line));
+        }
+    }
+    let files: String[*] = [];
+    for (p in filePaths) { files.push(Json.quote(p)); }
+    return "{\"version\":1,\"files\":[${files.join(",")}],\"functions\":{${fns.join(",")}},\"globals\":[${gs.join(",")}],\"types\":{${typesOut.join(",")}}}\n";
+}
+
+function methodJson(m: MethodInfo in default, isStruct: bool): String {
+    let d: String = "${decode(m.owner)}.${m.name}";
+    let selfVar: String = "";
+    if (m.selfSymbol != null && m.decl.hasBody) {
+        // in a struct method self is a pointer to the struct; in a class method, a pointer to the object
+        selfVar = isStruct ? varJson("self", "(*self)", m.selfSymbol!.type, 0) : varJson("self", "self", m.selfSymbol!.type, 0);
+    }
+    return fnJson(methodName(m), d, m.decl.line, m.paramSymbols, selfVar, m.decl.body, null);
+}
+
+function fnJson(cName: String, display: String, line: int32, params: Symbol[*], selfVar: String?, body: Stmt[*] in default,
+                lambda: LambdaInfo?): String {
+    let vars: String[*] = [];
+    if (selfVar != null && selfVar! != "") { vars.push(selfVar!); }
+    for (p in params) { vars.push(varJson(p.name, p.cName, p.type, 0)); }
+    if (lambda != null) {
+        for (c in lambda!.captures) { vars.push(varJson(c.name, "env->${envField(c)}", c.type, 0)); }
+    }
+    for (s in localsOf(body)) { vars.push(varJson(s.name, s.cName, s.type, s.line % FILE_LINES)); }
+    let file: int32 = line / FILE_LINES;
+    let path: String = file >= 0 && file < filePaths.length ? filePaths[file] : "";
+    return "${Json.quote(cName)}:{\"name\":${Json.quote(display)},\"file\":${Json.quote(path)},\"line\":${line % FILE_LINES},\"vars\":[${vars.join(",")}]}";
+}
+
+/** line: where it is declared (0 for parameters: from the start), so the debugger hides it before. */
+function varJson(name: String, c: String, t: Type, line: int32): String {
+    return "{\"name\":${Json.quote(name)},\"c\":${Json.quote(c)},\"line\":${line},\"type\":${typeJson(t)}}";
+}
+
+/** The variables a body declares (not those of lambdas inside it: they are their own functions). */
+function localsOf(body: Stmt[*] in default): Symbol[*] {
+    let out: Symbol[*] = [];
+    let all: Stmt[*] = [];
+    allStmts(body, all);
+    for (s in all) {
+        switch (s) {
+            case VarDecl v -> { if (v.symbol != null) { out.push(v.symbol!); } }
+            case ForStmt f -> {
+                if (f.forInfo != null) {
+                    if (f.forInfo!.index != null) { out.push(f.forInfo!.index!); }
+                    if (f.forInfo!.value != null) { out.push(f.forInfo!.value!); }
+                }
+            }
+            case TryStmt t -> {
+                for (c in t.catches) {
+                    if (c.catchInfo != null && c.catchInfo!.variable != null) { out.push(c.catchInfo!.variable!); }
+                }
+            }
+            case SwitchStmt sw -> switchBindings(sw.switchExpr, out);
+            default -> {}
+        }
+    }
+    let exprs: Expr[*] = [];
+    allExprs(body, false, exprs);
+    for (e in exprs) {
+        if (e is IsExpr && e.symbol != null) { out.push(e.symbol!); }
+        if (e is SwitchExpr sx) { switchBindings(sx, out); }
+    }
+    let unique: Symbol[*] = [];
+    for (s in out) {
+        let seen: bool = false;
+        for (u in unique) {
+            if (u == s) { seen = true; }
+        }
+        if (!seen && s.cName != "") { unique.push(s); }
+    }
+    return unique;
+}
+
+function switchBindings(sw: SwitchExpr in out, out: Symbol[*]): void {
+    for (c in sw.cases) {
+        for (pi in c.patternInfos) {
+            if (pi.whole != null) { out.push(pi.whole!); }
+            for (b in pi.bindings) {
+                if (b != null) { out.push(b!); }
+            }
+        }
+    }
+}
+
+// ---- types ------------------------------------------------------------------------------------
+
+function typeJson(t: Type): String {
+    switch (t.kind) {
+        case Prim -> {
+            if (t == T_STRING) { return "{\"k\":\"String\"}"; }
+            if (t == T_ANY) { return "{\"k\":\"any\"}"; }
+            if (t.name == "bool") { return "{\"k\":\"bool\"}"; }
+            if (t.name == "float32" || t.name == "float64") { return "{\"k\":\"float\"}"; }
+            if (t.name.startsWith("int") || t.name.startsWith("uint") || t.name == "byte") {
+                return "{\"k\":\"int\",\"name\":${Json.quote(t.name)}}";
+            }
+            return raw(t);
+        }
+        case Array -> {
+            let k: String = t.ak == ArrK.Growable ? "list" : t.ak == ArrK.Slice ? "slice" : "array";
+            return "{\"k\":\"${k}\",\"elem\":${typeJson(t.elem!)},\"text\":${Json.quote(decode(t.text))}}";
+        }
+        case Opt -> {
+            return "{\"k\":\"opt\",\"ptr\":${optIsPointer(t)},\"elem\":${typeJson(t.elem!)}}";
+        }
+        case Named -> {
+            if (t.nk == NamedK.Extern) { return raw(t); }
+            describe(t.name, t.nk);
+            let k: String = t.nk == NamedK.Struct ? "struct" : t.nk == NamedK.Class ? "class" : t.nk == NamedK.Interface ? "interface" : "enum";
+            return "{\"k\":\"${k}\",\"name\":${Json.quote(t.name)}}";
+        }
+        default -> { return raw(t); }
+    }
+}
+
+function raw(t: Type): String { return "{\"k\":\"raw\",\"text\":${Json.quote(decode(t.text))}}"; }
+
+/** Adds a named type to "types" (once). */
+function describe(name: String, nk: NamedK): void {
+    if (typesSeen.contains(name)) { return; }
+    typesSeen[name] = true;
+    let display: String = Json.quote(decode(name));
+    if (nk == NamedK.Struct) {
+        let s: StructInfo? = structOf(name);
+        if (s == null) { return; }
+        let cStruct: bool = s.decl.cName != "";
+        let fs: String[*] = [];
+        for (f in s.fields) { fs.push(fieldJson(f, cStruct ? f.name : escapeName(f.name))); }
+        typesOut.push("${Json.quote(name)}:{\"display\":${display},\"fields\":[${fs.join(",")}]}" in default);
+        return;
+    }
+    if (nk == NamedK.Class) {
+        // the fields of every level, the parents' first, with their path from the object (_super._super.x)
+        let levels: ClassInfo[*] = [];
+        let c: ClassInfo? = classOf(name);
+        while (c != null) {
+            levels.push(c!);
+            c = c!.superName != "" ? classOf(c!.superName) : null;
+        }
+        let fs: String[*] = [];
+        let i: int32 = levels.length - 1;
+        while (i >= 0) {
+            let prefix: String = "_super.".repeat(i);
+            for (f in levels[i].fields) { fs.push(fieldJson(f, "${prefix}${escapeName(f.name)}")); }
+            i -= 1;
+        }
+        typesOut.push("${Json.quote(name)}:{\"display\":${display},\"fields\":[${fs.join(",")}]}" in default);
+        return;
+    }
+    if (nk == NamedK.Interface) {
+        typesOut.push("${Json.quote(name)}:{\"display\":${display}}" in default);
+        return;
+    }
+    let e: EnumInfo? = enumOf(name);
+    if (e == null) { return; }
+    let vs: String[*] = [];
+    for (v in e.variants) {
+        let fs: String[*] = [];
+        for (f in v.fields) { fs.push(fieldJson(f, escapeName(f.name))); }
+        vs.push("{\"name\":${Json.quote(v.name)},\"index\":${v.index},\"fields\":[${fs.join(",")}]}");
+    }
+    typesOut.push("${Json.quote(name)}:{\"display\":${display},\"variants\":[${vs.join(",")}]}" in default);
+}
+
+function fieldJson(f: FieldInfo, path: String): String {
+    return "{\"name\":${Json.quote(f.name)},\"c\":${Json.quote(path)},\"type\":${typeJson(f.type)}}";
+}

@@ -1,0 +1,3 @@
+// expect: error C would not know when to free a String
+export function name(n: int32): String { return "x"; }
+function main(): int32 { return 0; }

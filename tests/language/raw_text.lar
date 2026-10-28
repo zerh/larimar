@@ -1,0 +1,22 @@
+// expect: run
+// output: printf("hola\n"); /* ${no se interpola} */ '\\'
+// output: tres comillas: """ dentro
+// output: 10 4
+// raw"""...""": el texto tal como se escribe. Sin escapes (\n son dos caracteres) y sin ${...}.
+// Si contiene tres comillas seguidas, se abre con más y se cierra con las mismas.
+function main(): int32 {
+    let c: String = raw"""
+        printf("hola\n"); /* ${no se interpola} */ '\\'
+        """;
+    print(c);
+    let fence: String = raw""""
+        tres comillas: """ dentro
+        """";
+    print(fence);
+    println("${raw"""
+        a\nb ${x}
+        """.length} ${raw"""
+        a\tb
+        """.trim().length}");
+    return 0;
+}

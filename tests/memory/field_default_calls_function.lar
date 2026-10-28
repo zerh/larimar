@@ -1,0 +1,18 @@
+// expect: run
+// output: 16 0
+// Regresión: el valor por defecto de un campo que llama a una función que crea su resultado
+// recibía memoria NULL (se analizaba antes de saber qué funciones crean).
+function buffer(n: int32): byte[*] {
+    let b: byte[*] = [];
+    for (i in 0..n) { b.push(0); }
+    return b;
+}
+class Reader {
+    let chunk: byte[*] = buffer(16);
+    let name: String = "r".toUpperCase();
+}
+function main(): int32 {
+    let r: Reader = Reader {};
+    println("${r.chunk.length} ${r.chunk[15]}");
+    return 0;
+}

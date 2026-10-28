@@ -1,0 +1,1743 @@
+// genexpr: C99 code generation (Gen.java), part 2: expressions.
+// An expression becomes a C expression; what needs statements first writes them with line().
+
+import std.text { isIdentifierPart, isDigit };
+import ast {
+    Expr, IntLit, FloatLit, StringLit, BoolLit, NullLit, Ident, SelfExpr, Member, Index, Call, Unary, Binary, Ternary,
+    IsExpr, Cast, Unwrap, Lambda, ObjectLit, ArrayLit, Placed, SwitchExpr
+};
+import sema {
+    Type, TyK, NamedK, ArrK, T_INT8, T_INT16, T_INT32, T_INT64, T_BYTE, T_UINT16, T_UINT32, T_UINT64, T_FLOAT32,
+    T_FLOAT64, T_BOOL, T_STRING, T_VOID, T_ANY, isError, isClass, isStruct, isInterface, isEnumT, isExternT, isOpt,
+    isArray, isFloat, isInteger, isSigned, isNumeric, bits, optIsPointer, ascii, isCReserved, escapeName, arrayT,
+    Symbol, SymK, MemK, ConstK, isMemory, FieldInfo, FunctionInfo, MethodInfo, StructInfo, ClassInfo, InterfaceInfo,
+    VariantInfo, EnumInfo, LambdaInfo, hasCapture, isMemParam, Place, PlaceK, Conversion, ConvK, CallInfo, CallK, BK,
+    MemberInfo, MbK, PatternInfo, PatK, classes, structOf, classOf, interfaceOf, enumOf, parentOf, findMethod, allFields,
+    isPtr, isResource, externInfoOf, ExternTypeInfo
+};
+import gen {
+    fn, line, tmp, counter, indent4, Block, block, cleanupsUntil, propagate, switchCode, methodName, dispatchName,
+    ifaceCallName, paramCTypes, envField, body, samInterfaces, samSeen, literalTypes, literalPrototypes, literalTables,
+    literalThunks, lambdaDefs, lambdaDone, resizeHelpers, resizeSeen, loopBlock, rootBlock, topBlock, returnsData, tempMem, lambdaHeader,
+    internalError
+};
+
+c_code {
+    /* The shortest decimal text that gives the same double back. */
+    static const char* gen_double_text(double d) {
+        char* buf = (char*)rt_mem_alloc(&rt_default_mem, 40, 0);
+        for (int p = 1; p <= 17; p++) {
+            snprintf(buf, 40, "%.*g", p, d);
+            if (strtod(buf, NULL) == d) break;
+        }
+        if (!strpbrk(buf, ".eEni")) strcat(buf, ".0");
+        return buf;
+    }
+}
+
+extern function gen_double_text(d: float64): String;
+
+// =====================================================================================
+// Names and C types
+// =====================================================================================
+
+public function tname(n: String): String {
+    let a: String = ascii(n);
+    return isCReserved(a) ? "${a}_" : a;
+}
+
+public function mangle(t: Type): String {
+    if (t.kind == TyK.Prim) {
+        return switch (t.name) {
+            case "int8" -> "i8";
+            case "int16" -> "i16";
+            case "int32" -> "i32";
+            case "int64" -> "i64";
+            case "byte" -> "u8";
+            case "uint16" -> "u16";
+            case "uint32" -> "u32";
+            case "uint64" -> "u64";
+            case "float32" -> "f32";
+            case "float64" -> "f64";
+            case "bool" -> "b";
+            case "String" -> "s";
+            case "Any" -> "any";
+            default -> "v";
+        };
+    }
+    if (t.kind == TyK.Named) { return t.name; }
+    if (t.kind == TyK.Func) { return "F${t.funcId}"; }
+    if (t.kind == TyK.Array) {
+        if (t.ak == ArrK.Fixed) { return "A${mangle(t.elem!)}_${t.size}"; }
+        return t.ak == ArrK.Slice ? "S${mangle(t.elem!)}" : "L${mangle(t.elem!)}";
+    }
+    if (t.kind == TyK.Ptr) { return "P${mangle(t.elem!)}"; }
+    return t.kind == TyK.Opt ? "O${mangle(t.elem!)}" : "x";
+}
+
+public function cType(t: Type): String {
+    if (t.kind == TyK.Prim) {
+        return switch (t.name) {
+            case "int8" -> "int8_t";
+            case "int16" -> "int16_t";
+            case "int32" -> "int32_t";
+            case "int64" -> "int64_t";
+            case "byte" -> "uint8_t";
+            case "uint16" -> "uint16_t";
+            case "uint32" -> "uint32_t";
+            case "uint64" -> "uint64_t";
+            case "float32" -> "float";
+            case "float64" -> "double";
+            case "bool" -> "bool";
+            case "String" -> "RtString";
+            case "Any" -> "RtAny";
+            default -> "void";
+        };
+    }
+    if (t.kind == TyK.Named) {
+        if (t.nk == NamedK.Class) { return "${tname(t.name)}*"; }
+        if (t.nk == NamedK.Struct) {
+            let so: StructInfo? = structOf(t.name);
+            if (so != null && so.decl.cName != "") { return so.decl.cName; }     // a C struct: its own name
+        }
+        if (t.nk == NamedK.Extern && isResource(t)) { return "Res_${t.name}*"; }    // its cell in a memory
+        return t.nk == NamedK.Extern ? "Ext_${t.name}" : tname(t.name);
+    }
+    if (t.kind == TyK.Func) { return "Closure_${t.funcId}"; }
+    if (t.kind == TyK.Array) {
+        if (t.ak == ArrK.Fixed) { return "Arr_${mangle(t.elem!)}_${t.size}"; }
+        return t.ak == ArrK.Slice ? "Slice_${mangle(t.elem!)}" : "List_${mangle(t.elem!)}*";
+    }
+    if (t.kind == TyK.Opt) { return optIsPointer(t) ? cType(t.elem!) : "Opt_${mangle(t.elem!)}"; }
+    if (t.kind == TyK.Ptr) { return "${cType(t.elem!)}*"; }
+    return "void";
+}
+
+public function structName(t: Type): String {
+    let c: String = cType(t);
+    return c.endsWith("*") ? c.substring(0, c.length - 1) : c;
+}
+
+// =====================================================================================
+// Helpers
+// =====================================================================================
+
+public function paren(s: String): String { return "(${s})"; }
+
+public function hoist(ct: String, v: String): String {
+    let t: String = tmp("t");
+    line("${ct} ${t} = ${v};");
+    return t;
+}
+
+function hoistAddr(ct: String, v: String): String { return "&${hoist(ct, v)}"; }
+
+function hoistIfNeeded(ct: String, v: String, e: Expr?): String {
+    return e != null && isPure(e) ? paren(v) : hoist(ct, v);
+}
+
+function isPure(e: Expr): bool {
+    return switch (e) {
+        case Ident, SelfExpr, IntLit, FloatLit, BoolLit -> true;
+        case Member m -> isPure(m.object);
+        default -> false;
+    };
+}
+
+/** The statements lazy() generated apart. */
+public let lazyPre: String = "";
+
+/** Generates `e` (its value) into a separate buffer: its statements go to lazyPre. */
+public function lazy(e: Expr in default): String {
+    let saved: StringBuilder = fn.out;
+    let buf: StringBuilder = {} in default;
+    fn.out = buf;
+    let v: String = value(e);
+    fn.out = saved;
+    lazyPre = buf.toString() in default;
+    return v;
+}
+
+/** Removes the outer parentheses of a C expression when they enclose all of it. */
+public function strip(s: String): String {
+    if (!s.startsWith("(") || !s.endsWith(")")) { return s; }
+    let depth: int32 = 0;
+    let i: int32 = 0;
+    while (i < s.length) {
+        let ch: byte = s[i];
+        if (ch == '"') {
+            i += 1;
+            while (i < s.length && s[i] != '"') {
+                if (s[i] == '\\') { i += 1; }
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+        if (ch == '(') {
+            depth += 1;
+        } else if (ch == ')') {
+            depth -= 1;
+            if (depth == 0 && i != s.length - 1) { return s; }
+        }
+        i += 1;
+    }
+    return s.substring(1, s.length - 1);
+}
+
+public function zero(t: Type): String {
+    let ct: String = cType(t);
+    if (t.kind == TyK.Prim && t != T_STRING && t != T_ANY) { return "(${ct})0"; }
+    if (ct.endsWith("*")) { return "NULL"; }
+    let z: String = tmp("zero");
+    line("${ct} ${z};");
+    line("memset(&${z}, 0, sizeof ${z});");
+    return z;
+}
+
+/** A call whose result is not used. */
+public function discard(e: String): void {
+    if (e.isEmpty()) { return; }
+    // an already hoisted result, or an element taken for its effect (pop)
+    line(isIdentifier(e) || e.endsWith("]") ? "(void)${e};" : "${e};");
+}
+
+function isIdentifier(s: String): bool {
+    for (i, b in s) {
+        if (!isIdentifierPart(b) || (i == 0 && isDigit(b))) { return false; }
+    }
+    return !s.isEmpty();
+}
+
+// =====================================================================================
+// Values and conversions
+// =====================================================================================
+
+/** An expression with its conversion applied: where a value is stored or passed. */
+public function value(e: Expr in default): String {
+    let c: Conversion? = e.conv;
+    if (e is Lambda l && c != null && c.kind == ConvK.SamLambda) { return sam(l, c); }
+    let v: String = expr(e);
+    return c == null ? v : convert(v, c, e);
+}
+
+function convert(v: String, c: Conversion in default, e: Expr? in default): String {
+    switch (c.kind) {
+        case None -> { return v; }
+        case Upcast -> { return "((${cType(c.to)})(${v}))"; }
+        case ClassToInterface -> { return "((${cType(c.to)}){ (void*)(${v}), &${c.implClass}__${c.to.name}_table })"; }
+        case NullToOptional -> { return optIsPointer(c.to) ? "NULL" : "((${cType(c.to)}){ .has = false })"; }
+        case ToPointer -> {                  // an array given to C as T*: its first element
+            let f: Type = c.from;           // (void*): it fits char*, unsigned char*, void*... without a warning
+            if (f.ak == ArrK.Growable) { return "((void*)${paren(v)}->items)"; }
+            if (f.ak == ArrK.Slice) { return "((void*)${paren(v)}.items)"; }
+            return e != null && isLvalueExpr(e) ? "((void*)${paren(v)}.items)" : "((void*)${hoistAddr(cType(f), v)}->items)";
+        }
+        case WrapOptional -> {
+            let o: Type = c.to;
+            let inner: Conversion? = innerConversion(c.from, o.elem!, c);
+            let iv: String = inner != null ? convert(v, inner, e) : v;
+            return optIsPointer(o) ? iv : "((${cType(o)}){ .has = true, .value = ${iv} })";
+        }
+        case ResizeFixed -> {
+            let from: Type = c.from;
+            let to: Type = c.to;
+            let name: String = "${structName(from)}_to_${to.size}";
+            let h: String = "static inline ${cType(to)} ${name}(${cType(from)} a) { ${cType(to)} r; memset(&r, 0, sizeof r); r.length = a.length; for (int32_t i = 0; i < a.length; i++) r.items[i] = a.items[i]; return r; }\n";
+            if (!resizeSeen.contains(h)) {
+                resizeSeen[h] = true;
+                resizeHelpers.push(h.clone());
+            }
+            return "${name}(${v})";
+        }
+        case ToSlice -> {
+            let from: Type = c.from;
+            let to: Type = c.to;
+            if (from.ak == ArrK.Fixed) {
+                let p: String = e != null && isPure(e) ? "&${paren(v)}" : hoistAddr(cType(from), v);
+                return "((${cType(to)}){ (${p})->items, (${p})->length })";
+            }
+            let l: String = hoistIfNeeded(cType(from), v, e);
+            return "((${cType(to)}){ ${l}->items, ${l}->length })";
+        }
+        case ToAny -> { return toAny(v, c.from, e!); }
+        default -> { return v; }
+    }
+}
+
+/** The inner conversion of WRAP_OPTIONAL (upcast or interface), if any. */
+function innerConversion(from: Type in default, to: Type in default, outer: Conversion in default): Conversion? {
+    if (from == to) { return null; }
+    if (isClass(from) && isClass(to)) { return Conversion { kind: ConvK.Upcast, from, to } in default; }
+    if (isClass(from) && isInterface(to)) { return Conversion { kind: ConvK.ClassToInterface, from, to, implClass: outer.implClass, iface: outer.iface } in default; }
+    if (from.kind == TyK.Array && to.kind == TyK.Array) { return Conversion { kind: ConvK.ResizeFixed, from, to } in default; }
+    return null;
+}
+
+let boxTypes: Type[*] = [] in default;
+let boxSeen: Any = {} in default;
+
+/** The descriptor of a struct or enum stored in an Any (its name and how to clone it). */
+function boxType(t: Type in default): String {
+    if (!boxSeen.contains(t.text)) {
+        boxSeen[t.text] = true;
+        boxTypes.push(t);
+    }
+    return "rttype_${mangle(t)}";
+}
+
+public function boxDescriptors(): String {
+    let sb: StringBuilder = {} in default;
+    for (t in boxTypes) {
+        let ct: String = cType(t);
+        let m: String = mangle(t);
+        sb.add("static void* rtbox_clone_${m}(const void* v, RtMem* mem, RtCloneMap* cm) {\n");
+        sb.add("    ${ct}* n = (${ct}*)rt_mem_alloc(mem, sizeof(${ct}), 0);\n");
+        sb.add("    (void)cm;\n");
+        sb.add("    *n = ${cloneOf(t, "(*(const ${ct}*)v)")};\n    return n;\n}\n");
+        sb.add("const RtValType rttype_${m} = { \"${t.text}\", rtbox_clone_${m} };\n");
+    }
+    return sb.toString();
+}
+
+/** RT_ANY_I32 and so on: the kind an Any uses for a value of type t. */
+function anyKind(t: Type): String {
+    return switch (t.name) {
+        case "int8" -> "RT_ANY_I8";
+        case "int16" -> "RT_ANY_I16";
+        case "int32" -> "RT_ANY_I32";
+        case "int64" -> "RT_ANY_I64";
+        case "byte" -> "RT_ANY_U8";
+        case "uint16" -> "RT_ANY_U16";
+        case "uint32" -> "RT_ANY_U32";
+        case "uint64" -> "RT_ANY_U64";
+        case "float32" -> "RT_ANY_F32";
+        case "float64" -> "RT_ANY_F64";
+        case "bool" -> "RT_ANY_BOOL";
+        case "String" -> "RT_ANY_STR";
+        default -> "RT_ANY_TABLE";
+    };
+}
+
+/** The value inside an Any already known to hold kind t. */
+public function anyPayload(t: Type, v: String): String {
+    if (t == T_ANY) { return v; }
+    if (isClass(t)) { return "((${cType(t)})${v}.as.box.ptr)"; }
+    if (t.kind == TyK.Named) { return "(*(${cType(t)}*)${v}.as.box.ptr)"; }
+    if (t == T_STRING) { return "${v}.as.s"; }
+    if (t == T_BOOL) { return "${v}.as.b"; }
+    if (isFloat(t)) { return "((${cType(t)})${v}.as.f)"; }
+    return isSigned(t) ? "((${cType(t)})${v}.as.i)" : "((${cType(t)})${v}.as.u)";
+}
+
+function toAny(v: String, from: Type in default, e: Expr in default): String {
+    if (from.kind == TyK.Null) { return "rt_any_null()"; }
+    if (isClass(from) || (isOpt(from) && isClass(from.elem!))) { return "rt_any_obj((void*)(${v}))"; }
+    if (isStruct(from) || isEnumT(from)) {      // a copy in a box, in the memory the analyzer chose
+        let mem: String = placeMemOf(e.boxPlace);
+        let bx: String = tmp("box");
+        line("${cType(from)}* ${bx} = (${cType(from)}*)rt_mem_alloc(${mem}, sizeof(${cType(from)}), ${e.line});");
+        line("*${bx} = ${v};");
+        return "rt_any_val(${bx}, &${boxType(from)})";
+    }
+    if (isOpt(from)) {
+        let h: String = hoist(cType(from), v);
+        let ptr: bool = optIsPointer(from);
+        return "(${ptr ? "${h} != NULL" : "${h}.has"} ? ${toAny(ptr ? h : "${h}.value", from.elem!, e)} : rt_any_null())";
+    }
+    if (from == T_STRING) { return "rt_any_s(${v})"; }
+    if (from == T_BOOL) { return "rt_any_b(${v})"; }
+    if (isFloat(from)) { return "rt_any_f((double)(${v}), ${anyKind(from)})"; }
+    return isSigned(from) ? "rt_any_i((int64_t)(${v}), ${anyKind(from)})" : "rt_any_u((uint64_t)(${v}), ${anyKind(from)})";
+}
+
+// =====================================================================================
+// Expressions
+// =====================================================================================
+
+public function expr(e: Expr in default): String {
+    let t: Type? = e.ty;
+    return switch (e) {
+        case IntLit n -> intLiteral(n.num, n.big, t);
+        case FloatLit f -> t != null && t == T_FLOAT32 ? "${f.text}f" : f.text;
+        case BoolLit b -> b.value ? "true" : "false";
+        case NullLit -> "NULL";
+        case StringLit s -> string(s, "");
+        case Ident id -> identExpr(id);
+        case SelfExpr -> selfExpr(e);
+        case Member m -> member(m);
+        case Index x -> index(x);
+        case Call c -> call(c);
+        case Unary u -> unary(u, t!);
+        case Binary b -> binary(b, t!);
+        case Ternary te -> ternary(te, t!);
+        case IsExpr x -> isTest(x);
+        case Cast c -> cast(c, t!);
+        case Unwrap u -> unwrap(u);
+        case Lambda l -> lambdaValue(l);
+        case ObjectLit o -> objectLit(o, t!);
+        case ArrayLit a -> arrayLit(a, t!);
+        case Placed p -> placed(p.expr);
+        case SwitchExpr sw -> switchCode(sw, true);
+        default -> "/* ? */ 0";
+    };
+}
+
+function unwrap(u: Unwrap in default): String {
+    let o: Type = u.expr.ty!;
+    let v: String = expr(u.expr);
+    if (!isOpt(o)) { return v; }          // a variable already known not to be null
+    return optIsPointer(o) ? "((${cType(o.elem!)})rt_unwrap((void*)(${v}), ${u.line}))" : "${structName(o)}_unwrap(${v}, ${u.line})";
+}
+
+/** `x in memory`: the value; a lambda that becomes an interface object is created there. */
+function placed(inner: Expr in default): String {
+    let c: Conversion? = inner.conv;
+    return inner is Lambda l && c != null && c.kind == ConvK.SamLambda ? sam(l, c) : expr(inner);
+}
+
+/** An integer literal of type t (value v, as uint64 when big). */
+public function intLiteral(v: int64, big: bool, t: Type?): String {
+    let text: String = "${v}";
+    if (big) { text = "${v as uint64}"; }
+    if (t != null && isFloat(t)) { return t == T_FLOAT32 ? "${text}.0f" : "${text}.0"; }
+    let p: Type = t != null && isInteger(t) ? t : T_INT32;
+    if (isSigned(p) && !big) {
+        if (bits(p) == 64 && v == -9223372036854775807 - 1) { return "INT64_MIN"; }
+        if (bits(p) == 32 && v == -2147483648) { return "INT32_MIN"; }
+    }
+    let suffix: String = p == T_INT64 ? "LL" : "";
+    if (p == T_UINT32) { suffix = "u"; }
+    if (p == T_UINT64) { suffix = "ULL"; }
+    let s: String = "${text}${suffix}";
+    if (bits(p) < 32) { s = "(${cType(p)})${s}"; }
+    return v < 0 && !big ? "(${s})" : s;
+}
+
+function identExpr(id: Ident in default): String {
+    let s: Symbol = id.symbol!;
+    if (s.kind == SymK.Const) { return constValue(s); }
+    if (s.externValue != null) { return s.type == T_STRING ? "rt_str_c(${s.cName})" : s.cName; }   // a C name, as it is
+    if (s.kind == SymK.Function) {               // given as a pointer to a C function
+        let f: FunctionInfo = s.func!;
+        return f.exportName != "" ? f.exportName : f.cName;
+    }
+    let l: LambdaInfo? = fn.lambda;
+    let base: String = l != null && hasCapture(l, s) ? "env->${envField(s)}" : s.cName;
+    return id.narrowed && isOpt(s.type) && !optIsPointer(s.type) ? "${base}.value" : base;
+}
+
+function constValue(s: Symbol): String {
+    if (s.ck == ConstK.Int) { return intLiteral(s.ci, s.cbig, s.type); }
+    if (s.ck == ConstK.Float) {
+        let d: float64 = s.cf;
+        let txt: String = d == d && d - d == 0.0 ? gen_double_text(d) : "0.0";
+        return s.type == T_FLOAT32 ? "${txt}f" : txt;
+    }
+    if (s.ck == ConstK.Bool) { return s.cb ? "true" : "false"; }
+    return stringLiteral(s.cs);
+}
+
+function selfExpr(se: Expr in default): String {
+    let s: Symbol = se.symbol!;
+    let l: LambdaInfo? = fn.lambda;
+    if (l != null && hasCapture(l, s)) { return "env->${envField(s)}"; }
+    return isStruct(s.type) ? "(*self)" : "self";
+}
+
+function member(m: Member in default): String {
+    let mi: MemberInfo = m.member!;
+    switch (mi.kind) {
+        case EnumConst -> { return "((${tname(mi.enumInfo!.name)}){ .tag = ${mi.enumInfo!.name}_${mi.variant!.name} })"; }
+        case MemoryStat -> {
+            let field: String = switch (mi.stat) {
+                case "length" -> "total";
+                case "capacity" -> "reserved";
+                default -> "peak";
+            };
+            return "((int64_t)(${memoryRef(mi.memory!)})->${field})";
+        }
+        case AnyKey -> { return "rt_any_get(${expr(m.object)}, ${stringLiteral(mi.key)})"; }
+        case Length -> {
+            let ot: Type = mi.objectType!;
+            let o: String = expr(m.object);
+            if (ot == T_ANY) { return "rt_any_length(${o})"; }
+            if (ot == T_STRING) { return "${paren(o)}.len"; }
+            return ot.ak == ArrK.Growable ? "${paren(o)}->length" : "${paren(o)}.length";
+        }
+        default -> {
+            let pt: Type = mi.objectType!;
+            let acc: String = isPtr(pt)       // through a C pointer: p->field, never through NULL
+                ? "((${cType(pt)})rt_unwrap((void*)(${expr(m.object)}), ${m.line}))->${fieldC(mi.field!)}"
+                : fieldAccess(m.object, mi);
+            let so: StructInfo? = structOf(mi.field!.owner);
+            if (mi.field!.type == T_STRING && so != null && so.decl.cName != "") { return "rt_str_c(${acc})"; }   // a C string: a view
+            return acc;
+        }
+    }
+}
+
+function fieldAccess(obj: Expr in default, f: MemberInfo): String {
+    let ot: Type = f.objectType!;
+    if (isClass(ot)) { return "${paren(expr(obj))}->${classFieldPath(ot.name, f.field!)}"; }
+    if (obj is SelfExpr) {
+        let l: LambdaInfo? = fn.lambda;
+        if (!(l != null && hasCapture(l, obj.symbol!))) { return "self->${fieldC(f.field!)}"; }
+    }
+    return "${paren(expr(obj))}.${fieldC(f.field!)}";
+}
+
+/** A field's name in C: the exact one in a C struct, otherwise escaped. */
+public function fieldC(f: FieldInfo): String {
+    let so: StructInfo? = structOf(f.owner);
+    return so != null && so.decl.cName != "" ? f.name : escapeName(f.name);
+}
+
+public function classFieldPath(cls: String, f: FieldInfo): String {
+    let sb: StringBuilder = {} in default;
+    let c: ClassInfo = classOf(cls)!;
+    while (c.name != f.owner) {
+        sb.add("_super.");
+        c = parentOf(c)!;
+    }
+    sb.add(escapeName(f.name));
+    return sb.toString();
+}
+
+function index(ix: Index in default): String {
+    let ot: Type = ix.object.ty!;
+    if (ot == T_STRING) { return "rt_str_byte(${expr(ix.object)}, (int64_t)(${expr(ix.index)}), ${ix.line})"; }
+    if (ot == T_ANY) {
+        let o: String = expr(ix.object);
+        let k: String = expr(ix.index);
+        return ix.index.ty! == T_STRING ? "rt_any_get(${o}, ${k})" : "rt_any_at(${o}, (int64_t)(${k}))";
+    }
+    let idx: String = expr(ix.index);
+    if (ot.ak == ArrK.Fixed) {
+        let p: String = isPure(ix.object) || isLvalueExpr(ix.object) ? "&${paren(expr(ix.object))}" : hoistAddr(cType(ot), expr(ix.object));
+        return "${paren(p)}->items[rt_index((int64_t)(${idx}), ${paren(p)}->length, ${ix.line})]";
+    }
+    let v: String = hoistIfNeeded(cType(ot), expr(ix.object), ix.object);
+    let dot: String = ot.ak == ArrK.Slice ? "." : "->";
+    return "${v}${dot}items[rt_index((int64_t)(${idx}), ${v}${dot}length, ${ix.line})]";
+}
+
+function isLvalueExpr(e: Expr): bool {
+    return switch (e) {
+        case Ident -> e.symbol != null && e.symbol!.kind != SymK.Const;
+        case SelfExpr -> true;
+        case Member m -> isClass(m.object.ty!) || isPtr(m.object.ty!) || isLvalueExpr(m.object);
+        case Index x -> {
+            let ot: Type = x.object.ty!;
+            yield (ot.kind == TyK.Array && ot.ak != ArrK.Fixed) || isLvalueExpr(x.object);
+        }
+        default -> false;
+    };
+}
+
+/** The C lvalue of an assignment target (no narrowing). */
+public function lvalue(target: Expr in default): String {
+    return target is Ident ? target.symbol!.cName : expr(target);
+}
+
+/** A pointer to the value of `e` (a temporary if `e` is not a variable or field). */
+public function addrOf(e: Expr in default): String {
+    if (e is SelfExpr && isStruct(e.symbol!.type)) { return "self"; }
+    return isLvalueExpr(e) ? "&${paren(expr(e))}" : hoistAddr(cType(e.ty!), value(e));
+}
+
+function memoryRef(mem: Symbol): String {
+    return mem.memKind == MemK.Param ? mem.cName : "&${mem.cName}";
+}
+
+/** C expression of type RtMem* for an allocation. */
+function placeMem(e: Expr in default): String { return placeMemOf(e.place); }
+
+/** The memory a call gives for its result: none (NULL) when the callee only returns data that already exists. */
+function callMem(c: Expr in default): String { return c.place != null ? placeMem(c) : "NULL"; }
+
+public function placeMemOf(p: Place? in default): String {
+    if (p == null || p.kind == PlaceK.Temp) { return fn.placeOverride != "" ? fn.placeOverride : tempMem(); }
+    let pl: Place = p;
+    if (pl.kind == PlaceK.Global) { return "&rt_default_mem"; }
+    if (pl.kind == PlaceK.Block) { return "&${pl.scope!.memory}"; }
+    if (pl.kind == PlaceK.Result) {
+        fn.destUsed = true;
+        return "rt_dest";
+    }
+    if (pl.kind == PlaceK.Memory) { return memoryRef(pl.memory!); }
+    if (pl.kind == PlaceK.Stack) {
+        let buf: String = tmp("tmpbuf");
+        let mem: String = tmp("tmpmem");
+        line("uint8_t ${buf}[${pl.bytes + 64}];");
+        line("RtMem ${mem} = rt_mem_fixed(${buf}, sizeof ${buf});");
+        topBlock().cleanups.push("rt_mem_finalize(&${mem});");    // what closes itself closes with the block
+        return "&${mem}";
+    }
+    if (pl.kind == PlaceK.OfObject) { return "rt_obj_mem(${expr(pl.expr!)})"; }
+    if (pl.kind == PlaceK.OfList) { return "${paren(expr(pl.expr!))}->mem"; }
+    return pl.kind == PlaceK.OfAny ? "rt_any_mem(${expr(pl.expr!)}, ${pl.expr!.line})" : "&rt_default_mem";
+}
+
+// ---- strings ------------------------------------------------------------------------
+
+/** memOverride != "": the text is built in that memory. */
+public function string(s: StringLit in default, memOverride: String): String {
+    if (s.exprs.length == 0) { return stringLiteral(s.texts[0]); }
+    let p: Place? = s.place;
+    let sb: String = tmp("sb");
+    if (memOverride != "") {
+        line("RtSb ${sb} = rt_sb_mem(${memOverride}, ${s.line});");
+    } else if (p != null && p.kind == PlaceK.Stack) {
+        let buf: String = tmp("text");
+        line("char ${buf}[${p.bytes + 1}];");
+        line("RtSb ${sb} = rt_sb_fixed(${buf}, (int32_t)sizeof ${buf});");
+    } else {
+        line("RtSb ${sb} = rt_sb_mem(${placeMem(s)}, ${s.line});");
+    }
+    appendPieces(s, "&${sb}");
+    return "rt_sb_finish(&${sb})";
+}
+
+/**
+ * print/println of a literal, or of a text whose parts are integers, bool, String or enums: straight to
+ * stdout (fputs or printf), with no text built in memory. null when it does not apply.
+ */
+function printDirect(s: StringLit in default, newline: bool): String? {
+    let texts: String[*] = [];
+    for (i, raw in s.texts) {
+        let t: String = decodeRaw(raw);
+        if (newline && i == s.texts.length - 1) { t = "${t}\n"; }
+        for (b in t) {
+            if (b == 0) { return null; }
+        }
+        texts.push(t);
+    }
+    for (x in s.exprs) {
+        let t: Type = x.ty!;
+        if (!isInteger(t) && t != T_BOOL && t != T_STRING && !isEnumT(t)) { return null; }
+    }
+    if (s.exprs.length == 0) { return texts[0].isEmpty() ? "" : "fputs(${cLiteral(texts[0])}, stdout)"; }
+    // printf's arguments run in any order: everything up to the last call is computed first, in order
+    let lastCall: int32 = -1;
+    for (i, x in s.exprs) {
+        if (!isPure(x)) { lastCall = i; }
+    }
+    let format: StringBuilder = {} in default;
+    let args: String[*] = [] in default;
+    for (i, text in texts) {
+        format.add(text.replace("%", "%%"));
+        if (i == s.exprs.length) { break; }
+        let x: Expr = s.exprs[i];
+        let t: Type = x.ty!;
+        let v: String = value(x);
+        let early: bool = i <= lastCall && !(x is IntLit || x is BoolLit);
+        if (early) { v = hoist(cType(t), v); }
+        if (t == T_STRING) {
+            let sv: String = early ? v : isPure(x) ? paren(v) : hoist("RtString", v);
+            format.add("%.*s");
+            args.push("(int)${sv}.len");
+            args.push("${sv}.ptr");
+        } else if (t == T_BOOL) {
+            format.add("%s");
+            args.push("(${v}) ? \"true\" : \"false\"");
+        } else if (isEnumT(t)) {
+            format.add("%s");
+            args.push("${t.name}__names[(${v}).tag]");
+        } else {
+            let wide: bool = bits(t) == 64;
+            let signed: bool = isSigned(t);
+            format.add(wide ? signed ? "%lld" : "%llu" : signed ? "%d" : "%u");
+            args.push(wide ? signed ? "(long long)(${v})" : "(unsigned long long)(${v})" : signed ? "(int)(${v})" : "(unsigned)(${v})");
+        }
+    }
+    return "printf(${cLiteral(format.toString())}, ${args.join(", ")})";
+}
+
+/** The bytes of a raw literal text (escapes interpreted; an unknown escape keeps its backslash). */
+function decodeRaw(raw: String in default): String {
+    let sb: StringBuilder = {} in default;
+    let i: int32 = 0;
+    while (i < raw.length) {
+        let c: byte = raw[i];
+        if (c == '\\' && i + 1 < raw.length) {
+            let e: byte = raw[i + 1];
+            if (e == 'n') {
+                sb.add("\n");
+            } else if (e == 't') {
+                sb.add("\t");
+            } else if (e == 'r') {
+                sb.add("\r");
+            } else if (e == '0') {
+                sb.add("\0");
+            } else if (e == '\\' || e == '"' || e == '$' || e == '\'') {
+                sb.add(raw.substring(i + 1, i + 2));
+            } else {
+                sb.add(raw.substring(i, i + 2));
+            }
+            i += 2;
+        } else {
+            sb.add(raw.substring(i, i + 1));
+            i += 1;
+        }
+    }
+    return sb.toString();
+}
+
+/** The C literal of some bytes. */
+function cLiteral(text: String): String {
+    let sb: StringBuilder = {} in default;
+    sb.add("\"");
+    for (i, b in text) { cByte(sb, b, text.substring(i, i + 1)); }
+    sb.add("\"");
+    return sb.toString();
+}
+
+/** Writes the parts of an interpolated text into a builder (sbRef: an RtSb*). */
+public function appendPieces(s: StringLit in default, sbRef: String): void {
+    for (i, text in s.texts) {
+        let c: String = cBytes(text);
+        if (cLength > 0) { line("rt_sb_add(${sbRef}, ${c}, ${cLength});"); }
+        if (i >= s.exprs.length) { continue; }
+        let x: Expr = s.exprs[i];
+        let t: Type = x.ty!;
+        let v: String = value(x);
+        if (t == T_STRING) {
+            line("rt_sb_str(${sbRef}, ${v});");
+        } else if (t == T_BOOL) {
+            line("rt_sb_bool(${sbRef}, ${v});");
+        } else if (isFloat(t)) {
+            line("rt_sb_f64(${sbRef}, (double)(${v}));");
+        } else if (isSigned(t)) {
+            line("rt_sb_i64(${sbRef}, (int64_t)(${v}));");
+        } else if (isInteger(t)) {
+            line("rt_sb_u64(${sbRef}, (uint64_t)(${v}));");
+        } else if (isEnumT(t)) {
+            line("rt_sb_cstr(${sbRef}, ${t.name}__names[(${v}).tag]);");
+        } else if (t == T_ANY) {
+            line("rt_sb_any(${sbRef}, ${v});");
+        }
+    }
+}
+
+public function stringLiteral(raw: String): String {
+    let c: String = cBytes(raw);
+    return "rt_str(${c}, ${cLength})";
+}
+
+/** The C literal of a raw Larimar text (escapes interpreted); its length in bytes goes to cLength. */
+let cLength: int32 = 0;
+
+const OCT: String = "01234567";
+
+function cBytes(raw: String): String {
+    let sb: StringBuilder = {} in default;
+    sb.add("\"");
+    let n: int32 = 0;
+    let i: int32 = 0;
+    while (i < raw.length) {
+        let c: byte = raw[i];
+        if (c == '\\' && i + 1 < raw.length) {
+            let e: byte = raw[i + 1];
+            i += 2;
+            if (e == 'n') {
+                cByte(sb, 10, "");
+            } else if (e == 't') {
+                cByte(sb, 9, "");
+            } else if (e == 'r') {
+                cByte(sb, 13, "");
+            } else if (e == '0') {
+                cByte(sb, 0, "");
+            } else if (e == '\\' || e == '"' || e == '$' || e == '\'') {
+                cByte(sb, e, raw.substring(i - 1, i));
+            } else {
+                cByte(sb, 92, "");               // an unknown escape keeps its backslash
+                n += 1;
+                cByte(sb, e, raw.substring(i - 1, i));
+            }
+            n += 1;
+        } else {
+            cByte(sb, c, raw.substring(i, i + 1));
+            n += 1;
+            i += 1;
+        }
+    }
+    sb.add("\"");
+    cLength = n;
+    return sb.toString();
+}
+
+function cByte(sb: StringBuilder, v: byte, text: String): void {
+    if (v == '"') {
+        sb.add("\\\"");
+    } else if (v == '\\') {
+        sb.add("\\\\");
+    } else if (v == '?') {
+        sb.add("\\?");
+    } else if (v == '\n') {
+        sb.add("\\n");
+    } else if (v == '\t') {
+        sb.add("\\t");
+    } else if (v >= ' ' && v < 127) {
+        sb.add(text);
+    } else {
+        let a: int32 = ((v >> 6) & 7) as int32;
+        let b: int32 = ((v >> 3) & 7) as int32;
+        let c: int32 = (v & 7) as int32;
+        sb.add("\\${OCT.substring(a, a + 1)}${OCT.substring(b, b + 1)}${OCT.substring(c, c + 1)}");
+    }
+}
+
+// ---- operators ------------------------------------------------------------------------
+
+function wide(t: Type): String {
+    return bits(t) <= 32 ? "uint32_t" : "uint64_t";
+}
+
+function unary(u: Unary in default, t: Type): String {
+    let op: MethodInfo? = u.opMethod;
+    if (op != null) { return operatorCall(op, u, u.operand, null); }
+    let v: String = expr(u.operand);
+    if (u.op == "&") { return "&${paren(v)}"; }               // a variable's address, for C (only in extern calls)
+    if (u.op == "!") { return "(!${paren(v)})"; }
+    if (u.op == "~") { return "((${cType(t)})~(${wide(t)})${paren(v)})"; }
+    if (u.operand is IntLit n && isInteger(t)) { return intLiteral(n.big ? n.num : 0 - n.num, false, t); }   // big: -9223372036854775808
+    return isFloat(t) ? "(-${paren(v)})" : "((${cType(t)})(0u - (${wide(t)})${paren(v)}))";
+}
+
+function binary(b: Binary in default, t: Type): String {
+    let op: String = b.op;
+    let ov: MethodInfo? = b.opMethod;
+    if (ov != null) {
+        return switch (op) {
+            case "!=" -> "(!${operatorCall(ov, b, b.left, b.right)})";
+            case ">" -> operatorCallSwapped(ov, b);
+            case "<=" -> "(!${operatorCallSwapped(ov, b)})";
+            case ">=" -> "(!${operatorCall(ov, b, b.left, b.right)})";
+            default -> operatorCall(ov, b, b.left, b.right);
+        };
+    }
+    if (op == "&&" || op == "||") {
+        let l: String = expr(b.left);
+        let r: String = lazy(b.right);
+        let pre: String = lazyPre;
+        if (pre.isEmpty()) { return "(${l} ${op} ${r})"; }
+        let tv: String = tmp("cond");
+        line("bool ${tv} = ${l};");
+        line(op == "&&" ? "if (${tv}) {" : "if (!${tv}) {");
+        fn.out.add(indent4(pre));
+        line("    ${tv} = ${r};");
+        line("}");
+        return tv;
+    }
+    if (op == "??") { return coalesce(b, t); }
+    let lt: Type = b.left.ty!;
+    if ((op == "==" || op == "!=") && (b.left is NullLit || b.right is NullLit)) {
+        let other: Expr = b.left is NullLit ? b.right : b.left;
+        let o: Type = other.ty!;
+        let v: String = expr(other);
+        let isNull: String = o == T_ANY ? "rt_any_is_null(${v})" : isPtr(o) || optIsPointer(o) ? "(${v} == NULL)" : "(!${paren(v)}.has)";
+        return op == "==" ? isNull : "(!${isNull})";
+    }
+    let l: String = value(b.left);
+    let r: String = value(b.right);
+    switch (op) {
+        case "==", "!=" -> {
+            let eq: String = "(${l} == ${r})";
+            if (lt == T_STRING) {
+                eq = "rt_str_eq(${l}, ${r})";
+            } else if (isEnumT(lt)) {
+                eq = "(${paren(l)}.tag == ${paren(r)}.tag)";
+            } else if (isClass(lt) || (isOpt(lt) && isClass(lt.elem!))) {
+                eq = "((const void*)(${l}) == (const void*)(${r}))";
+            }
+            return op == "==" ? eq : "(!${eq})";
+        }
+        case "<", "<=", ">", ">=" -> { return lt == T_STRING ? "(rt_str_cmp(${l}, ${r}) ${op} 0)" : "(${l} ${op} ${r})"; }
+        case "/", "%" -> { return isFloat(t) ? "(${l} / ${r})" : "rt_${op == "%" ? "mod" : "div"}_${mangle(t)}(${l}, ${r}, ${b.line})"; }
+        case "+", "-", "*" -> { return isFloat(t) ? "(${l} ${op} ${r})" : "((${cType(t)})((${wide(t)})${paren(l)} ${op} (${wide(t)})${paren(r)}))"; }
+        case "&", "|", "^" -> { return "((${cType(t)})(${paren(l)} ${op} ${paren(r)}))"; }
+        default -> {}
+    }
+    let n: int32 = bits(t) - 1;
+    if (op == "<<") { return "((${cType(t)})((${wide(t)})${paren(l)} << ((int)${paren(r)} & ${n})))"; }
+    return isSigned(t) ? "((${cType(t)})(${paren(l)} >> ((int)${paren(r)} & ${n})))" : "((${cType(t)})((${wide(t)})${paren(l)} >> ((int)${paren(r)} & ${n})))";
+}
+
+/** x is T [b]: rt_as_class gives the object when it is a T (NULL otherwise); the binding keeps it. */
+function isTest(x: IsExpr in default): String {
+    let st: Type = x.expr.ty!;
+    let v: String = expr(x.expr);
+    let obj: String = "(void*)(${v})";
+    if (isOpt(st) && !optIsPointer(st)) {             // an optional interface
+        let h: String = hoist(cType(st), v);
+        obj = "(${h}.has && ${h}.value.t->cls ? ${h}.value.obj : NULL)";
+    } else if (isInterface(st)) {                      // objects made from literals have no class
+        let h: String = hoistIfNeeded(cType(st), v, x.expr);
+        obj = "(${h}.t->cls ? ${h}.obj : NULL)";
+    }
+    let test: String = "rt_as_class(${obj}, &rtclass_${x.tested!.name})";
+    let b: Symbol? = x.symbol;
+    return b == null ? "(${test} != NULL)" : "((${b.cName} = (${tname(x.tested!.name)}*)${test}) != NULL)";
+}
+
+/** c ? a : b: a C conditional, or an if when a side needs statements of its own. */
+function ternary(te: Ternary in default, t: Type): String {
+    let c: String = expr(te.cond);
+    let a: String = lazy(te.then);
+    let preA: String = lazyPre;
+    let b: String = lazy(te.otherwise);
+    let preB: String = lazyPre;
+    if (preA.isEmpty() && preB.isEmpty()) { return "(${c} ? ${a} : ${b})"; }
+    let res: String = tmp("value");
+    line("${cType(t)} ${res};");
+    line("if (${strip(c)}) {");
+    fn.out.add(indent4(preA));
+    line("    ${res} = ${a};");
+    line("} else {");
+    fn.out.add(indent4(preB));
+    line("    ${res} = ${b};");
+    line("}");
+    return res;
+}
+
+function coalesce(b: Binary in default, t: Type): String {
+    let o: Type = b.left.ty!;
+    let l: String = expr(b.left);
+    let res: String = tmp("value");
+    if (optIsPointer(o)) {
+        line("${cType(t)} ${res} = ${l};");
+        let r: String = lazy(b.right);
+        let pre: String = lazyPre;
+        line("if (${res} == NULL) {");
+        fn.out.add(indent4(pre));
+        line("    ${res} = ${r};");
+        line("}");
+    } else {
+        let ov: String = hoist(cType(o), l);
+        line("${cType(t)} ${res};");
+        let r: String = lazy(b.right);
+        let pre: String = lazyPre;
+        line("if (${ov}.has) ${res} = ${ov}.value;");
+        line("else {");
+        fn.out.add(indent4(pre));
+        line("    ${res} = ${r};");
+        line("}");
+    }
+    return res;
+}
+
+/** a OP b, where the operator is a method of a's type; `op` is the expression (data it returns is created where it says). */
+function operatorCall(m: MethodInfo, op: Expr in default, left: Expr in default, right: Expr? in default): String {
+    let isStructOp: bool = structOf(m.owner) != null;
+    let recv: String = isStructOp ? addrOf(left) : value(left);
+    let arg: String = right != null ? ", ${value(right)}" : "";
+    if (returnsData(m.sig!.elem!)) { arg = ", ${callMem(op)}${arg}"; }
+    return isStructOp ? "${methodName(m)}(${recv}${arg})" : "${dispatchName(m.introducer, m)}((${m.introducer}*)${recv}${arg})";
+}
+
+/** b < a, keeping the evaluation order a then b. */
+function operatorCallSwapped(m: MethodInfo, b: Binary in default): String {
+    let l: String = hoist(cType(b.left.ty!), value(b.left));
+    let r: String = hoist(cType(b.right.ty!), value(b.right));
+    return structOf(m.owner) != null ? "${methodName(m)}(&${r}, ${l})" : "${dispatchName(m.introducer, m)}((${m.introducer}*)${r}, ${l})";
+}
+
+function minMacro(p: Type): String { return "INT${bits(p)}_MIN"; }
+
+function maxMacro(p: Type): String {
+    return isSigned(p) ? "INT${bits(p)}_MAX" : "UINT${bits(p)}_MAX";
+}
+
+function cast(c: Cast in default, to: Type in default): String {
+    let from: Type = c.expr.ty!;
+    let v: String = expr(c.expr);
+    if (from == T_ANY) { return anyAs(v, to.elem!, to); }
+    if (from == to) { return v; }
+    if (isFloat(from) && isInteger(to)) {
+        return isSigned(to) ? "((${cType(to)})rt_f2i((double)(${v}), ${minMacro(to)}, ${maxMacro(to)}))" : "((${cType(to)})rt_f2u((double)(${v}), ${maxMacro(to)}))";
+    }
+    return "((${cType(to)})(${v}))";
+}
+
+/** `a as T`: T? holding the value if the Any has one of that kind (numbers convert when they fit). */
+function anyAs(v: String, t: Type in default, ot: Type): String {
+    let name: String = "rt_any_as_${mangle(t)}";
+    let o: String = cType(ot);
+    if (isClass(t)) {
+        let h: String = "static inline ${o} ${name}(RtAny a) { return rt_any_is_obj(a, &rtclass_${t.name}) ? (${o})a.as.box.ptr : NULL; }\n";
+        if (!resizeSeen.contains(h)) {
+            resizeSeen[h] = true;
+            resizeHelpers.push(h.clone());
+        }
+        return "${name}(${v})";
+    }
+    let h: StringBuilder = {} in default;
+    h.add("static inline ${o} ${name}(RtAny a) {\n    ${o} r;\n    memset(&r, 0, sizeof r);\n");
+    if (t.kind == TyK.Named) {
+        h.add("    if (rt_any_is_val(a, &${boxType(t)})) { r.has = true; r.value = ${anyPayload(t, "a")}; }\n");
+    } else if (isInteger(t)) {
+        let lo: String = isSigned(t) ? minMacro(t) : "0";
+        let cv: String = isSigned(t) ? "(int64_t)bits" : "bits";
+        h.add("    uint64_t bits;\n    if (rt_any_to_int(a, ${lo}, ${maxMacro(t)}, &bits)) { r.has = true; r.value = (${cType(t)})${cv}; }\n");
+    } else if (isFloat(t)) {
+        h.add("    double f;\n    if (rt_any_to_float(a, &f)) { r.has = true; r.value = (${cType(t)})f; }\n");
+    } else {
+        h.add("    if (a.kind == ${anyKind(t)}) { r.has = true; r.value = ${anyPayload(t, "a")}; }\n");
+    }
+    h.add("    return r;\n}\n");
+    let hs: String = h.toString();
+    if (!resizeSeen.contains(hs)) {
+        resizeSeen[hs] = true;
+        resizeHelpers.push(hs.clone());
+    }
+    return "${name}(${v})";
+}
+
+// ---- calls ----------------------------------------------------------------------------
+
+/** The object a method is called on: a in a.f(...). */
+function receiver(c: Call): Expr {
+    return c.callee is Member m ? m.object : c.callee;
+}
+
+/** The name of the method called: f in a.f(...). */
+function calleeName(c: Call): String {
+    return c.callee is Member m ? m.name : "";
+}
+
+function call(c: Call in default): String {
+    let ci: CallInfo = c.call!;
+    if (ci.kind == CallK.Builtin) { return builtin(c, ci); }
+    if (ci.kind == CallK.EnumCtor) {
+        let e: EnumInfo = ci.enumInfo!;
+        let v: VariantInfo = ci.variant!;
+        if (v.fields.length == 0) { return "((${tname(e.name)}){ .tag = ${e.name}_${v.name} })"; }
+        let inits: String[*] = [] in default;
+        for (i, a in c.args) { inits.push(".${escapeName(v.fields[i].name)} = ${value(a)}"); }
+        return "((${tname(e.name)}){ .tag = ${e.name}_${v.name}, .as.${v.name} = { ${inits.join(", ")} } })";
+    }
+    if (ci.kind == CallK.Closure) {
+        let callee: String = value(c.callee);
+        let none: bool[*] = [];
+        let xs: String[*] = args(c.args, none);
+        let all: String[*] = [callee];
+        if (returnsData(ci.type!.elem!)) { all.push(placeMem(c)); }
+        for (x in xs) { all.push(x); }
+        return "call_Closure_${ci.type!.funcId}(${all.join(", ")})";
+    }
+    if (ci.kind == CallK.CPointer) {             // a pointer to a C function
+        let callee: String = value(c.callee);
+        let cx: String = "${paren(callee)}(${externArgs(c.args, false, null).join(", ")})";
+        return ci.type!.elem! == T_STRING ? "rt_str_c(${cx})" : cx;
+    }
+    if (ci.kind == CallK.Method && isBuilderAdd(c, ci)) {
+        // builder.add("... ${x}"): the parts go straight into the builder, no temporary text
+        let b: String = hoist("StringBuilder*", value(receiver(c)));
+        line("if (!${b}->_sb.buf) ${b}->_sb = rt_sb_mem(rt_obj_mem(${b}), ${c.line});");
+        if (c.args[0] is StringLit s) { appendPieces(s, "&${b}->_sb"); }
+        if (ci.method!.name == "addLine") { line("rt_sb_add(&${b}->_sb, \"\\n\", 1);"); }
+        return "";
+    }
+    let callExpr: String = "";
+    let ret: Type = T_VOID;
+    let throwsErr: bool = false;
+    if (ci.kind == CallK.Direct) {
+        let f: FunctionInfo = ci.func!;
+        let asg: String[*] = f.isExtern ? externArgs(c.args, f.varargs, f.sig) : args(c.args, f.memParams);
+        if (!f.isExtern && f.creates && c.place == null) {
+            internalError(c.line, "'${f.name}' creates its result, but this call was given no memory for it.");
+        }
+        let fr: Type = f.sig!.elem!;
+        if (f.isExtern && isOpt(fr) && isResource(fr.elem!)) {     // C makes a resource: its cell, in the memory of the call
+            return "${fr.elem!.name}__new(${callMem(c)}, ${f.cName}(${asg.join(", ")}), ${c.line})";
+        }
+        if (c.place != null || !f.isExtern && returnsData(f.sig!.elem!)) { asg = first(callMem(c), asg); }   // the memory of the call
+        throwsErr = f.throwsType != null;
+        if (throwsErr) { asg.push("&err"); }
+        callExpr = "${f.cName}(${asg.join(", ")})";
+        ret = f.sig!.elem!;
+        if (f.isExtern && ret == T_STRING) { return "rt_str_c(${callExpr})"; }
+        if (f.isExtern && isOpt(ret) && ret.elem! == T_STRING) {      // a C string that may be NULL: null
+            let p: String = hoist("const char*", callExpr);
+            let o: String = cType(ret);
+            return "(${p} ? ((${o}){ .has = true, .value = rt_str_c(${p}) }) : ((${o}){ .has = false }))";
+        }
+    } else {
+        let mi: MethodInfo = ci.method!;
+        let recv: String = "";
+        if (ci.kind == CallK.NativeMethod) {
+            recv = value(receiver(c));
+        } else if (ci.kind == CallK.Method) {
+            recv = ci.isClass ? value(receiver(c)) : addrOf(receiver(c));
+        } else if (ci.kind == CallK.InterfaceMethod) {
+            recv = value(receiver(c));
+        }
+        let asg: String[*] = args(c.args, mi.memParams);
+        if (mi.creates && c.place == null && returnsData(mi.sig!.elem!)) {
+            internalError(c.line, "'${mi.name}' creates its result, but this call was given no memory for it.");
+        }
+        if (returnsData(mi.sig!.elem!)) { asg = first(callMem(c), asg); }
+        throwsErr = mi.throwsType != null;
+        if (throwsErr) { asg.push("&err"); }
+        let rest: String = asg.length > 0 ? ", ${asg.join(", ")}" : "";
+        if (ci.kind == CallK.NativeMethod) {
+            callExpr = "${methodName(mi)}(${recv}${rest})";
+        } else if (ci.kind == CallK.Method) {
+            callExpr = ci.isClass ? "${dispatchName(mi.introducer, mi)}((${mi.introducer}*)${recv}${rest})" : "${methodName(mi)}(${recv}${rest})";
+        } else if (ci.kind == CallK.InterfaceMethod) {
+            callExpr = "${ifaceCallName(ci.iface!, mi)}(${recv}${rest})";
+        } else {
+            let impl: MethodInfo = findMethod(ci.implOwner, mi.name, false, 0)!;
+            callExpr = "${methodName(impl)}((${impl.introducer}*)self${rest})";
+        }
+        ret = mi.sig!.elem!;
+    }
+    if (!throwsErr) { return callExpr; }
+    let result: String = "";
+    if (ret == T_VOID) { line("${callExpr};"); } else { result = hoist(cType(ret), callExpr); }
+    line("if (err.kind != 0) {");
+    fn.indent += 1;
+    propagate();
+    fn.indent -= 1;
+    line("}");
+    return result;
+}
+
+/** x, then the items of xs. */
+function first(x: String, xs: String[*]): String[*] {
+    let out: String[*] = [x];
+    for (y in xs) { out.push(y); }
+    return out;
+}
+
+function isBuilderAdd(c: Call, ci: CallInfo): bool {
+    let mi: MethodInfo = ci.method!;
+    let co: ClassInfo? = classOf(mi.owner);
+    if (co == null || !co.builder || !(mi.name == "add" || mi.name == "addLine")) { return false; }
+    return c.args[0] is StringLit s && s.exprs.length > 0 && s.conv == null;
+}
+
+function args(asg: Expr[*] in default, memParams: bool[*]): String[*] {
+    let out: String[*] = [] in default;
+    for (a in asg) {
+        let m: Symbol? = a.memArg;
+        out.push(m != null ? memoryRef(m) : value(a));
+    }
+    return out;
+}
+
+function externArgs(asg: Expr[*] in default, varargs: bool, sig: Type?): String[*] {
+    let out: String[*] = [];
+    for (i, a in asg) {
+        let m: Symbol? = a.memArg;
+        if (m != null) {
+            out.push(memoryRef(m));
+            continue;
+        }
+        let t: Type = a.ty!;
+        let v: String = value(a);
+        let rt: Type = isOpt(t) ? t.elem! : t;
+        if (isResource(rt)) {
+            out.push("${rt.name}__get(${v}, ${a.line})");          // the C value (a panic if it was released)
+        } else if (t == T_STRING) {
+            out.push("rt_str_cz(${v}, ${tempMem()}, ${a.line})");
+        } else if (sig != null && i < sig!.params.length && sig!.params[i].kind == TyK.Array && sig!.params[i].ak == ArrK.Slice) {
+            let s: String = hoist(cType(sig!.params[i]), v);   // T[] -> the elements and their count, as C takes them
+            out.push("(void*)${s}.items");                       // (void*): it fits char*, unsigned char*, void*...
+            out.push("${s}.length");
+        } else if (t == T_FLOAT32 && varargs) {
+            out.push("(double)${paren(v)}");
+        } else {
+            out.push(v);
+        }
+    }
+    return out;
+}
+
+/** The elements of an array as C: items and length. */
+function itemsOf(at: Type, obj: Expr in default): String[*] {
+    if (at.ak == ArrK.Fixed) {
+        let p: String = addrOf(obj);
+        return ["${paren(p)}->items", "${paren(p)}->length"] in default;
+    }
+    let v: String = hoist(cType(at), expr(obj));
+    let dot: String = at.ak == ArrK.Slice ? "." : "->";
+    return ["${v}${dot}items", "${v}${dot}length"] in default;
+}
+
+function builtin(c: Call in default, b: CallInfo in default): String {
+    let k: BK = b.builtin;
+    if (k == BK.Print || k == BK.Println) { return printCall(c, k == BK.Println); }
+    if (k == BK.Panic) { return c.args.length == 1 ? "rt_panic_str(${value(c.args[0])}, ${c.line})" : "rt_panic(\"panic\", ${c.line})"; }
+    if (k == BK.Release) { return "rt_res_release((void*)(${value(c.args[0])}))"; }   // now, not when its memory is freed
+    let obj: Expr = receiver(c);
+    let at: Type = b.receiverType ?? T_VOID;
+    return switch (k) {
+        case Push -> "${structName(at)}_push(${at.ak == ArrK.Growable ? expr(obj) : addrOf(obj)}, ${value(c.args[0])})";
+        case Pop -> {      // the last element; the length goes down by one
+            let l: String = at.ak == ArrK.Growable ? hoistIfNeeded(cType(at), expr(obj), obj) : hoist("${cType(at)}*", addrOf(obj));
+            yield "${l}->items[rt_pop(&${l}->length, ${c.line})]";
+        }
+        case Clear -> "((void)(${paren(at.ak == ArrK.Growable ? expr(obj) : addrOf(obj))}->length = 0))";
+        case Map, Filter -> mapFilter(c, b);
+        case AnyPush -> {
+            let o: String = hoist("RtAny", expr(obj));
+            yield "rt_any_push(${o}, ${value(c.args[0])}, ${c.line})";
+        }
+        case AnyLength -> "rt_any_length(${expr(obj)})";
+        case AnyRemove -> "rt_any_remove(${expr(obj)}, ${value(c.args[0])}, ${c.line})";
+        case AnyRemoveAt -> "rt_any_remove_at(${expr(obj)}, (int64_t)(${value(c.args[0])}), ${c.line})";
+        case AnyClear -> "rt_any_clear(${expr(obj)}, ${c.line})";
+        case AnyRemoveIf -> anyRemoveIf(c);
+        case StringMethod -> stringMethod(c);
+        case Join -> {
+            let il: String[*] = itemsOf(at, obj);
+            yield "rt_str_join(${il[0]}, ${il[1]}, ${value(c.args[0])}, ${placeMem(c)}, ${c.line})";
+        }
+        case Contains -> {      // a loop that stops at the first element equal to the value
+            let il: String[*] = itemsOf(at, obj);
+            let x: String = hoist(cType(at.elem!), value(c.args[0]));
+            let found: String = tmp("found");
+            let k: String = tmp("k");
+            let e: String = "${il[0]}[${k}]";
+            let eq: String = at.elem! == T_STRING ? "rt_str_eq(${e}, ${x})" : isEnumT(at.elem!) ? "${e}.tag == ${x}.tag" : "${e} == ${x}";
+            line("bool ${found} = false;");
+            line("for (int32_t ${k} = 0; ${k} < ${il[1]}; ${k}++) if (${eq}) { ${found} = true; break; }");
+            yield found;
+        }
+        case AnyContains -> "rt_any_contains(${expr(obj)}, ${value(c.args[0])})";
+        case AnyContainsKey -> "rt_any_contains_key(${expr(obj)}, ${value(c.args[0])})";
+        case Wait -> "rt_sync_wait(self->_sync)";
+        default -> cloneCall(c, b);
+    };
+}
+
+function printCall(c: Call in default, newline: bool): String {
+    let f: String = newline ? "rt_println" : "rt_print";
+    let arg: Expr = c.args[0];
+    let ap: Place? = arg.place;
+    if (arg is StringLit s && arg.conv == null) {
+        let defaultPlace: bool = ap != null && ap.kind == PlaceK.Temp;
+        if (s.exprs.length == 0 || defaultPlace) {
+            let direct: String? = printDirect(s, newline);
+            if (direct != null) { return direct; }
+        }
+    }
+    return "${f}(${value(arg)})";
+}
+
+function stringMethod(c: Call in default): String {
+    let name: String = calleeName(c);
+    let s: String = hoist("RtString", expr(receiver(c)));
+    let a: String[*] = [] in default;
+    for (x in c.args) { a.push(x.ty! == T_STRING ? value(x) : "(int64_t)(${value(x)})"); }
+    let ln: int32 = c.line;
+    return switch (name) {
+        case "length" -> "${s}.len";
+        case "substring" -> "rt_str_sub(${s}, ${a[0]}, ${a.length > 1 ? a[1] : "(int64_t)${s}.len"}, ${ln})";
+        case "bytes" -> "((Slice_u8){ (uint8_t*)${s}.ptr, ${s}.len })";
+        default -> splitText(c, s, name == "lines" ? "rt_str(\"\\n\", 1)" : a[0], name == "lines");
+    };
+}
+
+/** split, lines: views of the text in a new list. */
+function splitText(c: Call in default, s: String, sep: String, isLines: bool): String {
+    let ln: int32 = c.line;
+    let l: String = hoist("List_s*", "List_s_new(${placeMem(c)}, ${ln})");
+    let sp: String = hoist("RtString", sep);
+    let start: String = tmp("start");
+    let k: String = tmp("k");
+    lines("""
+        if (${sp}.len == 0) {
+            for (int32_t ${k} = 0; ${k} < ${s}.len; ${k}++) List_s_add(${l}, rt_str(${s}.ptr + ${k}, 1), ${ln});
+        } else if (${s}.len > 0 || !${isLines}) {
+            int32_t ${start} = 0;
+            for (;;) {
+                int32_t ${k} = rt_str_find(${s}, ${sp}, ${start});
+                int32_t end_${k} = ${k} < 0 ? ${s}.len : ${k};
+                RtString part_${k} = rt_str(${s}.ptr + ${start}, end_${k} - ${start});""");
+    if (isLines) {
+        lines("""
+                        if (part_${k}.len > 0 && part_${k}.ptr[part_${k}.len - 1] == '\\r') part_${k}.len--;
+                        if (${k} < 0 && end_${k} == ${start}) break;   /* no empty line after a final newline */
+                """);
+    }
+    lines("""
+                List_s_add(${l}, part_${k}, ${ln});
+                if (${k} < 0) break;
+                ${start} = ${k} + ${sp}.len;
+            }
+        }""");
+    return l;
+}
+
+/** Several lines of C, each written like line() does (a final newline adds no empty line). */
+public function lines(text: String in default): void {
+    let ls: String[*] = text.split("\n");
+    for (i, l in ls) {
+        if (i < ls.length - 1 || !l.isEmpty()) { line(l); }
+    }
+}
+
+/** Keeps the entries for which the lambda says false; returns how many were removed. */
+function anyRemoveIf(c: Call in default): String {
+    let f: Expr = c.args[0];
+    let ft: Type = f.ty!;
+    let isNamed: bool = ft.params.length == 2;
+    let tb: String = tmp("table");
+    let fnv: String = tmp("pred");
+    let removed: String = tmp("removed");
+    let w: String = tmp("w");
+    let k: String = tmp("k");
+    line("RtTable* ${tb} = rt_any_table(${expr(receiver(c))}, ${c.line});");
+    line("${cType(ft)} ${fnv} = ${value(f)};");
+    line("int32_t ${removed} = 0;");
+    let callText: String = "call_Closure_${ft.funcId}(${fnv}, ";
+    line("{");
+    fn.indent += 1;
+    line("int32_t ${w} = 0;");
+    if (!isNamed) {
+        lines("""
+            for (int32_t ${k} = 0; ${k} < ${tb}->length; ${k}++) {
+                if (${callText}${tb}->items[${k}])) ${removed}++;
+                else ${tb}->items[${w}++] = ${tb}->items[${k}];
+            }
+            ${tb}->length = ${w};
+            ${w} = 0;
+            """);
+    }
+    let keyArg: String = isNamed ? "${tb}->keys[${k}], " : "";
+    lines("""
+        for (int32_t ${k} = 0; ${k} < ${tb}->count; ${k}++) {
+            if (${callText}${keyArg}${tb}->values[${k}])) ${removed}++;
+            else { ${tb}->keys[${w}] = ${tb}->keys[${k}]; ${tb}->values[${w}] = ${tb}->values[${k}]; ${w}++; }
+        }
+        ${tb}->count = ${w};
+        rt_table_rehash(${tb});
+        """);
+    fn.indent -= 1;
+    line("}");
+    return removed;
+}
+
+function mapFilter(c: Call in default, b: CallInfo): String {
+    let isMap: bool = b.builtin == BK.Map;
+    let result: Type = c.ty!;
+    let il: String[*] = itemsOf(b.receiverType!, receiver(c));
+    let items: String = il[0];
+    let len: String = il[1];
+    let f: Expr = c.args[0];
+    let ft: Type = f.ty!;
+    let fnv: String = hoist(cType(ft), value(f));
+    let res: String = tmp("result");
+    let k: String = "k_${counter}";
+    counter += 1;
+    // map's lambda creates its values where the result lives: the list's memory, or where the call says
+    let dest: String = !isMap || !returnsData(ft.elem!) ? "" : result.ak == ArrK.Fixed ? "${placeMem(c)}, " : "${res}->mem, ";
+    let callText: String = "call_Closure_${ft.funcId}(${fnv}, ${dest}${items}[${k}])";
+    if (result.ak == ArrK.Fixed) {
+        line("${cType(result)} ${res};");
+        line("memset(&${res}, 0, sizeof ${res});");
+        line("for (int32_t ${k} = 0; ${k} < ${len}; ${k}++) {");
+        line(isMap ? "    ${res}.items[${res}.length++] = ${callText};" : "    if (${callText}) ${res}.items[${res}.length++] = ${items}[${k}];");
+    } else {
+        let n: String = structName(result);
+        line("${cType(result)} ${res} = ${n}_new(${placeMem(c)}, ${c.line});");
+        line("for (int32_t ${k} = 0; ${k} < ${len}; ${k}++) {");
+        line(isMap ? "    ${n}_add(${res}, ${callText}, ${c.line});" : "    if (${callText}) ${n}_add(${res}, ${items}[${k}], ${c.line});");
+    }
+    line("}");
+    return res;
+}
+
+// ---- clone ---------------------------------------------------------------------------
+
+let cloneTypes: Type[*] = [] in default;
+let cloneSeen: Any = {} in default;
+
+public function cloneTypeList(): Type[*] { return cloneTypes; }
+
+public function needsDeepClone(t: Type): bool {
+    if (t == T_STRING || t == T_ANY) { return true; }
+    if (t.kind == TyK.Prim || t.kind == TyK.Func || isInterface(t) || t.kind == TyK.Null) { return false; }
+    if (t.kind == TyK.Named) {
+        if (t.nk == NamedK.Class) { return true; }
+        if (t.nk == NamedK.Struct) {
+            for (f in structOf(t.name)!.fields) {
+                if (needsDeepClone(f.type)) { return true; }
+            }
+            return false;
+        }
+        if (t.nk == NamedK.Enum) {
+            for (v in enumOf(t.name)!.variants) {
+                for (f in v.fields) {
+                    if (needsDeepClone(f.type)) { return true; }
+                }
+            }
+        }
+        return false;
+    }
+    if (t.kind == TyK.Array) { return t.ak == ArrK.Growable || (t.ak == ArrK.Fixed && needsDeepClone(t.elem!)); }
+    return t.kind == TyK.Opt ? needsDeepClone(t.elem!) : false;
+}
+
+public function requireClone(t: Type in default): void {
+    if (!needsDeepClone(t) || cloneSeen.contains(t.text)) { return; }
+    cloneSeen[t.text] = true;
+    cloneTypes.push(t);
+    if (isStruct(t)) {
+        for (f in structOf(t.name)!.fields) { requireClone(f.type); }
+    }
+    if (isEnumT(t)) {
+        for (v in enumOf(t.name)!.variants) {
+            for (f in v.fields) { requireClone(f.type); }
+        }
+    }
+    if (isClass(t)) {
+        for (c in classes) {
+            if (!c.sync && !c.thread) {
+                for (f in c.fields) { requireClone(f.type); }
+            }
+        }
+    }
+    if (t.kind == TyK.Array || t.kind == TyK.Opt) { requireClone(t.elem!); }
+}
+
+public function cloneHeader(t: Type): String {
+    return "static ${cType(t)} clone_${mangle(t)}(${cType(t)} v, RtMem* mem, RtCloneMap* cm)";
+}
+
+public function cloneOf(t: Type in default, v: String): String {
+    if (!needsDeepClone(t)) { return v; }
+    requireClone(t);
+    return "clone_${mangle(t)}(${v}, mem, cm)";
+}
+
+function cloneCall(c: Call in default, b: CallInfo in default): String {
+    let t: Type = b.receiverType!;
+    let v: String = value(receiver(c));
+    if (!needsDeepClone(t)) { return v; }
+    requireClone(t);
+    for (ci in classes) {
+        if (!ci.sync && !ci.thread) {
+            for (f in ci.fields) { requireClone(f.type); }
+        }
+    }
+    let mem: String = placeMem(c);
+    let map: String = tmp("clones");
+    let res: String = tmp("copy");
+    line("RtCloneMap ${map} = rt_clone_map();");
+    line("${cType(t)} ${res} = clone_${mangle(t)}(${v}, ${mem}, &${map});");
+    line("rt_clone_done(&${map});");
+    return res;
+}
+
+public function cloneFunctions(): String {
+    let out: StringBuilder = {} in default;
+    // Generating a function may require more: go on until there are no new ones.
+    let i: int32 = 0;
+    while (i < cloneTypes.length) {
+        let t: Type = cloneTypes[i];
+        out.add("${cloneHeader(t)} {\n    (void)cm;\n");
+        cloneBody(out, t);
+        out.add("}\n\n");
+        i += 1;
+    }
+    return out.toString();
+}
+
+function cloneBody(out: StringBuilder, t: Type in default): void {
+    if (t == T_STRING) {
+        out.add("    return rt_str_clone(v, mem, 0);\n");
+        return;
+    }
+    if (t == T_ANY) {
+        out.add("    return rt_any_clone(v, mem, cm);\n");
+        return;
+    }
+    if (isClass(t)) {
+        out.add("    return (${cType(t)})rt_obj_vt(v)->clone(v, mem, cm);\n");
+        return;
+    }
+    if (isStruct(t)) {
+        for (f in structOf(t.name)!.fields) {
+            if (needsDeepClone(f.type)) {
+                let n: String = escapeName(f.name);
+                out.add("    v.${n} = ${cloneOf(f.type, "v.${n}")};\n");
+            }
+        }
+        out.add("    return v;\n");
+        return;
+    }
+    if (isEnumT(t)) {
+        let e: EnumInfo = enumOf(t.name)!;
+        for (vr in e.variants) {
+            let deep: FieldInfo[*] = [] in default;
+            for (f in vr.fields) {
+                if (needsDeepClone(f.type)) { deep.push(f); }
+            }
+            if (deep.length == 0) { continue; }
+            out.add("    if (v.tag == ${e.name}_${vr.name}) {\n");
+            for (f in deep) {
+                let path: String = "v.as.${vr.name}.${escapeName(f.name)}";
+                out.add("        ${path} = ${cloneOf(f.type, path)};\n");
+            }
+            out.add("    }\n");
+        }
+        out.add("    return v;\n");
+        return;
+    }
+    if (isArray(t, ArrK.Fixed)) {
+        out.add("    for (int32_t i = 0; i < v.length; i++) v.items[i] = ${cloneOf(t.elem!, "v.items[i]")};\n    return v;\n");
+        return;
+    }
+    if (isArray(t, ArrK.Growable)) {
+        let n: String = structName(t);
+        out.add("    ${n}* r = ${n}_new(mem, 0);\n");
+        out.add("    for (int32_t i = 0; i < v->length; i++) ${n}_add(r, ${cloneOf(t.elem!, "v->items[i]")}, 0);\n");
+        out.add("    return r;\n");
+        return;
+    }
+    if (isOpt(t)) {
+        if (optIsPointer(t)) {
+            out.add("    return v ? ${cloneOf(t.elem!, "v")} : v;\n");
+        } else {
+            out.add("    if (v.has) v.value = ${cloneOf(t.elem!, "v.value")};\n    return v;\n");
+        }
+        return;
+    }
+    out.add("    return v;\n");
+}
+
+// ---- lambdas and literal objects -----------------------------------------------------
+
+function lambdaValue(l: Lambda in default): String {
+    let li: LambdaInfo = l.lambda!;
+    genLambda(li);
+    let fid: int32 = li.type.funcId;
+    if (li.captures.length == 0) { return "((Closure_${fid}){ .fn = lambda_${li.id} })"; }
+    let env: String[*] = [] in default;
+    for (s in li.captures) { env.push(".${envField(s)} = ${captureValue(s)}"); }
+    return "((Closure_${fid}){ .fn = lambda_${li.id}, .env = { .l_${li.id} = { ${env.join(", ")} } } })";
+}
+
+function captureValue(s: Symbol): String {
+    let l: LambdaInfo? = fn.lambda;
+    if (l != null && hasCapture(l, s)) { return "env->${envField(s)}"; }
+    return s.kind == SymK.Self ? "self" : s.cName;
+}
+
+function genLambda(li: LambdaInfo in default): void {
+    if (lambdaDone[li.id]) { return; }
+    lambdaDone[li.id] = true;
+    let savedLoop: Block? = loopBlock;
+    loopBlock = null;
+    let sb: StringBuilder = {} in default;
+    sb.add(lambdaHeader(li));
+    sb.add(" {\n");
+    sb.add(li.captures.length == 0 ? "    (void)env_;\n" : "    Env_${li.id}* env = (Env_${li.id}*)env_;\n");
+    sb.add(body(li.node.body, li.type.elem!, false, li, li.params, "", li.node.line));
+    sb.add("}\n\n");
+    loopBlock = savedLoop;
+    lambdaDefs[li.id] = sb.toString();
+}
+
+/** A lambda used as a single-method interface: a small object holding the closure. */
+function sam(l: Lambda in default, c: Conversion in default): String {
+    let i: InterfaceInfo = c.iface!;
+    if (!samSeen.contains(i.name)) {
+        samSeen[i.name] = true;
+        samInterfaces.push(i.name);
+    }
+    let closure: String = lambdaValue(l);
+    let mem: String = placeMem(l);
+    let o: String = tmp("sam");
+    line("${i.name}__Sam* ${o} = (${i.name}__Sam*)rt_mem_alloc(${mem}, sizeof(${i.name}__Sam), ${l.line});");
+    line("${o}->fn = ${closure};");
+    return "((${i.name}){ (void*)${o}, &${i.name}__sam_table })";
+}
+
+function givenValue(o: ObjectLit, name: String): Expr? {
+    let found: Expr? = null;
+    for (fi in o.fields) {
+        if (fi.name == name) { found = fi.value; }
+    }
+    return found;
+}
+
+function objectLit(o: ObjectLit in default, t: Type in default): String {
+    if (t == T_ANY) {
+        let tb: String = tmp("table");
+        line("RtTable* ${tb} = rt_table_new(${placeMem(o)}, ${o.line});");
+        for (fi in o.fields) {
+            let v: String = value(fi.value);
+            if (fi.name == "" || fi.shorthand) {
+                line("rt_table_push(${tb}, ${v}, ${fi.line});");
+            } else {
+                line("rt_table_set(${tb}, ${stringLiteral(fi.name)}, ${v}, ${fi.line});");
+            }
+        }
+        return "rt_any_t(${tb})";
+    }
+    let variant: VariantInfo? = o.variant;
+    if (variant != null) {
+        let tag: String = "${t.name}_${variant.name}";
+        return variant.fields.length == 0 ? "((${tname(t.name)}){ .tag = ${tag} })" : "((${tname(t.name)}){ .tag = ${tag}, .as.${variant.name} = { ${fieldInits(variant.fields, o, "")} } })";
+    }
+    if (t.nk == NamedK.Struct) {
+        let s: StructInfo = structOf(t.name)!;
+        let sn: String = cType(t);              // a C struct has its own name
+        if (s.fields.length == 0) { return s.decl.cName != "" ? "((${sn}){ 0 })" : "((${sn}){ ._none = 0 })"; }
+        let inits: String = fieldInits(s.fields, o, "");
+        return "((${sn}){ ${inits == "" ? "0" : inits} })";            // {0}: a C struct with nothing given
+    }
+    if (t.nk != NamedK.Class) { return interfaceLit(o, interfaceOf(t.name)!); }
+    let c: ClassInfo = classOf(t.name)!;
+    let mem: String = hoist("RtMem*", placeMem(o)) in default;      // (field defaults are created there)
+    let obj: String = tmp("obj");
+    line("${c.name}* ${obj} = (${c.name}*)rt_mem_alloc(${mem}, sizeof(${c.name}), ${o.line});");
+    let sync: String = "";
+    if (c.sync) {       // its fields live in its own memory, used only under its lock
+        sync = tmp("sync");
+        line("RtSync* ${sync} = rt_sync_new(${mem}, ${o.line});");
+        mem = "(&${sync}->own)" in default;
+    }
+    let init: String = classInit(c, c.name, o, mem);
+    line("*${obj} = (${c.name}){ ${init}${sync != "" ? ", ._sync = ${sync}" : ""} };");
+    return obj;
+}
+
+function fieldInits(fields: FieldInfo[*] in default, o: ObjectLit in default, mem: String in default): String {
+    let out: String[*] = [] in default;
+    for (f in fields) {
+        let g: Expr? = givenValue(o, f.name);
+        let v: String = "";
+        if (g != null) {
+            v = value(g);
+        } else if (f.defaultValue == null) {
+            continue;                        // a field of a C struct that was not given: zero
+        } else {
+            let saved: String = fn.placeOverride;
+            if (mem != "") { fn.placeOverride = mem; }
+            v = value(f.defaultValue!);
+            fn.placeOverride = saved;
+        }
+        out.push(".${fieldC(f)} = ${v}");
+    }
+    return out.join(", ");
+}
+
+function classInit(level: ClassInfo in default, concrete: String, o: ObjectLit in default, mem: String in default): String {
+    let parts: String[*] = [] in default;
+    if (level.superName == "") {
+        parts.push("._h = { (const void*)&vtable_${concrete}, ${mem} }");
+    } else {
+        parts.push("._super = { ${classInit(parentOf(level)!, concrete, o, mem)} }");
+    }
+    if (level.fields.length > 0) { parts.push(fieldInits(level.fields, o, mem)); }
+    return parts.join(", ");
+}
+
+function interfaceLit(o: ObjectLit in default, i: InterfaceInfo in default): String {
+    let id: int32 = counter;
+    counter += 1;
+    let sn: String = "ILit_${id}";
+    literalTypes.add("typedef struct ${sn} {");
+    for (m in i.methods) { literalTypes.add(" ${cType(m.sig!)} ${m.name};"); }
+    literalTypes.add(" } ${sn};\n");
+    for (m in i.methods) {
+        let ps: StringBuilder = {} in default;
+        let asb: StringBuilder = {} in default;
+        for (k, p in paramCTypes(m)) {
+            ps.add(", ${p} a${k}");
+            asb.add(", a${k}");
+        }
+        let head: String = "static ${cType(m.sig!.elem!)} ${sn}__${m.name}(void* self${ps.toString()})";
+        literalPrototypes.add("${head};\n");
+        let ret: String = m.sig!.elem! == T_VOID ? "" : "return ";
+        literalThunks.add("${head} { ${ret}call_Closure_${m.sig!.funcId}(((${sn}*)self)->${m.name}${asb.toString()}); }\n");
+    }
+    literalTables.add("const ${i.name}_Table ${sn}_table = { NULL");
+    for (m in i.methods) { literalTables.add(", ${sn}__${m.name}"); }
+    literalTables.add(" };\n");
+    let mem: String = placeMem(o);
+    let obj: String = tmp("iobj");
+    line("${sn}* ${obj} = (${sn}*)rt_mem_alloc(${mem}, sizeof(${sn}), ${o.line});");
+    for (m in i.methods) { line("${obj}->${m.name} = ${value(givenValue(o, m.name)!)};"); }
+    return "((${i.name}){ (void*)${obj}, &${sn}_table })";
+}
+
+function arrayLit(a: ArrayLit in default, t: Type): String {
+    if (t.ak == ArrK.Growable) {
+        let mem: String = placeMem(a);
+        let l: String = tmp("list");
+        line("${cType(t)} ${l} = ${structName(t)}_new(${mem}, ${a.line});");
+        for (x in a.elems) { line("${structName(t)}_add(${l}, ${value(x)}, ${a.line});"); }
+        return l;
+    }
+    if (a.elems.length == 0) { return "((${cType(t)}){ .length = 0 })"; }
+    let vs: String[*] = [] in default;
+    for (x in a.elems) { vs.push(value(x)); }
+    return "((${cType(t)}){ .length = ${a.elems.length}, .items = { ${vs.join(", ")} } })";
+}
+
+// ---- switch patterns -----------------------------------------------------------------
+
+// Joined only with || (several patterns in one case), so a comparison needs no parentheses of its own
+// (clang warns about if ((a == b))).
+public function patternTest(pi: PatternInfo in default, st: Type, inner: Type, subj: String, val: String): String {
+    let opt: bool = isOpt(st);
+    let has: String = "";
+    if (opt) { has = optIsPointer(st) ? "(${subj} != NULL)" : "${subj}.has"; }
+    if (st == T_ANY) {
+        if (pi.kind == PatK.Default) { return "1"; }
+        if (pi.kind == PatK.Null) { return "${subj}.kind == RT_ANY_NULL"; }
+        let at: Type = pi.anyType!;
+        if (isClass(at)) { return "rt_any_is_obj(${subj}, &rtclass_${at.name})"; }
+        return at.kind == TyK.Named ? "rt_any_is_val(${subj}, &${boxType(at)})" : "${subj}.kind == ${anyKind(at)}";
+    }
+    let test: String = "1";
+    if (pi.kind == PatK.AnyType) {
+        test = "0";
+    } else if (pi.kind == PatK.Null) {
+        test = optIsPointer(st) ? "${subj} == NULL" : "!${subj}.has";
+    } else if (pi.kind == PatK.Variant) {
+        test = "${val}.tag == ${inner.name}_${pi.variant!.name}";
+    } else if (pi.kind == PatK.Constant) {
+        let c: String = value(pi.constant!);
+        test = inner == T_STRING ? "rt_str_eq(${val}, ${c})" : "${val} == ${c}";
+    } else if (pi.kind == PatK.Class) {
+        if (isInterface(inner)) {
+            test = "(${val}.t->cls != NULL && rt_is_a(rt_obj_class(${val}.obj), &rtclass_${pi.cls!.name}))";
+        } else {
+            test = "rt_is_a(rt_obj_class(${val}), &rtclass_${pi.cls!.name})";
+        }
+    }
+    return opt && pi.kind != PatK.Default && pi.kind != PatK.Null ? "(${has} && ${test})" : test;
+}
+
+public function bindPattern(pi: PatternInfo, inner: Type, subj: String, val: String): void {
+    let w: Symbol? = pi.whole;
+    if (w != null) {
+        line("${cType(w.type)} ${w.cName} = ${val};");
+        if (!w.used) { line("(void)${w.cName};"); }
+    }
+    if (pi.kind == PatK.Variant) {
+        for (i, bo in pi.bindings) {
+            if (bo == null) { continue; }
+            let b: Symbol = bo;
+            line("${cType(b.type)} ${b.cName} = ${val}.as.${pi.variant!.name}.${escapeName(pi.variant!.fields[i].name)};");
+            if (!b.used) { line("(void)${b.cName};"); }
+        }
+    } else if (pi.kind == PatK.AnyType && pi.bindings.length > 0) {
+        let b: Symbol = pi.bindings[0]!;
+        line("${cType(b.type)} ${b.cName} = ${anyPayload(pi.anyType!, val)};");
+        if (!b.used) { line("(void)${b.cName};"); }
+    } else if (pi.kind == PatK.Class && pi.bindings.length > 0) {
+        let b: Symbol = pi.bindings[0]!;
+        let obj: String = isInterface(inner) ? "${val}.obj" : val;
+        line("${pi.cls!.name}* ${b.cName} = (${pi.cls!.name}*)${obj};");
+        if (!b.used) { line("(void)${b.cName};"); }
+    }
+}

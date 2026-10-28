@@ -1,0 +1,460 @@
+// std.net.http: an HTTP/1.1 client over std.net, with https:// through a TlsProvider (std.net.http.tls).
+//
+//   import std.net.http { Client, Request, Response, Header, HttpError, message, get };
+//
+//   let r: Response = get("https://example.com/");            // a Client {} with the system's TLS
+//   println("${r.status} ${r.text()}");
+//
+//   let api: Client = { timeout: 10000, headers: [Header { name: "Authorization", value: "Bearer x" }] };
+//   let big: Response = api.send({ url: "https://mirror.local/disk.iso" });
+//   copy(big.body, create("disk.iso"));        // the body is a stream: 4 KB at a time, never all of it
+//
+// A Client says how to connect (TLS, timeouts, redirections, headers for every request); a Request says
+// what to ask. send() reads the status line and the headers; the body is read when it is asked for: all
+// of it with text(), bytes() or json(), or piece by piece from body (an InputStream, so Reader and copy()
+// work on it). A status like 404 is a response, not an error: HttpError means there was no response.
+//
+// Everything blocks; there are no threads inside (a request in another thread goes in a Thread of yours).
+// Memory: a Response, its headers and its connection live where the caller puts the result
+// (`api.send(req) in scratch` frees all of it, closing the connection, at the end of scratch's block).
+// Each request has its own connection (Connection: close). A Client is not shared between threads.
+
+import std.net { Connection, TcpSocket, NetError };
+import std.net as Net;
+import std.net.http.tls { TlsProvider, SystemTls };
+import std.io.files { IoError };
+import std.io.files as Files;
+import std.io.streams { InputStream, Closeable, Reader, buffer };
+import std.json { JsonError };
+import std.json as Json;
+
+/** Why there was no response. */
+public enum HttpError {
+    /** It could not connect, the connection broke or timed out. */
+    Net(reason: String),
+    /** The server did not answer in HTTP (or the body is not what was asked: json() of something else). */
+    BadResponse(reason: String),
+    /** More redirections than Request.maxRedirects. */
+    TooManyRedirects,
+    /** The URL is not one this client can use: not http://, or no host. */
+    BadUrl(url: String),
+    /** Something there is no support for: https:// when the system has no TLS ("https: OpenSSL not found..."). */
+    Unsupported(what: String)
+}
+
+/** "network: connection refused", "bad response: ...", ... */
+public function message(e: HttpError): String {
+    return switch (e) {
+        case Net { reason } -> "network: ${reason}";
+        case BadResponse { reason } -> "bad response: ${reason}";
+        case TooManyRedirects -> "too many redirects";
+        case BadUrl { url } -> "bad url: ${url}";
+        case Unsupported { what } -> "unsupported: ${what}";
+    };
+}
+
+/** One header line: "Name: value". */
+public class Header {
+    let name: String;
+    let value: String;
+}
+
+/** What to ask. Only url is needed: { url: "http://..." } is a GET. */
+public class Request {
+    let method: String = "GET";
+    let url: String;
+    /** Sent after the Client's headers. */
+    let headers: Header[*] = [];
+    /** Sent as it is, with its Content-Length (empty: no body). */
+    let body: String = "";
+    /** How long this request may wait for the server, in ms (0: no limit; -1: the Client's timeout). */
+    let timeout: int32 = -1;
+}
+
+/**
+ * How to connect. Every field has a default: Client {} speaks http:// and https:// (with the system's TLS),
+ * waits up to 30 s and follows up to 5 redirections.
+ */
+public class Client {
+    /** What makes https:// connections. Give it your own TlsProvider to use another TLS library. */
+    let tls: TlsProvider = SystemTls {};
+    /** How long the connection may wait for the server, in ms (0: no limit). */
+    let timeout: int32 = 30000;
+    /** 301, 302, 303, 307 and 308 are followed up to this many times (0: not followed). */
+    let maxRedirects: int32 = 5;
+    /** Sent with every request (before the request's own). */
+    let headers: Header[*] = [];
+
+    /** Sends the request and reads the answer up to the end of its headers (following redirections). */
+    function send(req: Request): Response throws HttpError {
+        return fetch(self, req, req.url, self.maxRedirects);
+    }
+
+    /** A GET. */
+    function get(url: String): Response throws HttpError {
+        return fetch(self, Request { url: url }, url, self.maxRedirects);
+    }
+
+    /** A POST with that body and Content-Type. */
+    function post(url: String, body: String, contentType: String): Response throws HttpError {
+        let req: Request = {
+            method: "POST",
+            url: url,
+            body: body,
+            headers: [Header { name: "Content-Type", value: contentType }]
+        };
+        return fetch(self, req, url, self.maxRedirects);
+    }
+}
+
+// how the end of a body is known
+const UNTIL_CLOSE: int32 = 0;      // HTTP/1.0 style: the server closes the connection
+const BY_LENGTH: int32 = 1;        // Content-Length
+const CHUNKED: int32 = 2;          // Transfer-Encoding: chunked
+
+/**
+ * The body of a response, as an InputStream: it ends where the body ends (Content-Length, the last
+ * chunk, or the server closing), whatever the server sends after.
+ */
+public class Body implements InputStream, Closeable {
+    let tcp: TcpSocket? = null;                // http://
+    let connection: Connection? = null;       // the one in use: tcp, or what the TlsProvider gave
+    let host: String = "";
+    let from: Reader? = null;
+    let mode: int32 = UNTIL_CLOSE;
+    let left: int64 = 0;           // bytes left: of the body (BY_LENGTH) or of the chunk (CHUNKED)
+    let done: bool = false;
+
+    function read(buffer: byte[]): int32 throws IoError {
+        if (self.done || self.from == null || buffer.length == 0) { return 0; }
+        let from: Reader = self.from!;
+        if (self.mode == UNTIL_CLOSE) {
+            let n: int32 = from.read(buffer);
+            if (n == 0) { self.done = true; }
+            return n;
+        }
+        if (self.left == 0) {
+            if (self.mode == BY_LENGTH || !self.nextChunk(from)) {
+                self.done = true;
+                return 0;
+            }
+        }
+        let max: int32 = self.left < buffer.length as int64 ? self.left as int32 : buffer.length;
+        let n: int32 = from.readInto(buffer, max);
+        if (n == 0) { throw IoError.Failed("http: the body ended before its end"); }
+        self.left -= n as int64;
+        if (self.mode == CHUNKED && self.left == 0) { from.readLine(); }   // the \r\n after the chunk
+        return n;
+    }
+
+    /** Reads the size line of the next chunk; false at the last one (size 0, then trailers). */
+    function nextChunk(from: Reader): bool throws IoError {
+        let line: String = from.readLine() ?? "";
+        let semi: int32 = line.indexOf(";") ?? line.length;              // "1a3;name=value": extensions
+        let size: int64? = "0x${line.substring(0, semi).trim()}".toInt();
+        if (size == null || size! < 0) { throw IoError.Failed("http: bad chunk size '${line}'"); }
+        if (size! == 0) {
+            while (true) {                                                 // trailers, up to the empty line
+                let t: String? = from.readLine();
+                if (t == null || t!.length == 0) { break; }
+            }
+            return false;
+        }
+        self.left = size!;
+        return true;
+    }
+
+    /** http://: the connection is the TcpSocket. */
+    function useTcp(): void { self.connection = self.tcp!; }
+
+    /** Closes the connection (what was not read is lost). */
+    function close(): void throws IoError {
+        self.done = true;
+        if (self.connection != null) { self.connection!.close(); }
+    }
+}
+
+/** What the server answered. */
+public class Response implements Closeable {
+    let status: int32 = 0;
+    /** The text after the status: "OK", "Not Found"... */
+    let reason: String = "";
+    let headers: Header[*] = [];
+    /** Where the answer came from (after redirections, the last URL). */
+    let url: String = "";
+    let body: Body = {};
+
+    /** 200 to 299. */
+    function ok(): bool { return self.status >= 200 && self.status < 300; }
+
+    /** The value of the first header with that name (names are compared ignoring case), or null. */
+    function header(name: String): String? {
+        for (h in self.headers) {
+            if (h.name.equalsIgnoreCase(name)) { return h.value; }
+        }
+        return null;
+    }
+
+    /** The whole body (what is left of it) as bytes. */
+    function bytes(): byte[*] throws HttpError {
+        let all: byte[*] = [];
+        let chunk: byte[*] = buffer(4096);
+        try {
+            while (true) {
+                let n: int32 = self.body.read(chunk);
+                if (n == 0) { break; }
+                for (i in 0..n) { all.push(chunk[i]); }
+            }
+        } catch (IoError e) {
+            throw HttpError.Net(Files.message(e));
+        }
+        return all;
+    }
+
+    /** The whole body (what is left of it) as text. */
+    function text(): String throws HttpError {
+        let all: byte[*] = [];
+        let chunk: byte[*] = buffer(4096);
+        try {
+            while (true) {
+                let n: int32 = self.body.read(chunk);
+                if (n == 0) { break; }
+                for (i in 0..n) { all.push(chunk[i]); }
+            }
+        } catch (IoError e) {
+            throw HttpError.Net(Files.message(e));
+        }
+        return stringOfRange(all, 0, all.length);
+    }
+
+    /** The body parsed as JSON (std.json); not JSON is a BadResponse. */
+    function json(): Any throws HttpError {
+        let t: String = self.text();
+        try {
+            return Json.parse(t);
+        } catch (JsonError e) {
+            let why: String = switch (e) { case Invalid { at, why } -> "not JSON (at ${at}: ${why})"; };
+            throw HttpError.BadResponse(why.clone());
+        }
+    }
+
+    /** Closes the connection now; otherwise it closes when the Response's memory is freed. */
+    function close(): void throws IoError { self.body.close(); }
+}
+
+/** A GET with a Client {} (the system's TLS for https://). */
+public function get(url: String): Response throws HttpError {
+    let c: Client = {};
+    return c.get(url);
+}
+
+/** A POST with a Client {}. */
+public function post(url: String, body: String, contentType: String): Response throws HttpError {
+    let c: Client = {};
+    return c.post(url, body, contentType);
+}
+
+/** A request with a Client {}. */
+public function send(req: Request): Response throws HttpError {
+    let c: Client = {};
+    return c.send(req);
+}
+
+/** A Connection as an InputStream, for the Reader. */
+class ConnectionInput implements InputStream {
+    let connection: Connection;
+    function read(buffer: byte[]): int32 throws IoError { return self.connection.read(buffer); }
+}
+
+// ---------------------------------------------------------------------------------------------------
+
+/** The parts of an http:// or https:// URL. */
+class Url {
+    let secure: bool = false;
+    let host: String = "";
+    let port: int32 = 80;
+    let path: String = "/";
+    let hostHeader: String = "";       // host, or host:port when the port is not the scheme's
+}
+
+function parseUrl(url: String): Url throws HttpError {
+    let lower: String = url.toLowerCase();
+    let secure: bool = lower.startsWith("https://");
+    if (!secure && !lower.startsWith("http://")) { throw HttpError.BadUrl(url.clone()); }
+    let rest: String = url.substring(secure ? 8 : 7);
+    let slash: int32 = rest.indexOf("/") ?? rest.length;
+    let query: int32 = rest.indexOf("?") ?? rest.length;
+    let cut: int32 = slash < query ? slash : query;
+    let authority: String = rest.substring(0, cut);
+    let u: Url = { secure: secure, port: secure ? 443 : 80, path: cut < rest.length ? rest.substring(cut) : "/", hostHeader: authority };
+    if (u.path.startsWith("?")) { u.path = "/${u.path}"; }
+    let hash: int32? = u.path.indexOf("#");                       // the fragment is not sent
+    if (hash != null) { u.path = u.path.substring(0, hash!); }
+    u.host = authority;
+    if (authority.startsWith("[")) {                               // [::1]:8080
+        let close: int32 = authority.indexOf("]") ?? authority.length;
+        u.host = authority.substring(1, close);
+        if (close + 1 < authority.length && authority[close + 1] == ':') {
+            u.port = portOf(authority.substring(close + 2), url);
+        }
+    } else {
+        let colon: int32? = authority.lastIndexOf(":");
+        if (colon != null) {
+            u.host = authority.substring(0, colon!);
+            u.port = portOf(authority.substring(colon! + 1), url);
+        }
+    }
+    if (u.host.length == 0) { throw HttpError.BadUrl(url.clone()); }
+    return u;
+}
+
+function portOf(text: String, url: String): int32 throws HttpError {
+    let p: int64? = text.toInt();
+    if (p == null || p! <= 0 || p! > 65535) { throw HttpError.BadUrl(url.clone()); }
+    return p! as int32;
+}
+
+/** Where a Location points, from the URL that answered (absolute, "/path", or relative). */
+function resolve(base: String, location: String): String {
+    let lower: String = location.toLowerCase();
+    if (lower.startsWith("http://") || lower.startsWith("https://")) { return location.clone(); }
+    let schemeEnd: int32 = (base.indexOf("://") ?? 0) + 3;
+    let pathStart: int32 = base.indexOf("/", schemeEnd) ?? base.length;
+    if (location.startsWith("//")) { return "http:${location}"; }
+    if (location.startsWith("/")) { return "${base.substring(0, pathStart)}${location}"; }
+    let dir: int32 = base.lastIndexOf("/") ?? pathStart;
+    if (dir < pathStart) { return "${base.substring(0, pathStart)}/${location}"; }
+    return "${base.substring(0, dir + 1)}${location}";
+}
+
+function hasHeader(client: Client, req: Request, name: String): bool {
+    for (h in client.headers) {
+        if (h.name.equalsIgnoreCase(name)) { return true; }
+    }
+    for (h in req.headers) {
+        if (h.name.equalsIgnoreCase(name)) { return true; }
+    }
+    return false;
+}
+
+/** The request line and the headers, up to the empty line. */
+function head(client: Client, req: Request, u: Url): String {
+    let sb: StringBuilder = {};
+    sb.add("${req.method} ${u.path} HTTP/1.1\r\n");
+    if (!hasHeader(client, req, "Host")) { sb.add("Host: ${u.hostHeader}\r\n"); }
+    if (!hasHeader(client, req, "User-Agent")) { sb.add("User-Agent: Larimar\r\n"); }
+    if (!hasHeader(client, req, "Accept-Encoding")) { sb.add("Accept-Encoding: identity\r\n"); }
+    sb.add("Connection: close\r\n");
+    let method: String = req.method.toUpperCase();
+    if (req.body.length > 0 || method == "POST" || method == "PUT" || method == "PATCH") {
+        sb.add("Content-Length: ${req.body.length}\r\n");
+    }
+    for (h in client.headers) { sb.add("${h.name}: ${h.value}\r\n"); }
+    for (h in req.headers) { sb.add("${h.name}: ${h.value}\r\n"); }
+    sb.add("\r\n");
+    return sb.toString();
+}
+
+function isRedirect(status: int32): bool {
+    return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
+}
+
+function fetch(client: Client, req: Request, url: String, redirectsLeft: int32): Response throws HttpError {
+    let u: Url = parseUrl(url);
+    let timeout: int32 = req.timeout >= 0 ? req.timeout : client.timeout;
+    let r: Response = { url: url.clone() };
+    r.body.host = u.host.clone();               // (in r: the connection may point to it, and to client.tls)
+    try {
+        if (u.secure) {
+            r.body.connection = client.tls.connect(r.body.host, u.port, timeout);
+        } else {
+            r.body.tcp = TcpSocket.connect(u.host, u.port);
+            r.body.tcp!.setTimeout(timeout);
+            r.body.useTcp();
+        }
+    } catch (NetError e) {
+        switch (e) {
+            case TlsUnavailable { what } -> throw HttpError.Unsupported("https: ${what}");
+            default -> throw HttpError.Net(Net.message(e));
+        }
+    }
+    let conn: Connection = r.body.connection!;
+    try {
+        conn.write(head(client, req, u).bytes());
+        if (req.body.length > 0) { conn.write(req.body.bytes()); }
+        conn.flush();
+    } catch (IoError e) {
+        throw HttpError.Net(Files.message(e));
+    }
+    r.body.from = Reader { from: ConnectionInput { connection: conn } };
+    readHead(r, req.method.equalsIgnoreCase("HEAD"));
+    let location: String? = r.header("Location");
+    if (isRedirect(r.status) && location != null && client.maxRedirects > 0) {
+        if (redirectsLeft <= 0) { throw HttpError.TooManyRedirects; }
+        let next: String = resolve(url, location!);
+        try { r.close(); } catch (IoError e) {}
+        let keep: bool = r.status == 307 || r.status == 308;      // the others become a GET without body
+        let again: Request = {
+            method: keep ? req.method : "GET",
+            url: next,
+            headers: req.headers,
+            body: keep ? req.body : "",
+            timeout: req.timeout
+        };
+        return fetch(client, again, next, redirectsLeft - 1);
+    }
+    return r;
+}
+
+/** The status line and the headers (skipping 1xx answers); then how the body ends. */
+function readHead(r: Response, isHead: bool): void throws HttpError {
+    let from: Reader = r.body.from!;
+    try {
+        while (true) {
+            let status: String = from.readLine() ?? "";
+            if (!status.startsWith("HTTP/")) {
+                throw HttpError.BadResponse(status.length == 0 ? "no answer" : "not HTTP: '${status}'");
+            }
+            let sp: int32 = status.indexOf(" ") ?? status.length;
+            let sp2: int32 = status.indexOf(" ", sp + 1) ?? status.length;
+            let code: int64? = sp < status.length ? status.substring(sp + 1, sp2).toInt() : null;
+            if (code == null) { throw HttpError.BadResponse("no status: '${status}'"); }
+            r.status = code! as int32;
+            r.reason = sp2 < status.length ? status.substring(sp2 + 1).clone() : "";
+            r.headers.clear();
+            while (true) {
+                let line: String = from.readLine() ?? "";
+                if (line.length == 0) { break; }
+                let colon: int32? = line.indexOf(":");
+                if (colon == null) { continue; }
+                r.headers.push(Header {
+                    name: line.substring(0, colon!).trim().clone(),
+                    value: line.substring(colon! + 1).trim().clone()
+                });
+            }
+            if (r.status < 100 || r.status >= 200 || r.status == 101) { break; }   // 100 Continue...: the real one follows
+        }
+    } catch (IoError e) {
+        throw HttpError.Net(Files.message(e));
+    }
+    let body: Body = r.body;
+    if (isHead || r.status == 204 || r.status == 304 || r.status < 200) {
+        body.mode = BY_LENGTH;                                     // no body
+        body.left = 0;
+        return;
+    }
+    let te: String = r.header("Transfer-Encoding") ?? "";
+    if (te.toLowerCase().contains("chunked")) {
+        body.mode = CHUNKED;
+        return;
+    }
+    let length: String? = r.header("Content-Length");
+    if (length != null) {
+        let n: int64? = length!.toInt();
+        if (n == null || n! < 0) { throw HttpError.BadResponse("bad Content-Length '${length!}'"); }
+        body.mode = BY_LENGTH;
+        body.left = n!;
+        return;
+    }
+    body.mode = UNTIL_CLOSE;
+}

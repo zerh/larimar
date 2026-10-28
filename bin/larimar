@@ -1,0 +1,12 @@
+#!/bin/bash
+# Larimar compiler wrapper script
+# Automatically sets LARIMAR_HOME to the installation directory
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# LARIMAR_HOME is the parent directory of bin/
+export LARIMAR_HOME="$(dirname "$SCRIPT_DIR")"
+
+# Execute larimarc with all arguments
+exec "$SCRIPT_DIR/larimarc" "$@"

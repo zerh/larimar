@@ -1,0 +1,560 @@
+// std.text.regex: regular expressions, written in Larimar (no C library: the same on every system).
+//
+//   import std.text.regex { Regex, Match };
+//   let email: Regex = Regex.compile("([a-z]+)@([a-z]+)\\.com");
+//   let m: Match? = email.find("write to ana@mail.com");
+//   if (m != null) { println(m.group(1) ?? ""); }          // ana
+//
+// What a pattern can say:
+//   a  \.  \n \t \r       a character (\ before a sign takes it as it is)
+//   .                      any character but \n
+//   [abc] [a-z] [^0-9]     one of them, a range, none of them
+//   \d \w \s  \D \W \S     a digit, a letter/digit/_, a space; and their opposites
+//   ^ $  \b \B             start, end, a word boundary, not a boundary
+//   * + ? {n} {n,} {n,m}   repeated (as many as possible); with a ? after, as few as possible
+//   (x) (?:x)  x|y         a group (captured, or not), one or the other
+//
+// The classes (\d, \w, [a-z]...) are ASCII; a letter with an accent is one character for '.' and [^...].
+// It checks each place of the text once per instruction at most: no pattern makes it take forever.
+
+/** A pattern that cannot be compiled: why, and where (the byte of the pattern). */
+public enum RegexError {
+    Invalid(reason: String, at: int32)
+}
+
+/** "missing ')' at 7". */
+public function message(e: RegexError): String {
+    return switch (e) {
+        case Invalid { reason, at } -> "${reason} at ${at}";
+    };
+}
+
+// The instructions of a compiled pattern.
+const CHAR: int32 = 0;        // x: the byte
+const ANY: int32 = 1;         // any character but \n
+const CLASS: int32 = 2;       // x: the class
+const SPLIT: int32 = 3;       // try x first, then y
+const JMP: int32 = 4;         // go to x
+const SAVE: int32 = 5;        // x: the capture slot (2 per group)
+const MATCH: int32 = 6;
+const BOL: int32 = 7;         // ^
+const EOL: int32 = 8;         // $
+const WORDB: int32 = 9;       // \b
+const NWORDB: int32 = 10;     // \B
+
+/** The longest {n,m} repetition. */
+const MAX_REPEAT: int32 = 1000;
+
+/** A place where the pattern matched. */
+public class Match {
+    /** Where it starts and ends in the text (bytes, the end not included). */
+    let start: int32;
+    let end: int32;
+    /** What it matched. */
+    let value: String;
+    /** groups[i]: what group i matched ("" if it took no part); groups[0] is the whole match. */
+    let groups: String[*] = [];
+    /** spans[2i], spans[2i+1]: where group i starts and ends (-1 if it took no part). */
+    let spans: int32[*] = [];
+
+    /** What group i matched, or null if it took no part (0 is the whole match). */
+    function group(i: int32): String? {
+        if (i < 0 || 2 * i >= self.spans.length || self.spans[2 * i] < 0) { return null; }
+        return self.groups[i];
+    }
+}
+
+/** A compiled pattern. */
+public class Regex {
+    let pattern: String;
+    let op: int32[*] = [];
+    let x: int32[*] = [];
+    let y: int32[*] = [];
+    /** Classes: ranges lo..hi from clsFirst[k], clsCount[k] of them; clsNeg[k] 1 for [^...]. */
+    let lo: byte[*] = [];
+    let hi: byte[*] = [];
+    let clsFirst: int32[*] = [];
+    let clsCount: int32[*] = [];
+    let clsNeg: byte[*] = [];
+    /** Groups, the whole match counted. */
+    let groupCount: int32 = 1;
+    // while compiling
+    let pos: int32 = 0;
+    let groups: int32 = 1;
+
+    /** Compiles a pattern; a pattern with an error throws RegexError. */
+    static function compile(pattern: String): Regex throws RegexError {
+        let r: Regex = { pattern: pattern.clone() };
+        r.emit(SAVE, 0, 0);
+        r.alternation();
+        if (r.pos < r.pattern.length) { r.fail("')' without '('"); }
+        r.emit(SAVE, 1, 0);
+        r.emit(MATCH, 0, 0);
+        r.groupCount = r.groups;
+        return r;
+    }
+
+    // ---- compiling ------------------------------------------------------------------------
+
+    function fail(reason: String): void throws RegexError { throw RegexError.Invalid(reason.clone(), self.pos); }
+
+    function emit(o: int32, a: int32, b: int32): int32 {
+        self.op.push(o);
+        self.x.push(a);
+        self.y.push(b);
+        return self.op.length - 1;
+    }
+
+    function here(): int32 { return self.op.length; }
+
+    function more(): bool { return self.pos < self.pattern.length; }
+
+    function peek(): byte { return self.pattern[self.pos]; }
+
+    /** Forgets the code from `n` on (to write it again, wrapped). */
+    function cut(n: int32): void {
+        while (self.op.length > n) {
+            self.op.pop();
+            self.x.pop();
+            self.y.pop();
+        }
+    }
+
+    /** x|y|z: each branch is compiled, then again after a SPLIT once a '|' says it was one. */
+    function alternation(): void throws RegexError {
+        let startPos: int32 = self.pos;
+        let startGroups: int32 = self.groups;
+        let code: int32 = self.here();
+        self.concat();
+        if (!self.more() || self.peek() != '|') { return; }
+        let endPos: int32 = self.pos;
+        self.cut(code);
+        let split: int32 = self.emit(SPLIT, code + 1, 0);
+        self.pos = startPos;
+        self.groups = startGroups;
+        self.concat();
+        let jmp: int32 = self.emit(JMP, 0, 0);
+        self.y[split] = self.here();
+        self.pos = endPos + 1;                    // after the '|'
+        self.alternation();
+        self.x[jmp] = self.here();
+    }
+
+    function concat(): void throws RegexError {
+        while (self.more() && self.peek() != '|' && self.peek() != ')') { self.piece(); }
+    }
+
+    /** An atom and its repetition: the atom is compiled, and again as often as the repetition says. */
+    function piece(): void throws RegexError {
+        let atomPos: int32 = self.pos;
+        let atomGroups: int32 = self.groups;
+        let code: int32 = self.here();
+        self.atom();
+        if (!self.more()) { return; }
+        let min: int32 = -1;
+        let max: int32 = -1;
+        let c: byte = self.peek();
+        if (c == '*') { min = 0; max = -1; self.pos += 1; }
+        else if (c == '+') { min = 1; max = -1; self.pos += 1; }
+        else if (c == '?') { min = 0; max = 1; self.pos += 1; }
+        else if (c == '{') {
+            let saved: int32 = self.pos;
+            if (!self.counted()) { self.pos = saved; return; }       // not a repetition: a '{' (the next atom)
+            min = self.lastMin;
+            max = self.lastMax;
+        } else {
+            return;
+        }
+        let lazy: bool = false;
+        if (self.more() && self.peek() == '?') {
+            lazy = true;
+            self.pos += 1;
+        }
+        if (self.more() && (self.peek() == '*' || self.peek() == '+')) { self.fail("a repetition of a repetition"); }
+        let after: int32 = self.pos;
+        let groupsAfter: int32 = self.groups;
+        self.cut(code);
+        for (i in 0..min) { self.again(atomPos, atomGroups); }
+        if (max < 0) {                            // and then any number more
+            let top: int32 = self.here();
+            let split: int32 = self.emit(SPLIT, 0, 0);
+            self.again(atomPos, atomGroups);
+            self.emit(JMP, top, 0);
+            self.choose(split, top + 1, self.here(), lazy);
+        } else {
+            for (i in min..max) {
+                let split: int32 = self.emit(SPLIT, 0, 0);
+                self.again(atomPos, atomGroups);
+                self.choose(split, split + 1, self.here(), lazy);
+            }
+        }
+        self.pos = after;
+        self.groups = groupsAfter;
+    }
+
+    /** SPLIT to `more` first (as many as possible), or to `done` first when lazy. */
+    function choose(split: int32, more: int32, done: int32, lazy: bool): void {
+        self.x[split] = lazy ? done : more;
+        self.y[split] = lazy ? more : done;
+    }
+
+    /** Compiles the atom at `atomPos` once more (its groups keep their numbers). */
+    function again(atomPos: int32, atomGroups: int32): void throws RegexError {
+        self.pos = atomPos;
+        self.groups = atomGroups;
+        self.atom();
+    }
+
+    let lastMin: int32 = 0;
+    let lastMax: int32 = 0;
+
+    /** {n}, {n,}, {n,m} into lastMin/lastMax; false if what follows '{' is not one. */
+    function counted(): bool throws RegexError {
+        self.pos += 1;
+        let n: int32 = self.number();
+        if (n < 0) { return false; }
+        let m: int32 = n;
+        if (self.more() && self.peek() == ',') {
+            self.pos += 1;
+            m = self.number();                    // -1: no upper limit
+        }
+        if (!self.more() || self.peek() != '}') { return false; }
+        self.pos += 1;
+        if (n > MAX_REPEAT || m > MAX_REPEAT) { self.fail("a repetition above ${MAX_REPEAT}"); }
+        if (m >= 0 && m < n) { self.fail("{n,m} with m below n"); }
+        self.lastMin = n;
+        self.lastMax = m;
+        return true;
+    }
+
+    /** The digits at pos as a number, or -1 if there are none. */
+    function number(): int32 {
+        let start: int32 = self.pos;
+        let n: int32 = 0;
+        while (self.more() && self.peek() >= '0' && self.peek() <= '9') {
+            if (n < 100000) { n = n * 10 + (self.peek() - '0') as int32; }
+            self.pos += 1;
+        }
+        return self.pos == start ? -1 : n;
+    }
+
+    function atom(): void throws RegexError {
+        let c: byte = self.peek();
+        if (c == '(') {
+            self.pos += 1;
+            let capture: bool = true;
+            if (self.pos + 1 < self.pattern.length && self.peek() == '?' && self.pattern[self.pos + 1] == ':') {
+                capture = false;
+                self.pos += 2;
+            }
+            let g: int32 = self.groups;
+            if (capture) {
+                self.groups += 1;
+                self.emit(SAVE, 2 * g, 0);
+            }
+            self.alternation();
+            if (!self.more() || self.peek() != ')') { self.fail("missing ')'"); }
+            self.pos += 1;
+            if (capture) { self.emit(SAVE, 2 * g + 1, 0); }
+            return;
+        }
+        if (c == '*' || c == '+' || c == '?') { self.fail("'${self.pattern.substring(self.pos, self.pos + 1)}' with nothing to repeat"); }
+        self.pos += 1;
+        if (c == '.') { self.emit(ANY, 0, 0); return; }
+        if (c == '^') { self.emit(BOL, 0, 0); return; }
+        if (c == '$') { self.emit(EOL, 0, 0); return; }
+        if (c == '[') { self.charClass(); return; }
+        if (c == '\\') { self.escape(); return; }
+        self.emit(CHAR, c as int32, 0);
+        // a character of several bytes (UTF-8) is one atom: a repetition takes all of it
+        while (c >= 0xC0 && self.more() && (self.peek() & 0xC0) == 0x80) {
+            self.emit(CHAR, self.peek() as int32, 0);
+            self.pos += 1;
+        }
+    }
+
+    function escape(): void throws RegexError {
+        if (!self.more()) { self.fail("'\\' at the end"); }
+        let e: byte = self.peek();
+        self.pos += 1;
+        if (e == 'b') { self.emit(WORDB, 0, 0); return; }
+        if (e == 'B') { self.emit(NWORDB, 0, 0); return; }
+        if (e == 'd' || e == 'w' || e == 's' || e == 'D' || e == 'W' || e == 'S') {
+            let k: int32 = self.newClass(e == 'D' || e == 'W' || e == 'S');
+            self.shorthand(k, e);
+            self.emit(CLASS, k, 0);
+            return;
+        }
+        self.emit(CHAR, self.escaped(e) as int32, 0);
+    }
+
+    /** \n, \t, \r, \f, \v, \0; any other byte after '\' is itself (\. \* \\ ...). */
+    function escaped(e: byte): byte {
+        if (e == 'n') { return '\n'; }
+        if (e == 't') { return '\t'; }
+        if (e == 'r') { return '\r'; }
+        if (e == 'f') { return 12; }
+        if (e == 'v') { return 11; }
+        if (e == '0') { return 0; }
+        return e;
+    }
+
+    function newClass(negated: bool): int32 {
+        self.clsFirst.push(self.lo.length);
+        self.clsCount.push(0);
+        self.clsNeg.push(negated ? 1 : 0);
+        return self.clsFirst.length - 1;
+    }
+
+    function range(k: int32, a: byte, b: byte): void {
+        self.lo.push(a);
+        self.hi.push(b);
+        self.clsCount[k] = self.clsCount[k] + 1;
+    }
+
+    /** The ranges of \d, \w or \s (in either case: the class says if it is negated). */
+    function shorthand(k: int32, e: byte): void {
+        if (e == 'd' || e == 'D') {
+            self.range(k, '0', '9');
+        } else if (e == 'w' || e == 'W') {
+            self.range(k, 'a', 'z');
+            self.range(k, 'A', 'Z');
+            self.range(k, '0', '9');
+            self.range(k, '_', '_');
+        } else {
+            self.range(k, ' ', ' ');
+            self.range(k, 9, 13);                 // \t \n \v \f \r
+        }
+    }
+
+    /** [abc], [a-z0-9_], [^"], []a] (a ']' first is a ']'). */
+    function charClass(): void throws RegexError {
+        let negated: bool = self.more() && self.peek() == '^';
+        if (negated) { self.pos += 1; }
+        let k: int32 = self.newClass(negated);
+        let first: bool = true;
+        while (true) {
+            if (!self.more()) { self.fail("missing ']'"); }
+            let c: byte = self.peek();
+            if (c == ']' && !first) { break; }
+            first = false;
+            self.pos += 1;
+            if (c == '\\') {
+                if (!self.more()) { self.fail("missing ']'"); }
+                let e: byte = self.peek();
+                self.pos += 1;
+                if (e == 'd' || e == 'w' || e == 's') {
+                    self.shorthand(k, e);
+                    continue;
+                }
+                if (e == 'D' || e == 'W' || e == 'S') { self.fail("\\${self.pattern.substring(self.pos - 1, self.pos)} inside [...]: use [^...]"); }
+                c = self.escaped(e);
+            }
+            if (c >= 128) { self.fail("[...] holds ASCII characters only"); }
+            let to: byte = c;
+            if (self.pos + 1 < self.pattern.length && self.peek() == '-' && self.pattern[self.pos + 1] != ']') {
+                self.pos += 1;
+                to = self.peek();
+                self.pos += 1;
+                if (to == '\\') {
+                    if (!self.more()) { self.fail("missing ']'"); }
+                    to = self.escaped(self.peek());
+                    self.pos += 1;
+                }
+                if (to >= 128) { self.fail("[...] holds ASCII characters only"); }
+                if (to < c) { self.fail("a range [a-z] whose end is before its start"); }
+            }
+            self.range(k, c, to);
+        }
+        self.pos += 1;                            // the ']'
+        self.emit(CLASS, k, 0);
+    }
+
+    // ---- running -----------------------------------------------------------------------------
+
+    function inClass(k: int32, b: byte): bool {
+        let from: int32 = self.clsFirst[k];
+        for (i in from..from + self.clsCount[k]) {
+            if (b >= self.lo[i] && b <= self.hi[i]) { return true; }
+        }
+        return false;
+    }
+
+    /**
+     * Runs the program from `start`: true if it reaches MATCH (caps then has the groups). Backtracking
+     * with its own stack; `seen` remembers each (instruction, place) already tried: trying it again
+     * would fail again, so nothing is tried twice. whole: only a match that ends at the end counts.
+     */
+    function run(text: String, start: int32, caps: int32[*], seen: byte[], whole: bool): bool {
+        let n: int32 = text.length;
+        let width: int32 = n + 1;
+        // the stack: (pc, sp) to try later, or (-1 - slot, old value) to undo a SAVE
+        let stackA: int32[*] = [];
+        let stackB: int32[*] = [];
+        stackA.push(0);
+        stackB.push(start);
+        while (stackA.length > 0) {
+            let pc: int32 = stackA.pop();
+            let sp: int32 = stackB.pop();
+            if (pc < 0) {
+                caps[-1 - pc] = sp;
+                continue;
+            }
+            while (true) {
+                let at: int32 = pc * width + sp;
+                if (seen[at] != 0) { break; }
+                seen[at] = 1;
+                let o: int32 = self.op[pc];
+                if (o == CHAR) {
+                    if (sp >= n || text[sp] as int32 != self.x[pc]) { break; }
+                    pc += 1;
+                    sp += 1;
+                } else if (o == ANY) {
+                    if (sp >= n || text[sp] == '\n') { break; }
+                    sp = nextChar(text, sp);
+                    pc += 1;
+                } else if (o == CLASS) {
+                    if (sp >= n) { break; }
+                    let b: byte = text[sp];
+                    let k: int32 = self.x[pc];
+                    let inside: bool = b < 128 && self.inClass(k, b);
+                    if (inside == (self.clsNeg[k] != 0)) { break; }
+                    sp = nextChar(text, sp);
+                    pc += 1;
+                } else if (o == SPLIT) {
+                    stackA.push(self.y[pc]);
+                    stackB.push(sp);
+                    pc = self.x[pc];
+                } else if (o == JMP) {
+                    pc = self.x[pc];
+                } else if (o == SAVE) {
+                    let slot: int32 = self.x[pc];
+                    stackA.push(-1 - slot);
+                    stackB.push(caps[slot]);
+                    caps[slot] = sp;
+                    pc += 1;
+                } else if (o == BOL) {
+                    if (sp != 0) { break; }
+                    pc += 1;
+                } else if (o == EOL) {
+                    if (sp != n) { break; }
+                    pc += 1;
+                } else if (o == WORDB || o == NWORDB) {
+                    let boundary: bool = isWord(text, sp - 1) != isWord(text, sp);
+                    if (boundary != (o == WORDB)) { break; }
+                    pc += 1;
+                } else {                          // MATCH
+                    if (whole && sp != n) { break; }
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** The first match at `from` or after, or null. */
+    function findFrom(text: String, from: int32, whole: bool): Match? {
+        let n: int32 = text.length;
+        let caps: int32[*] = [];
+        for (i in 0..2 * self.groupCount) { caps.push(-1); }
+        let seen: byte[*] = [];
+        for (i in 0..self.op.length * (n + 1)) { seen.push(0); }
+        let last: int32 = whole ? from : n;
+        let start: int32 = from;
+        while (start <= last) {
+            if (self.run(text, start, caps, seen, whole)) {
+                let groups: String[*] = [];
+                for (g in 0..self.groupCount) {
+                    let a: int32 = caps[2 * g];
+                    let b: int32 = caps[2 * g + 1];
+                    groups.push(a >= 0 && b >= a ? text.substring(a, b).clone() : "");
+                }
+                return Match { start: caps[0], end: caps[1], value: text.substring(caps[0], caps[1]).clone(), groups, spans: caps };
+            }
+            if (start >= n) { break; }
+            start = nextChar(text, start);
+        }
+        return null;
+    }
+
+    // ---- what it offers ----------------------------------------------------------------------
+
+    /** Does the pattern match the whole text? */
+    function matches(text: String): bool { return self.findFrom(text, 0, true) != null; }
+
+    /** Does it match somewhere in the text? */
+    function contains(text: String): bool { return self.findFrom(text, 0, false) != null; }
+
+    /** The first match, or null. */
+    function find(text: String): Match? { return self.findFrom(text, 0, false); }
+
+    /** Every match, one after the other (an empty match moves one character on). */
+    function findAll(text: String): Match[*] {
+        let all: Match[*] = [];
+        let from: int32 = 0;
+        while (from <= text.length) {
+            let m: Match? = self.findFrom(text, from, false);
+            if (m == null) { break; }
+            all.push(m!);
+            from = m.end > m.start ? m.end : (m.end < text.length ? nextChar(text, m.end) : text.length + 1);
+        }
+        return all;
+    }
+
+    /** The text with every match replaced: $0 is the match, $1..$9 its groups, $$ a '$'. */
+    function replace(text: String, replacement: String): String {
+        let out: StringBuilder = {};
+        let done: int32 = 0;
+        for (m in self.findAll(text)) {
+            out.add(text.substring(done, m.start));
+            let i: int32 = 0;
+            while (i < replacement.length) {
+                let c: byte = replacement[i];
+                if (c == '$' && i + 1 < replacement.length) {
+                    let d: byte = replacement[i + 1];
+                    if (d == '$') {
+                        out.add("$");
+                        i += 2;
+                        continue;
+                    }
+                    if (d >= '0' && d <= '9') {
+                        out.add(m.group((d - '0') as int32) ?? "");
+                        i += 2;
+                        continue;
+                    }
+                }
+                out.add(replacement.substring(i, i + 1));
+                i += 1;
+            }
+            done = m.end;
+        }
+        out.add(text.substring(done, text.length));
+        return out.toString().clone();
+    }
+
+    /** The pieces of the text between the matches. */
+    function split(text: String): String[*] {
+        let parts: String[*] = [];
+        let done: int32 = 0;
+        for (m in self.findAll(text)) {
+            if (m.end == m.start) { continue; }       // an empty match does not cut
+            parts.push(text.substring(done, m.start).clone());
+            done = m.end;
+        }
+        parts.push(text.substring(done, text.length).clone());
+        return parts;
+    }
+}
+
+/** Where the character at i ends (a character of UTF-8 may take several bytes). */
+function nextChar(text: String, i: int32): int32 {
+    let j: int32 = i + 1;
+    while (j < text.length && (text[j] & 0xC0) == 0x80) { j += 1; }
+    return j;
+}
+
+function isWord(text: String, i: int32): bool {
+    if (i < 0 || i >= text.length) { return false; }
+    let b: byte = text[i];
+    return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_';
+}

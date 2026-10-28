@@ -1,0 +1,8 @@
+// expect: error but the array lives for the whole program
+// Guardar en una lista de todo el programa algo que muere al final del bloque.
+let names: String[*] = [] in default;
+function main(): int32 {
+    let local: String = "x".toUpperCase();
+    names.push(local);
+    return 0;
+}

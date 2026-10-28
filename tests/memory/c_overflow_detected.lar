@@ -1,0 +1,16 @@
+// expect: memory-error
+// C que escribe un byte de más dentro de una memoria: las comprobaciones de memoria lo detectan.
+// (Sin ellas, el byte pisaba en silencio lo siguiente de la memoria.)
+c_code {
+    static const char* bad(RtMem* m) {
+        char* out = (char*)rt_mem_alloc(m, 4, 0);
+        for (int i = 0; i <= 4; i++) out[i] = 'A';
+        out[3] = 0;
+        return out;
+    }
+}
+extern function bad(m: byte[*]): String;
+function main(): int32 {
+    println(bad());
+    return 0;
+}

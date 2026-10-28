@@ -1,0 +1,14 @@
+// expect: run
+// output: 1 2 1 3 4 5 6
+// Names of the C library (log, exit, abs, time...) get a '_' in the C: clang treats them as built-ins.
+let log: int32 = 1;
+let exit: int32 = 2;
+function abs(x: int32): int32 { return x; }
+function time(): int32 { return 3; }
+function main(): int32 {
+    let double: int32 = 4;
+    let register: int32 = 5;
+    let printf: int32 = 6;
+    println("${log} ${exit} ${abs(1)} ${time()} ${double} ${register} ${printf}");
+    return 0;
+}

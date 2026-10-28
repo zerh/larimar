@@ -1,0 +1,8 @@
+// expect: error but the array lives for the whole program
+// Una lambda que vive todo el programa no puede capturar algo del bloque.
+let actions: (() -> String)[*] = [] in default;
+function main(): int32 {
+    let label: String = "x".toUpperCase();
+    actions.push(() -> { return label; });
+    return 0;
+}

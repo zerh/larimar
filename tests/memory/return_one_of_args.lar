@@ -1,0 +1,13 @@
+// expect: run
+// output: largo
+// output: corto2
+// Una función que devuelve uno de sus argumentos (o algo nuevo): lo que devuelve vive en la llamada.
+function longer(a: String, b: String): String { return a.length >= b.length ? a : b; }
+function pick(a: String, n: int32): String { return n > 0 ? a : "${a}${-n}"; }
+function main(): int32 {
+    let x: String = "corto".toLowerCase();
+    let y: String = "largo!".substring(0, 5);
+    println(longer(y, x));
+    println(pick(x, -2));
+    return 0;
+}

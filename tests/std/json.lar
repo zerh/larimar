@@ -1,0 +1,36 @@
+// expect: run
+// output: 8080 a b true null 2.5 -7 1e+21
+// output: hola "mundo" \ ñ € 😀
+// output: {"port":8080,"names":["a","b"],"ok":true,"none":null,"r":2.5,"neg":-7,"big":1e+21}
+// output: {"s":"line\nnext\ttab \"q\" \\ \u0001","list":[1,2,{"x":{}}],"e":{}}
+// output: error at 8: expected ',' or '}'
+// output: error at 4: unterminated string
+// output: 9223372036854775807 9.22337203685478e+18
+import std.json as Json;
+function main(): int32 {
+    try {
+        let v: Any = Json.parse(" {\"port\": 8080, \"names\": [\"a\", \"b\"], \"ok\": true, \"none\": null, \"r\": 2.5, \"neg\": -7, \"big\": 1e21 } ");
+        println("${v.port as int32 ?? 0} ${v.names[0]} ${v.names[1]} ${v.ok} ${v.none} ${v.r} ${v.neg} ${v.big}");
+        let u: Any = Json.parse("[\"hola \\\"mundo\\\" \\\\ \\u00f1 \\u20ac \\ud83d\\ude00\"]");
+        println(u[0] as String ?? "?");
+        println(Json.stringify(v));
+        let w: Any = { s: "line\nnext\ttab \"q\" \\ ${stringOf([1])}", list: { 1, 2, { x: {} } }, e: {} };
+        println(Json.stringify(w));
+    } catch (Json.JsonError e) {
+        println("unexpected");
+    }
+    let bads: String[*] = ["{\"a\": 1 \"b\": 2}", "\"abc"];
+    for (bad in bads) {
+        try {
+            let x: Any = Json.parse(bad);
+            println("parsed?");
+        } catch (Json.JsonError e) {
+            switch (e) { case Invalid { at, why } -> println("error at ${at}: ${why}"); }
+        }
+    }
+    try {
+        let n: Any = Json.parse("[9223372036854775807, 9223372036854775808]");
+        println("${n[0]} ${n[1]}");
+    } catch (Json.JsonError e) { println("unexpected"); }
+    return 0;
+}

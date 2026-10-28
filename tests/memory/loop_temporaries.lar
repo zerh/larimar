@@ -1,0 +1,16 @@
+// expect: run
+// output: 4950 100
+// Temporales de cada vuelta (interpolación, mayúsculas, recortes) mueren en cada ';'.
+function main(): int32 {
+    let total: int32 = 0;
+    let count: int32 = 0;
+    for (i in 0..100) {
+        let t: String = "  n${i}  ".trim().toUpperCase();
+        if (t.substring(1).toInt() != null) {
+            total += (t.substring(1).toInt() ?? 0) as int32;
+            count += 1;
+        }
+    }
+    println("${total} ${count}");
+    return 0;
+}

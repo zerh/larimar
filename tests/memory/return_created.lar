@@ -1,0 +1,12 @@
+// expect: run
+// output: hola 3
+// output: [hola 1] [hola 2]
+// Lo que devuelve una función que crea su resultado vive en la memoria de quien llama.
+function make(n: int32): String { return "hola ${n}"; }
+function wrap(s: String): String { return "[${s}]"; }
+function main(): int32 {
+    let s: String = make(3);
+    println(s);
+    println("${wrap(make(1))} ${wrap(make(2))}");
+    return 0;
+}

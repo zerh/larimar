@@ -1,0 +1,10 @@
+// expect: error 'x'
+// Without every platform covered, what a branch declares cannot stay: some platform would lack it.
+function main(): void {
+    #when macos
+        let x: int32 = 1;
+    #when windows
+        let x: int32 = 1;
+    #end
+    println("${x}");
+}

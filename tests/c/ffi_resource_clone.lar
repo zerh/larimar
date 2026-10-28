@@ -1,0 +1,11 @@
+// expect: error holds a Thing (a resource, released when its memory is freed): it cannot be cloned
+c_code { static void close_thing(int t) { (void)t; } static int open_thing(void) { return 1; } }
+extern type Thing = c "int" released by close_thing;
+extern function open_thing(): Thing?;
+extern function close_thing(t: Thing): void;
+class Holder { let thing: Thing? = null; }
+function main(): int32 {
+    let h: Holder = {};
+    let copy: Holder = h.clone();
+    return 0;
+}

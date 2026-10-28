@@ -1,0 +1,16 @@
+// expect: panic a released Thing was used
+c_code {
+    static int open_thing(void) { return 1; }
+    static void close_thing(int t) { (void)t; }
+    static int use_thing(int t) { return t; }
+}
+extern type Thing = c "int" released by close_thing;
+extern function open_thing(): Thing?;
+extern function close_thing(t: Thing): void;
+extern function use_thing(t: Thing): int32;
+
+function main(): int32 {
+    let t: Thing? = open_thing();
+    release(t);
+    return use_thing(t!);
+}

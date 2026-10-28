@@ -1,0 +1,5 @@
+// expect: error padStart() takes 2 argument(s)
+function main(): int32 {
+    println("7".padStart(3));
+    return 0;
+}

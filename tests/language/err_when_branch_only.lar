@@ -1,0 +1,10 @@
+// expect: error 'onlyHere'
+// A name only one branch declares does not stay after #end.
+function main(): void {
+    #when windows
+        let onlyHere: int32 = 1;
+    #else
+        let other: int32 = 2;
+    #end
+    println("${onlyHere}");
+}

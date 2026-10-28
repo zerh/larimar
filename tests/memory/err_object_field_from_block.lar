@@ -1,0 +1,9 @@
+// expect: error but field 'text' lives for the whole program
+// Un objeto de todo el programa no puede guardar un texto del bloque.
+class Box { let text: String = ""; }
+let box: Box = Box {} in default;
+function main(): int32 {
+    let t: String = "y".toUpperCase();
+    box.text = t;
+    return 0;
+}

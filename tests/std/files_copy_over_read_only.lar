@@ -1,0 +1,20 @@
+// expect: run
+// output: second
+// Files.copy replaces the destination even when it is read-only (like cp -f): a library copied from
+// Homebrew keeps its r--r--r--, and the next build copies it again.
+import std.io.files as Files;
+import std.io.files { IoError };
+import std.os;
+
+function main(): void throws IoError {
+    let dir: String = "build/copy-test";
+    Files.createDirectories(dir);
+    Files.writeString("${dir}/a.txt", "first");
+    Files.copy("${dir}/a.txt", "${dir}/b.txt");
+    os.run("chmod 444 ${dir}/b.txt");
+    Files.writeString("${dir}/a.txt", "second");
+    Files.copy("${dir}/a.txt", "${dir}/b.txt");
+    println(Files.readString("${dir}/b.txt"));
+    Files.delete("${dir}/a.txt");
+    Files.delete("${dir}/b.txt");
+}

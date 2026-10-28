@@ -1,0 +1,4 @@
+// expect: error Write 'released by' (two words)
+extern type CFile = c "FILE*" released_by fclose;
+extern function fclose(f: CFile): int32;
+function main(): void {}

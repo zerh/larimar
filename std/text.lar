@@ -1,0 +1,56 @@
+// std.text: helpers for reading text byte by byte (lexers, parsers).
+//
+//   import std.text;
+//   if (text.isDigit(source[i])) { ... }
+//
+// Bytes are ASCII-aware: letters with accents are several bytes in UTF-8 and are not
+// letters here; use String.codePoints() for those.
+
+public function isDigit(b: byte): bool { return b >= '0' && b <= '9'; }
+public function isHexDigit(b: byte): bool { return isDigit(b) || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F'); }
+public function isLetter(b: byte): bool { return isLower(b) || isUpper(b); }
+public function isLetterOrDigit(b: byte): bool { return isLetter(b) || isDigit(b); }
+/** A letter, a digit or _: a byte of a name in most languages. */
+public function isIdentifierPart(b: byte): bool { return isLetterOrDigit(b) || b == '_'; }
+/** Space, tab, newline, carriage return. */
+public function isSpace(b: byte): bool { return b == ' ' || b == '\t' || b == '\n' || b == '\r'; }
+public function isUpper(b: byte): bool { return b >= 'A' && b <= 'Z'; }
+public function isLower(b: byte): bool { return b >= 'a' && b <= 'z'; }
+
+/** The value of a digit (0-9, a-f, A-F), or null. */
+public function digitValue(b: byte): int32? {
+    if (isDigit(b)) { return (b - '0') as int32; }
+    if (b >= 'a' && b <= 'f') { return (b - 'a') as int32 + 10; }
+    if (b >= 'A' && b <= 'F') { return (b - 'A') as int32 + 10; }
+    return null;
+}
+
+/** Is every byte ASCII (below 128)? */
+public function isAscii(s: String): bool {
+    for (b in s) {
+        if (b >= 128) { return false; }
+    }
+    return true;
+}
+
+/** The text of one Unicode character (its UTF-8 bytes); a code that is not a character gives U+FFFD. */
+public function fromCode(code: int32): String {
+    let cp: int32 = code < 0 || code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF) ? 0xFFFD : code;
+    let b: byte[4] = [];
+    if (cp < 0x80) {
+        b.push(cp as byte);
+    } else if (cp < 0x800) {
+        b.push((0xC0 | (cp >> 6)) as byte);
+        b.push((0x80 | (cp & 0x3F)) as byte);
+    } else if (cp < 0x10000) {
+        b.push((0xE0 | (cp >> 12)) as byte);
+        b.push((0x80 | ((cp >> 6) & 0x3F)) as byte);
+        b.push((0x80 | (cp & 0x3F)) as byte);
+    } else {
+        b.push((0xF0 | (cp >> 18)) as byte);
+        b.push((0x80 | ((cp >> 12) & 0x3F)) as byte);
+        b.push((0x80 | ((cp >> 6) & 0x3F)) as byte);
+        b.push((0x80 | (cp & 0x3F)) as byte);
+    }
+    return stringOfRange(b, 0, b.length);
+}

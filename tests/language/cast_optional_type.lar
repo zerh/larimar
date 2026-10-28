@@ -1,0 +1,8 @@
+// expect: error got int64?
+// After `as T`, a '?' followed by '??' (or ')', ';', ',', ...) is still part of the type: T?.
+function main(): int32 {
+    let data: Any = { a: 7 };
+    let a: int64 = data.a as int64? ?? 0;
+    println("${a}");
+    return 0;
+}

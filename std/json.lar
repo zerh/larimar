@@ -1,0 +1,297 @@
+// std.json: JSON text to Any, and Any to JSON text.
+//
+//   import std.json as Json;
+//   let config: Any = Json.parse("{\"port\": 8080, \"names\": [\"a\", \"b\"]}");
+//   println("${config.port as int32 ?? 80}");
+//   println(Json.stringify({ ok: true, list: { 1, 2, 3 } }));
+//
+// An object becomes a table with named entries, an array a table with positions. Whole numbers that
+// fit are int64, the rest float64. A table with named entries is written as an object; one with only
+// positions, as an array; an empty table, as {}.
+
+import std.text { fromCode };
+
+/** The text is not valid JSON: where (byte position) and why. */
+public enum JsonError { Invalid(at: int32, why: String) }
+
+/** The value of a JSON text. */
+public function parse(text: String): Any throws JsonError {
+    let p: JsonParser = JsonParser { text };
+    p.space();
+    let v: Any = p.value();
+    p.space();
+    if (p.pos < text.length) { throw JsonError.Invalid { at: p.pos, why: "text after the value" }; }
+    return v;
+}
+
+/** The JSON text of a value. */
+public function stringify(v: Any): String {
+    let sb: StringBuilder = {};
+    writeValue(sb, v);
+    return sb.toString().clone();
+}
+
+/** A String as a JSON string, with its quotes. */
+public function quote(s: String): String {
+    let sb: StringBuilder = {};
+    writeString(sb, s);
+    return sb.toString().clone();
+}
+
+class JsonParser {
+    let text: String;
+    let pos: int32 = 0;
+
+    function space(): void {
+        while (self.pos < self.text.length) {
+            let c: byte = self.text[self.pos];
+            if (c != ' ' && c != '\t' && c != '\n' && c != '\r') { return; }
+            self.pos += 1;
+        }
+    }
+
+    function fail(why: String): void throws JsonError {
+        throw JsonError.Invalid { at: self.pos, why: why.clone() in default };
+    }
+
+    function value(): Any throws JsonError {
+        if (self.pos >= self.text.length) { self.fail("the text ends where a value was expected"); }
+        let c: byte = self.text[self.pos];
+        if (c == '{') { return self.object(); }
+        if (c == '[') { return self.array(); }
+        if (c == '"') { return self.string(); }
+        if (c == 't') { self.word("true"); return true; }
+        if (c == 'f') { self.word("false"); return false; }
+        if (c == 'n') { self.word("null"); return null; }
+        if (c == '-' || (c >= '0' && c <= '9')) { return self.number(); }
+        self.fail("unexpected character");
+        return null;
+    }
+
+    function word(w: String): void throws JsonError {
+        if (self.pos + w.length > self.text.length || self.text.substring(self.pos, self.pos + w.length) != w) {
+            self.fail("expected ${w}");
+        }
+        self.pos += w.length;
+    }
+
+    function object(): Any throws JsonError {
+        let o: Any = {};
+        self.pos += 1;
+        self.space();
+        if (self.pos < self.text.length && self.text[self.pos] == '}') {
+            self.pos += 1;
+            return o;
+        }
+        while (true) {
+            self.space();
+            if (self.pos >= self.text.length || self.text[self.pos] != '"') { self.fail("expected a name in quotes"); }
+            let key: String = self.string();
+            self.space();
+            if (self.pos >= self.text.length || self.text[self.pos] != ':') { self.fail("expected ':'"); }
+            self.pos += 1;
+            self.space();
+            o[key] = self.value();
+            self.space();
+            if (self.pos < self.text.length && self.text[self.pos] == ',') {
+                self.pos += 1;
+                continue;
+            }
+            if (self.pos < self.text.length && self.text[self.pos] == '}') {
+                self.pos += 1;
+                return o;
+            }
+            self.fail("expected ',' or '}'");
+        }
+        return o;
+    }
+
+    function array(): Any throws JsonError {
+        let a: Any = {};
+        self.pos += 1;
+        self.space();
+        if (self.pos < self.text.length && self.text[self.pos] == ']') {
+            self.pos += 1;
+            return a;
+        }
+        while (true) {
+            self.space();
+            a.push(self.value());
+            self.space();
+            if (self.pos < self.text.length && self.text[self.pos] == ',') {
+                self.pos += 1;
+                continue;
+            }
+            if (self.pos < self.text.length && self.text[self.pos] == ']') {
+                self.pos += 1;
+                return a;
+            }
+            self.fail("expected ',' or ']'");
+        }
+        return a;
+    }
+
+    function string(): String throws JsonError {
+        self.pos += 1;
+        let start: int32 = self.pos;
+        let sb: StringBuilder = {};
+        while (true) {
+            if (self.pos >= self.text.length) { self.fail("unterminated string"); }
+            let c: byte = self.text[self.pos];
+            if (c == '"') { break; }
+            if (c < 0x20) { self.fail("a control character inside a string"); }
+            if (c != '\\') {
+                self.pos += 1;
+                continue;
+            }
+            sb.add(self.text.substring(start, self.pos));
+            if (self.pos + 1 >= self.text.length) { self.fail("unterminated escape"); }
+            let e: byte = self.text[self.pos + 1];
+            self.pos += 2;
+            if (e == '"') { sb.add("\""); }
+            else if (e == '\\') { sb.add("\\"); }
+            else if (e == '/') { sb.add("/"); }
+            else if (e == 'b') { sb.add(fromCode(8)); }
+            else if (e == 'f') { sb.add(fromCode(12)); }
+            else if (e == 'n') { sb.add("\n"); }
+            else if (e == 'r') { sb.add("\r"); }
+            else if (e == 't') { sb.add("\t"); }
+            else if (e == 'u') {
+                let cp: int32 = self.hex4();
+                if (cp >= 0xD800 && cp <= 0xDBFF && self.pos + 1 < self.text.length
+                    && self.text[self.pos] == '\\' && self.text[self.pos + 1] == 'u') {
+                    self.pos += 2;
+                    let low: int32 = self.hex4();
+                    if (low >= 0xDC00 && low <= 0xDFFF) {
+                        cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                    } else {
+                        sb.add(fromCode(0xFFFD));
+                        cp = low;
+                    }
+                }
+                sb.add(fromCode(cp >= 0xD800 && cp <= 0xDFFF ? 0xFFFD : cp));
+            } else {
+                self.fail("unknown escape");
+            }
+            start = self.pos;
+        }
+        sb.add(self.text.substring(start, self.pos));
+        self.pos += 1;
+        return sb.toString().clone();
+    }
+
+    function hex4(): int32 throws JsonError {
+        if (self.pos + 4 > self.text.length) { self.fail("\\u needs four hex digits"); }
+        let v: int32 = 0;
+        for (k in 0..4) {
+            let c: byte = self.text[self.pos + k];
+            let d: int32 = c >= '0' && c <= '9' ? (c - '0') as int32
+                : c >= 'a' && c <= 'f' ? (c - 'a') as int32 + 10
+                : c >= 'A' && c <= 'F' ? (c - 'A') as int32 + 10 : -1;
+            if (d < 0) { self.fail("\\u needs four hex digits"); }
+            v = v * 16 + d;
+        }
+        self.pos += 4;
+        return v;
+    }
+
+    function number(): Any throws JsonError {
+        let start: int32 = self.pos;
+        let whole: bool = true;
+        if (self.text[self.pos] == '-') { self.pos += 1; }
+        if (self.pos >= self.text.length || !isDigit(self.text[self.pos])) { self.fail("expected a digit"); }
+        while (self.pos < self.text.length && isDigit(self.text[self.pos])) { self.pos += 1; }
+        if (self.pos < self.text.length && self.text[self.pos] == '.') {
+            whole = false;
+            self.pos += 1;
+            if (self.pos >= self.text.length || !isDigit(self.text[self.pos])) { self.fail("expected a digit after '.'"); }
+            while (self.pos < self.text.length && isDigit(self.text[self.pos])) { self.pos += 1; }
+        }
+        if (self.pos < self.text.length && (self.text[self.pos] == 'e' || self.text[self.pos] == 'E')) {
+            whole = false;
+            self.pos += 1;
+            if (self.pos < self.text.length && (self.text[self.pos] == '+' || self.text[self.pos] == '-')) { self.pos += 1; }
+            if (self.pos >= self.text.length || !isDigit(self.text[self.pos])) { self.fail("expected a digit in the exponent"); }
+            while (self.pos < self.text.length && isDigit(self.text[self.pos])) { self.pos += 1; }
+        }
+        let t: String = self.text.substring(start, self.pos);
+        if (whole) {
+            let n: int64? = t.toInt();
+            if (n != null) { return n!; }
+        }
+        return t.toFloat() ?? 0.0;
+    }
+}
+
+function isDigit(c: byte): bool { return c >= '0' && c <= '9'; }
+
+function writeValue(sb: StringBuilder, v: Any): void {
+    switch (v) {
+        case null -> sb.add("null");
+        case bool b -> sb.add(b ? "true" : "false");
+        case String s -> writeString(sb, s);
+        case float64 f -> {
+            if (f != f || f - f != 0.0) { sb.add("null"); } else { sb.add("${f}"); }    // NaN and infinity are not JSON
+        }
+        case Any t -> writeTable(sb, t);
+        default -> {
+            let n: int64? = v as int64;
+            if (n != null) {
+                sb.add("${n!}");
+                return;
+            }
+            let f: float64? = v as float64;
+            if (f != null) {
+                sb.add("${f!}");
+                return;
+            }
+            sb.add("null");                 // objects, structs and enums have no JSON form
+        }
+    }
+}
+
+function writeTable(sb: StringBuilder, t: Any): void {
+    let named: bool = false;
+    for (k, x in t.fields) { named = true; }
+    if (named || t.length == 0) {
+        sb.add("{");
+        let first: bool = true;
+        for (k, x in t.fields) {
+            if (!first) { sb.add(","); }
+            first = false;
+            writeString(sb, k);
+            sb.add(":");
+            writeValue(sb, x);
+        }
+        sb.add("}");
+        return;
+    }
+    sb.add("[");
+    for (i, x in t) {
+        if (i > 0) { sb.add(","); }
+        writeValue(sb, x);
+    }
+    sb.add("]");
+}
+
+function writeString(sb: StringBuilder, s: String): void {
+    sb.add("\"");
+    let start: int32 = 0;
+    for (i, c in s) {
+        let esc: String = c == '"' ? "\\\"" : c == '\\' ? "\\\\" : c == '\n' ? "\\n" : c == '\r' ? "\\r" : c == '\t' ? "\\t" : "";
+        if (esc == "" && c >= 0x20) { continue; }
+        sb.add(s.substring(start, i));
+        if (esc != "") {
+            sb.add(esc);
+        } else {
+            let hi: int32 = (c >> 4) as int32;
+            let lo: int32 = (c & 15) as int32;
+            sb.add("\\u00${HEX.substring(hi, hi + 1)}${HEX.substring(lo, lo + 1)}");
+        }
+        start = i + 1;
+    }
+    sb.add(s.substring(start, s.length));
+    sb.add("\"");
+}
+
+const HEX: String = "0123456789abcdef";

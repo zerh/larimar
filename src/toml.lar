@@ -1,0 +1,229 @@
+// toml: the subset of TOML that larimar.toml needs (Toml.java): [sections], key = value,
+// where a value is a "string", a number, true/false, or a list of strings (which may span
+// several lines). Comments start with #.
+
+import std.text { isIdentifierPart, isDigit };
+
+public enum TomlK { Text, Number, Bool, List }
+
+public class TomlValue {
+    let kind: TomlK;
+    let text: String = "";
+    let number: int64 = 0;
+    let flag: bool = false;
+    let items: String[*] = [];
+}
+
+public class TomlSection {
+    let name: String;
+    let keys: String[*] = [];
+    let values: TomlValue[*] = [];
+}
+
+/** The first problem found ("Project Error [file:line]: ..."), or "". */
+public let tomlError: String = "";
+
+let fileName: String = "";
+
+/** The sections in order; keys before any section go in the section "". */
+public function parseToml(text: String, file: String in default): TomlSection[*] {
+    fileName = file;
+    tomlError = "";
+    let out: TomlSection[*] = [TomlSection { name: "" }];
+    let current: TomlSection = out[0];
+    let lines: String[*] = splitLines(text);
+    let i: int32 = 0;
+    while (i < lines.length) {
+        let lineNo: int32 = i + 1;
+        let ln: String = stripComment(lines[i]).trim();
+        if (ln.isEmpty()) {
+            i += 1;
+            continue;
+        }
+        if (ln.startsWith("[")) {
+            if (!ln.endsWith("]")) { return fail(lineNo, "Expected ']' to close the section name", out); }
+            let name: String = ln.substring(1, ln.length - 1).trim();
+            let found: TomlSection? = sectionOf(out, name);
+            if (found != null && name != "") { return fail(lineNo, "Section [${name}] appears twice", out); }
+            if (found != null) {
+                current = found;
+            } else {
+                current = TomlSection { name };
+                out.push(current);
+            }
+            i += 1;
+            continue;
+        }
+        let eq: int32 = ln.indexOf("=") ?? -1;
+        if (eq < 0) { return fail(lineNo, "Expected key = value", out); }
+        let key: String = ln.substring(0, eq).trim();
+        if (!isKey(key)) { return fail(lineNo, "Invalid key '${key}'", out); }
+        let value: String = ln.substring(eq + 1).trim();
+        if (value.startsWith("[")) {          // a list may continue on the next lines
+            while (!closed(value) && i + 1 < lines.length) {
+                i += 1;
+                value = "${value} ${stripComment(lines[i]).trim()}";
+            }
+        }
+        for (k in current.keys) {
+            if (k == key) { return fail(lineNo, "Key '${key}' appears twice in [${current.name}]", out); }
+        }
+        let v: TomlValue? = parseValue(value, lineNo);
+        if (v == null) { return out; }
+        current.keys.push(key);
+        current.values.push(v);
+        i += 1;
+    }
+    return out;
+}
+
+public function sectionOf(sections: TomlSection[*], name: String): TomlSection? {
+    for (s in sections) {
+        if (s.name == name) { return s; }
+    }
+    return null;
+}
+
+public function valueOf(s: TomlSection?, key: String): TomlValue? {
+    if (s == null) { return null; }
+    for (i, k in s.keys) {
+        if (k == key) { return s.values[i]; }
+    }
+    return null;
+}
+
+function fail(line: int32, msg: String, out: TomlSection[*]): TomlSection[*] {
+    if (tomlError == "") { tomlError = "Project Error [${fileName}:${line}]: ${msg}" in default; }
+    return out;
+}
+
+function error(line: int32, msg: String): TomlValue? {
+    if (tomlError == "") { tomlError = "Project Error [${fileName}:${line}]: ${msg}" in default; }
+    return null;
+}
+
+function splitLines(text: String): String[*] {
+    let out: String[*] = [];
+    for (part in text.split("\n")) {
+        if (part.endsWith("\r")) { out.push(part.substring(0, part.length - 1)); } else { out.push(part); }
+    }
+    return out;
+}
+
+function isKey(k: String): bool {
+    if (k.isEmpty()) { return false; }
+    for (b in k) {
+        if (!isIdentifierPart(b) && b != '-') { return false; }
+    }
+    return true;
+}
+
+function isNumber(v: String): bool {
+    let digits: int32 = 0;
+    for (i, b in v) {
+        if ((b == '+' || b == '-') && i == 0) { continue; }
+        if (isDigit(b)) { digits += 1; } else if (b != '_') { return false; }
+    }
+    return digits > 0;
+}
+
+function parseValue(v: String, line: int32): TomlValue? {
+    if (v.startsWith("\"")) {
+        let s: String? = string(v, line);
+        if (s == null) { return null; }
+        return TomlValue { kind: TomlK.Text, text: s };
+    }
+    if (v == "true" || v == "false") { return TomlValue { kind: TomlK.Bool, flag: v == "true" }; }
+    if (isNumber(v)) {
+        let n: int64? = v.replace("_", "").replace("+", "").toInt();
+        if (n == null) { return error(line, "Unknown value '${v}' (use \"text\", a number, true/false or [\"a\", \"b\"])"); }
+        return TomlValue { kind: TomlK.Number, number: n };
+    }
+    if (v.startsWith("[")) {
+        if (!closed(v)) { return error(line, "Expected ']' to close the list"); }
+        let inner: String = v.substring(1, v.lastIndexOf("]") ?? 1).trim();
+        let result: TomlValue = TomlValue { kind: TomlK.List };
+        let i: int32 = 0;
+        while (i < inner.length) {
+            let c: byte = inner[i];
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ',') {
+                i += 1;
+                continue;
+            }
+            if (c != '"') { return error(line, "Lists can only contain \"strings\""); }
+            let end: int32 = closingQuote(inner, i);
+            if (end < 0) { return error(line, "Unterminated string"); }
+            let s: String? = string(inner.substring(i, end + 1), line);
+            if (s == null) { return null; }
+            result.items.push(s);
+            i = end + 1;
+        }
+        return result;
+    }
+    return error(line, "Unknown value '${v}' (use \"text\", a number, true/false or [\"a\", \"b\"])");
+}
+
+function string(v: String, line: int32): String? {
+    let end: int32 = closingQuote(v, 0);
+    if (end != v.length - 1) {
+        error(line, "Invalid string ${v}");
+        return null;
+    }
+    let sb: StringBuilder = {};
+    let i: int32 = 1;
+    while (i < end) {
+        let c: byte = v[i];
+        if (c == '\\' && i + 1 < end) {
+            i += 1;
+            let n: byte = v[i];
+            if (n == 'n') { sb.add("\n"); } else if (n == 't') { sb.add("\t"); } else { sb.add(v.substring(i, i + 1)); }
+        } else {
+            sb.add(v.substring(i, i + 1));
+        }
+        i += 1;
+    }
+    return sb.toString();
+}
+
+function closingQuote(s: String, open: int32): int32 {
+    let i: int32 = open + 1;
+    while (i < s.length) {
+        if (s[i] == '\\') { i += 1; } else if (s[i] == '"') { return i; }
+        i += 1;
+    }
+    return -1;
+}
+
+function closed(v: String): bool {
+    let inString: bool = false;
+    let i: int32 = 0;
+    while (i < v.length) {
+        let c: byte = v[i];
+        if (inString && c == '\\') {
+            i += 1;
+        } else if (c == '"') {
+            inString = !inString;
+        } else if (!inString && c == ']') {
+            return true;
+        }
+        i += 1;
+    }
+    return false;
+}
+
+function stripComment(ln: String): String {
+    let inString: bool = false;
+    let i: int32 = 0;
+    while (i < ln.length) {
+        let c: byte = ln[i];
+        if (inString && c == '\\') {
+            i += 1;
+        } else if (c == '"') {
+            inString = !inString;
+        } else if (!inString && c == '#') {
+            return ln.substring(0, i);
+        }
+        i += 1;
+    }
+    return ln;
+}

@@ -1,0 +1,416 @@
+// std.net: TCP connections. A TcpSocket is read and written directly (read, write), like a socket in C,
+// and it is also an InputStream and an OutputStream, so Reader and copy() work on it as on a file.
+//
+//   import std.net { TcpSocket, TcpListener, NetError };
+//   import std.io.streams { Reader };
+//
+//   let socket: TcpSocket = TcpSocket.connect("example.com", 80);
+//   socket.writeText("GET / HTTP/1.0\r\nHost: example.com\r\n\r\n");
+//   let lines: Reader = { from: socket };
+//   println(lines.readLine() ?? "");                  // HTTP/1.0 200 OK
+//
+//   let server: TcpListener = TcpListener.bind("127.0.0.1", 8080);
+//   while (true) {
+//       let client: TcpSocket = server.accept();      // closed when the turn's memory is freed
+//       ...
+//   }
+//
+// Sockets block (read waits for data; setTimeout limits the wait). A socket closes itself when the memory
+// it lives in is freed, so one accepted in a loop is never left open. On Windows (Winsock) the program
+// is linked with ws2_32 by larimar build.
+//
+// Written in Larimar over the C functions of the system (BSD sockets, Winsock on Windows): the C below is
+// only declarations.
+
+import std.io.files { IoError };
+import std.io.streams { InputStream, OutputStream, Closeable };
+
+/**
+ * A connection both ways: a TcpSocket is one, and so is what a TlsProvider (std.net.http.tls) gives. Whoever
+ * speaks a protocol (std.net.http) works on a Connection, so it does not care whether it is encrypted.
+ */
+public interface Connection {
+    /** Reads what has arrived, up to the length of buffer; 0 when the other side closed. */
+    function read(buffer: byte[]): int32 throws IoError;
+    /** Writes all the bytes, or throws. */
+    function write(bytes: byte[]): void throws IoError;
+    function flush(): void throws IoError;
+    function close(): void throws IoError;
+}
+
+/** Why something of the network failed. */
+public enum NetError {
+    HostNotFound(host: String),
+    Refused,
+    Timeout,
+    Closed,
+    Reset,
+    AddressInUse,
+    /** The encrypted part failed: a bad certificate, a failed handshake. */
+    Tls(reason: String),
+    /** There is no TLS to use: what is missing (the system's library was not found, say). */
+    TlsUnavailable(what: String),
+    Other(code: int32)
+}
+
+/** "connection refused", "host not found: example.org"... */
+public function message(e: NetError): String {
+    return switch (e) {
+        case HostNotFound { host } -> "host not found: ${host}";
+        case Refused -> "connection refused";
+        case Timeout -> "timed out";
+        case Closed -> "connection closed";
+        case Reset -> "connection reset";
+        case AddressInUse -> "address already in use";
+        case Tls { reason } -> "tls: ${reason}";
+        case TlsUnavailable { what } -> "tls not available: ${what}";
+        case Other { code } -> "network error ${code}";
+    };
+}
+
+// ---- the C of the system: only declarations ------------------------------------------------
+
+#when unix
+    c_include "<sys/types.h>";
+    c_include "<sys/socket.h>";
+    c_include "<sys/time.h>";
+    c_include "<netinet/in.h>";
+    c_include "<netinet/tcp.h>";
+    c_include "<arpa/inet.h>";
+    c_include "<netdb.h>";
+    c_include "<unistd.h>";
+    c_include "<errno.h>";
+    c_include "<signal.h>";
+#when windows
+    c_include "<winsock2.h>";
+    c_include "<ws2tcpip.h>";
+#end
+
+/** A socket of the system: an int on Unix, a SOCKET on Windows. Closed when its memory is freed. */
+#when unix
+    public extern type Socket = c "int" released by close;
+    extern function close(s: Socket): int32;
+#when windows
+    public extern type Socket = c "SOCKET" released by closesocket;
+    extern function closesocket(s: Socket): int32;
+#end
+
+extern type AddrInfo = struct "struct addrinfo" {
+    let ai_flags: int32;
+    let ai_family: int32;
+    let ai_socktype: int32;
+    let ai_protocol: int32;
+    let ai_addrlen: uint32;
+    let ai_addr: SockAddr*;
+    let ai_next: AddrInfo*;
+};
+extern type SockAddr = struct "struct sockaddr" { let sa_family: uint16; };
+/** Big enough for an IPv4 or IPv6 address; the port is at the same place in both. */
+extern type SockAddrIn6 = struct "struct sockaddr_in6" { let sin6_port: uint16; };
+extern type TimeVal = struct "struct timeval" {
+    let tv_sec: int64;
+    let tv_usec: int64;
+};
+extern type WsaData = struct "WSADATA" { let wVersion: uint16; };
+/** What setsockopt and getsockname take as "a pointer to anything". */
+extern type Untyped;
+extern type SignalHandler = (int32) -> void;
+
+extern const AF_UNSPEC: int32;
+extern const SOCK_STREAM: int32;
+extern const AI_PASSIVE: int32;
+extern const IPPROTO_TCP: int32;
+extern const TCP_NODELAY: int32;
+extern const SOL_SOCKET: int32;
+extern const SO_REUSEADDR: int32;
+extern const SO_RCVTIMEO: int32;
+extern const SO_SNDTIMEO: int32;
+extern const SOCKADDR_IN6_SIZE: uint32 = c "(unsigned)sizeof(struct sockaddr_in6)";
+#when unix
+    extern const TIMEVAL_SIZE: int32 = c "(int)sizeof(struct timeval)";
+    extern const SHUT_WR: int32;
+    extern const SIGPIPE: int32;
+    extern const SIG_IGN: SignalHandler;
+    extern function signal(sig: int32, handler: SignalHandler): SignalHandler;
+    extern let errno: int32;
+    extern const EINTR: int32;
+    extern const EAGAIN: int32;
+    extern const EWOULDBLOCK: int32;
+    extern const ETIMEDOUT: int32;
+    extern const ECONNREFUSED: int32;
+    extern const ECONNRESET: int32;
+    extern const EPIPE: int32;
+    extern const EADDRINUSE: int32;
+#when windows
+    extern const SD_SEND: int32;
+    extern function WSAStartup(version: uint16, data: WsaData*): int32;
+    extern function WSAGetLastError(): int32;
+    extern const WSAEINTR: int32;
+    extern const WSAETIMEDOUT: int32;
+    extern const WSAEWOULDBLOCK: int32;
+    extern const WSAECONNREFUSED: int32;
+    extern const WSAECONNRESET: int32;
+    extern const WSAECONNABORTED: int32;
+    extern const WSAEADDRINUSE: int32;
+#end
+
+extern function getaddrinfo(host: String, service: String, hints: AddrInfo*, list: AddrInfo**): int32;
+extern function freeaddrinfo(list: AddrInfo*): void;
+extern function socket(family: int32, kind: int32, protocol: int32): Socket?;
+extern function connect(s: Socket, addr: SockAddr*, length: uint32): int32;
+extern function bind(s: Socket, addr: SockAddr*, length: uint32): int32;
+extern function listen(s: Socket, backlog: int32): int32;
+extern function accept(s: Socket, addr: SockAddr*, length: Untyped?): Socket?;
+extern function recv(s: Socket, buffer: byte[], flags: int32): int64;
+extern function send(s: Socket, bytes: byte[], flags: int32): int64;
+extern function shutdown(s: Socket, how: int32): int32;
+extern function setsockopt(s: Socket, level: int32, name: int32, value: Untyped, length: int32): int32;
+extern function getsockname(s: Socket, addr: SockAddr*, length: Untyped): int32;
+extern function ntohs(n: uint16): uint16;
+
+// error codes, as NetError: 1 host not found, 2 refused, 3 timeout, 4 closed, 5 reset, 6 address in use, 100+ other
+
+/** Why the last call failed (errno, or WSAGetLastError on Windows), as a code. */
+function lastError(): int32 {
+    #when windows
+        let e: int32 = WSAGetLastError();
+        if (e == WSAECONNREFUSED) { return 2; }
+        if (e == WSAETIMEDOUT || e == WSAEWOULDBLOCK) { return 3; }
+        if (e == WSAECONNRESET || e == WSAECONNABORTED) { return 5; }
+        if (e == WSAEADDRINUSE) { return 6; }
+        return 100 + e;
+    #else
+        let e: int32 = errno;
+        if (e == ECONNREFUSED) { return 2; }
+        if (e == EAGAIN || e == EWOULDBLOCK || e == ETIMEDOUT) { return 3; }
+        if (e == ECONNRESET || e == EPIPE) { return 5; }
+        if (e == EADDRINUSE) { return 6; }
+        return 100 + e;
+    #end
+}
+
+/** The call was interrupted by a signal: try it again. */
+function interrupted(): bool {
+    #when windows
+        return WSAGetLastError() == WSAEINTR;
+    #else
+        return errno == EINTR;
+    #end
+}
+
+/**
+ * Before a connection: Winsock started (it counts the calls); on Unix, a closed peer is an error, not a
+ * SIGPIPE that kills the program. Both can be repeated, so there is no shared state between threads.
+ */
+function start(): void {
+    #when windows
+        let data: WsaData = {};
+        WSAStartup(514 as uint16, &data);          // version 2.2
+    #else
+        signal(SIGPIPE, SIG_IGN);
+    #end
+}
+
+/** The NetError of a code. */
+function raise(code: int32, host: String): void throws NetError {
+    switch (code) {
+        case 0 -> {}
+        case 1 -> throw NetError.HostNotFound(host.clone());
+        case 2 -> throw NetError.Refused;
+        case 3 -> throw NetError.Timeout;
+        case 4 -> throw NetError.Closed;
+        case 5 -> throw NetError.Reset;
+        case 6 -> throw NetError.AddressInUse;
+        default -> throw NetError.Other(code);
+    }
+}
+
+/** For the stream interfaces, which throw IoError: what failed, as a path-like text. */
+function ioFailure(code: int32): void throws IoError {
+    switch (code) {
+        case 3 -> throw IoError.Failed("socket: timed out");
+        case 4 -> throw IoError.Failed("socket: closed");
+        case 5 -> throw IoError.Failed("socket: connection reset");
+        default -> throw IoError.Failed("socket: error ${code}");
+    }
+}
+
+/** A bool option of a socket (TCP_NODELAY, SO_REUSEADDR). */
+function option(s: Socket, level: int32, name: int32): void {
+    let one: int32 = 1;
+    setsockopt(s, level, name, &one as Untyped, 4);
+}
+
+/** A TCP connection. */
+public class TcpSocket implements InputStream, OutputStream, Closeable, Connection {
+    let socket: Socket? = null;
+
+    /** Connects to host:port (a name or an IP, v4 or v6). */
+    static function connect(host: String, port: int32): TcpSocket throws NetError {
+        start();
+        let hints: AddrInfo = { ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM };
+        let list: AddrInfo* = null;
+        if (getaddrinfo(host, "${port}", &hints, &list) != 0 || list == null) { throw NetError.HostNotFound(host.clone()); }
+        let s: TcpSocket = {};
+        let code: int32 = 2;
+        let a: AddrInfo* = list;
+        while (a != null && s.socket == null) {
+            s.socket = socket(a.ai_family, a.ai_socktype, a.ai_protocol);
+            if (s.socket == null) {
+                code = lastError();
+            } else if (connect(s.socket!, a.ai_addr, a.ai_addrlen) != 0) {
+                code = lastError();
+                release(s.socket);
+                s.socket = null;
+            }
+            a = a.ai_next;
+        }
+        freeaddrinfo(list);
+        if (s.socket == null) { raise(code, host); }
+        option(s.socket!, IPPROTO_TCP, TCP_NODELAY);      // small writes go out now
+        return s;
+    }
+
+    /** The socket, or an IoError when it is closed. */
+    function live(): Socket throws IoError {
+        if (self.socket == null) { throw IoError.Failed("socket: closed"); }
+        return self.socket!;
+    }
+
+    /** Reads what has arrived, up to the length of buffer; 0 when the other side closed. */
+    function read(buffer: byte[]): int32 throws IoError {
+        let s: Socket = self.live();
+        if (buffer.length == 0) { return 0; }
+        while (true) {
+            let n: int64 = recv(s, buffer, 0);
+            if (n >= 0) { return n as int32; }
+            if (!interrupted()) { ioFailure(lastError()); }
+        }
+        return 0;
+    }
+
+    /** Writes all the bytes, or throws. */
+    function write(bytes: byte[]): void throws IoError {
+        let s: Socket = self.live();
+        let n: int64 = 0;
+        while (true) {
+            n = send(s, bytes, 0);
+            if (n >= 0 || !interrupted()) { break; }
+        }
+        if (n < 0) { ioFailure(lastError()); }
+        if (n < bytes.length as int64) {           // part of it (a timeout, a signal): the rest, from a copy
+            let rest: byte[*] = [];
+            for (i in n as int32..bytes.length) { rest.push(bytes[i]); }
+            self.write(rest);
+        }
+    }
+
+    /** Writes a text (its UTF-8 bytes). */
+    function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+
+    /** Nothing to do: what is written goes to the system at once (TCP_NODELAY). */
+    function flush(): void throws IoError {}
+
+    /** How long read and write wait before failing with a timeout (0: no limit). */
+    function setTimeout(ms: int32): void {
+        if (self.socket == null) { return; }
+        let s: Socket = self.socket!;
+        let t: int32 = ms > 0 ? ms : 0;
+        #when windows
+            let w: uint32 = t as uint32;
+            setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &w as Untyped, 4);
+            setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &w as Untyped, 4);
+        #else
+            let tv: TimeVal = { tv_sec: (t / 1000) as int64, tv_usec: ((t % 1000) * 1000) as int64 };
+            setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv as Untyped, TIMEVAL_SIZE);
+            setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv as Untyped, TIMEVAL_SIZE);
+        #end
+    }
+
+    /** Says that nothing more will be written: the other side reads the end, and can still answer. */
+    function finishWriting(): void {
+        if (self.socket == null) { return; }
+        #when windows
+            shutdown(self.socket!, SD_SEND);
+        #else
+            shutdown(self.socket!, SHUT_WR);
+        #end
+    }
+
+    function isOpen(): bool { return self.socket != null; }
+
+    /**
+     * The socket of the system, for a C library that works on an open connection (a TLS library): an
+     * extern function that takes a Socket receives the descriptor (a SOCKET on Windows). It stays this
+     * object's: it is closed with it.
+     */
+    function handle(): Socket? { return self.socket; }
+
+    /** The local port of the connection. */
+    function localPort(): int32 { return portOf(self.socket); }
+
+    /** Closes it now; otherwise it closes when its memory is freed. */
+    function close(): void throws IoError {
+        release(self.socket);
+        self.socket = null;
+    }
+}
+
+/** The local port of a socket (a listener bound to port 0 gets one from the system). */
+function portOf(s: Socket?): int32 {
+    if (s == null) { return 0; }
+    let a: SockAddrIn6 = {};
+    let length: uint32 = SOCKADDR_IN6_SIZE;
+    if (getsockname(s!, &a as SockAddr*, &length as Untyped) != 0) { return 0; }
+    return ntohs(a.sin6_port) as int32;
+}
+
+/** Waits for connections on a port. */
+public class TcpListener implements Closeable {
+    let socket: Socket? = null;
+
+    /** Listens on host:port ("0.0.0.0" or "::" for every address; port 0: one the system chooses). */
+    static function bind(host: String, port: int32): TcpListener throws NetError {
+        start();
+        let hints: AddrInfo = { ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM, ai_flags: AI_PASSIVE };
+        let list: AddrInfo* = null;
+        let at: String = host == "" ? "0.0.0.0" : host;
+        if (getaddrinfo(at, "${port}", &hints, &list) != 0 || list == null) { throw NetError.HostNotFound(host.clone()); }
+        let l: TcpListener = {};
+        l.socket = socket(list.ai_family, list.ai_socktype, list.ai_protocol);
+        let code: int32 = 0;
+        if (l.socket == null) {
+            code = lastError();
+        } else {
+            option(l.socket!, SOL_SOCKET, SO_REUSEADDR);
+            if (bind(l.socket!, list.ai_addr, list.ai_addrlen) != 0 || listen(l.socket!, 128) != 0) {
+                code = lastError();
+                release(l.socket);
+                l.socket = null;
+            }
+        }
+        freeaddrinfo(list);
+        raise(code, host);
+        return l;
+    }
+
+    /** Waits for the next connection. */
+    function accept(): TcpSocket throws NetError {
+        if (self.socket == null) { throw NetError.Closed; }
+        let s: TcpSocket = {};
+        while (s.socket == null) {
+            s.socket = accept(self.socket!, null, null);
+            if (s.socket == null && !interrupted()) { raise(lastError(), ""); }
+        }
+        option(s.socket!, IPPROTO_TCP, TCP_NODELAY);
+        return s;
+    }
+
+    /** The port it listens on (the one the system chose, after bind with port 0). */
+    function port(): int32 { return portOf(self.socket); }
+
+    function close(): void throws IoError {
+        release(self.socket);
+        self.socket = null;
+    }
+}

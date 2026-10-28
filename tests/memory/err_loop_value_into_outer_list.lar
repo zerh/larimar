@@ -1,0 +1,11 @@
+// expect: error on every turn of the loop
+// Una variable de la vuelta muere al final de cada vuelta: no puede guardarse en una lista de fuera.
+// (Correcto: items.push("item-${i}"), o items.push(tmp.clone()).)
+function main(): int32 {
+    let items: String[*] = [];
+    for (i in 0..10) {
+        let tmp: String = "item-${i}";
+        items.push(tmp);
+    }
+    return 0;
+}

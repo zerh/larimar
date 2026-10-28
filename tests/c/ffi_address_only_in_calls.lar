@@ -1,0 +1,6 @@
+// expect: error '&' gives a pointer for C: it is only allowed as an argument of an extern function
+function main(): int32 {
+    let x: int32 = 1;
+    let p: int32* = &x;
+    return 0;
+}

@@ -1,0 +1,10 @@
+// expect: run
+// output: X2,X4,X6
+// map y filter crean sus resultados donde vive la lista resultante.
+function main(): int32 {
+    let nums: int32[*] = [1, 2, 3, 4, 5, 6];
+    let even: int32[*] = nums.filter((n) -> { return n % 2 == 0; });
+    let names: String[*] = even.map((n) -> { return "x${n}".toUpperCase(); });
+    println(names.join(","));
+    return 0;
+}
