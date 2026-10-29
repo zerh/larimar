@@ -48,7 +48,7 @@ obtener un ejecutable. La herramienta `larimar` hace los dos pasos:
 
 ```sh
 ./build-bootstrap.sh             # una vez: compila larimarc e instala en ../larimar (bin/, std/, MANUAL.md)
-export LARIMAR_HOME="$PWD/../larimar"
+export LARIMAR_HOME="$PWD/../out/larimar"
 export PATH="$LARIMAR_HOME/bin:$PATH"   # en Windows, añade la carpeta bin al PATH
 
 larimar new hello                # crea hello/larimar.toml y hello/src/main.lar
