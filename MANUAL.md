@@ -3965,7 +3965,23 @@ GET, a `chunked` body, a big one with `copy()`, a POST, a redirect from `http://
 
 ## 29. Current limitations
 
-- There is no `defer` and there are no generics.
+### By design
+
+What Larimar does not have, and will not have, with what is used instead:
+
+- **No generics.** Arrays (`T[N]`, `T[*]`) and `Any` already hold any type, and interfaces cover the rest.
+- **No garbage collector.** Memory is freed at the `;` and at the `}`: you always see where ([section 16](#16-memory)).
+- **No constructors.** A literal creates the object; when something must be validated, a plain function does it.
+- **No overloading.** Each name is one function, and the generated C reads without guessing.
+- **No hidden jumps.** An error is a value that is returned, and `throws` announces it in the signature ([section 19](#19-errors-throw-try-and-catch)).
+- **No hidden threads or async.** Threads are created in plain sight, and the compiler checks what they share ([section 22](#22-threads)).
+- **No surprise `null`.** Only what carries `?` can be `null` ([section 14](#14-optionals-and-null)).
+- **No implicit conversions.** Numeric types are converted with `as`, in plain sight: `int32 + int64` does not compile.
+- **No undefined behavior.** Integers wrap around, indexes are checked, and a failure stops with its file and line ([section 20](#20-failures-at-run-time)).
+
+### Not yet
+
+- There is no `defer`.
 - An `Any` does not keep `[*]` lists, lambdas or interfaces.
 - A `synchronized` class cannot inherit, and `wait until` has no time limit (it waits until the condition holds).
 - The standard library is small: files, console, paths, environment, bytes, regular expressions, JSON,

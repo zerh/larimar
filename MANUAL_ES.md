@@ -3957,7 +3957,23 @@ cuerpo `chunked`, uno grande con `copy()`, un POST, una redirección de `http://
 
 ## 29. Limitaciones actuales
 
-- No hay `defer` ni genéricos.
+### Por diseño
+
+Lo que Larimar no tiene, ni va a tener, con lo que se usa en su lugar:
+
+- **Sin genéricos.** Los arreglos (`T[N]`, `T[*]`) y `Any` ya guardan cualquier tipo, y las interfaces cubren el resto.
+- **Sin recolector de basura.** La memoria se libera en el `;` y en la `}`: siempre se ve dónde ([sección 16](#16-memoria)).
+- **Sin constructores.** Un literal crea el objeto; si hay que validar, una función normal lo hace.
+- **Sin sobrecarga.** Cada nombre es una función, y el C generado se lee sin adivinar.
+- **Sin saltos ocultos.** Un error es un valor que se devuelve, y `throws` lo anuncia en la firma ([sección 19](#19-errores-throw-try-y-catch)).
+- **Sin hilos ocultos ni async.** Los hilos se crean a la vista, y el compilador revisa lo que comparten ([sección 22](#22-hilos)).
+- **Sin `null` por sorpresa.** Solo puede ser `null` lo que lleva `?` ([sección 14](#14-opcionales-y-null)).
+- **Sin conversiones implícitas.** Entre tipos numéricos se convierte con `as`, a la vista: `int32 + int64` no compila.
+- **Sin comportamiento indefinido.** Los enteros dan la vuelta, los índices se comprueban y un fallo se detiene con su archivo y su línea ([sección 20](#20-fallos-en-tiempo-de-ejecución)).
+
+### Todavía no
+
+- No hay `defer`.
 - Un `Any` no guarda listas `[*]`, lambdas ni interfaces.
 - Una clase `synchronized` no puede heredar, y `wait until` no tiene tiempo límite (espera hasta que la condición se cumpla).
 - La biblioteca estándar es pequeña: archivos, consola, rutas, entorno, bytes, expresiones regulares, JSON, TCP y UDP con sus servidores, un servidor TLS y un cliente HTTP y HTTPS (`std.io.*`, `std.path`, `std.os`, `std.text`, `std.text.regex`, `std.json`, `std.net`, `std.net.http`). La red aún no tiene servidor HTTP, WebSockets, un bucle de eventos ni conexiones HTTP reutilizadas (keep-alive). El servidor TLS aún no está en Windows. El TLS de cliente de macOS y Windows está escrito y compila, pero sus pruebas solo se han ejecutado en Linux.
