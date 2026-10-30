@@ -981,7 +981,9 @@ function fromEditor(body: String): bool {
     let cmd: String = msg.command as String ?? "";
     switch (cmd) {
         case "initialize" -> {
-            let r: Any = parse(call("initialize", Json.stringify(msg.arguments)));
+            let args: Any = msg.arguments;
+            if (!args.containsKey("pathFormat")) { args["pathFormat"] = "path"; }    // newer lldb-dap requires it
+            let r: Any = parse(call("initialize", Json.stringify(args)));
             respond(msg, capabilities(r));
         }
         case "launch" -> { forward(body, msg, launchArguments(msg)); }

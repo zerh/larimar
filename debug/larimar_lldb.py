@@ -591,7 +591,7 @@ def table_summary(valobj, internal_dict):
 def __lldb_init_module(debugger, internal_dict):
     m = __name__
     run = debugger.HandleCommand
-    run("type category define -e larimar -l c")
+    run("type category define -e larimar")      # every language: Apple lldb takes "-l c" as C89 only, not the C99 of the program
     run('type summary add -w larimar -F %s.string_summary RtString' % m)
     run('type summary add -w larimar -e -x -F %s.list_summary "^(List|Slice|Arr)_[A-Za-z0-9_]+$"' % m)
     run('type synthetic add -w larimar -x -l %s.ListProvider "^(List|Slice|Arr)_[A-Za-z0-9_]+$"' % m)
