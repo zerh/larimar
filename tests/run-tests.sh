@@ -13,7 +13,7 @@
 # TLS, and tests/debug/debug_test.py larimar --debug with lldb or gdb (with python3, when there is one).
 #
 # Usage:
-#   tests/run-tests.sh                   all the tests, with ./larimarc
+#   tests/run-tests.sh                   all the tests, with the larimarc build-bootstrap.sh made
 #   tests/run-tests.sh memory            only the files whose path contains "memory"
 #   LARIMARC=build/larimarc_stage2 tests/run-tests.sh
 #
@@ -22,6 +22,11 @@
 cd "$(dirname "$0")/.." || exit 2
 ROOT="$(pwd)"
 export LARIMAR_HOME="$ROOT"
+if [ -z "${LARIMARC:-}" ]; then              # where build-bootstrap.sh leaves it
+    for c in "$ROOT/../out/larimar/bin/larimarc" "$ROOT/bin/larimarc" "$ROOT/larimarc"; do
+        if [ -x "$c" ] || [ -x "$c.exe" ]; then LARIMARC="$c"; break; fi
+    done
+fi
 LARIMARC="${LARIMARC:-$ROOT/larimarc}"
 CC="${CC:-cc}"
 FILTER="${1:-}"
@@ -40,6 +45,14 @@ pass=0
 fail=0
 failed=""
 
+libs() {     # libs <file.c>: what larimar build would add for std.net's TLS
+    case "$(uname -s)" in
+        Darwin) grep -q "#define LM_NET_TLS\b" "$1" && echo "-framework Network -framework Security" ;;
+        MINGW*|MSYS*|CYGWIN*) grep -q "#define LM_NET_TLS\b" "$1" && echo "-lsecur32 -lws2_32" ;;
+        *) grep -q "#define LM_NET_TLS" "$1" && echo "-ldl" ;;
+    esac
+}
+
 header() {   # header <file> <key>: the text after "// <key>:" on its first such line
     sed -n "s#^// $2: \{0,1\}##p" "$1" | head -n 1
 }
@@ -52,7 +65,7 @@ for t in tests/*/*.lar; do
     want="${expect#* }"
     [ "$want" = "$expect" ] && want=""
     name="${t#tests/}"
-    rm -f "$TMP"/*
+    rm -rf "$TMP"/*                                     # also p.dSYM (macOS: a folder)
     "$LARIMARC" "$t" -o "$TMP/p.c" > "$TMP/compile.txt" 2>&1
     compiled=$?
     problem=""
@@ -73,7 +86,7 @@ $(cat "$TMP/compile.txt")"
                 problem="the generated C should contain: $missing"
             elif extra="$(sed -n 's#^// c-lacks: *##p' "$t" | while read -r n; do grep -qw -- "$n" "$TMP/p.c" && echo "$n"; done)"; [ -n "$extra" ]; then
                 problem="the generated C should not contain: $extra"
-            elif ! $CC $CFLAGS "$TMP/p.c" -o "$TMP/p" -pthread -lm > "$TMP/cc.txt" 2>&1; then
+            elif ! $CC $CFLAGS "$TMP/p.c" -o "$TMP/p" -pthread -lm $(libs "$TMP/p.c") > "$TMP/cc.txt" 2>&1; then
                 problem="the C compiler failed:
 $(head -20 "$TMP/cc.txt")"
             else

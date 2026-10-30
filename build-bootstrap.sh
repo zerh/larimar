@@ -85,7 +85,7 @@ if [ "$VERIFY" = 1 ]; then
     else
         echo "  NOTE: larimarc_bootstrap.c is older than src/; installing the compiler built from src/."
         echo "        To update it: cp build/stage2.c larimarc_bootstrap.c"
-        cp build/larimarc_stage2 "$OUTPUT"
+        rm -f "$OUTPUT"; cp build/larimarc_stage2 "$OUTPUT"     # a new file: macOS kills a signed binary changed in place
     fi
 fi
 
@@ -102,7 +102,7 @@ if [ "$INSTALL" = 1 ]; then
     
     # Comprobación de seguridad para evitar que cp falle si origen y destino coinciden exactamente
     if [ "$(cd bin && pwd -P)/larimarc" != "$(cd "$PREFIX/bin" 2>/dev/null && pwd -P || echo "")/larimarc" ]; then
-        cp -f "$OUTPUT" "$PREFIX/bin/larimarc"
+        rm -f "$PREFIX/bin/larimarc"; cp "$OUTPUT" "$PREFIX/bin/larimarc"     # a new file (macOS: Killed: 9 otherwise)
     else
         echo "  (Source and destination are identical, skipping larimarc copy)"
     fi
