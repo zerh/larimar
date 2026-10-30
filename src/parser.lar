@@ -683,7 +683,7 @@ function parseType(): TypeRef {
         strictList(TT.RParen, () -> { ps.push(parseType()); });
         consume(TT.RParen, "Expected ')' in type");
         if (match(TT.Arrow)) {           // suffixes after a function type belong to its return type
-            return TypeRef { line: t.line, kind: TK.Func, params: ps, inner: parseType() } in default;
+            return threadSafe(TypeRef { line: t.line, kind: TK.Func, params: ps, inner: parseType() } in default);
         }
         if (ps.length != 1) {
             error(t.line, "Expected '->' after the parameters of a function type");
@@ -714,10 +714,28 @@ function parseType(): TypeRef {
             advance();                   // T*: a C pointer (after `as`, only where a type can end: x as T* ; not x as T * 2)
             base = TypeRef { line: previous().line, kind: TK.Ptr, inner: base } in default;
         } else {
-            return base;
+            return base.kind == TK.Func ? threadSafe(base) : base;      // ((A) -> B) thread safe
         }
     }
     return base;
+}
+
+/**
+ * `thread safe` after a function type: other threads may call it at the same time. Two words, like
+ * `wait until`; neither is reserved. With function types inside function types it goes to the nearest
+ * one on its left; parentheses choose another: ((A) -> (B) -> C) thread safe.
+ */
+function threadSafe(t: TypeRef in default): TypeRef {
+    if (check(TT.Ident) && peek().text == "thread" && peekNext().kind == TT.Ident && peekNext().text == "safe") {
+        advance();
+        advance();
+        if (t.threadSafe) {
+            error(previous().line, "'thread safe' is written once.");
+        } else {
+            t.threadSafe = true;
+        }
+    }
+    return t;
 }
 
 // ---- statements ----------------------------------------------------------------------------------

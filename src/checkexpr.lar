@@ -8,6 +8,7 @@ import ast {
     PL_MEMORY, PL_HEAP, PL_STACK, PL_DEFAULT, PT_NAME, PT_TYPE, PT_DESTRUCTURE, PT_CONSTANT, PT_NULL
 };
 import sema {
+    hasThreadSafe, cTypeOf,
     Type, TyK, NamedK, ArrK, T_INT8, T_INT16, T_INT32, T_INT64, T_BYTE, T_UINT16, T_UINT32, T_UINT64,
     T_FLOAT32, T_FLOAT64, T_BOOL, T_STRING, T_VOID, T_ANY, T_ERROR, T_NULL, primByName, isPrimName, named, functionOf,
     funcT, arrayT, optT, bits, isFloat, isInteger, isNumeric, isSigned, isError, isClass, isStruct, isInterface,
@@ -24,7 +25,7 @@ import analyzer {
     error, wrong, frame, frames, frameTop, state, scope, pushFrame, popFrame, pushScope, popScope, declare, lookup,
     narrowedType, noteCapture, declareParam, checkReturns, analyzeStmts, analyzeBlock, analyzeThrow, requireBool,
     requireHandled, lifetime, requireOutlives, livesHint, isReference, storageRegion, placeFor, rootSymbol, isLValue,
-    reassignedNames, currentOwner, edge, useGlobal, callTargets, checkThreadRun, anyFieldsLoop, block, blockRegion,
+    reassignedNames, currentOwner, edge, useGlobal, callTargets, checkThreadRun, checkThreadSafeLambda, anyFieldsLoop, block, blockRegion,
     returnedNames, viewMethod, callMemory, creatingMethod, staticName, platformCtx,
     Mutation, MutK, mutations, alwaysExits, FrameState, nonNull, narrow, bindingSymbol, objectOf
 };
@@ -60,12 +61,12 @@ public function resolveType(t: TypeRef in default): Type {
             let ps: Type[*] = [] in default;
             let bad: bool = false;
             for (p in t.params) {
-                let pt: Type = resolveValue(p, "A function parameter");
+                let pt: Type = resolveTop(p, TC_PARAM, "A function parameter");      // T[]: a view, as in a parameter
                 if (isError(pt)) { bad = true; }
                 ps.push(pt);
             }
             let ret: Type = resolveType(t.inner!);
-            yield !bad && !isError(ret) ? funcT(ps, ret) : T_ERROR;
+            yield !bad && !isError(ret) ? funcT(ps, ret, t.threadSafe) : T_ERROR;
         }
         case Fixed -> {
             let elem: Type = resolveValue(t.inner!, "An array element");
@@ -124,6 +125,13 @@ public function note(t: Type in default): void {
     if (t == T_ANY) { usesAny = true; }
     if (t.kind == TyK.Array && t.ak == ArrK.Fixed && t.size < 0) { return; }
     if (t.used) { return; }
+    if (hasThreadSafe(t)) {                       // C uses the type without `thread safe`
+        t.used = true;
+        let c: Type = cTypeOf(t);
+        note(c);
+        if (t.kind == TyK.Func) { t.funcId = c.funcId; }
+        return;
+    }
     t.used = true;
     usedTypes.push(t);
     if (t.kind == TyK.Func) {
@@ -432,6 +440,18 @@ public function coerce(e: Expr in default, target: Type in default, place: Place
         note(m.sig!);
         return target;
     }
+    // A lambda where a `thread safe` function is expected: checked like the run of a Thread.
+    let bare: Type = withoutThreadSafe(target);
+    if (bare != target) {
+        let inner: Expr = e is Placed pl ? pl.expr : e;
+        if (inner is Lambda l) {
+            let lt: Type = coerce(e, bare, place, ctx);
+            if (isError(lt)) { return T_ERROR; }
+            if (l.lambda != null) { checkThreadSafeLambda(l.lambda!, e.line); }
+            note(target);
+            return target;
+        }
+    }
     // A switch gets the optional type itself: its arms can be null or a value.
     let hint: Type = isOpt(target) && !(e is NullLit) && !(e is SwitchExpr) ? target.elem! : target;
     let t: Type = check(e, hint, place);
@@ -467,6 +487,7 @@ function box(e: Expr in default, t: Type, place: Place in default): void {
 
 function conversion(from: Type in default, to: Type in default): Conversion? {
     if (from == to) { return conv(ConvK.None, from, to); }
+    if (hasThreadSafe(from) && cTypeOf(from) == to) { return conv(ConvK.None, from, to); }    // drops `thread safe`
     if (to == T_ANY) {
         let inner: Type = isOpt(from) ? from.elem! : from;
         let ok: bool = from.kind == TyK.Null || isNumeric(inner) || inner == T_BOOL || inner == T_STRING
@@ -1225,6 +1246,13 @@ function related(cls: ClassInfo in default, t: Type in default): bool {
 /** A number or null literal: it takes the type of the other side of ?:. */
 function loose(e: Expr): bool { return isIntLiteral(e) || e is FloatLit || e is NullLit; }
 
+/** A type without `thread safe` (also inside an optional), or the type itself. */
+function withoutThreadSafe(t: Type in default): Type {
+    if (t.kind == TyK.Func && t.safe) { return t.plain!; }
+    if (t.kind == TyK.Opt && t.elem!.kind == TyK.Func && t.elem!.safe) { return optional(t.elem!.plain!); }
+    return t;
+}
+
 function optional(t: Type in default): Type {
     return isOpt(t) || t == T_ANY ? t : optT(t);
 }
@@ -1969,7 +1997,7 @@ function checkMapFilter(c: Call in default, obj: Expr in default, isMap: bool, a
         resultElem = exp.elem!;
     }
     let ps: Type[*] = [at.elem!] in default;
-    let ft: Type = noted(funcT(ps, isMap ? resultElem : T_BOOL));
+    let ft: Type = noted(funcT(ps, isMap ? resultElem : T_BOOL, false));
     coerce(c.args[0], ft, P_TEMP, "Argument of ${isMap ? "map" : "filter"}()");
     let dataRegion: Region = meet(regionOf(obj), regionOf(c.args[0]));
     builtinCall(c, isMap ? BK.Map : BK.Filter, at);
@@ -2116,7 +2144,7 @@ function checkAnyMethod(c: Call in default, m: Member in default): Type {
                 let ps: Type[*] = [] in default;
                 if (a is Lambda l && l.params.length == 2) { ps.push(T_STRING); }
                 ps.push(T_ANY);
-                coerce(a, noted(funcT(ps, T_BOOL)), P_TEMP, "Argument of removeIf()");
+                coerce(a, noted(funcT(ps, T_BOOL, false)), P_TEMP, "Argument of removeIf()");
                 builtinCall(c, BK.AnyRemoveIf, T_ANY);
                 return T_INT32;
             }

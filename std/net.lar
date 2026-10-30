@@ -1,4 +1,9 @@
-// std.net: TCP connections. A TcpSocket is read and written directly (read, write), like a socket in C,
+// std.net: TCP and UDP. A TcpSocket is read and written directly (read, write), like a socket in C,
+// and it is also an InputStream and an OutputStream, so Reader and copy() work on it as on a file.
+// TcpServer and UdpServer are the loop of a server, written for you: you give what to do with each
+// connection (or datagram), as a `thread safe` function, and run() serves them with the threads you say.
+//
+// TCP connections. A TcpSocket is read and written directly (read, write), like a socket in C,
 // and it is also an InputStream and an OutputStream, so Reader and copy() work on it as on a file.
 //
 //   import std.net { TcpSocket, TcpListener, NetError };
@@ -23,7 +28,7 @@
 // only declarations.
 
 import std.io.files { IoError };
-import std.io.streams { InputStream, OutputStream, Closeable };
+import std.io.streams { InputStream, OutputStream, Closeable, buffer };
 
 /**
  * A connection both ways: a TcpSocket is one, and so is what a TlsProvider (std.net.http.tls) gives. Whoever
@@ -118,6 +123,9 @@ extern type SignalHandler = (int32) -> void;
 
 extern const AF_UNSPEC: int32;
 extern const SOCK_STREAM: int32;
+extern const SOCK_DGRAM: int32;
+extern const NI_NUMERICHOST: int32;
+extern const NI_NUMERICSERV: int32;
 extern const AI_PASSIVE: int32;
 extern const IPPROTO_TCP: int32;
 extern const TCP_NODELAY: int32;
@@ -167,6 +175,45 @@ extern function shutdown(s: Socket, how: int32): int32;
 extern function setsockopt(s: Socket, level: int32, name: int32, value: Untyped, length: int32): int32;
 extern function getsockname(s: Socket, addr: SockAddr*, length: Untyped): int32;
 extern function ntohs(n: uint16): uint16;
+extern function sendto(s: Socket, bytes: byte[], flags: int32, to: SockAddr*, length: uint32): int64;
+extern function recvfrom(s: Socket, buffer: byte[], flags: int32, from: SockAddr*, length: Untyped): int64;
+extern function getnameinfo(addr: SockAddr*, length: uint32, host: byte[], service: byte[], flags: int32): int32;
+
+// For the servers: a copy of a socket (another descriptor for the same connection, which a worker thread
+// owns and closes), taking one back as a Socket, and waiting a while for something to read.
+c_code {
+#if defined(_WIN32)
+    static long long lm_net_dup(SOCKET s) {
+        WSAPROTOCOL_INFOW info;
+        SOCKET d;
+        if (WSADuplicateSocketW(s, GetCurrentProcessId(), &info) != 0) return -1;
+        d = WSASocketW(FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, &info, 0, 0);
+        return d == INVALID_SOCKET ? -1 : (long long)d;
+    }
+    static SOCKET lm_net_adopt(long long n) { return (SOCKET)n; }
+    static int lm_net_readable(SOCKET s, int ms) {
+        WSAPOLLFD p;
+        p.fd = s;
+        p.events = POLLRDNORM;
+        p.revents = 0;
+        return WSAPoll(&p, 1, ms) > 0;
+    }
+#else
+    #include <poll.h>
+    static long long lm_net_dup(int s) { return (long long)dup(s); }
+    static int lm_net_adopt(long long n) { return (int)n; }
+    static int lm_net_readable(int s, int ms) {
+        struct pollfd p;
+        p.fd = s;
+        p.events = POLLIN;
+        p.revents = 0;
+        return poll(&p, 1, ms) > 0;
+    }
+#endif
+}
+extern function lm_net_dup(s: Socket): int64;
+extern function lm_net_adopt(n: int64): Socket?;
+extern function lm_net_readable(s: Socket, ms: int32): int32;
 
 // error codes, as NetError: 1 host not found, 2 refused, 3 timeout, 4 closed, 5 reset, 6 address in use, 100+ other
 
@@ -313,18 +360,7 @@ public class TcpSocket implements InputStream, OutputStream, Closeable, Connecti
 
     /** How long read and write wait before failing with a timeout (0: no limit). */
     function setTimeout(ms: int32): void {
-        if (self.socket == null) { return; }
-        let s: Socket = self.socket!;
-        let t: int32 = ms > 0 ? ms : 0;
-        #when windows
-            let w: uint32 = t as uint32;
-            setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &w as Untyped, 4);
-            setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &w as Untyped, 4);
-        #else
-            let tv: TimeVal = { tv_sec: (t / 1000) as int64, tv_usec: ((t % 1000) * 1000) as int64 };
-            setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv as Untyped, TIMEVAL_SIZE);
-            setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv as Untyped, TIMEVAL_SIZE);
-        #end
+        if (self.socket != null) { timeout(self.socket!, ms); }
     }
 
     /** Says that nothing more will be written: the other side reads the end, and can still answer. */
@@ -354,6 +390,20 @@ public class TcpSocket implements InputStream, OutputStream, Closeable, Connecti
         release(self.socket);
         self.socket = null;
     }
+}
+
+/** How long reads and writes of a socket wait before failing with a timeout (0: no limit). */
+function timeout(s: Socket, ms: int32): void {
+    let t: int32 = ms > 0 ? ms : 0;
+    #when windows
+        let w: uint32 = t as uint32;
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &w as Untyped, 4);
+        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &w as Untyped, 4);
+    #else
+        let tv: TimeVal = { tv_sec: (t / 1000) as int64, tv_usec: ((t % 1000) * 1000) as int64 };
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv as Untyped, TIMEVAL_SIZE);
+        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv as Untyped, TIMEVAL_SIZE);
+    #end
 }
 
 /** The local port of a socket (a listener bound to port 0 gets one from the system). */
@@ -412,5 +462,714 @@ public class TcpListener implements Closeable {
     function close(): void throws IoError {
         release(self.socket);
         self.socket = null;
+    }
+}
+
+// ---- servers -----------------------------------------------------------------------------
+
+/**
+ * Tells a server to stop: give one to its literal (stop: quit) and call quit.stop() from anywhere, the
+ * handler included. The server notices within a fifth of a second and run() returns after the requests
+ * being served.
+ */
+public synchronized class StopSignal {
+    let stopped: bool = false;
+    function stop(): void { self.stopped = true; }
+    function isStopped(): bool { return self.stopped; }
+}
+
+/** The server's StopSignal, or a new one that nobody stops. */
+function signalOf(given: StopSignal?): StopSignal {
+    if (given != null) { return given!; }
+    return {};
+}
+
+/** Connections accepted and not yet served, as copies of their sockets (numbers), for the workers. */
+synchronized class Handoff {
+    let items: int64[*] = [];
+    let head: int32 = 0;
+    let closed: bool = false;
+
+    function put(n: int64): void { self.items.push(n); }
+    function close(): void { self.closed = true; }
+
+    /** The next one, waiting for it; -1 when closed and empty. */
+    function take(): int64 wait until (self.head < self.items.length || self.closed) {
+        if (self.head == self.items.length) { return -1; }
+        let n: int64 = self.items[self.head];
+        self.head += 1;
+        if (self.head == self.items.length) {
+            self.items.clear();
+            self.head = 0;
+        }
+        return n;
+    }
+}
+
+/**
+ * A TCP server: it listens on host:port and gives each connection to onConnect, in one of its threads.
+ * The client closes when onConnect returns (its memory is freed).
+ *
+ *   let quit: StopSignal = {};
+ *   let server: TcpServer = {
+ *       port: 8080,                                   // host: "127.0.0.1" unless you say "0.0.0.0"
+ *       threads: 8,                                   // connections served at the same time (1 by default)
+ *       stop: quit,
+ *       onConnect: (client: TcpSocket) -> { ... }    // thread safe: checked like the run of a Thread
+ *   };
+ *   server.run();                                     // until quit.stop()
+ */
+public class TcpServer {
+    let host: String = "127.0.0.1";
+    let port: int32 = 0;
+    let threads: int32 = 1;
+    let stop: StopSignal? = null;
+    let onConnect: (TcpSocket) -> void thread safe;
+
+    /**
+     * Listens and serves until its StopSignal says stop (without one, until the program ends). This
+     * thread accepts; the others serve. Throws when it cannot listen.
+     */
+    function run(): void throws NetError {
+        let listener: TcpListener = TcpListener.bind(self.host, self.port);
+        let handler: (TcpSocket) -> void thread safe = self.onConnect;
+        let signal: StopSignal = signalOf(self.stop);
+        let queue: Handoff = {};
+        {
+            let workers: byte[*] = [] in heap;            // freed at the '}': it waits for the threads
+            for (i in 0..(self.threads > 1 ? self.threads : 1)) {
+                let t: Thread = { run: () -> { serveConnections(queue, handler); } } in workers;
+                t.start();
+            }
+            acceptInto(listener, signal, queue);
+        }
+    }
+}
+
+/**
+ * The loop of a server's own thread: it accepts until the signal says stop and gives each connection to
+ * the workers (a copy of its socket, which the worker owns). It closes the handoff when it ends, also
+ * when it fails, so the workers end too.
+ */
+function acceptInto(listener: TcpListener, signal: StopSignal, queue: Handoff): void throws NetError {
+    try {
+        while (!signal.isStopped()) {
+            if (lm_net_readable(listener.socket!, 200) == 0) { continue; }
+            let client: TcpSocket = listener.accept();
+            let n: int64 = lm_net_dup(client.socket!);
+            if (n >= 0) { queue.put(n); }
+        }                                                 // this copy closes; the worker has its own
+    } catch (NetError e) {
+        queue.close();
+        throw e;
+    }
+    queue.close();
+}
+
+/** A worker of a TcpServer: it serves connections until the server closes the handoff. */
+function serveConnections(queue: Handoff, handler: (TcpSocket) -> void thread safe): void {
+    while (true) {
+        let n: int64 = queue.take();
+        if (n < 0) { return; }
+        let client: TcpSocket = {};
+        client.socket = lm_net_adopt(n);
+        if (client.socket != null) { handler(client); }
+    }
+}
+
+// ---- UDP -----------------------------------------------------------------------------------
+
+/** Where a datagram comes from or goes to: an IP (or a name, to send) and a port. */
+public struct Address {
+    let host: String;
+    let port: int32;
+}
+
+/** What receive() got: how many bytes of the buffer, and from where. */
+public struct Datagram {
+    let length: int32;
+    let from: Address;
+}
+
+/**
+ * A UDP socket: datagrams, each one whole, with no connection. Bound to a port to receive (a server), or
+ * to any port the system chooses (open(), a client); both send with sendTo.
+ *
+ *   let socket: UdpSocket = UdpSocket.open();
+ *   socket.sendTo("ping".bytes(), Address { host: "127.0.0.1", port: 9000 });
+ *   let data: byte[*] = buffer(1500);
+ *   let got: Datagram = socket.receive(data);         // waits for one
+ */
+public class UdpSocket implements Closeable {
+    let socket: Socket? = null;
+    let family: int32 = 0;
+
+    /** Receives on host:port ("0.0.0.0" or "::" for every address; port 0: one the system chooses). */
+    static function bind(host: String, port: int32): UdpSocket throws NetError {
+        start();
+        let hints: AddrInfo = { ai_family: AF_UNSPEC, ai_socktype: SOCK_DGRAM, ai_flags: AI_PASSIVE };
+        let list: AddrInfo* = null;
+        let at: String = host == "" ? "0.0.0.0" : host;
+        if (getaddrinfo(at, "${port}", &hints, &list) != 0 || list == null) { throw NetError.HostNotFound(host.clone()); }
+        let u: UdpSocket = { family: list.ai_family };
+        u.socket = socket(list.ai_family, list.ai_socktype, list.ai_protocol);
+        let code: int32 = 0;
+        if (u.socket == null) {
+            code = lastError();
+        } else if (bind(u.socket!, list.ai_addr, list.ai_addrlen) != 0) {
+            code = lastError();
+            release(u.socket);
+            u.socket = null;
+        }
+        freeaddrinfo(list);
+        raise(code, host);
+        return u;
+    }
+
+    /** A socket to send from (IPv4), on a port the system chooses; the answers come back to it. */
+    static function open(): UdpSocket throws NetError { return UdpSocket.bind("0.0.0.0", 0); }
+
+    /** Sends bytes as one datagram (it may be lost: UDP does not resend). */
+    function sendTo(bytes: byte[], to: Address): void throws NetError {
+        if (self.socket == null) { throw NetError.Closed; }
+        let hints: AddrInfo = { ai_family: self.family, ai_socktype: SOCK_DGRAM };
+        let list: AddrInfo* = null;
+        if (getaddrinfo(to.host, "${to.port}", &hints, &list) != 0 || list == null) { throw NetError.HostNotFound(to.host.clone()); }
+        let n: int64 = -1;
+        while (true) {
+            n = sendto(self.socket!, bytes, 0, list.ai_addr, list.ai_addrlen);
+            if (n >= 0 || !interrupted()) { break; }
+        }
+        let code: int32 = n < 0 ? lastError() : 0;
+        freeaddrinfo(list);
+        raise(code, to.host);
+    }
+
+    /** Waits for one datagram, into buffer (what does not fit is lost), and says its length and sender. */
+    function receive(buffer: byte[]): Datagram throws NetError {
+        if (self.socket == null) { throw NetError.Closed; }
+        let a: SockAddrIn6 = {};
+        let length: uint32 = SOCKADDR_IN6_SIZE;
+        let n: int64 = -1;
+        while (true) {
+            n = recvfrom(self.socket!, buffer, 0, &a as SockAddr*, &length as Untyped);
+            if (n >= 0 || !interrupted()) { break; }
+        }
+        if (n < 0) { raise(lastError(), ""); }
+        let host: byte[64] = [];
+        let service: byte[16] = [];
+        for (i in 0..64) { host.push(0 as byte); }
+        for (i in 0..16) { service.push(0 as byte); }
+        getnameinfo(&a as SockAddr*, length, host, service, NI_NUMERICHOST | NI_NUMERICSERV);
+        let end: int32 = 0;
+        while (end < host.length && host[end] != 0 as byte) { end += 1; }
+        return Datagram { length: n as int32, from: Address { host: stringOfRange(host, 0, end), port: ntohs(a.sin6_port) as int32 } };
+    }
+
+    /** How long receive and sendTo wait before failing with NetError.Timeout (0: no limit). */
+    function setTimeout(ms: int32): void {
+        if (self.socket != null) { timeout(self.socket!, ms); }
+    }
+
+    function isOpen(): bool { return self.socket != null; }
+
+    /** The local port (the one the system chose, after open() or bind with port 0). */
+    function port(): int32 { return portOf(self.socket); }
+
+    /** Closes it now; otherwise it closes when its memory is freed. */
+    function close(): void throws IoError {
+        release(self.socket);
+        self.socket = null;
+    }
+}
+
+// ---- UdpServer -----------------------------------------------------------------------------
+
+/**
+ * A UDP server: it receives on host:port and gives each datagram to onReceive (the socket to answer
+ * with, the bytes, who sent them), in one of its threads. Each thread has its own copy of the socket,
+ * on the same port, so the answers come from the port the client wrote to.
+ *
+ *   let quit: StopSignal = {};
+ *   let server: UdpServer = {
+ *       port: 9000,
+ *       threads: 4,
+ *       stop: quit,
+ *       onReceive: (socket: UdpSocket, data: byte[], from: Address) -> { socket.sendTo(data, from); }
+ *   };
+ *   server.run();                                     // until quit.stop()
+ */
+public class UdpServer {
+    let host: String = "127.0.0.1";
+    let port: int32 = 0;
+    let threads: int32 = 1;
+    let stop: StopSignal? = null;
+    /** The largest datagram it takes whole (bytes); the rest of a bigger one is lost. */
+    let maxSize: int32 = 65507;
+    let onReceive: (UdpSocket, byte[], Address) -> void thread safe;
+
+    /** Receives and serves until its StopSignal says stop. Throws when it cannot bind. */
+    function run(): void throws NetError {
+        let socket: UdpSocket = UdpSocket.bind(self.host, self.port);
+        socket.setTimeout(200);                           // the copies too: they look at the signal
+        let handler: (UdpSocket, byte[], Address) -> void thread safe = self.onReceive;
+        let signal: StopSignal = signalOf(self.stop);
+        let family: int32 = socket.family;
+        let maxSize: int32 = self.maxSize;
+        let workers: byte[*] = [] in heap;                // freed when run returns: it waits for the threads
+        for (i in 0..(self.threads > 1 ? self.threads : 1)) {
+            let n: int64 = lm_net_dup(socket.socket!);
+            let t: Thread = { run: () -> { serveDatagrams(n, family, maxSize, signal, handler); } } in workers;
+            t.start();
+        }
+    }
+}
+
+/** A worker of a UdpServer, on its own copy (n) of the server's socket. */
+function serveDatagrams(n: int64, family: int32, maxSize: int32, signal: StopSignal,
+                        handler: (UdpSocket, byte[], Address) -> void thread safe): void {
+    let socket: UdpSocket = { family: family };
+    socket.socket = lm_net_adopt(n);
+    let data: byte[*] = buffer(maxSize);
+    while (socket.isOpen() && !signal.isStopped()) {
+        try {
+            let got: Datagram = socket.receive(data);
+            let bytes: byte[*] = [];
+            for (i in 0..got.length) { bytes.push(data[i]); }
+            handler(socket, bytes, got.from);
+        } catch (NetError e) {}                           // a timeout: look at the signal again
+    }
+}
+
+// ---- TLS servers ---------------------------------------------------------------------------
+
+// OpenSSL, for the servers here and for the client of std.net.http.tls on Linux: loaded the first time
+// it is needed (libssl 3 or 1.1: Linux, and macOS with Homebrew's openssl@3), so nothing is loaded by a
+// program that never uses it. The functions are the same in OpenSSL 1.1 and 3, and no headers are
+// needed to compile. A TLS server is not available on Windows yet: OpenSslProvider.load throws
+// NetError.TlsUnavailable there.
+c_code {
+    #define LM_NET_TLS_SERVER       /* larimar build: -ldl on Linux */
+    #define LM_OSSL_TEXT 300
+#if defined(_WIN32)
+    typedef struct { int32_t error; char text[LM_OSSL_TEXT]; long long ctx; } LmTlsCtx;
+    typedef struct { int32_t error; char text[LM_OSSL_TEXT]; bool open, eof; } LmOsslConn;
+    static LmTlsCtx* lm_tlss_context(RtMem* m, const char* cert, const char* key) {
+        LmTlsCtx* c = (LmTlsCtx*)rt_mem_alloc(m, sizeof(LmTlsCtx), 0);
+        memset(c, 0, sizeof *c);
+        (void)cert; (void)key;
+        c->error = 51;
+        snprintf(c->text, LM_OSSL_TEXT, "a TLS server is not available on Windows yet");
+        return c;
+    }
+    static long long lm_tlss_context_number(LmTlsCtx* c) { return c->ctx; }
+    static LmOsslConn* lm_tlss_accept(RtMem* m, long long ctx, SOCKET fd) {
+        LmOsslConn* t = (LmOsslConn*)rt_mem_alloc(m, sizeof(LmOsslConn), 0);
+        memset(t, 0, sizeof *t);
+        (void)ctx; (void)fd;
+        t->error = 51;
+        return t;
+    }
+    static int32_t lm_ossl_read(LmOsslConn* t, uint8_t* items, int32_t len) { (void)t; (void)items; (void)len; return -1; }
+    static int32_t lm_ossl_write(LmOsslConn* t, const uint8_t* items, int32_t len) { (void)t; (void)items; (void)len; return -1; }
+    static void lm_ossl_close(LmOsslConn* t) { t->open = false; }
+#else
+    #include <dlfcn.h>
+    #include <errno.h>
+    #include <sched.h>
+
+    /* ---- the library: loaded once, by whichever thread comes first */
+    typedef struct LmOsslCtx LmOsslCtx;
+    typedef struct LmOsslSsl LmOsslSsl;
+    typedef struct {
+        const void* (*TLS_client_method)(void);
+        const void* (*TLS_server_method)(void);
+        LmOsslCtx* (*SSL_CTX_new)(const void*);
+        void (*SSL_CTX_free)(LmOsslCtx*);
+        long (*SSL_CTX_ctrl)(LmOsslCtx*, int, long, void*);
+        int (*SSL_CTX_set_default_verify_paths)(LmOsslCtx*);
+        void (*SSL_CTX_set_verify)(LmOsslCtx*, int, void*);
+        int (*SSL_CTX_use_certificate_chain_file)(LmOsslCtx*, const char*);
+        int (*SSL_CTX_use_PrivateKey_file)(LmOsslCtx*, const char*, int);
+        int (*SSL_CTX_check_private_key)(const LmOsslCtx*);
+        LmOsslSsl* (*SSL_new)(LmOsslCtx*);
+        void (*SSL_free)(LmOsslSsl*);
+        int (*SSL_set_fd)(LmOsslSsl*, int);
+        long (*SSL_ctrl)(LmOsslSsl*, int, long, void*);
+        int (*SSL_set1_host)(LmOsslSsl*, const char*);
+        void* (*SSL_get0_param)(LmOsslSsl*);
+        int (*SSL_connect)(LmOsslSsl*);
+        int (*SSL_accept)(LmOsslSsl*);
+        int (*SSL_read)(LmOsslSsl*, void*, int);
+        int (*SSL_write)(LmOsslSsl*, const void*, int);
+        int (*SSL_shutdown)(LmOsslSsl*);
+        int (*SSL_get_error)(const LmOsslSsl*, int);
+        long (*SSL_get_verify_result)(const LmOsslSsl*);
+        int (*X509_VERIFY_PARAM_set1_ip_asc)(void*, const char*);
+        const char* (*X509_verify_cert_error_string)(long);
+        unsigned long (*ERR_get_error)(void);
+        void (*ERR_error_string_n)(unsigned long, char*, size_t);
+        void (*ERR_clear_error)(void);
+        unsigned long (*OpenSSL_version_num)(void);
+    } LmOsslApi;
+    static LmOsslApi lm_ossl;
+    static volatile int lm_ossl_state;             /* 0 not tried, 3 loading, 1 loaded, 2 missing */
+    static char lm_ossl_missing[LM_OSSL_TEXT];
+
+    static bool lm_ossl_load_now(void) {
+        static const char* names[] = {
+    #if defined(__APPLE__)
+            "libssl.3.dylib", "/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib",
+            "/usr/local/opt/openssl@3/lib/libssl.3.dylib",
+    #else
+            "libssl.so.3", "libssl.so.1.1", "libssl.so",
+    #endif
+            0 };
+        void* h = NULL;
+        for (int i = 0; names[i] && !h; i++) h = dlopen(names[i], RTLD_NOW | RTLD_LOCAL);
+        if (!h) {
+    #if defined(__APPLE__)
+            snprintf(lm_ossl_missing, LM_OSSL_TEXT, "OpenSSL not found: brew install openssl@3");
+    #else
+            snprintf(lm_ossl_missing, LM_OSSL_TEXT, "OpenSSL not found (tried libssl.so.3, libssl.so.1.1, libssl.so)");
+    #endif
+            return false;
+        }
+        #define LM_OSSL_SYM(name) \
+            *(void**)(&lm_ossl.name) = dlsym(h, #name); \
+            if (!lm_ossl.name) { \
+                snprintf(lm_ossl_missing, LM_OSSL_TEXT, "OpenSSL 1.1 or newer is needed (missing " #name ")"); \
+                return false; \
+            }
+        LM_OSSL_SYM(TLS_client_method) LM_OSSL_SYM(TLS_server_method) LM_OSSL_SYM(SSL_CTX_new)
+        LM_OSSL_SYM(SSL_CTX_free) LM_OSSL_SYM(SSL_CTX_ctrl) LM_OSSL_SYM(SSL_CTX_set_default_verify_paths)
+        LM_OSSL_SYM(SSL_CTX_set_verify) LM_OSSL_SYM(SSL_CTX_use_certificate_chain_file)
+        LM_OSSL_SYM(SSL_CTX_use_PrivateKey_file) LM_OSSL_SYM(SSL_CTX_check_private_key) LM_OSSL_SYM(SSL_new)
+        LM_OSSL_SYM(SSL_free) LM_OSSL_SYM(SSL_set_fd) LM_OSSL_SYM(SSL_ctrl) LM_OSSL_SYM(SSL_set1_host)
+        LM_OSSL_SYM(SSL_get0_param) LM_OSSL_SYM(SSL_connect) LM_OSSL_SYM(SSL_accept) LM_OSSL_SYM(SSL_read)
+        LM_OSSL_SYM(SSL_write) LM_OSSL_SYM(SSL_shutdown) LM_OSSL_SYM(SSL_get_error)
+        LM_OSSL_SYM(SSL_get_verify_result) LM_OSSL_SYM(X509_VERIFY_PARAM_set1_ip_asc)
+        LM_OSSL_SYM(X509_verify_cert_error_string) LM_OSSL_SYM(ERR_get_error) LM_OSSL_SYM(ERR_error_string_n)
+        LM_OSSL_SYM(ERR_clear_error) LM_OSSL_SYM(OpenSSL_version_num)
+        #undef LM_OSSL_SYM
+        return true;
+    }
+
+    static bool lm_ossl_load(void) {
+        for (;;) {
+            int state = lm_ossl_state;
+            if (state == 1 || state == 2) return state == 1;
+            if (state == 0 && __sync_bool_compare_and_swap(&lm_ossl_state, 0, 3)) {
+                int done = lm_ossl_load_now() ? 1 : 2;
+                __sync_synchronize();
+                lm_ossl_state = done;
+                return done == 1;
+            }
+            sched_yield();
+        }
+    }
+
+    /* the text of OpenSSL's last error, after what */
+    static void lm_ossl_error(char* text, const char* what) {
+        unsigned long e = lm_ossl.ERR_get_error();
+        char buf[200];
+        if (e) { lm_ossl.ERR_error_string_n(e, buf, sizeof buf); snprintf(text, LM_OSSL_TEXT, "%s: %s", what, buf); }
+        else snprintf(text, LM_OSSL_TEXT, "%s", what);
+    }
+
+    /* ---- a connection, client or server: the same reading, writing, errors and closing.
+       error: 3 timeout, 4 closed, 5 reset, 50 TLS failed (text), 51 TLS unavailable (text), 100+ other */
+    typedef struct {
+        int32_t error; char text[LM_OSSL_TEXT]; bool open, eof;
+        LmOsslCtx* ctx;                 /* a client's own context (a server's is shared: NULL here) */
+        LmOsslSsl* ssl;
+    } LmOsslConn;
+
+    static LmOsslConn* lm_ossl_conn(RtMem* m) {
+        LmOsslConn* t = (LmOsslConn*)rt_mem_alloc(m, sizeof(LmOsslConn), 0);
+        memset(t, 0, sizeof *t);
+        return t;
+    }
+
+    /* the error of a failed SSL_read/SSL_write/SSL_connect/SSL_accept: -1, or 0 when it is the end */
+    static int32_t lm_ossl_io_error(LmOsslConn* t, int r, const char* what) {
+        int e = lm_ossl.SSL_get_error(t->ssl, r);
+        if (e == 6) { t->eof = true; t->open = false; return 0; }                 /* SSL_ERROR_ZERO_RETURN */
+        if (e == 5 && errno == 0) { t->eof = true; t->open = false; return 0; }   /* closed without close_notify */
+        if (e == 5 || e == 2 || e == 3) {                                         /* SYSCALL, WANT_READ/WRITE */
+            t->error = errno == EAGAIN || errno == EWOULDBLOCK || errno == ETIMEDOUT || e != 5 ? 3
+                     : errno == ECONNRESET || errno == EPIPE ? 5 : 100 + errno;
+            snprintf(t->text, LM_OSSL_TEXT, "%s", strerror(errno ? errno : EAGAIN));
+            return -1;
+        }
+        t->error = 50;
+        lm_ossl_error(t->text, what);
+        return -1;
+    }
+
+    static void lm_ossl_close(LmOsslConn* t) {
+        if (t->open && t->ssl) lm_ossl.SSL_shutdown(t->ssl);
+        t->open = false;
+    }
+
+    static void lm_ossl_final(void* p) {
+        LmOsslConn* t = (LmOsslConn*)p;
+        lm_ossl_close(t);
+        if (t->ssl) { lm_ossl.SSL_free(t->ssl); t->ssl = NULL; }
+        if (t->ctx) { lm_ossl.SSL_CTX_free(t->ctx); t->ctx = NULL; }
+    }
+
+    static int32_t lm_ossl_read(LmOsslConn* t, uint8_t* items, int32_t len) {
+        if (!t->open) { if (t->eof) return 0; t->error = 4; return -1; }
+        if (len <= 0) return 0;
+        for (;;) {
+            errno = 0;
+            lm_ossl.ERR_clear_error();
+            int n = lm_ossl.SSL_read(t->ssl, items, len);
+            if (n > 0) return n;
+            if (errno == EINTR) continue;
+            return lm_ossl_io_error(t, n, "read failed");
+        }
+    }
+
+    static int32_t lm_ossl_write(LmOsslConn* t, const uint8_t* items, int32_t len) {
+        if (!t->open) { t->error = 4; return -1; }
+        int32_t done = 0;
+        while (done < len) {
+            errno = 0;
+            lm_ossl.ERR_clear_error();
+            int n = lm_ossl.SSL_write(t->ssl, items + done, len - done);
+            if (n > 0) { done += n; continue; }
+            if (errno == EINTR) continue;
+            if (lm_ossl_io_error(t, n, "write failed") == 0) { t->error = 4; snprintf(t->text, LM_OSSL_TEXT, "closed"); }
+            return -1;
+        }
+        return 0;
+    }
+
+    /* ---- a server: the certificate and its key, one context for every connection
+       (OpenSSL shares it between threads) */
+    typedef struct { int32_t error; char text[LM_OSSL_TEXT]; LmOsslCtx* ctx; } LmTlsCtx;
+
+    static void lm_tlss_context_final(void* p) {
+        LmTlsCtx* c = (LmTlsCtx*)p;
+        if (c->ctx) { lm_ossl.SSL_CTX_free(c->ctx); c->ctx = NULL; }
+    }
+
+    static LmTlsCtx* lm_tlss_context(RtMem* m, const char* cert, const char* key) {
+        LmTlsCtx* c = (LmTlsCtx*)rt_mem_alloc(m, sizeof(LmTlsCtx), 0);
+        memset(c, 0, sizeof *c);
+        if (!lm_ossl_load()) { c->error = 51; memcpy(c->text, lm_ossl_missing, LM_OSSL_TEXT); return c; }
+        lm_ossl.ERR_clear_error();
+        c->ctx = lm_ossl.SSL_CTX_new(lm_ossl.TLS_server_method());
+        if (!c->ctx) { c->error = 50; lm_ossl_error(c->text, "cannot create a TLS context"); return c; }
+        rt_mem_on_free(m, lm_tlss_context_final, c, 0);
+        lm_ossl.SSL_CTX_ctrl(c->ctx, 123, 0x0303, NULL);                /* SSL_CTX_set_min_proto_version: TLS 1.2 */
+        if (lm_ossl.OpenSSL_version_num() >= 0x30000000UL) {
+            lm_ossl.SSL_CTX_ctrl(c->ctx, 32, 1L << 7, NULL);              /* SSL_OP_IGNORE_UNEXPECTED_EOF: an end, not an error */
+        }
+        char what[LM_OSSL_TEXT];
+        if (lm_ossl.SSL_CTX_use_certificate_chain_file(c->ctx, cert) != 1) {
+            c->error = 50;
+            snprintf(what, sizeof what, "cannot use the certificate %s", cert);
+            lm_ossl_error(c->text, what);
+            return c;
+        }
+        if (lm_ossl.SSL_CTX_use_PrivateKey_file(c->ctx, key, 1) != 1) { /* SSL_FILETYPE_PEM */
+            c->error = 50;
+            snprintf(what, sizeof what, "cannot use the key %s", key);
+            lm_ossl_error(c->text, what);
+            return c;
+        }
+        if (lm_ossl.SSL_CTX_check_private_key(c->ctx) != 1) {
+            c->error = 50;
+            snprintf(c->text, LM_OSSL_TEXT, "the key %s is not the key of the certificate %s", key, cert);
+            return c;
+        }
+        return c;
+    }
+
+    static long long lm_tlss_context_number(LmTlsCtx* c) { return (long long)(intptr_t)c->ctx; }
+
+    /* a server's connection: the handshake over an accepted socket (with its timeouts) */
+    static LmOsslConn* lm_tlss_accept(RtMem* m, long long ctx, int fd) {
+        LmOsslConn* t = lm_ossl_conn(m);
+        lm_ossl.ERR_clear_error();
+        t->ssl = lm_ossl.SSL_new((LmOsslCtx*)(intptr_t)ctx);
+        if (!t->ssl) { t->error = 50; lm_ossl_error(t->text, "cannot create a TLS connection"); return t; }
+        rt_mem_on_free(m, lm_ossl_final, t, 0);
+        lm_ossl.SSL_set_fd(t->ssl, fd);
+        errno = 0;
+        int r = lm_ossl.SSL_accept(t->ssl);
+        if (r != 1) {
+            if (lm_ossl_io_error(t, r, "handshake failed") == 0) {
+                t->eof = false;
+                t->error = 50;
+                snprintf(t->text, LM_OSSL_TEXT, "the client closed the connection during the handshake");
+            }
+            return t;
+        }
+        t->open = true;
+        return t;
+    }
+#endif
+    static int32_t lm_tlss_context_error(LmTlsCtx* c) { return c->error; }
+    static const char* lm_tlss_context_text(LmTlsCtx* c) { return c->text; }
+    static int32_t lm_ossl_conn_error(LmOsslConn* t) { return t->error; }
+    static const char* lm_ossl_conn_text(LmOsslConn* t) { return t->text; }
+}
+
+extern type TlsContextHandle;
+extern type TlsSessionHandle;
+extern function lm_tlss_context(m: byte[*], certificate: String, key: String): TlsContextHandle;
+extern function lm_tlss_context_number(c: TlsContextHandle): int64;
+extern function lm_tlss_context_error(c: TlsContextHandle): int32;
+extern function lm_tlss_context_text(c: TlsContextHandle): String;
+extern function lm_tlss_accept(m: byte[*], context: int64, s: Socket): TlsSessionHandle;
+extern function lm_ossl_conn_error(t: TlsSessionHandle): int32;
+extern function lm_ossl_conn_text(t: TlsSessionHandle): String;
+extern function lm_ossl_read(t: TlsSessionHandle, buffer: byte[]): int32;
+extern function lm_ossl_write(t: TlsSessionHandle, bytes: byte[]): int32;
+extern function lm_ossl_close(t: TlsSessionHandle): void;
+
+/**
+ * The certificate and the key of a TLS server, loaded with OpenSSL. Load it once and give it to as many
+ * servers as you want: their threads share it.
+ *
+ *   let tls: OpenSslProvider = OpenSslProvider.load("/etc/letsencrypt/live/example.com/fullchain.pem",
+ *                                                   "/etc/letsencrypt/live/example.com/privkey.pem");
+ */
+public synchronized class OpenSslProvider {
+    let context: TlsContextHandle? = null;
+    let number: int64 = 0;
+
+    /**
+     * Loads the certificate (with its chain: Let's Encrypt's fullchain.pem) and its private key (PEM files).
+     * Throws NetError.Tls when a file cannot be used or the key is not the certificate's, and
+     * NetError.TlsUnavailable when there is no OpenSSL.
+     */
+    static function load(certificate: String, key: String): OpenSslProvider throws NetError {
+        let p: OpenSslProvider = {};
+        p.open(certificate, key);
+        return p;
+    }
+
+    function open(certificate: String, key: String): void throws NetError {
+        self.context = lm_tlss_context(certificate, key);
+        let code: int32 = lm_tlss_context_error(self.context!);
+        if (code == 51) { throw NetError.TlsUnavailable(lm_tlss_context_text(self.context!).clone()); }
+        if (code != 0) { throw NetError.Tls(lm_tlss_context_text(self.context!).clone()); }
+        self.number = lm_tlss_context_number(self.context!);
+    }
+
+    /** What a worker gives OpenSSL for each connection (the context, shared by every thread). */
+    function contextNumber(): int64 { return self.number; }
+}
+
+/**
+ * A connection of a TlsServer, already decrypted: used like a TcpSocket (read, write, writeText, Reader,
+ * copy). It closes when its memory is freed.
+ */
+public class TlsSocket implements InputStream, OutputStream, Closeable, Connection {
+    let tcp: TcpSocket? = null;
+    let session: TlsSessionHandle? = null;
+
+    /** Reads what has arrived, up to the length of buffer; 0 when the other side closed. */
+    function read(buffer: byte[]): int32 throws IoError {
+        if (self.session == null) { throw IoError.Failed("tls: closed"); }
+        let n: int32 = lm_ossl_read(self.session!, buffer);
+        if (n < 0) { tlsFailure(self.session!); }
+        return n;
+    }
+
+    /** Writes all the bytes, or throws. */
+    function write(bytes: byte[]): void throws IoError {
+        if (self.session == null) { throw IoError.Failed("tls: closed"); }
+        if (lm_ossl_write(self.session!, bytes) < 0) { tlsFailure(self.session!); }
+    }
+
+    /** Writes a text (its UTF-8 bytes). */
+    function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+
+    function flush(): void throws IoError {}
+
+    /** How long read and write wait before failing with a timeout (0: no limit). */
+    function setTimeout(ms: int32): void {
+        if (self.tcp != null) { self.tcp!.setTimeout(ms); }
+    }
+
+    /** Closes it now (it tells the client); otherwise it closes when its memory is freed. */
+    function close(): void throws IoError {
+        if (self.session != null) { lm_ossl_close(self.session!); }
+        if (self.tcp != null) { self.tcp!.close(); }
+    }
+}
+
+function tlsFailure(t: TlsSessionHandle): void throws IoError {
+    switch (lm_ossl_conn_error(t)) {
+        case 3 -> throw IoError.Failed("tls: timed out");
+        case 4 -> throw IoError.Failed("tls: closed");
+        case 5 -> throw IoError.Failed("tls: connection reset");
+        default -> throw IoError.Failed("tls: ${lm_ossl_conn_text(t)}");
+    }
+}
+
+/**
+ * A TLS server (https, or any protocol over TLS): a TcpServer whose connections are decrypted before
+ * onConnect gets them. The handshake happens in the worker thread, with handshakeTimeout; a client that
+ * fails it (or does not speak TLS) is dropped without reaching onConnect.
+ *
+ *   let tls: OpenSslProvider = OpenSslProvider.load("fullchain.pem", "privkey.pem");
+ *   let server: TlsServer = {
+ *       port: 8443,
+ *       threads: 8,
+ *       tls: tls,
+ *       onConnect: (client: TlsSocket) -> { ... }
+ *   };
+ *   server.run();
+ */
+public class TlsServer {
+    let host: String = "127.0.0.1";
+    let port: int32 = 0;
+    let threads: int32 = 1;
+    let stop: StopSignal? = null;
+    let tls: OpenSslProvider;
+    /** How long a client has to finish the handshake (ms). */
+    let handshakeTimeout: int32 = 10000;
+    let onConnect: (TlsSocket) -> void thread safe;
+
+    /** Listens and serves until its StopSignal says stop. Throws when it cannot listen. */
+    function run(): void throws NetError {
+        let listener: TcpListener = TcpListener.bind(self.host, self.port);
+        let handler: (TlsSocket) -> void thread safe = self.onConnect;
+        let signal: StopSignal = signalOf(self.stop);
+        let provider: OpenSslProvider = self.tls;
+        let timeout: int32 = self.handshakeTimeout;
+        let queue: Handoff = {};
+        {
+            let workers: byte[*] = [] in heap;            // freed at the '}': it waits for the threads
+            for (i in 0..(self.threads > 1 ? self.threads : 1)) {
+                let t: Thread = { run: () -> { serveTls(queue, provider, timeout, handler); } } in workers;
+                t.start();
+            }
+            acceptInto(listener, signal, queue);
+        }
+    }
+}
+
+/** A worker of a TlsServer: the handshake, then onConnect. */
+function serveTls(queue: Handoff, provider: OpenSslProvider, timeout: int32, handler: (TlsSocket) -> void thread safe): void {
+    let context: int64 = provider.contextNumber();
+    while (true) {
+        let n: int64 = queue.take();
+        if (n < 0) { return; }
+        let client: TlsSocket = { tcp: TcpSocket {} };
+        client.tcp!.socket = lm_net_adopt(n);
+        if (client.tcp!.socket == null) { continue; }
+        client.tcp!.setTimeout(timeout);
+        client.session = lm_tlss_accept(context, client.tcp!.socket!);
+        if (lm_ossl_conn_error(client.session!) != 0) { continue; }    // not TLS, or too slow: dropped
+        client.tcp!.setTimeout(0);
+        handler(client);
     }
 }

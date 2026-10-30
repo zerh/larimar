@@ -17,6 +17,7 @@ import ast {
     ObjectLit, ArrayLit, Placed, SwitchExpr, Unwrap, Cast, Ternary, SuperMember, allStmts, allExprs, exprAll, PL_HEAP, PL_MEMORY
 };
 import sema {
+    hasThreadSafe, cTypeOf,
     Type, TyK, NamedK, ArrK, T_INT32, T_INT64, T_BYTE, T_BOOL, T_STRING, T_VOID, T_ANY, T_ERROR, isPrimName, named,
     funcT, arrayT, optT, isFloat, isInteger, isError, isClass, isStruct, isInterface, isEnumT, isExternT, isOpt, isArray,
     optIsPointer, minOf, maxText, Region, RK, R_STATIC, rCaller, rLocal, rVar, symbolic, resolveRegion, outlives, meet,
@@ -120,6 +121,7 @@ public let anyFieldsLoop: Expr? = null;
 public class ThreadRun {
     let lambda: LambdaInfo;
     let line: int32;
+    let safe: bool = false;          // a lambda given as a `thread safe` function, not the run of a Thread
 }
 
 public let threadRuns: ThreadRun[*] = [] in default;
@@ -396,7 +398,7 @@ function externSignature(e: ExternTypeInfo in default): void {
     if (!isError(ret) && ret != T_VOID && !isCValue(ret)) {
         error(fr.line, "C function type '${e.name}' can only return numbers, bool, String, void, extern types or C structs.");
     }
-    e.sig = funcT(ps, ret);
+    e.sig = funcT(ps, ret, false);
 }
 
 let exportNames: Any = {} in default;
@@ -621,7 +623,7 @@ function signatures(program: Program in default): void {
             if (!isError(ret) && ret != T_VOID && !isCValue(ret) && ret != optT(T_STRING)) {
                 error(e.line, "Extern function '${f.name}' can only return numbers, bool, String, void, extern types or C structs.");
             }
-            f.sig = funcT(ps, ret);
+            f.sig = funcT(ps, ret, false);
         } else {
             let fd: FunctionDecl = f.decl!;
             f.sig = resolveSig(f.params, fd.ret);
@@ -739,7 +741,7 @@ function resolveSig(params: Param[*] in default, ret: TypeRef in default): Type 
         error(ret.line, "A function cannot return T[] (a borrowed view); return T[N] or T[*].");
         r = T_ERROR;
     }
-    return funcT(ps, r);
+    return funcT(ps, r, false);
 }
 
 /** A number or bool: what a T[] given to C may hold (C sees an array of them). */
@@ -2604,7 +2606,7 @@ function sendableIn(t: Type in default, visiting: Any): bool {
     if (t.kind == TyK.Prim) { return true; }
     if (t.kind == TyK.Opt) { return sendableIn(t.elem!, visiting); }
     if (t.kind == TyK.Array) { return t.ak == ArrK.Fixed && sendableIn(t.elem!, visiting); }
-    if (t.kind == TyK.Func) { return false; }
+    if (t.kind == TyK.Func) { return t.safe; }
     if (visiting.contains(t.name)) { return true; }
     visiting[t.name] = true;
     if (t.nk == NamedK.Struct) {
@@ -2647,6 +2649,11 @@ function checkSynchronizedClasses(): void {
     }
 }
 
+/** A lambda given where a `thread safe` function is expected: checked like the run of a Thread. */
+public function checkThreadSafeLambda(l: LambdaInfo in default, line: int32): void {
+    threadRuns.push(ThreadRun { lambda: l, line, safe: true } in default);
+}
+
 /** Thread { run: ... }: a lambda written here, or a synchronized object. */
 public function checkThreadRun(o: ObjectLit in default): void {
     for (fi in o.fields) {
@@ -2671,7 +2678,9 @@ function checkThreads(): void {
         for (s in tr.lambda.captures) {
             if (sendable(s.type)) { continue; }
             let what: String = s.kind == SymK.Self ? "self" : "'${s.name}'";
-            error(tr.line, "This thread uses ${what} (${s.type.text}), which could change while the thread runs. A thread can share only values (numbers, bool, String, and structs, enums and T[N] made of them) and objects of synchronized classes.");
+            error(tr.line, tr.safe
+                ? "This 'thread safe' lambda uses ${what} (${s.type.text}), which other threads could change at the same time. It can use only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes and 'thread safe' functions."
+                : "This thread uses ${what} (${s.type.text}), which could change while the thread runs. A thread can share only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes and 'thread safe' functions.");
         }
         markRound += 1;
         let todo: Owner[*] = [tr.lambda.owner] in default;
@@ -2687,9 +2696,10 @@ function checkThreads(): void {
                 if (reported.contains(key) || !(isMemory(g) || g.mutatedGlobal || !sendable(g.type))) { continue; }
                 reported[key] = true;
                 let line: int32 = o.useLines[i];
+                let who: String = tr.safe ? "This 'thread safe' lambda" : "This thread";
                 error(tr.line, isMemory(g)
-                    ? "This thread can reach global memory '${g.name}' (line ${line}). Between threads only the default memory is shared: create things 'in default' or in a memory of the thread."
-                    : "This thread can reach global '${g.name}' (line ${line}), which can change while threads use it. Keep shared state in an object of a synchronized class.");
+                    ? "${who} can reach global memory '${g.name}' (line ${line}). Between threads only the default memory is shared: create things 'in default' or in a memory of the thread."
+                    : "${who} can reach global '${g.name}' (line ${line}), which can change while threads use it. Keep shared state in an object of a synchronized class.");
             }
             for (e in o.edges) { todo.push(e); }
         }
@@ -2716,6 +2726,10 @@ function computeTypeOrder(): void {
 }
 
 function visitType(t: Type in default, path: Type[*] in default): void {
+    if (hasThreadSafe(t)) {                     // C uses the type without `thread safe`
+        visitType(cTypeOf(t), path);
+        return;
+    }
     if (t.order == 2) { return; }
     if (t.order == 1) {
         let cycle: StringBuilder = {} in default;

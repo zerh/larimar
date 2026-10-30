@@ -26,7 +26,7 @@ import gen { generate, generatorErrors, debugLines, spreadLines };
 import debugmap { debugMap };
 import toml { TomlK, TomlValue, TomlSection, parseToml, tomlError, sectionOf, valueOf };
 
-const VERSION: String = "0.1.0";
+const VERSION: String = "0.2.0";
 
 /** Set when a command fails; main prints it as "larimar: ...". */
 let toolError: String = "";
@@ -363,6 +363,7 @@ function build(p: Project, debug: bool): String {
             cmd.push("-ldl");                                // OpenSSL, loaded when first used
         }
     }
+    if (c.contains("#define LM_NET_TLS_SERVER") && !windows() && !mac()) { cmd.push("-ldl"); }    // std.net: OpenSSL, when first used
     let quoted: String[*] = [];
     for (a in cmd) { quoted.push(quote(a)); }
     let code: int32 = os.run(quoted.join(" "));

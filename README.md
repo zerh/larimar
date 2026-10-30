@@ -96,7 +96,7 @@ Test the compiler:
 
 ```bash
 ./larimarc --version
-# Should output: larimar 0.1.0
+# Should output: larimar 0.2.0
 
 # Compile a test program
 echo 'function main(): void { println("Hello!"); }' > test.lar

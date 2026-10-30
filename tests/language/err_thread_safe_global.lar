@@ -1,0 +1,8 @@
+// expect: error This 'thread safe' lambda can reach global 'count'
+let count: int32 = 0;
+function bump(): void { count += 1; }
+function main(): int32 {
+    let f: () -> void thread safe = () -> { bump(); };
+    f();
+    return 0;
+}

@@ -1,0 +1,44 @@
+// expect: run
+// output: 1998000
+// output: 2497500
+// output: 3
+// 'thread safe' function types: a lambda checked like the run of a Thread, shared between threads,
+// given where a plain function is expected, in parameters, optionals and with T[] parameters.
+synchronized class Total {
+    let n: int64 = 0;
+    function add(k: int64): void { self.n += k; }
+    function get(): int64 { return self.n; }
+}
+
+class Pool {
+    let work: (int32) -> void thread safe;
+    let threads: int32 = 4;
+    function run(): void {
+        let w: (int32) -> void thread safe = self.work;
+        {
+            let ts: byte[*] = [] in heap;
+            for (i in 0..self.threads) {
+                let id: int32 = i;
+                let t: Thread = { run: () -> { w(id); } } in ts;
+                t.start();
+            }
+        }
+    }
+}
+
+function sum(bytes: byte[], f: (byte[]) -> int32 thread safe): int32 { return f(bytes); }
+
+function main(): int32 {
+    let total: Total = {};
+    let pool: Pool = { work: (id: int32) -> { for (k in 0..1000) { total.add(k as int64); } } };
+    pool.run();
+    println("${total.get()}");
+    let plain: (int32) -> void = pool.work;
+    plain(1);
+    println("${total.get()}");
+    let maybe: ((int32) -> void thread safe)? = null;
+    maybe = (x: int32) -> { total.add(0); };
+    let base: int32 = 0;
+    println("${sum([1 as byte, 2 as byte], (b: byte[]) -> { return base + b.length + 1; })}");
+    return 0;
+}

@@ -63,6 +63,7 @@ public class TypeRef extends Node {
     let params: TypeRef[*] = [];        // Func
     let inner: TypeRef? = null;         // the element, the return type (Func) or the optional's type
     let size: Expr? = null;             // Fixed
+    let threadSafe: bool = false;       // Func: `(T) -> R thread safe`
 }
 
 public function typeNamed(name: String in default, line: int32): TypeRef { return TypeRef { line, kind: TK.Named, name } in default; }

@@ -1,0 +1,108 @@
+// expect: run
+// output: tcp served: 6
+// output: udp served: 3
+// output: client: echo: hi 0 | echo: hi 1 | echo: hi 2 | echo: hi 3 | echo: hi 4 | echo: hi 5 | pong 4 | pong 4 | pong 4
+// std.net: TcpServer and UdpServer with threads, thread safe handlers and a StopSignal; clients in a thread.
+import std.net { TcpServer, TcpSocket, UdpServer, UdpSocket, Address, Datagram, StopSignal, NetError, message };
+import std.io.streams { Reader, buffer };
+import std.io.files { IoError };
+
+synchronized class Counter {
+    let n: int32 = 0;
+    function add(): int32 { self.n += 1; return self.n; }
+    function get(): int32 { return self.n; }
+}
+
+synchronized class Result {
+    let text: String = "";
+    function add(t: String): void { self.text = (self.text == "" ? t : "${self.text} | ${t}").clone(); }
+    function get(): String { return self.text; }
+}
+
+/** Connects, retrying while the server is not listening yet. */
+function connectRetry(port: int32): TcpSocket throws NetError {
+    let tries: int32 = 0;
+    while (true) {
+        try {
+            return TcpSocket.connect("127.0.0.1", port);
+        } catch (NetError e) {
+            tries += 1;
+            if (tries > 1000000) { throw e; }
+        }
+    }
+    throw NetError.Refused;
+}
+
+function clients(result: Result, quitTcp: StopSignal, quitUdp: StopSignal): void throws NetError {
+    for (k in 0..6) {
+        let s: TcpSocket = connectRetry(47821);
+        s.setTimeout(5000);
+        try {
+            s.writeText("hi ${k}\n");
+            let lines: Reader = { from: s };
+            result.add(lines.readLine() ?? "(nothing)");
+        } catch (IoError e) { result.add("io error"); }
+    }
+    quitTcp.stop();
+    let u: UdpSocket = UdpSocket.open();
+    u.setTimeout(100);
+    let data: byte[*] = buffer(100);
+    let answers: int32 = 0;
+    while (answers < 3) {                   // a datagram sent before the server binds is lost: send again
+        u.sendTo("ping".bytes(), Address { host: "127.0.0.1", port: 47822 });
+        try {
+            let got: Datagram = u.receive(data);
+            result.add("${stringOfRange(data, 0, got.length)} ${got.length}");
+            answers += 1;
+        } catch (NetError e) {}
+    }
+    quitUdp.stop();
+}
+
+function main(): int32 {
+    let result: Result = {};
+    let tcpCount: Counter = {};
+    let udpCount: Counter = {};
+    let quitTcp: StopSignal = {};
+    let quitUdp: StopSignal = {};
+    let t: Thread = {
+        run: () -> {
+            try { clients(result, quitTcp, quitUdp); } catch (NetError e) { result.add("client: ${message(e)}"); }
+        }
+    };
+    t.start();
+
+    let tcp: TcpServer = {
+        port: 47821,
+        threads: 4,
+        stop: quitTcp,
+        onConnect: (c: TcpSocket) -> {
+            try {
+                let lines: Reader = { from: c };
+                let line: String = lines.readLine() ?? "";
+                c.writeText("echo: ${line}\n");
+                tcpCount.add();
+            } catch (IoError e) {}
+        }
+    };
+    let udp: UdpServer = {
+        port: 47822,
+        threads: 3,
+        stop: quitUdp,
+        onReceive: (socket: UdpSocket, data: byte[], from: Address) -> {
+            try {
+                socket.sendTo("pong".bytes(), from);
+                udpCount.add();
+            } catch (NetError e) {}
+        }
+    };
+    try {
+        tcp.run();
+        udp.run();
+    } catch (NetError e) { println("server: ${message(e)}"); }
+    t.join();
+    println("tcp served: ${tcpCount.get()}");
+    println("udp served: ${udpCount.get()}");
+    println("client: ${result.get()}");
+    return 0;
+}

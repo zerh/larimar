@@ -1,0 +1,6 @@
+// expect: error This 'thread safe' lambda uses 'names' (String[*]), which other threads could change at the same time
+function main(): int32 {
+    let names: String[*] = [];
+    let f: (int32) -> void thread safe = (x: int32) -> { names.push("a"); };
+    return 0;
+}
