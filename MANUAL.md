@@ -1,65 +1,66 @@
-# Manual de Larimar
+# Larimar Manual
 
-Este manual explica cómo escribir programas en Larimar, de lo más simple a lo más avanzado.
-Todos los ejemplos completos (los que tienen `function main`) se compilan y se ejecutan tal cual, y
-su salida es la que se muestra.
+This manual explains how to write programs in Larimar, from the simplest to the most advanced.
+All the complete examples (the ones with `function main`) compile and run as they are, and their
+output is the one shown.
 
-Los nombres del lenguaje, de la herramienta y de los ejemplos están en inglés; las explicaciones, en español.
+The names of the language, the tool and the examples are in English, like the explanations.
+[Leer en español](MANUAL_ES.md).
 
-## Índice
+## Contents
 
-1. [Primeros pasos](#1-primeros-pasos)
-2. [Estructura de un programa](#2-estructura-de-un-programa)
-3. [Variables y constantes](#3-variables-y-constantes)
-4. [Tipos básicos](#4-tipos-básicos)
-5. [Operadores](#5-operadores)
-6. [Texto (`String`)](#6-texto-string)
-7. [Control de flujo](#7-control-de-flujo)
-8. [Funciones](#8-funciones)
+1. [Getting started](#1-getting-started)
+2. [Structure of a program](#2-structure-of-a-program)
+3. [Variables and constants](#3-variables-and-constants)
+4. [Basic types](#4-basic-types)
+5. [Operators](#5-operators)
+6. [Text (`String`)](#6-text-string)
+7. [Control flow](#7-control-flow)
+8. [Functions](#8-functions)
 9. [Structs](#9-structs)
-10. [Clases y herencia](#10-clases-y-herencia)
+10. [Classes and inheritance](#10-classes-and-inheritance)
 11. [Interfaces](#11-interfaces)
 12. [Enums](#12-enums)
-13. [`switch` y patrones](#13-switch-y-patrones)
-14. [Opcionales y `null`](#14-opcionales-y-null)
-15. [Arreglos y listas](#15-arreglos-y-listas)
-16. [Memoria](#16-memoria)
-17. [La regla de vida y `clone()`](#17-la-regla-de-vida-y-clone)
-18. [Lambdas y closures](#18-lambdas-y-closures)
-19. [Errores: `throw`, `try` y `catch`](#19-errores-throw-try-y-catch)
-20. [Fallos en tiempo de ejecución](#20-fallos-en-tiempo-de-ejecución)
-21. [`Any`: datos de forma libre](#21-any-datos-de-forma-libre)
-22. [Hilos](#22-hilos)
-23. [Llamar a C](#23-llamar-a-c)
-24. [Módulos](#24-módulos)
-25. [Biblioteca estándar](#25-biblioteca-estándar)
-26. [Proyectos: `larimar.toml` y `larimar build`](#26-proyectos-larimartoml-y-larimar-build)
-27. [Qué genera el transpilador](#27-qué-genera-el-transpilador)
-28. [Larimar escrito en Larimar](#28-larimar-escrito-en-larimar)
-29. [Limitaciones actuales](#29-limitaciones-actuales)
-30. [Referencia rápida](#30-referencia-rápida)
+13. [`switch` and patterns](#13-switch-and-patterns)
+14. [Optionals and `null`](#14-optionals-and-null)
+15. [Arrays and lists](#15-arrays-and-lists)
+16. [Memory](#16-memory)
+17. [The lifetime rule and `clone()`](#17-the-lifetime-rule-and-clone)
+18. [Lambdas and closures](#18-lambdas-and-closures)
+19. [Errors: `throw`, `try` and `catch`](#19-errors-throw-try-and-catch)
+20. [Failures at run time](#20-failures-at-run-time)
+21. [`Any`: free-form data](#21-any-free-form-data)
+22. [Threads](#22-threads)
+23. [Calling C](#23-calling-c)
+24. [Modules](#24-modules)
+25. [Standard library](#25-standard-library)
+26. [Projects: `larimar.toml` and `larimar build`](#26-projects-larimartoml-and-larimar-build)
+27. [What the transpiler generates](#27-what-the-transpiler-generates)
+28. [Larimar written in Larimar](#28-larimar-written-in-larimar)
+29. [Current limitations](#29-current-limitations)
+30. [Quick reference](#30-quick-reference)
 
 ---
 
-## 1. Primeros pasos
+## 1. Getting started
 
-Larimar se traduce a un único archivo C99, que luego se compila con cualquier compilador de C para
-obtener un ejecutable. La herramienta `larimar` hace los dos pasos:
+Larimar is translated into a single C99 file, which is then compiled with any C compiler to get an
+executable. The `larimar` tool does both steps:
 
 ```sh
-./build-bootstrap.sh             # una vez: compila larimarc e instala en ../larimar (bin/, std/, MANUAL.md)
+./build-bootstrap.sh             # once: builds larimarc and installs it in ../out/larimar (bin/, std/, MANUAL.md)
 export LARIMAR_HOME="$PWD/../out/larimar"
-export PATH="$LARIMAR_HOME/bin:$PATH"   # en Windows, añade la carpeta bin al PATH
+export PATH="$LARIMAR_HOME/bin:$PATH"   # on Windows, add the bin folder to the PATH
 
-larimar new hello                # crea hello/larimar.toml y hello/src/main.lar
+larimar new hello                # creates hello/larimar.toml and hello/src/main.lar
 cd hello
-larimar run                      # traduce a C, compila con gcc o clang y ejecuta
+larimar run                      # translates to C, compiles with gcc or clang and runs
 ```
 
-`larimar run` necesita un compilador de C instalado (gcc o clang; en Windows, MinGW). El
-[apartado 26](#26-proyectos-larimartoml-y-larimar-build) explica el archivo de proyecto.
+`larimar run` needs a C compiler installed (gcc or clang; on Windows, MinGW).
+[Section 26](#26-projects-larimartoml-and-larimar-build) explains the project file.
 
-El primer programa (`src/main.lar`):
+The first program (`src/main.lar`):
 
 ```actionscript
 function main(): int32 {
@@ -68,11 +69,11 @@ function main(): int32 {
 }
 ```
 
-Salida: `Hello, world`
+Output: `Hello, world`
 
-`main` es el punto de entrada. Devuelve `int32` (el código de salida del programa) o `void`.
+`main` is the entry point. It returns `int32` (the exit code of the program) or `void`.
 
-Si el programa tiene errores, Larimar los lista todos, con el archivo y la línea, y no genera C:
+If the program has errors, Larimar lists them all, with the file and the line, and generates no C:
 
 ```
 Semantic Error [src/main.lar:2]: Initializer of 'x': expected int32 but got String.
@@ -80,48 +81,48 @@ Semantic Error [src/main.lar:2]: Initializer of 'x': expected int32 but got Stri
 
 ---
 
-## 2. Estructura de un programa
+## 2. Structure of a program
 
-Un archivo es una lista de **declaraciones**. A nivel superior solo puede haber declaraciones,
-no instrucciones sueltas:
+A file is a list of **declarations**. At the top level there can only be declarations, not loose
+statements:
 
-| Declaración | Ejemplo |
+| Declaration | Example |
 |---|---|
-| Importación | `import geo.shapes;` (al principio del archivo; ver [Módulos](#24-módulos)) |
-| Función | `function add(a: int32, b: int32): int32 { ... }` |
-| Constante | `const MAX: int32 = 64;` |
-| Variable global | `let counter: int32 = 0;` |
+| Import | `import geo.shapes;` (at the start of the file; see [Modules](#24-modules)) |
+| Function | `function add(a: int32, b: int32): int32 { ... }` |
+| Constant | `const MAX: int32 = 64;` |
+| Global variable | `let counter: int32 = 0;` |
 | Struct | `struct Point { ... }` |
-| Clase | `class Animal { ... }`, `synchronized class Counter { ... }` (ver [Hilos](#22-hilos)) |
-| Interfaz | `interface Drawable { ... }` |
+| Class | `class Animal { ... }`, `synchronized class Counter { ... }` (see [Threads](#22-threads)) |
+| Interface | `interface Drawable { ... }` |
 | Enum | `enum Color { Red, Green }` |
-| Código C | `c_include "<math.h>";`, `extern function ...`, `extern type ...` |
+| C code | `c_include "<math.h>";`, `extern function ...`, `extern type ...` |
 
-Cualquier declaración puede llevar `public` delante para que otros módulos la usen.
+Any declaration can have `public` in front so that other modules can use it.
 
-El orden de las declaraciones no importa: una función puede usar otra que esté más abajo.
-Las variables globales se inicializan en el orden en que aparecen, antes de `main`.
+The order of the declarations does not matter: a function can use another one that is further down.
+Global variables are initialized in the order in which they appear, before `main`.
 
-Los comentarios son como en C: `// hasta el final de la línea` y `/* en bloque */`.
-Cada instrucción termina en `;`, y los bloques van entre `{ }`.
+Comments are as in C: `// to the end of the line` and `/* in a block */`.
+Each statement ends in `;`, and blocks go between `{ }`.
 
 ---
 
-## 3. Variables y constantes
+## 3. Variables and constants
 
 ```actionscript
 let age: int32 = 30;
 let name: String = "Ana";
-age = 31;          // las variables se pueden reasignar
-age += 1;          // también +=, -=, *=, /=, %=, &=, |=, ^=
+age = 31;          // variables can be reassigned
+age += 1;          // also +=, -=, *=, /=, %=, &=, |=, ^=
 ```
 
-- El **tipo es obligatorio**, y también el **valor inicial**: no existen variables sin inicializar.
-- Una variable declarada dentro de un bloque solo existe dentro de él.
-- Se puede declarar una variable con el mismo nombre que otra de un bloque exterior; la interior la oculta.
+- The **type is required**, and so is the **initial value**: there are no uninitialized variables.
+- A variable declared inside a block only exists inside it.
+- A variable can be declared with the same name as one of an outer block; the inner one hides it.
 
-Las **constantes** se declaran a nivel superior, y su valor se calcula al compilar. Pueden ser
-números, `bool` o `String`, y se pueden usar como tamaño de un arreglo:
+**Constants** are declared at the top level, and their value is computed when compiling. They can
+be numbers, `bool` or `String`, and they can be used as the size of an array:
 
 ```actionscript
 const SIZE: int32 = 16;
@@ -136,42 +137,42 @@ function main(): int32 {
 }
 ```
 
-Salida: `sensor: 0 of 16, 1048576 bytes`
+Output: `sensor: 0 of 16, 1048576 bytes`
 
 ---
 
-## 4. Tipos básicos
+## 4. Basic types
 
-| Tipo | Valores | En C |
+| Type | Values | In C |
 |---|---|---|
-| `int8`, `int16`, `int32`, `int64` | enteros con signo | `int8_t` … `int64_t` |
-| `byte` (o `uint8`), `uint16`, `uint32`, `uint64` | enteros sin signo | `uint8_t` … `uint64_t` |
-| `float32`, `float64` | decimales | `float`, `double` |
+| `int8`, `int16`, `int32`, `int64` | signed integers | `int8_t` … `int64_t` |
+| `byte` (or `uint8`), `uint16`, `uint32`, `uint64` | unsigned integers | `uint8_t` … `uint64_t` |
+| `float32`, `float64` | decimals | `float`, `double` |
 | `bool` | `true`, `false` | `bool` |
-| `String` | texto | estructura del runtime |
-| `void` | nada (solo como tipo de retorno) | `void` |
+| `String` | text | a structure of the runtime |
+| `void` | nothing (only as a return type) | `void` |
 
-Los tipos **primitivos se escriben en minúscula**: son valores simples que nunca necesitan memoria,
-no tienen campos y no se pueden redefinir. Todo lo demás empieza con mayúscula: `String` (que sí
-necesita memoria), y los structs, clases, interfaces y enums que declares. Así, con mirar el nombre
-se sabe si un tipo es del lenguaje o es tuyo.
+**Primitive types are written in lowercase**: they are simple values that never need memory, have
+no fields and cannot be redefined. Everything else starts with an uppercase letter: `String` (which
+does need memory), and the structs, classes, interfaces and enums you declare. So by looking at the
+name you know whether a type is the language's or yours.
 
-### Literales numéricos
+### Numeric literals
 
 ```actionscript
-let a: int32 = 1_000_000;     // los _ separan dígitos
+let a: int32 = 1_000_000;     // _ separates digits
 let b: byte = 0xFF;           // hexadecimal
-let c: byte = 0b1010_0101;    // binario
-let d: float64 = 2.5e3;       // exponente
+let c: byte = 0b1010_0101;    // binary
+let d: float64 = 2.5e3;       // exponent
 ```
 
-Un literal entero toma el tipo que se espera en ese lugar. El compilador comprueba que quepa:
-`let b: byte = 256;` es un error.
+An integer literal takes the type that is expected in that place. The compiler checks that it fits:
+`let b: byte = 256;` is an error.
 
-### Caracteres
+### Characters
 
-`'a'` es el código del carácter (su número Unicode), y se usa como cualquier literal entero: toma
-el tipo que se espera. Sirve sobre todo para comparar bytes de un texto:
+`'a'` is the code of the character (its Unicode number), and it is used like any integer literal:
+it takes the type that is expected. It is useful above all to compare the bytes of a text:
 
 ```actionscript
 function digits(s: String): int32 {
@@ -189,15 +190,15 @@ function main(): int32 {
 }
 ```
 
-Salida: `true 3 65 10 8364`
+Output: `true 3 65 10 8364`
 
-Escapes: `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\\'`, `'\''` y `'\"'`. Un literal tiene exactamente un
-carácter; si el código no cabe en el tipo (`let b: byte = '€';`), es un error.
+Escapes: `'\n'`, `'\t'`, `'\r'`, `'\0'`, `'\\'`, `'\''` and `'\"'`. A literal has exactly one
+character; if the code does not fit in the type (`let b: byte = '€';`), it is an error.
 
-### Desbordamiento
+### Overflow
 
-Los enteros **vuelven a empezar** cuando se pasan del máximo o del mínimo, con y sin signo.
-Nunca hay comportamiento indefinido:
+Integers **wrap around** when they go past the maximum or the minimum, signed and unsigned.
+There is never undefined behavior:
 
 ```actionscript
 function main(): int32 {
@@ -209,11 +210,11 @@ function main(): int32 {
 }
 ```
 
-Salida: `-2147483648 0`
+Output: `-2147483648 0`
 
-### Conversiones con `as`
+### Conversions with `as`
 
-No hay conversiones automáticas entre tipos numéricos. Se hacen con `as`:
+There are no automatic conversions between numeric types. They are done with `as`:
 
 ```actionscript
 function main(): int32 {
@@ -226,47 +227,46 @@ function main(): int32 {
 }
 ```
 
-Salida: `7 3.5 2147483647 0`
+Output: `7 3.5 2147483647 0`
 
-De decimal a entero se trunca, y si el valor no cabe se usa el límite más cercano (en lugar del
-comportamiento indefinido de C).
+From decimal to integer the value is truncated, and if it does not fit the nearest limit is used
+(instead of the undefined behavior of C).
 
 ---
 
-## 5. Operadores
+## 5. Operators
 
-| Precedencia (de menor a mayor) | Operadores |
+| Precedence (lowest to highest) | Operators |
 |---|---|
-| condicional | `c ? a : b` (de derecha a izquierda) |
-| valor por defecto de un opcional | `??` |
-| o lógico | `\|\|` |
-| y lógico | `&&` |
-| comparación | `==` `!=` `<` `<=` `>` `>=` |
-| bits | `\|`, luego `^`, luego `&` |
-| desplazamiento | `<<` `>>` |
-| suma | `+` `-` |
-| producto | `*` `/` `%` |
-| conversión | `as` |
-| unarios | `-` `!` `~` |
-| sufijos | llamada `f()`, campo `a.b`, índice `a[i]`, `x!` |
+| conditional | `c ? a : b` (right to left) |
+| default value of an optional | `??` |
+| logical or | `\|\|` |
+| logical and | `&&` |
+| comparison | `==` `!=` `<` `<=` `>` `>=` |
+| bits | `\|`, then `^`, then `&` |
+| shift | `<<` `>>` |
+| sum | `+` `-` |
+| product | `*` `/` `%` |
+| conversion | `as` |
+| unary | `-` `!` `~` |
+| suffixes | call `f()`, field `a.b`, index `a[i]`, `x!` |
 
-Reglas:
-- Los dos lados de un operador deben ser **del mismo tipo** (`int32 + int64` es un error; usa `as`).
-  Los literales se adaptan al otro lado.
-- `as` se aplica antes que las comparaciones: `n > MAX as int64 ? a : b` es `(n > (MAX as int64)) ? a : b`,
-  sin paréntesis. Después de `as T`, un `?` seguido del principio de una expresión es el del
-  condicional; seguido de `)`, `;`, `,`, `??`, `==`... es parte del tipo (`T?`).
-- `/` y `%` entre enteros comprueban la división por cero. `%` solo es para enteros.
-- Los operadores de bits están **por encima** de las comparaciones, así que `x & 1 == 0`
-  significa `(x & 1) == 0`, no la trampa de C.
-- En `a << n`, solo se usan los bits bajos de `n` (para `uint32`, `n & 31`).
-- `&&` y `||` no evalúan el lado derecho si no hace falta.
-- `==` compara números, `bool`, `String` (por contenido), enums sin datos y objetos (por identidad).
-  Un objeto opcional (`Node?`) se puede comparar con un `Node`.
+Rules:
+- The two sides of an operator must be **of the same type** (`int32 + int64` is an error; use `as`).
+  Literals adapt to the other side.
+- `as` applies before comparisons: `n > MAX as int64 ? a : b` is `(n > (MAX as int64)) ? a : b`,
+  without parentheses. After `as T`, a `?` followed by the start of an expression is the one of the
+  conditional; followed by `)`, `;`, `,`, `??`, `==`... it is part of the type (`T?`).
+- `/` and `%` between integers check division by zero. `%` is only for integers.
+- Bit operators are **above** comparisons, so `x & 1 == 0` means `(x & 1) == 0`, not C's trap.
+- In `a << n`, only the low bits of `n` are used (for `uint32`, `n & 31`).
+- `&&` and `||` do not evaluate the right side if it is not needed.
+- `==` compares numbers, `bool`, `String` (by content), enums without data and objects (by identity).
+  An optional object (`Node?`) can be compared with a `Node`.
 
-### El condicional `c ? a : b`
+### The conditional `c ? a : b`
 
-Da `a` si la condición es `true`, y `b` si no. Solo se evalúa el lado elegido:
+It gives `a` if the condition is `true`, and `b` otherwise. Only the chosen side is evaluated:
 
 ```actionscript
 class Animal { let name: String; }
@@ -278,29 +278,29 @@ function sign(n: int64): String { return n > 0 ? "+" : n < 0 ? "-" : "0"; }
 function main(): int32 {
     let big: int64 = 10000000000;
     let small: bool = true;
-    let n: int64 = small ? 1 : big;                    // el literal toma el tipo int64
+    let n: int64 = small ? 1 : big;                    // the literal takes the type int64
     let dog: Dog = Dog { name: "Rex" };
     let cat: Cat = Cat { name: "Tom" };
-    let pet: Animal = small ? dog : cat;              // la clase común más cercana
-    let maybe: Dog? = small ? null : dog;             // con null, el tipo es opcional
+    let pet: Animal = small ? dog : cat;              // the nearest common class
+    let maybe: Dog? = small ? null : dog;             // with null, the type is optional
     println("${n} ${pet.name} ${maybe == null} ${sign(-3)}");
     return 0;
 }
 ```
 
-Salida: `1 Rex true -`
+Output: `1 Rex true -`
 
-- El tipo sale del lado que no es un literal suelto (un número o `null`); el otro se adapta. Si los
-  dos lados tienen tipos distintos (`int64` y `String`), es un error: da un tipo a la variable.
-- Cada lado sabe lo que dice la condición: en `x != null ? x.value : 0`, `x` no es `null` a la izquierda.
-- También vale en constantes: `const SIZE: int32 = DEBUG ? 16 : 1024;`.
+- The type comes from the side that is not a loose literal (a number or `null`); the other adapts.
+  If the two sides have different types (`int64` and `String`), it is an error: give the variable a type.
+- Each side knows what the condition says: in `x != null ? x.value : 0`, `x` is not `null` on the left.
+- It also works in constants: `const SIZE: int32 = DEBUG ? 16 : 1024;`.
 
 ---
 
-## 6. Texto (`String`)
+## 6. Text (`String`)
 
-Un `String` es **inmutable**: una vez creado, no cambia. Se compara por contenido y tiene `length`
-(en bytes, porque el texto es UTF-8).
+A `String` is **immutable**: once created, it does not change. It is compared by content and has
+`length` (in bytes, because the text is UTF-8).
 
 ```actionscript
 enum Color { Red, Green }
@@ -316,26 +316,26 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
 Ana has 3 apples of color Green
 true 31
 ```
 
-- **Interpolación**: `"${expresión}"` admite números, `bool`, `String` y enums (se imprime el nombre de la variante).
-- **Escapes**: `\n`, `\t`, `\r`, `\0`, `\\`, `\"`, `\'` y `\$` (para escribir `$` literal).
-- **No hay `+` para texto**: se une con interpolación, `"${a}${b}"`.
-- `print(text)` y `println(text)` escriben en la salida estándar.
+- **Interpolation**: `"${expression}"` accepts numbers, `bool`, `String` and enums (the name of the variant is printed).
+- **Escapes**: `\n`, `\t`, `\r`, `\0`, `\\`, `\"`, `\'` and `\$` (to write a literal `$`).
+- **There is no `+` for text**: it is joined with interpolation, `"${a}${b}"`.
+- `print(text)` and `println(text)` write to the standard output.
 
-Un texto con interpolación necesita memoria para existir. Dónde se crea se explica en la
-[sección 16](#16-memoria); por ahora basta saber que, si no dices nada, el compilador lo pone donde
-corresponde y lo libera cuando deja de usarse.
+An interpolated text needs memory to exist. Where it is created is explained in
+[section 16](#16-memory); for now it is enough to know that, if you say nothing, the compiler puts
+it where it belongs and frees it when it is no longer used.
 
-### Texto en varias líneas: `"""`
+### Text on several lines: `"""`
 
-Como en Java, un bloque de texto empieza con `"""` y un salto de línea, y termina con `"""`. Se
-quita la sangría común a todas las líneas (y a la línea del `"""` final, si está sola), y los espacios
-al final de cada línea. Las comillas no necesitan escape, y los escapes y `${...}` funcionan igual:
+As in Java, a text block starts with `"""` and a line break, and ends with `"""`. The indentation
+common to all the lines (and to the line of the closing `"""`, if it is alone) is removed, and so are
+the spaces at the end of each line. Quotes need no escape, and escapes and `${...}` work the same:
 
 ```actionscript
 function main(): int32 {
@@ -350,42 +350,42 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
 <p class="greeting">
   Hola, Ana.
 </p>
 ```
 
-Con el `"""` final al terminar la última línea, el texto no acaba en salto de línea.
+With the closing `"""` at the end of the last line, the text does not end in a line break.
 
-### Texto crudo: `raw"""`
+### Raw text: `raw"""`
 
-Un `raw"""` es un bloque de texto que se toma **tal como está escrito**: sin escapes (una barra `\` es
-una barra) y sin `${...}`. Sirve para texto que tiene sus propias comillas y barras, como código C, SQL,
-expresiones regulares o plantillas:
+A `raw"""` is a text block taken **exactly as written**: without escapes (a backslash `\` is a
+backslash) and without `${...}`. It is useful for text that has its own quotes and backslashes, like
+C code, SQL, regular expressions or templates:
 
 ```actionscript
 let code: String = raw"""
-    printf("hola\n");      /* \n son dos caracteres: \ y n */
-    char* p = "${HOME}";   /* ${...} es texto, no se interpola */
+    printf("hola\n");      /* \n is two characters: \ and n */
+    char* p = "${HOME}";   /* ${...} is text, it is not interpolated */
     """;
 ```
 
-- Como en `"""`, empieza con `raw"""` y un salto de línea, y se quita la sangría común.
-- Si el texto tiene tres comillas seguidas, se abre con más comillas y se cierra con las mismas:
+- As with `"""`, it starts with `raw"""` and a line break, and the common indentation is removed.
+- If the text has three quotes in a row, it is opened with more quotes and closed with the same:
   `raw""""` ... `""""`.
-- El compilador escribe así su runtime (`src/runtime.lar`): el C va tal cual, sin escapar nada.
+- The compiler writes its runtime this way (`src/runtime.lar`): the C goes as it is, escaping nothing.
 
-### Métodos
+### Methods
 
-Un `String` está hecho de **bytes** (UTF-8): `s[i]` es un `byte`, `for (b in s)` recorre sus bytes, y
-`length` cuenta bytes. Una letra con tilde ocupa dos; para contar letras está `codePointCount()`.
+A `String` is made of **bytes** (UTF-8): `s[i]` is a `byte`, `for (b in s)` goes over its bytes,
+and `length` counts bytes. An accented letter takes two; to count letters there is `codePointCount()`.
 
 ```actionscript
 function main(): int32 {
     let s: String = "  Hello, Larimar world!  ";
-    let t: String = s.trim();                                  // una vista: no copia nada
+    let t: String = s.trim();                                  // a view: it copies nothing
     println("[${t}] ${t.indexOf("o") ?? -1} ${t.contains("Larimar")} ${t.count("l")}");
     println("${t.substring(7, 14)} ${t.toUpperCase()} ${t.replace("l", "L")}");
     let parts: String[*] = "a,b,,c".split(",");
@@ -396,7 +396,7 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
 [Hello, Larimar world!] 4 true 3
 Larimar HELLO, LARIMAR WORLD! HeLLo, Larimar worLd!
@@ -405,51 +405,52 @@ Larimar HELLO, LARIMAR WORLD! HeLLo, Larimar worLd!
 true 007 ababab 72
 ```
 
-| Grupo | Métodos |
+| Group | Methods |
 |---|---|
-| Consultar | `length`, `isEmpty()`, `isBlank()`, `s[i]` (un `byte`), `for (b in s)`, `codePointCount()` |
-| Buscar | `indexOf(t)`, `indexOf(t, from)`, `lastIndexOf(t)` (dan `int32?`), `contains(t)`, `startsWith(t)`, `endsWith(t)`, `count(t)` |
-| Cortar: **vistas**, sin copiar | `substring(from)`, `substring(from, to)`, `trim()`, `trimStart()`, `trimEnd()`, `bytes()` (un `byte[]`) |
-| Crear texto nuevo | `toUpperCase()`, `toLowerCase()`, `replace(a, b)`, `repeat(n)`, `padStart(n, s)`, `padEnd(n, s)` |
-| Dividir y unir | `split(sep)`, `lines()`, `codePoints()` (listas nuevas); `list.join(sep)` |
-| Comparar | `==`, `!=`, `<`, `<=`, `>`, `>=` (orden de bytes), `compareTo(t)`, `equalsIgnoreCase(t)` |
-| Convertir | `toInt()` (`int64?`: decimal, `0x`, `0b`, con `_`), `toFloat()` (`float64?`), `toBool()` (`bool?`) |
+| Query | `length`, `isEmpty()`, `isBlank()`, `s[i]` (a `byte`), `for (b in s)`, `codePointCount()` |
+| Search | `indexOf(t)`, `indexOf(t, from)`, `lastIndexOf(t)` (they give `int32?`), `contains(t)`, `startsWith(t)`, `endsWith(t)`, `count(t)` |
+| Cut: **views**, without copying | `substring(from)`, `substring(from, to)`, `trim()`, `trimStart()`, `trimEnd()`, `bytes()` (a `byte[]`) |
+| Create new text | `toUpperCase()`, `toLowerCase()`, `replace(a, b)`, `repeat(n)`, `padStart(n, s)`, `padEnd(n, s)` |
+| Split and join | `split(sep)`, `lines()`, `codePoints()` (new lists); `list.join(sep)` |
+| Compare | `==`, `!=`, `<`, `<=`, `>`, `>=` (byte order), `compareTo(t)`, `equalsIgnoreCase(t)` |
+| Convert | `toInt()` (`int64?`: decimal, `0x`, `0b`, with `_`), `toFloat()` (`float64?`), `toBool()` (`bool?`) |
 
-- **Las vistas comparten los bytes del texto original**: cortar es instantáneo y no usa memoria. Viven
-  tanto como el original, y la regla de vida lo comprueba.
-- **Lo que crea texto nuevo** va, como la interpolación, donde corresponda o a la memoria que digas
-  con `in`: `s.toUpperCase() in memory`. Las listas de `split`, `lines` y `codePoints` también.
-- `toUpperCase`, `toLowerCase` y `equalsIgnoreCase` cambian solo letras ASCII.
-- Un `String` no se modifica: `s[0] = 65` es un error. Para construir texto está `StringBuilder`.
+- **Views share the bytes of the original text**: cutting is instant and uses no memory. They live as
+  long as the original, and the lifetime rule checks it.
+- **What creates new text** goes, like interpolation, where it belongs or to the memory you say with
+  `in`: `s.toUpperCase() in memory`. The lists of `split`, `lines` and `codePoints` too.
+- `toUpperCase`, `toLowerCase` and `equalsIgnoreCase` change only ASCII letters.
+- A `String` is not modified: `s[0] = 65` is an error. To build text there is `StringBuilder`.
 
 ### `StringBuilder`
 
-Para construir un texto grande por partes sin crear uno nuevo cada vez:
+To build a big text in parts without creating a new one each time:
 
 ```actionscript
 function main(): int32 {
     let out: StringBuilder = {};
-    for (i in 0..3) { out.add("item ${i}, "); }   // la interpolación se escribe directo en el builder
+    for (i in 0..3) { out.add("item ${i}, "); }   // the interpolation is written straight into the builder
     out.addLine("end");
-    let text: String = out.toString();          // una vista de lo construido hasta ahora
+    let text: String = out.toString();          // a view of what has been built so far
     println("${text.length} ${out.length()}");
     print(text);
     return 0;
 }
 ```
 
-Salida:
+Output:
 ```
 28 28
 item 0, item 1, item 2, end
 ```
 
-`add(text)`, `addLine(text)`, `length()`, `toString()` y `clear()`. El texto crece en la memoria del
-builder. Lo que devuelve `toString()` no cambia aunque después se añada más o se llame a `clear()`.
+`add(text)`, `addLine(text)`, `length()`, `toString()` and `clear()`. The text grows in the memory of
+the builder. What `toString()` returns does not change even if more is added afterwards or `clear()`
+is called.
 
 ---
 
-## 7. Control de flujo
+## 7. Control flow
 
 ### `if`
 
@@ -465,7 +466,7 @@ function classify(n: int32): String {
 }
 ```
 
-Las llaves son obligatorias. La condición debe ser `bool`: `if (1)` es un error.
+Braces are required. The condition must be `bool`: `if (1)` is an error.
 
 ### `while`
 
@@ -479,29 +480,29 @@ while (i < 10) {
 ### `for`
 
 ```actionscript
-for (i in 0..5) { }            // 0, 1, 2, 3, 4 (el final no se incluye)
-for (x in items) { }           // cada elemento
-for (i, x in items) { }        // índice y elemento
+for (i in 0..5) { }            // 0, 1, 2, 3, 4 (the end is not included)
+for (x in items) { }           // each element
+for (i, x in items) { }        // index and element
 ```
 
-Las variables del `for` no se pueden reasignar dentro del cuerpo.
+The variables of the `for` cannot be reassigned inside the body.
 
-### Bloques
+### Blocks
 
-Unas llaves sueltas forman un bloque: lo que se declara dentro solo existe ahí, y las memorias creadas
-dentro se liberan al cerrarlo. Sirve para acotar memorias e hilos ([sección 22](#22-hilos)).
+Loose braces form a block: what is declared inside only exists there, and the memories created inside
+are freed when it closes. It is useful to bound memories and threads ([section 22](#22-threads)).
 
 ```actionscript
 {
     let scratch: byte[*] = [] in heap;
     let text: String = "temporary ${1}" in scratch;
     println(text);
-}   // 'scratch' se libera aquí
+}   // 'scratch' is freed here
 ```
 
-### `break` y `continue`
+### `break` and `continue`
 
-Funcionan como en C o Java, dentro de `while` y `for`.
+They work as in C or Java, inside `while` and `for`.
 
 ```actionscript
 function main(): int32 {
@@ -516,11 +517,11 @@ function main(): int32 {
 }
 ```
 
-Salida: `16`
+Output: `16`
 
 ---
 
-## 8. Funciones
+## 8. Functions
 
 ```actionscript
 function add(a: int32, b: int32): int32 {
@@ -531,21 +532,20 @@ function greet(name: String): void {
     println("Hello, ${name}");
 }
 
-function bye() {               // ": void" se puede omitir
+function bye() {               // ": void" can be left out
     println("Bye");
 }
 ```
 
-- Los parámetros llevan tipo siempre.
-- Si la función no devuelve `void`, **todos los caminos** deben terminar en `return` (o `throw`).
-  Un `while (true)` sin `break` cuenta como un camino que nunca termina.
-- Las funciones se declaran a nivel superior o dentro de clases y structs. Dentro de un cuerpo se usan lambdas.
-- Las funciones no son valores; para pasar una, envuélvela en una lambda:
-  `(x) -> { return add(x, 1); }`.
+- Parameters always have a type.
+- If the function does not return `void`, **every path** must end in `return` (or `throw`).
+  A `while (true)` without `break` counts as a path that never ends.
+- Functions are declared at the top level or inside classes and structs. Inside a body, lambdas are used.
+- Functions are not values; to pass one, wrap it in a lambda: `(x) -> { return add(x, 1); }`.
 
-### `main` y los argumentos del programa
+### `main` and the arguments of the program
 
-`main` puede recibir los argumentos con los que se ejecutó el programa (sin su propio nombre):
+`main` can receive the arguments the program was run with (without its own name):
 
 ```actionscript
 function main(args: String[]): int32 {
@@ -558,25 +558,25 @@ function main(args: String[]): int32 {
 }
 ```
 
-Con `larimar run -- Ana` imprime `Hello, Ana`. Lo que devuelve `main` es el código de salida.
+With `larimar run -- Ana` it prints `Hello, Ana`. What `main` returns is the exit code.
 
 ---
 
 ## 9. Structs
 
-Un `struct` es un **valor**: un grupo de campos que se copia entero al asignarlo o pasarlo.
-No necesita memoria especial; vive donde vive la variable.
+A `struct` is a **value**: a group of fields that is copied whole when it is assigned or passed.
+It needs no special memory; it lives where the variable lives.
 
 ```actionscript
 struct Vector2 {
     let x: int32;
-    let y: int32 = 0;                      // valor por defecto
+    let y: int32 = 0;                      // default value
 
-    function length2(): int32 {            // un método
+    function length2(): int32 {            // a method
         return self.x * self.x + self.y * self.y;
     }
 
-    function scale(k: int32): void {       // los métodos pueden modificar self
+    function scale(k: int32): void {       // methods can modify self
         self.x = self.x * k;
         self.y = self.y * k;
     }
@@ -591,40 +591,40 @@ struct Vector2 {
 }
 
 function main(): int32 {
-    let a: Vector2 = { x: 1, y: 2 };       // literal: el tipo sale de la variable
-    let b: Vector2 = Vector2 { x: 3 };     // con el tipo escrito; y = 0 por defecto
+    let a: Vector2 = { x: 1, y: 2 };       // literal: the type comes from the variable
+    let b: Vector2 = Vector2 { x: 3 };     // with the type written; y = 0 by default
     let c: Vector2 = a + b;
     c.scale(2);
-    let copy: Vector2 = c;                 // una copia independiente
+    let copy: Vector2 = c;                 // an independent copy
     copy.x = 100;
     println("(${c.x}, ${c.y}) ${c.length2()} ${copy.x} ${a == b}");
     return 0;
 }
 ```
 
-Salida: `(8, 4) 80 100 false`
+Output: `(8, 4) 80 100 false`
 
-### Literales
+### Literals
 
-- `{ field: value, ... }` cuando el tipo se sabe por el contexto (una variable, un parámetro, un `return`).
-- `Type { field: value }` cuando no.
-- `{ x, y }` es la abreviatura de `{ x: x, y: y }`.
-- Los campos sin valor por defecto son **obligatorios**: si falta uno, es un error de compilación.
-- Un struct nunca lleva `in`: es un valor y vive en su variable. (Los objetos de clase, en cambio, siempre lo llevan.)
-- Los valores por defecto deben ser constantes (literales, `null`, `[]`, enums o structs hechos de constantes).
+- `{ field: value, ... }` when the type is known from the context (a variable, a parameter, a `return`).
+- `Type { field: value }` when it is not.
+- `{ x, y }` is short for `{ x: x, y: y }`.
+- Fields without a default value are **required**: if one is missing, it is a compile error.
+- A struct never has `in`: it is a value and lives in its variable. (Class objects, on the other hand, always have it.)
+- Default values must be constants (literals, `null`, `[]`, enums or structs made of constants).
 
-### Operadores
+### Operators
 
-Un struct (o una clase) puede definir `+ - * / % == <` y el `-` unario (`operator -()`, sin parámetros).
-A partir de `==` se obtiene `!=`, y a partir de `<` se obtienen `>`, `<=` y `>=`.
-Sin `operator ==`, comparar dos structs con `==` es un error.
+A struct (or a class) can define `+ - * / % == <` and the unary `-` (`operator -()`, without parameters).
+From `==` you get `!=`, and from `<` you get `>`, `<=` and `>=`.
+Without `operator ==`, comparing two structs with `==` is an error.
 
 ---
 
-## 10. Clases y herencia
+## 10. Classes and inheritance
 
-Una clase define **objetos**: tienen identidad, viven en una memoria y se usan por **referencia**.
-Asignar un objeto a otra variable no lo copia; las dos variables apuntan al mismo objeto.
+A class defines **objects**: they have identity, live in a memory and are used by **reference**.
+Assigning an object to another variable does not copy it; both variables point to the same object.
 
 ```actionscript
 class Animal {
@@ -661,14 +661,14 @@ function main(): int32 {
     d.introduce();
     p.introduce();
 
-    let same: Animal = d;       // la misma referencia
+    let same: Animal = d;       // the same reference
     same.name = "Rexy";
     println(d.name);
     return 0;
 }
 ```
 
-Salida:
+Output:
 ```
 Kitty says ...
 Rex says woof
@@ -677,26 +677,27 @@ Bobby says yip
 Rexy
 ```
 
-- Los objetos se crean con un literal, como los structs: `Dog { name: "Rex" }`, o `Dog {}` si todos los
-  campos tienen valor por defecto. No existe `new`.
-- Un objeto vive en una memoria: si no se dice nada, la de su variable (su bloque), la de la lista donde
-  se añade, o la de quien llama si se devuelve. Con `in` se elige: `Dog { name: "Rex" } in memory`, o
-  `in default` para que viva todo el programa (ver [sección 16](#16-memoria)).
-- Un struct es un valor, no vive en ninguna memoria; escribir `in` después de él es un error.
-- **Herencia simple**: `extends` una sola clase. Los campos y métodos se heredan.
-- Todos los métodos son **virtuales**: se ejecuta el de la clase real del objeto.
-- Redefinir un método exige **`override`**, y debe tener exactamente la misma firma.
-  Escribir `override` en un método que no existe en el padre también es un error.
-- `super.method(...)` llama a la versión del padre.
-- Un campo no puede redefinir uno heredado.
-- Un `Dog` se puede usar donde se espera un `Animal`. Al revés no: para pasar de `Animal` a `Dog`
-  se usa un `switch` con un patrón de tipo ([sección 13](#13-switch-y-patrones)).
-- `==` entre objetos compara identidad (si son el mismo objeto), salvo que la clase defina `operator ==`.
+- Objects are created with a literal, like structs: `Dog { name: "Rex" }`, or `Dog {}` if every field
+  has a default value. There is no `new`.
+- An object lives in a memory: if nothing is said, the one of its variable (its block), the one of the
+  list it is added to, or the caller's if it is returned. With `in` you choose: `Dog { name: "Rex" } in memory`,
+  or `in default` so that it lives the whole program (see [section 16](#16-memory)).
+- A struct is a value, it does not live in any memory; writing `in` after it is an error.
+- **Single inheritance**: `extends` one class only. Fields and methods are inherited.
+- Every method is **virtual**: the one of the real class of the object runs.
+- Redefining a method requires **`override`**, and it must have exactly the same signature.
+  Writing `override` on a method that does not exist in the parent is an error too.
+- `super.method(...)` calls the parent's version.
+- A field cannot redefine an inherited one.
+- A `Dog` can be used where an `Animal` is expected. Not the other way around: to go from `Animal` to `Dog`
+  a `switch` with a type pattern is used ([section 13](#13-switch-and-patterns)).
+- `==` between objects compares identity (whether they are the same object), unless the class defines `operator ==`.
 
-### Funciones estáticas
+### Static functions
 
-Una función estática pertenece al tipo, no a un objeto: no tiene `self` y se llama con el nombre del tipo.
-Se puede escribir dentro del tipo con `static`, o fuera con `function Tipo.nombre`; las dos formas son lo mismo.
+A static function belongs to the type, not to an object: it has no `self` and is called with the name
+of the type. It can be written inside the type with `static`, or outside with `function Type.name`;
+both forms are the same.
 
 ```actionscript
 class Order {
@@ -719,19 +720,19 @@ function main(): int32 {
 }
 ```
 
-- Valen en `struct`, `class`, `enum` y `native type`. Las interfaces no tienen funciones estáticas.
-- En un `native type` también se puede escribir `static native function nombre(...) = funcion_c(...);`.
-- `function Tipo.nombre` solo se puede escribir en el módulo que declara el tipo.
-- Se llaman siempre como `Tipo.nombre(...)` (o `modulo.Tipo.nombre(...)`); no desde un objeto.
-- No usan `self`, no entran en la tabla virtual y no se redefinen con `override`.
-- Un tipo no puede tener un método y una función estática con el mismo nombre.
-- Son visibles donde lo es su tipo: se marca `public` el tipo, no la función.
+- They work in `struct`, `class`, `enum` and `native type`. Interfaces have no static functions.
+- In a `native type` you can also write `static native function name(...) = c_function(...);`.
+- `function Type.name` can only be written in the module that declares the type.
+- They are always called as `Type.name(...)` (or `module.Type.name(...)`); not from an object.
+- They do not use `self`, do not go in the virtual table and are not redefined with `override`.
+- A type cannot have a method and a static function with the same name.
+- They are visible where their type is: the type is marked `public`, not the function.
 
 ---
 
 ## 11. Interfaces
 
-Una interfaz describe **qué se puede hacer** con algo: solo firmas de métodos, sin campos.
+An interface describes **what can be done** with something: only method signatures, without fields.
 
 ```actionscript
 interface Drawable {
@@ -739,9 +740,9 @@ interface Drawable {
 }
 ```
 
-Hay tres formas de cumplirla:
+There are three ways to fulfill it:
 
-**1. Con una clase**, declarándolo con `implements` (una clase puede implementar varias):
+**1. With a class**, declaring it with `implements` (a class can implement several):
 
 ```actionscript
 class Circle implements Drawable {
@@ -750,19 +751,19 @@ class Circle implements Drawable {
 }
 ```
 
-**2. Con un literal**, dando cada método como una lambda:
+**2. With a literal**, giving each method as a lambda:
 
 ```actionscript
 let mark: Drawable = { draw: () -> { println("X"); } };
 ```
 
-**3. Con una lambda**, si la interfaz tiene un solo método:
+**3. With a lambda**, if the interface has a single method:
 
 ```actionscript
 let quick: Drawable = () -> { println("quick"); };
 ```
 
-Un ejemplo completo:
+A complete example:
 
 ```actionscript
 interface Drawable {
@@ -784,20 +785,20 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
 circle of radius 2.0
 a literal
 a lambda
 ```
 
-A quien recibe un `Drawable` le da igual cuál de las tres formas hay detrás.
+Whoever receives a `Drawable` does not care which of the three forms is behind it.
 
 ---
 
 ## 12. Enums
 
-Un enum es un valor que es **una de varias variantes**. Las variantes pueden llevar datos.
+An enum is a value that is **one of several variants**. Variants can carry data.
 
 ```actionscript
 enum State { Off, On, Failed }
@@ -809,29 +810,29 @@ enum Shape {
 }
 ```
 
-Crear valores:
+Creating values:
 
 ```actionscript
 let s: State = State.On;
-let a: Shape = Shape.Circle { radius: 2.0 };            // por nombre
-let b: Shape = Shape.Rect { height: 4.0, width: 3.0 };  // el orden no importa
-let c: Shape = Shape.Rect(3.0, 4.0);                    // atajo por posición
+let a: Shape = Shape.Circle { radius: 2.0 };            // by name
+let b: Shape = Shape.Rect { height: 4.0, width: 3.0 };  // the order does not matter
+let c: Shape = Shape.Rect(3.0, 4.0);                    // shortcut by position
 let d: Shape = Shape.Empty;
 ```
 
-- Los enums **sin datos** se pueden comparar con `==` y `!=`.
-- Los enums con datos se examinan con un `switch` ([sección 13](#13-switch-y-patrones)).
-- En una interpolación, un enum se escribe con el nombre de su variante: `"${s}"` da `On`.
-- Los enums son valores: se copian, como los structs.
+- Enums **without data** can be compared with `==` and `!=`.
+- Enums with data are examined with a `switch` ([section 13](#13-switch-and-patterns)).
+- In an interpolation, an enum is written with the name of its variant: `"${s}"` gives `On`.
+- Enums are values: they are copied, like structs.
 
 ---
 
-## 13. `switch` y patrones
+## 13. `switch` and patterns
 
-El `switch` sigue el estilo moderno de Java: cada caso usa `->`, no hay "caída" de un caso al siguiente,
-y no hace falta `break`.
+The `switch` follows the modern Java style: each case uses `->`, there is no "fall through" from one
+case to the next, and `break` is not needed.
 
-### Como instrucción
+### As a statement
 
 ```actionscript
 switch (state) {
@@ -844,23 +845,23 @@ switch (state) {
 }
 ```
 
-Un caso sin llaves debe ser una llamada; para cualquier otra cosa usa `{ }`.
+A case without braces must be a call; for anything else use `{ }`.
 
-### Como expresión
+### As an expression
 
 ```actionscript
 let text: String = switch (n) {
     case 0 -> "zero";
-    case 1, 2, 3 -> "a few";               // varios valores en un caso
+    case 1, 2, 3 -> "a few";               // several values in a case
     default -> {
-        if (n < 0) { yield "negative"; }   // yield da el valor desde un bloque
+        if (n < 0) { yield "negative"; }   // yield gives the value from a block
         yield "many";
     }
 };
 ```
 
-Dentro de un `switch` usado como expresión, los bloques terminan con `yield value;`, y `return` no está permitido.
-Si el resultado es opcional (`T?`), un caso puede dar `null`:
+Inside a `switch` used as an expression, blocks end with `yield value;`, and `return` is not allowed.
+If the result is optional (`T?`), a case can give `null`:
 
 ```actionscript
 function digit(c: byte): int32? {
@@ -872,24 +873,24 @@ function digit(c: byte): int32? {
 }
 ```
 
-### Patrones
+### Patterns
 
-| Patrón | Funciona con | Significado |
+| Pattern | Works with | Meaning |
 |---|---|---|
-| `0`, `-1`, `2.5`, `"a"`, `true` | números, `String`, `bool` | igual a ese valor |
-| `MAX` | lo mismo | igual a esa constante |
-| `Circle` | enums | esa variante |
-| `Circle { radius }` | enums | esa variante, sacando el campo `radius` |
-| `Rect { width: w, height: h }` | enums | sacando campos con otro nombre |
-| `Rect r` | enums | la variante, con el valor entero en `r` |
-| `Rect { height } r` | enums | las dos cosas |
-| `Dog d` | clases e interfaces | si el objeto es un `Dog` (o subclase), como `Dog` en `d` |
-| `null` | opcionales | si no hay valor |
-| `default` | todo | cualquier otro caso |
+| `0`, `-1`, `2.5`, `"a"`, `true` | numbers, `String`, `bool` | equal to that value |
+| `MAX` | the same | equal to that constant |
+| `Circle` | enums | that variant |
+| `Circle { radius }` | enums | that variant, taking out the field `radius` |
+| `Rect { width: w, height: h }` | enums | taking out fields with another name |
+| `Rect r` | enums | the variant, with the whole value in `r` |
+| `Rect { height } r` | enums | both things |
+| `Dog d` | classes and interfaces | if the object is a `Dog` (or a subclass), as `Dog` in `d` |
+| `null` | optionals | if there is no value |
+| `default` | everything | any other case |
 
-Los campos de un patrón se toman **por nombre**: el orden no importa y los que no nombres se ignoran.
+The fields of a pattern are taken **by name**: the order does not matter and the ones you do not name are ignored.
 
-`when` añade una condición a un caso:
+`when` adds a condition to a case:
 
 ```actionscript
 enum Shape { Circle(radius: float64), Rect(width: float64, height: float64), Empty }
@@ -899,7 +900,7 @@ class Dog extends Animal { let breed: String = "mixed"; }
 
 function area(s: Shape): float64 {
     return switch (s) {
-        case Circle { radius } when radius > 10.0 -> 0.0;   // demasiado grande: no se cuenta
+        case Circle { radius } when radius > 10.0 -> 0.0;   // too big: not counted
         case Circle { radius } -> 3.0 * radius * radius;
         case Rect { width: w, height: h } -> w * h;
         case Empty -> 0.0;
@@ -921,26 +922,26 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
 12.0 12.0 0.0
 a shepherd dog
 an animal
 ```
 
-### Cubrir todos los casos
+### Covering every case
 
-- Un `switch` sobre un **enum** debe cubrir todas las variantes (o tener `default`), sea instrucción
-  o expresión. Si mañana añades una variante, el compilador te señala cada `switch` que hay que revisar.
-- Los casos con `when` no cuentan como cubiertos.
-- Un `switch` usado como **expresión** sobre cualquier otro tipo necesita `default`.
-- Dentro de un `switch` en un bucle, `break` y `continue` se refieren al bucle.
+- A `switch` on an **enum** must cover every variant (or have `default`), whether it is a statement
+  or an expression. If you add a variant tomorrow, the compiler points at each `switch` to review.
+- Cases with `when` do not count as covered.
+- A `switch` used as an **expression** on any other type needs `default`.
+- Inside a `switch` in a loop, `break` and `continue` refer to the loop.
 
-### Un solo caso: `x is T nombre`
+### A single case: `x is T name`
 
-Para preguntar por una sola clase no hace falta un `switch`: `x is Dog` es `true` si `x` es un `Dog`
-(o una subclase), y `x is Dog d` además le da el nombre `d`, ya como `Dog`, donde la prueba se sabe
-cierta: dentro del `if`, a la derecha de `&&`, en un lado de `?:`, y después de un
+To ask about a single class a `switch` is not needed: `x is Dog` is `true` if `x` is a `Dog`
+(or a subclass), and `x is Dog d` also gives it the name `d`, already as `Dog`, where the test is known
+to be true: inside the `if`, on the right of `&&`, on one side of `?:`, and after an
 `if (!(x is Dog d)) { return ...; }`.
 
 ```actionscript
@@ -961,29 +962,29 @@ function main(): int32 {
 }
 ```
 
-Salida: `Rex, a beagle | not a dog | not a dog | false`
+Output: `Rex, a beagle | not a dog | not a dog | false`
 
-`x` puede ser un objeto, un objeto opcional o una interfaz, y `T` una clase con la que pueda coincidir.
+`x` can be an object, an optional object or an interface, and `T` a class it can match.
 
 ---
 
-## 14. Opcionales y `null`
+## 14. Optionals and `null`
 
-Ningún valor es `null` salvo que su tipo lo permita con `?`.
+No value is `null` unless its type allows it with `?`.
 
 ```actionscript
 let a: int32 = null;      // error
-let b: int32? = null;     // bien
+let b: int32? = null;     // fine
 ```
 
-Para usar un opcional:
+To use an optional:
 
-| Forma | Qué hace |
+| Form | What it does |
 |---|---|
-| `x ?? value` | `x` si tiene valor; si no, `value` |
-| `x!` | el valor; si es `null`, el programa se detiene |
-| `if (x != null) { ... }` | dentro del bloque, `x` se usa como si no fuera opcional |
-| `switch (x) { case null -> ...; default -> ... }` | por casos |
+| `x ?? value` | `x` if it has a value; otherwise, `value` |
+| `x!` | the value; if it is `null`, the program stops |
+| `if (x != null) { ... }` | inside the block, `x` is used as if it were not optional |
+| `switch (x) { case null -> ...; default -> ... }` | by cases |
 
 ```actionscript
 class Node {
@@ -1020,70 +1021,70 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
 6 0 value 1 none
 7
 has 6
 ```
 
-### Dónde se sabe que no es `null`
+### Where it is known not to be `null`
 
-El compilador sigue las condiciones, y una variable local o un parámetro opcional se usa como si no lo
-fuera donde ya se comprobó:
+The compiler follows the conditions, and an optional local variable or parameter is used as if it
+were not optional where it was already checked:
 
-- dentro de `if (x != null) { ... }`, y en el `else` de `if (x == null) { ... } else { ... }`;
-- después de `if (x == null) { return ...; }` (o `throw`, `break`, `continue`): en el resto del bloque;
-- a la derecha de `x != null && ...`, y de `x == null || ...`; y con varias: `a != null && b != null`;
-- dentro de `while (x != null) { ... }`;
-- en cada lado de `c ? a : b`, según la condición.
+- inside `if (x != null) { ... }`, and in the `else` of `if (x == null) { ... } else { ... }`;
+- after `if (x == null) { return ...; }` (or `throw`, `break`, `continue`): in the rest of the block;
+- on the right of `x != null && ...`, and of `x == null || ...`; and with several: `a != null && b != null`;
+- inside `while (x != null) { ... }`;
+- on each side of `c ? a : b`, according to the condition.
 
-Termina donde la variable se vuelve a asignar: en `current = current.next;` el lado derecho todavía
-sabe que `current` no es `null`, pero lo que sigue ya no. Los campos (`n.next`) no se estrechan, porque
-otra función o un hilo podría cambiarlos entre la comprobación y el uso: guárdalos antes en una
-variable local. Un `!` que ya no hace falta está permitido y no hace nada.
+It ends where the variable is assigned again: in `current = current.next;` the right side still
+knows that `current` is not `null`, but what follows no longer does. Fields (`n.next`) are not
+narrowed, because another function or a thread could change them between the check and the use:
+keep them in a local variable first. A `!` that is no longer needed is allowed and does nothing.
 
 ---
 
-## 15. Arreglos y listas
+## 15. Arrays and lists
 
-Hay tres formas de agrupar elementos del mismo tipo:
+There are three ways to group elements of the same type:
 
-| Tipo | Qué es | Dónde vive |
+| Type | What it is | Where it lives |
 |---|---|---|
-| `T[N]` | hasta N elementos; capacidad fija, longitud variable | con la variable, como un struct |
-| `T[]` | en un parámetro: cualquier arreglo, prestado | donde esté el original |
-| `T[*]` | lista que crece | en una memoria |
+| `T[N]` | up to N elements; fixed capacity, variable length | with the variable, like a struct |
+| `T[]` | in a parameter: any array, borrowed | where the original is |
+| `T[*]` | a list that grows | in a memory |
 
 ### `T[N]`
 
 ```actionscript
 function main(): int32 {
-    let xs: int32[8] = [5, 3, 8];         // capacidad 8, longitud 3
-    let ok: bool = xs.push(1);            // true: cabía
+    let xs: int32[8] = [5, 3, 8];         // capacity 8, length 3
+    let ok: bool = xs.push(1);            // true: it fit
     println("${xs.length} ${xs[0]} ${ok}");
     xs[0] = 50;
-    let inferred: int32[] = [1, 2, 3];    // capacidad tomada del literal: 3
-    println("${inferred.push(4)}");       // false: está lleno
+    let inferred: int32[] = [1, 2, 3];    // capacity taken from the literal: 3
+    println("${inferred.push(4)}");       // false: it is full
     return 0;
 }
 ```
 
-Salida:
+Output:
 ```
 4 5 true
 false
 ```
 
-- `[]` en una variable significa "la capacidad sale del valor".
-- `push` devuelve `false` si no cabe; nunca escribe fuera del arreglo.
-- Un `T[N]` se puede asignar a un `T[M]` si `N <= M` (se copian los elementos).
-- Es un valor: asignarlo lo copia.
+- `[]` in a variable means "the capacity comes from the value".
+- `push` returns `false` if it does not fit; it never writes outside the array.
+- A `T[N]` can be assigned to a `T[M]` if `N <= M` (the elements are copied).
+- It is a value: assigning it copies it.
 
-### `T[]` en parámetros
+### `T[]` in parameters
 
-Un parámetro `T[]` acepta cualquier arreglo o lista de `T`, sin copiarlo. Se pueden leer y cambiar
-sus elementos, pero no añadir:
+A `T[]` parameter accepts any array or list of `T`, without copying it. Its elements can be read and
+changed, but not added:
 
 ```actionscript
 function sum(xs: int32[]): int32 {
@@ -1100,24 +1101,24 @@ let numbers: int32[*] = [];
 for (i in 0..1000) { numbers.push(i); }
 ```
 
-Crece dentro de su memoria. Si la memoria es de tamaño fijo y se llena, `push` devuelve `false`.
+It grows inside its memory. If the memory has a fixed size and fills up, `push` returns `false`.
 
-### Operaciones
+### Operations
 
-| Operación | `T[N]` | `T[]` | `T[*]` |
+| Operation | `T[N]` | `T[]` | `T[*]` |
 |---|---|---|---|
-| `.length`, `x[i]`, `x[i] = v`, `for` | sí | sí | sí |
-| `.push(v)` → `bool`, `.clear()` | sí | no | sí |
-| `.pop()` → el último (y lo quita) | sí | no | sí |
-| `.contains(v)` → `bool` (compara con `==`) | sí | sí | sí |
-| `.filter(f)`, `.map(f)` | dan `T[N]` | dan `T[*]` | dan `T[*]` |
-| `.join(sep)` (listas de `String`) | sí | sí | sí |
-| `.clone()` | sí | no | sí |
+| `.length`, `x[i]`, `x[i] = v`, `for` | yes | yes | yes |
+| `.push(v)` → `bool`, `.clear()` | yes | no | yes |
+| `.pop()` → the last one (and removes it) | yes | no | yes |
+| `.contains(v)` → `bool` (compares with `==`) | yes | yes | yes |
+| `.filter(f)`, `.map(f)` | give `T[N]` | give `T[*]` | give `T[*]` |
+| `.join(sep)` (lists of `String`) | yes | yes | yes |
+| `.clone()` | yes | no | yes |
 
-Un índice fuera de rango, o `pop()` en una lista vacía, detiene el programa con un mensaje
-([sección 20](#20-fallos-en-tiempo-de-ejecución)).
+An index out of range, or `pop()` on an empty list, stops the program with a message
+([section 20](#20-failures-at-run-time)).
 
-`map` necesita saber el tipo del resultado, así que se usa donde haya un tipo declarado:
+`map` needs to know the type of the result, so it is used where there is a declared type:
 
 ```actionscript
 function main(): int32 {
@@ -1129,62 +1130,61 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
 0: #8
 1: #4
 ```
 
-El resultado de `filter` y `map` sobre una lista se crea en la misma memoria que la lista, salvo que
-digas otra con `in`.
+The result of `filter` and `map` on a list is created in the same memory as the list, unless you say
+another one with `in`.
 
 ---
 
-## 16. Memoria
+## 16. Memory
 
-Larimar **no tiene recolector de basura**, y casi nunca hay que pensar en la memoria: el compilador la
-organiza en **memorias** que se liberan enteras, en momentos que se ven en el código.
+Larimar **has no garbage collector**, and you almost never have to think about memory: the compiler
+organizes it in **memories** that are freed whole, at moments that can be seen in the code.
 
-> Todo lo que necesita memoria vive en una memoria, y todo lo de una memoria se libera junto.
+> Everything that needs memory lives in a memory, and everything in a memory is freed together.
 
-### Qué necesita memoria
+### What needs memory
 
-Los números, `bool`, structs, enums y `T[N]` **no** la necesitan: viven con su variable.
-Sí la necesitan los objetos de clase, las listas `T[*]`, los textos interpolados, las tablas `Any` y los
-literales de interfaz.
+Numbers, `bool`, structs, enums and `T[N]` do **not** need it: they live with their variable.
+Class objects, `T[*]` lists, interpolated texts, `Any` tables and interface literals do need it.
 
-### Memorias automáticas
+### Automatic memories
 
-Sin escribir nada, cada cosa vive donde le corresponde:
+Without writing anything, each thing lives where it belongs:
 
-| Lo que se crea | Dónde vive | Se libera |
+| What is created | Where it lives | It is freed |
 |---|---|---|
-| lo que no se guarda en ningún sitio: argumentos, partes de una expresión, el texto de un `println` | la memoria temporal de la instrucción | al terminar la instrucción (en el `;`) |
-| el valor de una variable local (`let`, o al asignarla) | la memoria de su bloque | al cerrar el bloque (`}`); en un bucle, en cada vuelta |
-| lo que se añade a una lista, o se pone en un campo o en una tabla | la memoria de la lista, del objeto o de la tabla | con ella |
-| lo que devuelve una función | la memoria que dice quien llama | depende de quien llama |
-| el valor inicial de una variable global | la memoria por defecto | nunca |
+| what is not kept anywhere: arguments, parts of an expression, the text of a `println` | the temporary memory of the statement | when the statement ends (at the `;`) |
+| the value of a local variable (`let`, or when assigning it) | the memory of its block | when the block closes (`}`); in a loop, on each turn |
+| what is added to a list, or put in a field or in a table | the memory of the list, of the object or of the table | with it |
+| what a function returns | the memory the caller says | it depends on the caller |
+| the initial value of a global variable | the default memory | never |
 
 ```actionscript
 class Order { let customer: String; let total: int32 = 0; }
 
 function createOrder(customer: String, n: int32): Order {
-    return Order { customer: "${customer} #${n}", total: n * 10 };   // donde diga quien llama
+    return Order { customer: "${customer} #${n}", total: n * 10 };   // where the caller says
 }
 
 function main(): int32 {
-    let orders: Order[*] = [];                     // en la memoria del bloque de main
+    let orders: Order[*] = [];                     // in the memory of main's block
     for (i in 0..3) {
-        let o: Order = createOrder("Ana", i);      // en la memoria de la vuelta: se libera en cada vuelta
-        println("${o.customer}: ${o.total}");      // el texto es un temporal de esta instrucción
-        orders.push(createOrder("Luis", i));       // en la memoria de la lista
+        let o: Order = createOrder("Ana", i);      // in the memory of the turn: freed on each turn
+        println("${o.customer}: ${o.total}");      // the text is a temporary of this statement
+        orders.push(createOrder("Luis", i));       // in the memory of the list
     }
     println("${orders.length} orders");
     return 0;
 }
 ```
 
-Salida:
+Output:
 ```
 Ana #0: 0
 Ana #1: 10
@@ -1192,112 +1192,112 @@ Ana #2: 20
 3 orders
 ```
 
-Un programa que corre mucho tiempo (un servidor, un bucle que procesa archivos) no acumula nada: lo de
-cada vuelta se libera en cada vuelta.
+A program that runs for a long time (a server, a loop that processes files) accumulates nothing:
+what belongs to each turn is freed on each turn.
 
-### Lo que devuelve una función
+### What a function returns
 
-Una función que devuelve algo **creado por ella** lo crea directamente en la memoria de quien llama, sin
-copiarlo. Quien llama decide dónde, casi siempre sin escribirlo: `let` lo pone en su bloque, `push` en
-la lista, una asignación a un campo en el objeto, un `return` en la memoria de *su* llamada. Para decirlo
-explícitamente, la llamada lleva `in`, como cualquier otro valor:
+A function that returns something **it created** creates it directly in the caller's memory, without
+copying it. The caller decides where, almost always without writing it: `let` puts it in its block,
+`push` in the list, an assignment to a field in the object, a `return` in the memory of *its* call.
+To say it explicitly, the call has `in`, like any other value:
 
 ```actionscript
 let report: String = summary(data);
 ```
 
-- Las variables que la función devuelve también se crean en la memoria de quien llama:
+- The variables that the function returns are also created in the caller's memory:
 
 ```actionscript
 function parts(text: String): String[*] {
-    let out: String[*] = [];          // se devuelve: vive donde diga quien llama
+    let out: String[*] = [];          // it is returned: it lives where the caller says
     for (p in text.split(",")) { out.push(p.trim()); }
     return out;
 }
 ```
 
-- Si la función devuelve algo **que ya existía** (un elemento de una lista, un campo, un parámetro o
-  una parte de él), no crea nada: el resultado sigue viviendo donde estaba. Un `find(name)` que busca
-  en una lista global devuelve un objeto que vive todo el programa.
-- Los argumentos que solo se usan durante la llamada son temporales de la instrucción. Los que pueden
-  acabar en el resultado (como el texto que `trim()` recorta) se crean donde va el resultado.
+- If the function returns something **that already existed** (an element of a list, a field, a
+  parameter or a part of one), it creates nothing: the result keeps living where it was. A
+  `find(name)` that searches a global list returns an object that lives the whole program.
+- The arguments that are only used during the call are temporaries of the statement. The ones that
+  can end up in the result (like the text that `trim()` cuts) are created where the result goes.
 
-### La memoria por defecto: `in default`
+### The default memory: `in default`
 
-Hay una memoria que vive todo el programa: la **memoria por defecto**. Nada termina ahí sin que se vea
-en el código: se usa solo cuando se pide con `in default`.
+There is a memory that lives the whole program: the **default memory**. Nothing ends up there
+without it being seen in the code: it is used only when asked for with `in default`.
 
-- Los valores iniciales de las variables globales se crean ahí solos.
-- Darle a una global un valor **nuevo** lo pide: `config = load(path) in default;`. Si falta, el error
-  lo dice: `This value lives in the memory of this block, but 'config' lives for the whole program: create it with 'in default'.`
-- Un parámetro `p: T in default` (ver [sección 17](#17-la-regla-de-vida-y-clone)) recibe su argumento
-  creado ahí, sin escribir nada más en la llamada.
+- The initial values of global variables are created there on their own.
+- Giving a global a **new** value asks for it: `config = load(path) in default;`. If it is missing,
+  the error says so: `This value lives in the memory of this block, but 'config' lives for the whole program: create it with 'in default'.`
+- A parameter `p: T in default` (see [section 17](#17-the-lifetime-rule-and-clone)) receives its
+  argument created there, without writing anything else in the call.
 
-### Memorias propias
+### Memories of your own
 
-Cuando conviene decidirlo uno mismo (soltar algo grande antes, agrupar lo de una tarea), se crean
-memorias. Una memoria es un bloque de bytes, `byte[...]`:
+When it is better to decide it yourself (to let go of something big earlier, to group what belongs
+to a task), memories are created. A memory is a block of bytes, `byte[...]`:
 
 ```actionscript
-let a: byte[4096] = [];             // 4 KB en el stack (o estática, si es global)
-let b: byte[1024] = [] in heap;     // un bloque pedido al sistema
-let c: byte[*] = [] in heap;        // crece pidiendo más bloques al sistema
+let a: byte[4096] = [];             // 4 KB on the stack (or static, if it is global)
+let b: byte[1024] = [] in heap;     // a block asked from the system
+let c: byte[*] = [] in heap;        // it grows by asking the system for more blocks
 ```
 
-- **`in heap`** pide la memoria al sistema operativo. Con `byte[N]`, el tamaño puede depender de una variable.
-- Sin `in heap`, el bloque está en el stack (dentro de una función) o es memoria estática (si es global).
-  Una memoria local sin heap está limitada a 64 KB.
-- `byte[*]` (que crece) siempre necesita `in heap`.
+- **`in heap`** asks the operating system for the memory. With `byte[N]`, the size can depend on a variable.
+- Without `in heap`, the block is on the stack (inside a function) or is static memory (if it is global).
+  A local memory without heap is limited to 64 KB.
+- `byte[*]` (which grows) always needs `in heap`.
 
-Y se usan con `in`:
+And they are used with `in`:
 
 ```actionscript
 let text: String = "hello ${name}" in c;
 let pet: Animal = Animal { name: "Kitty" } in c;
 let numbers: int32[*] = [] in c;
-let order: Order = createOrder("Ana", 3) in c;    // el resultado de una llamada, también
-let short: String = "id ${n}" in byte[64];        // un búfer temporal del bloque actual
+let order: Order = createOrder("Ana", 3) in c;    // the result of a call, too
+let short: String = "id ${n}" in byte[64];        // a temporary buffer of the current block
 ```
 
-| Dónde | Cuánto vive |
+| Where | How long it lives |
 |---|---|
-| sin `in` | donde corresponde (ver [Memorias automáticas](#memorias-automáticas)) |
-| `in m`, con `m` local | hasta el final del bloque donde se declaró `m` |
-| `in m`, con `m` global | todo el programa |
-| `in byte[N]` | hasta el final del bloque actual; un texto que no cabe se corta |
-| `in default` | todo el programa |
+| without `in` | where it belongs (see [Automatic memories](#automatic-memories)) |
+| `in m`, with `m` local | until the end of the block where `m` was declared |
+| `in m`, with `m` global | the whole program |
+| `in byte[N]` | until the end of the current block; a text that does not fit is cut |
+| `in default` | the whole program |
 
-Además:
-- Un bloque `{ ... }` dentro de una función tiene su propia memoria: lo creado en él se libera al cerrarlo.
-- Una memoria se libera **en todas las salidas** de su bloque: al terminar, con `return`,
-  `break`, `continue` o cuando sale un error.
-- Las memorias se consultan con `m.length` (bytes usados), `m.capacity` y `m.peak` (máximo usado).
-- Una función también puede recibir una memoria como parámetro (`m: byte[*]`) y crear ahí. Rara vez
-  hace falta: basta con que quien llama escriba `f(x) in m`.
+Also:
+- A block `{ ... }` inside a function has its own memory: what is created in it is freed when it closes.
+- A memory is freed **on every exit** of its block: when it ends, with `return`, `break`,
+  `continue` or when an error leaves it.
+- Memories are queried with `m.length` (bytes used), `m.capacity` and `m.peak` (maximum used).
+- A function can also receive a memory as a parameter (`m: byte[*]`) and create things there. It is
+  rarely needed: it is enough for the caller to write `f(x) in m`.
 
-### Cuándo usar cada una
+### When to use each one
 
-- **Casi siempre**: ninguna; las memorias automáticas ya liberan cada cosa cuando deja de usarse.
-- **Datos de todo el programa** (configuración, cachés): `in default`, o una memoria global.
-- **Controlar cuándo se libera algo grande**: una memoria propia `in heap`, o un bloque `{ }`.
-- **Valores pequeños y de corta vida**: un búfer `in byte[N]`.
+- **Almost always**: none; the automatic memories already free each thing when it is no longer used.
+- **Data for the whole program** (configuration, caches): `in default`, or a global memory.
+- **Controlling when something big is freed**: a memory of your own `in heap`, or a block `{ }`.
+- **Small, short-lived values**: a buffer `in byte[N]`.
 
-### Restricciones
+### Restrictions
 
-- Una memoria no es un valor: no se asigna, no se devuelve y no se guarda en campos.
-  Se usa después de `in`, se pasa a parámetros y se consulta.
-- Un `byte[N]` que se usa como memoria no se puede usar a la vez como bytes de datos.
-- Las lambdas solo pueden usar memorias globales o creadas dentro de ellas.
+- A memory is not a value: it is not assigned, not returned and not kept in fields.
+  It is used after `in`, passed to parameters and queried.
+- A `byte[N]` used as a memory cannot be used at the same time as bytes of data.
+- Lambdas can only use global memories or memories created inside them.
 
 ---
 
-## 17. La regla de vida y `clone()`
+## 17. The lifetime rule and `clone()`
 
-El compilador garantiza que **nada apunte a memoria ya liberada**, con una regla:
+The compiler guarantees that **nothing points to memory that was already freed**, with one rule:
 
-> Un valor no puede guardarse en un sitio que vive más que la memoria donde se creó.
+> A value cannot be kept in a place that lives longer than the memory where it was created.
 
-Por ejemplo:
+For example:
 
 ```actionscript
 class Card { let name: String = ""; }
@@ -1305,73 +1305,74 @@ class Card { let name: String = ""; }
 function rename(c: Card): void {
     let draft: byte[*] = [] in heap;
     let fresh: String = "temporary ${1}" in draft;
-    c.name = fresh;          // ERROR: 'draft' se libera al salir y c.name quedaría apuntando ahí
+    c.name = fresh;          // ERROR: 'draft' is freed on the way out and c.name would point there
 }
 ```
 
-El error dice:
+The error says:
 
 ```
 This value lives in memory 'draft', but field 'name' lives longer (in 'c' (owned by the caller)). Use .clone() to copy it there.
 ```
 
-Y la solución es la que sugiere: **`clone()`**, que copia el valor en el lugar del destino.
+And the solution is the one it suggests: **`clone()`**, which copies the value to the place of the destination.
 
 ```actionscript
-c.name = fresh.clone();      // bien: se copia a la memoria de c
+c.name = fresh.clone();      // fine: it is copied to c's memory
 ```
 
 ### `clone()`
 
-- Crea una **copia completa e independiente**: un objeto con todo lo que contiene, una lista con sus
-  elementos, un texto. Si hay ciclos entre objetos, la copia los respeta.
-- La copia va al lugar del destino (la memoria de un objeto, de una lista, del bloque) o a donde digas
-  con `in`: `let p: Person = ana.clone() in otherMemory;`.
-- Existe para todos los tipos. En los que no tienen memoria (números, structs simples) es igual que asignar.
-- No está disponible para interfaces, lambdas ni parámetros `T[]`.
+- It creates a **complete, independent copy**: an object with everything it contains, a list with its
+  elements, a text. If there are cycles between objects, the copy respects them.
+- The copy goes to the place of the destination (the memory of an object, of a list, of the block) or
+  to where you say with `in`: `let p: Person = ana.clone() in otherMemory;`.
+- It exists for every type. In the ones that have no memory (numbers, simple structs) it is the same as assigning.
+- It is not available for interfaces, lambdas or `T[]` parameters.
 
-### Dónde aplica la regla
+### Where the rule applies
 
-- Al asignar una variable, un campo o un elemento.
-- Al crear un objeto o una lista: sus campos y elementos deben vivir al menos tanto como él.
-- Al devolver: el valor no puede venir de una memoria de la función (un `in m` con `m` local, un búfer
-  `byte[N]`). Lo que se crea en el `return`, o en una variable que se devuelve, vive donde diga quien
-  llama, así que no hay nada que comprobar.
-- Al guardar en una variable global: solo valores que viven todo el programa (créalos con `in default`).
-- Un parámetro que recibe datos del que llama no se puede guardar en otro objeto que también viene
-  del que llama sin `clone()`, porque el compilador no sabe cuál de los dos vive más. Es el caso típico:
+- When assigning a variable, a field or an element.
+- When creating an object or a list: its fields and elements must live at least as long as it does.
+- When returning: the value cannot come from a memory of the function (an `in m` with `m` local, a
+  `byte[N]` buffer). What is created in the `return`, or in a variable that is returned, lives where
+  the caller says, so there is nothing to check.
+- When keeping it in a global variable: only values that live the whole program (create them with `in default`).
+- A parameter that receives data from the caller cannot be kept in another object that also comes
+  from the caller without `clone()`, because the compiler does not know which of the two lives longer.
+  It is the typical case:
 
 ```actionscript
 class Contact {
     let name: String = "";
     function setName(n: String): void {
-        self.name = n.clone();       // sin clone() es un error
+        self.name = n.clone();       // without clone() it is an error
     }
 }
 ```
 
-- Para las variables que se reasignan, el compilador considera todos los valores que reciben
-  (también en bucles). Este patrón es válido:
+- For variables that are reassigned, the compiler considers every value they receive (in loops too).
+  This pattern is valid:
 
 ```actionscript
 let last: Animal? = null;
 for (a in animals) { last = a; }
 ```
 
-### Decir dónde vive un parámetro: `in`
+### Saying where a parameter lives: `in`
 
-Cuando una función **sí** debe guardar un parámetro en otro (construir un árbol, llenar una tabla),
-el parámetro puede decir dónde viven sus datos, igual que `in` dice dónde se crea algo:
+When a function **does** have to keep a parameter in another one (building a tree, filling a table),
+the parameter can say where its data lives, just as `in` says where something is created:
 
-| Parámetro | Significa | Quien llama debe pasar |
+| Parameter | Means | The caller must pass |
 |---|---|---|
-| `k: Node in p` | vive tanto como el parámetro `p` | algo que viva al menos tanto como lo que pasa en `p` |
-| `s: String in default` | vive todo el programa | lo que se crea en la llamada va ahí solo; si ya existía, algo global, literal o `in default` |
-| `x: Item in self` | (en un método) vive tanto como el objeto | algo que viva tanto como el objeto |
-| `t: String in m` | vive en la memoria `m` (un parámetro `byte[*]`) | algo que viva tanto como esa memoria |
+| `k: Node in p` | lives as long as the parameter `p` | something that lives at least as long as what it passes in `p` |
+| `s: String in default` | lives the whole program | what is created in the call goes there on its own; if it already existed, something global, a literal or `in default` |
+| `x: Item in self` | (in a method) lives as long as the object | something that lives as long as the object |
+| `t: String in m` | lives in the memory `m` (a `byte[*]` parameter) | something that lives as long as that memory |
 
-Dentro de la función, ese parámetro se puede guardar ahí sin `clone()`. El compilador lo comprueba
-en cada llamada:
+Inside the function, that parameter can be kept there without `clone()`. The compiler checks it in
+each call:
 
 ```actionscript
 class Node {
@@ -1382,11 +1383,11 @@ class Node {
 let names: String[*] = [] in default;
 
 function addKid(parent: Node, kid: Node in parent): void {
-    parent.kids.push(kid);                 // bien: kid vive tanto como parent
+    parent.kids.push(kid);                 // fine: kid lives as long as parent
 }
 
 function remember(name: String in default): void {
-    names.push(name);                      // bien: name vive todo el programa
+    names.push(name);                      // fine: name lives the whole program
 }
 
 function main(): int32 {
@@ -1400,23 +1401,23 @@ function main(): int32 {
 }
 ```
 
-Salida: `2 b 1`
+Output: `2 b 1`
 
-Si en la llamada el valor vive menos (por ejemplo, un nodo creado en una memoria `scratch` de un
-bucle, que se libera en cada vuelta), el error lo dice:
+If in the call the value lives less (for example, a node created in a `scratch` memory of a loop,
+which is freed on each turn), the error says so:
 `Argument 2 of 'addKid' ('kid: Node in parent') must live as long as argument 1 (memory 'memory'), but it lives in memory 'scratch'.`
-Y cuando falta el `in`, el mensaje de error lo sugiere: `... or declare the parameter as 'kid: Node in parent'`.
+And when the `in` is missing, the error message suggests it: `... or declare the parameter as 'kid: Node in parent'`.
 
-- `in` solo tiene sentido en parámetros que apuntan a memoria (objetos, listas, textos).
-- Un método que redefine a otro (`override`) o implementa una interfaz debe repetir los mismos `in`.
-- Las funciones `extern` no lo usan.
+- `in` only makes sense in parameters that point to memory (objects, lists, texts).
+- A method that redefines another (`override`) or implements an interface must repeat the same `in`.
+- `extern` functions do not use it.
 
 ---
 
-## 18. Lambdas y closures
+## 18. Lambdas and closures
 
-Una lambda es una función sin nombre que se guarda en una variable o se pasa como argumento.
-Su tipo se escribe con los parámetros y el resultado:
+A lambda is a function without a name that is kept in a variable or passed as an argument.
+Its type is written with the parameters and the result:
 
 ```actionscript
 let double: (int32) -> int32 = (x) -> { return x * 2; };
@@ -1424,12 +1425,12 @@ let add: (int32, int32) -> int32 = (a: int32, b: int32) -> { return a + b; };
 let warn: () -> void = () -> { println("warning"); };
 ```
 
-El tipo de los parámetros se puede omitir cuando se deduce del contexto.
+The type of the parameters can be left out when it is deduced from the context.
 
-### Capturas
+### Captures
 
-Una lambda puede usar variables de alrededor. Las **copia** en el momento de crearse
-(los objetos se copian como referencia: la lambda ve el mismo objeto).
+A lambda can use variables from around it. It **copies** them at the moment it is created
+(objects are copied as a reference: the lambda sees the same object).
 
 ```actionscript
 function makeAdder(base: int32): (int32) -> int32 {
@@ -1456,36 +1457,36 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
 15
 3 3
 ```
 
-**Regla:** una variable capturada **no se puede reasignar ni modificar**, ni antes ni después de la
-lambda, ni dentro de ella. Así la copia nunca queda desactualizada:
+**Rule:** a captured variable **cannot be reassigned or modified**, neither before nor after the
+lambda, nor inside it. That way the copy never gets out of date:
 
 ```actionscript
 let x: int32 = 5;
 let f: () -> int32 = () -> { return x; };
-x = 10;     // error: 'x' está capturada
+x = 10;     // error: 'x' is captured
 ```
 
-Lo mismo para cambiar un campo de un struct capturado o añadir a un `T[N]` capturado. Los objetos de
-clase y las listas `T[*]` sí se pueden modificar, porque la lambda comparte la misma referencia.
+The same goes for changing a field of a captured struct or adding to a captured `T[N]`. Class objects
+and `T[*]` lists can be modified, because the lambda shares the same reference.
 
-### Otras reglas
+### Other rules
 
-- Una lambda puede devolverse o guardarse en campos sin problema: lleva consigo sus copias.
-- En métodos de clase, una lambda puede usar `self`. En métodos de struct no, porque el struct podría copiarse o desaparecer.
-- Las lambdas no pueden lanzar errores.
-- Una lambda no puede capturar otra lambda **de su mismo tipo** (el compilador lo detecta).
+- A lambda can be returned or kept in fields without a problem: it carries its copies with it.
+- In class methods, a lambda can use `self`. In struct methods it cannot, because the struct could be copied or disappear.
+- Lambdas cannot throw errors.
+- A lambda cannot capture another lambda **of its own type** (the compiler detects it).
 
 ---
 
-## 19. Errores: `throw`, `try` y `catch`
+## 19. Errors: `throw`, `try` and `catch`
 
-Los errores esperables (un archivo que no existe, una lectura inválida) se representan con enums:
+Expected errors (a file that does not exist, an invalid read) are represented with enums:
 
 ```actionscript
 enum FileError {
@@ -1501,7 +1502,7 @@ function open(path: String): int32 throws FileError {
 }
 
 function readBoth(a: String, b: String): int32 throws FileError {
-    return open(a) + open(b);        // si open falla, el error sigue subiendo
+    return open(a) + open(b);        // if open fails, the error keeps going up
 }
 
 function main(): int32 {
@@ -1521,134 +1522,134 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
 read 9
 not found
 denied for ana
 ```
 
-Las reglas:
-- **`throws E`** declara el enum que la función puede lanzar (uno por función).
-- Cada llamada a una función que puede fallar debe estar dentro de un `try` que capture ese tipo,
-  o en una función que declare el mismo `throws` (entonces el error sube solo).
-  Si no, es un error de compilación.
-- Un `try` puede tener varios `catch`, uno por tipo de error. Lo que no se captura sigue subiendo.
-- Los métodos de clases e interfaces también pueden declarar `throws`; un `override` debe declarar el mismo.
-- Los datos que viajan en un error deben vivir todo el programa: usa literales o `.clone()`.
-- Si `main` declara `throws` y un error llega hasta ella, el programa termina con código 1 y el mensaje
+The rules:
+- **`throws E`** declares the enum that the function can throw (one per function).
+- Each call to a function that can fail must be inside a `try` that catches that type, or in a
+  function that declares the same `throws` (then the error goes up on its own). Otherwise, it is a
+  compile error.
+- A `try` can have several `catch`, one per error type. What is not caught keeps going up.
+- Methods of classes and interfaces can also declare `throws`; an `override` must declare the same.
+- The data that travels in an error must live the whole program: use literals or `.clone()`.
+- If `main` declares `throws` and an error reaches it, the program ends with code 1 and the message
   `uncaught error: FileError.NotFound`.
 
-Por dentro, un error es un valor que se devuelve: no hay saltos ocultos, y las memorias locales se liberan
-mientras el error sube.
+Inside, an error is a value that is returned: there are no hidden jumps, and local memories are freed
+while the error goes up.
 
 ---
 
-## 20. Fallos en tiempo de ejecución
+## 20. Failures at run time
 
-Algunos fallos no se pueden prever al compilar. En lugar de corromper la memoria, el programa se
-detiene con un mensaje que dice el archivo y la línea, y el código de salida **101**:
+Some failures cannot be foreseen when compiling. Instead of corrupting memory, the program stops with
+a message that says the file and the line, and the exit code **101**:
 
-| Causa | Mensaje |
+| Cause | Message |
 |---|---|
-| índice fuera de rango | `panic [src/main.lar:4]: index 5 out of range (length 3)` |
-| división por cero | `panic [src/main.lar:4]: division by zero` |
-| `!` sobre `null` | `panic [src/main.lar:4]: '!' used on a null value` |
-| una memoria de tamaño fijo se llena al crear algo | `panic [src/main.lar:4]: memory is full` |
-| el sistema no da más memoria | `panic: out of memory: ...` |
+| index out of range | `panic [src/main.lar:4]: index 5 out of range (length 3)` |
+| division by zero | `panic [src/main.lar:4]: division by zero` |
+| `!` on `null` | `panic [src/main.lar:4]: '!' used on a null value` |
+| a fixed-size memory fills up when creating something | `panic [src/main.lar:4]: memory is full` |
+| the system gives no more memory | `panic: out of memory: ...` |
 
-Estos fallos no se capturan con `catch`: indican un error del programa, no una situación esperada.
+These failures are not caught with `catch`: they mean an error in the program, not an expected situation.
 
-El programa también puede detenerse así a propósito, con **`panic("mensaje")`**, cuando encuentra algo que
-no debería pasar nunca:
+The program can also stop like this on purpose, with **`panic("message")`**, when it finds something
+that should never happen:
 
 ```actionscript
 function name(n: int32): String {
-    if (n == 1) { return "uno"; }
-    panic("no sé decir ${n}");
+    if (n == 1) { return "one"; }
+    panic("I cannot say ${n}");
 }
 ```
 
-Salida, si se llama con 7: `panic [src/main.lar:3]: no sé decir 7`, con código de salida 101.
+Output, if it is called with 7: `panic [src/main.lar:3]: I cannot say 7`, with exit code 101.
 
-- `panic` recibe un `String` (puede ser un texto interpolado).
-- Una función puede terminar con `panic(...)` en lugar de `return`: el compilador sabe que no sigue.
-- Es para errores del programa. Lo que se espera que pueda fallar (un archivo que no existe, un dato mal
-  escrito) se avisa con `throw`, que quien llama puede capturar.
+- `panic` receives a `String` (it can be an interpolated text).
+- A function can end with `panic(...)` instead of `return`: the compiler knows it does not go on.
+- It is for errors in the program. What is expected to possibly fail (a file that does not exist,
+  badly written data) is reported with `throw`, which the caller can catch.
 
 ---
 
-## 21. `Any`: datos de forma libre
+## 21. `Any`: free-form data
 
-Los structs y las clases sirven para datos cuya forma conoces de antemano. Para datos cuya forma no
-conoces (configuración, mensajes, JSON) está **`Any`**: un valor que puede ser un número, un `bool`, un
-`String`, `null`, un objeto, un struct, un enum o una **tabla**. Una tabla tiene, como en Lua, dos partes: una **por posición**
-(0, 1, 2…) y otra **por nombre**.
+Structs and classes are for data whose shape you know in advance. For data whose shape you do not
+know (configuration, messages, JSON) there is **`Any`**: a value that can be a number, a `bool`, a
+`String`, `null`, an object, a struct, an enum or a **table**. A table has, as in Lua, two parts: one
+**by position** (0, 1, 2…) and another **by name**.
 
 ```actionscript
 function main(): int32 {
     let config: Any = {
-        "web", "api",                  // posiciones 0 y 1
-        name: "server",                // por nombre
+        "web", "api",                  // positions 0 and 1
+        name: "server",                // by name
         port: 8080,
         limits: { max: 100, ratio: 0.75 },
     };
 
     println("${config[0]} ${config.name} ${config.limits.max}");
-    config.port = 9090;                // cambiar una entrada
-    config["debug"] = true;            // añadir una entrada (también con un String calculado)
-    config.push("admin");              // añadir al final de la parte por posición
+    config.port = 9090;                // change an entry
+    config["debug"] = true;            // add an entry (also with a computed String)
+    config.push("admin");              // add at the end of the part by position
     println("${config}");
     return 0;
 }
 ```
 
-Salida:
+Output:
 ```
 web server 100
 {"web", "api", "admin", name: "server", port: 9090, limits: {max: 100, ratio: 0.75}, debug: true}
 ```
 
-- **Una tabla vive en una memoria**, como un objeto: la de su variable, o la que digas con `in`.
-  Las tablas dentro de otra, y las que se asignan o añaden a una tabla, viven en la memoria de esa tabla.
-- **Los valores llevan su tipo.** Un entero sin tipo se guarda como `int64` y un decimal como `float64`;
-  para otro tipo, dilo: `0xFF as byte`, `1.5 as float32`.
-- Una tabla guarda números, `bool`, `String`, `null`, otras tablas, objetos, structs y enums
-  (ver más abajo). Listas `[*]`, lambdas e interfaces no: para eso están los campos con su tipo.
-- **Leer nunca falla**: una entrada que no existe, o leer dentro de algo que no es una tabla, da `null`.
-  Por eso `config.server.port` funciona aunque falte `server`. Escribir en algo que no es una tabla, en
-  cambio, detiene el programa.
-- Las entradas por nombre se recorren en el orden en que se añadieron.
-- `a.length` es el tamaño de la parte por posición. Para una entrada llamada `length`, `push` o `fields`,
-  usa corchetes: `a["length"]`.
+- **A table lives in a memory**, like an object: the one of its variable, or the one you say with `in`.
+  The tables inside another one, and the ones assigned or added to a table, live in the memory of that table.
+- **Values carry their type.** An integer without a type is kept as `int64` and a decimal as `float64`;
+  for another type, say it: `0xFF as byte`, `1.5 as float32`.
+- A table keeps numbers, `bool`, `String`, `null`, other tables, objects, structs and enums
+  (see below). `[*]` lists, lambdas and interfaces do not: that is what typed fields are for.
+- **Reading never fails**: an entry that does not exist, or reading inside something that is not a
+  table, gives `null`. That is why `config.server.port` works even if `server` is missing. Writing to
+  something that is not a table, on the other hand, stops the program.
+- The entries by name are gone over in the order in which they were added.
+- `a.length` is the size of the part by position. For an entry called `length`, `push` or `fields`,
+  use brackets: `a["length"]`.
 
-### Leer un valor: `as`
+### Reading a value: `as`
 
-Como el tipo de lo que hay dentro no se conoce al compilar, leer un valor con un tipo da un **opcional**:
-el valor si lo hay y es de ese tipo, o `null`. Se combina con `??`:
+Since the type of what is inside is not known when compiling, reading a value with a type gives an
+**optional**: the value if there is one and it is of that type, or `null`. It is combined with `??`:
 
 ```actionscript
 function main(): int32 {
     let config: Any = { port: 8080, ratio: 0.75, name: "web" };
-    let port: int32 = config.port as int32 ?? 80;         // 8080: un entero que cabe se convierte
-    let small: byte = config.port as byte ?? 0;           // 0: 8080 no cabe en un byte
+    let port: int32 = config.port as int32 ?? 80;         // 8080: an integer that fits is converted
+    let small: byte = config.port as byte ?? 0;           // 0: 8080 does not fit in a byte
     let ratio: float64 = config.ratio as float64 ?? 1.0;
-    let timeout: int32 = config.server.timeout as int32 ?? 30;   // no existe: 30
+    let timeout: int32 = config.server.timeout as int32 ?? 30;   // it does not exist: 30
     let name: String = config.name as String ?? "?";
     println("${port} ${small} ${ratio} ${timeout} ${name} ${config.missing == null}");
     return 0;
 }
 ```
 
-Salida: `8080 0 0.75 30 web true`
+Output: `8080 0 0.75 30 web true`
 
-Los enteros se convierten a cualquier tipo entero en el que quepan, y los números a decimal. `as`
-también sirve con clases, structs y enums: `v as Dog` da un `Dog?`.
+Integers are converted to any integer type they fit in, and numbers to decimal. `as` also works with
+classes, structs and enums: `v as Dog` gives a `Dog?`.
 
-### Recorrer y distinguir
+### Going over and telling apart
 
-`for (i, v in table)` recorre la parte por posición y `for (name, v in table.fields)` la parte por nombre.
-Para saber qué hay en cada valor se usa un `switch` con el tipo; `case Any t` es una tabla:
+`for (i, v in table)` goes over the part by position and `for (name, v in table.fields)` the part by
+name. To know what each value holds, a `switch` with the type is used; `case Any t` is a table:
 
 ```actionscript
 function describe(v: Any): String {
@@ -1671,7 +1672,7 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
 0: number 3
 1: decimal 2.5
@@ -1681,19 +1682,19 @@ name: text 'sensor'
 port: big number 8080
 ```
 
-- El `switch` sobre un `Any` compara el tipo exacto: `8080` está guardado como `int64`, así que
-  `case int32` no lo cubre. Usado como expresión, necesita `default`.
-- Mientras se recorre una tabla se pueden cambiar sus valores, pero no añadir ni quitar entradas: si
-  pasa, el programa se detiene con un mensaje.
-- `clone()` copia una tabla con todo lo que contiene, también si se contiene a sí misma.
+- The `switch` on an `Any` compares the exact type: `8080` is kept as `int64`, so `case int32` does
+  not cover it. Used as an expression, it needs `default`.
+- While a table is gone over its values can be changed, but entries cannot be added or removed: if
+  it happens, the program stops with a message.
+- `clone()` copies a table with everything it contains, also if it contains itself.
 
-### Objetos, structs y enums
+### Objects, structs and enums
 
-Un `Any` también guarda objetos, structs y enums, y se recuperan con su tipo:
+An `Any` also keeps objects, structs and enums, and they are recovered with their type:
 
-- **un objeto se guarda por referencia**: la tabla y la variable apuntan al mismo objeto;
-- **un struct o un enum se guarda copiado** en la memoria de la tabla. Fuera de una tabla, se dice dónde
-  va la copia a la memoria de la variable (o donde digas con `in`): `let v: Any = point;`.
+- **an object is kept by reference**: the table and the variable point to the same object;
+- **a struct or an enum is kept copied** in the memory of the table. Outside a table, the copy goes
+  to the memory of the variable (or where you say with `in`): `let v: Any = point;`.
 
 ```actionscript
 struct Point { let x: int32; let y: int32; }
@@ -1709,7 +1710,7 @@ function main(): int32 {
         let text: String = switch (v) {
             case int64 n -> "number ${n}";
             case Point q -> "point ${q.x},${q.y}";
-            case Animal a -> "animal ${a.name}";      // un Dog también es un Animal
+            case Animal a -> "animal ${a.name}";      // a Dog is also an Animal
             case null -> "null";
             default -> "other";
         };
@@ -1721,7 +1722,7 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
 number 42
 point 1,2
@@ -1730,19 +1731,20 @@ null
 {42, <Point>, <Dog>, null} true
 ```
 
-Al imprimir, un objeto o un struct se muestra con el nombre de su tipo. `clone()` de una tabla copia
-también los objetos que contiene, salvo los de clases `synchronized` y los `Thread`, que se comparten.
+When printed, an object or a struct is shown with the name of its type. `clone()` of a table also
+copies the objects it contains, except the ones of `synchronized` classes and the `Thread`s, which
+are shared.
 
-### Buscar
+### Searching
 
-| Método | Qué hace |
+| Method | What it does |
 |---|---|
-| `t.contains(x)` | `true` si `x` es el nombre de una entrada, o es igual a un elemento por posición |
-| `t.containsKey("name")` | `true` si hay una entrada con ese nombre |
+| `t.contains(x)` | `true` if `x` is the name of an entry, or is equal to an element by position |
+| `t.containsKey("name")` | `true` if there is an entry with that name |
 
-`contains` busca números (por valor: `5` es igual a `5.0`), `bool`, `String`, objetos (el mismo objeto) y
-`null`. No mira los valores de las entradas con nombre: esos se recorren con `fields`. Usado con nombres,
-un `Any` es un conjunto:
+`contains` searches numbers (by value: `5` is equal to `5.0`), `bool`, `String`, objects (the same
+object) and `null`. It does not look at the values of the entries with a name: those are gone over
+with `fields`. Used with names, an `Any` is a set:
 
 ```actionscript
 function main(): int32 {
@@ -1756,17 +1758,17 @@ function main(): int32 {
 }
 ```
 
-Salida: `again: x`
+Output: `again: x`
 
-### Quitar entradas
+### Removing entries
 
-| Método | Qué hace |
+| Method | What it does |
 |---|---|
-| `t.remove("name")` | quita una entrada por nombre; da `true` si existía |
-| `t.removeAt(i)` | quita una posición; las siguientes se corren hacia atrás |
-| `t.clear()` | vacía la tabla |
-| `t.removeIf((v) -> ...)` | quita, de las dos partes, los valores para los que la lambda da `true`; devuelve cuántos |
-| `t.removeIf((name, v) -> ...)` | lo mismo con la parte por nombre, recibiendo también el nombre |
+| `t.remove("name")` | removes an entry by name; gives `true` if it existed |
+| `t.removeAt(i)` | removes a position; the following ones move back |
+| `t.clear()` | empties the table |
+| `t.removeIf((v) -> ...)` | removes, from both parts, the values for which the lambda gives `true`; returns how many |
+| `t.removeIf((name, v) -> ...)` | the same with the part by name, also receiving the name |
 
 ```actionscript
 function main(): int32 {
@@ -1779,40 +1781,40 @@ function main(): int32 {
 }
 ```
 
-Salida: `2 {3, port: 80}`
+Output: `2 {3, port: 80}`
 
-Quitar entradas mientras se recorre la misma tabla detiene el programa, igual que añadirlas: el recorrido
-se saltaría entradas. Para quitar varias, `removeIf` lo hace de una vez. Quitar no libera memoria: lo que
-vive en una memoria se libera junto, cuando se libera la memoria.
+Removing entries while going over the same table stops the program, just like adding them: the walk
+would skip entries. To remove several, `removeIf` does it at once. Removing does not free memory:
+what lives in a memory is freed together, when the memory is freed.
 
 ---
 
-## 22. Hilos
+## 22. Threads
 
-Un hilo ejecuta código al mismo tiempo que el resto del programa. En Larimar, un **`Thread`** es un
-objeto que vive en una memoria, y lo que ejecuta (su `run`) es una lambda escrita ahí mismo:
+A thread runs code at the same time as the rest of the program. In Larimar, a **`Thread`** is an
+object that lives in a memory, and what it runs (its `run`) is a lambda written right there:
 
 ```actionscript
 let worker: Thread = { run: () -> { println("working"); } };
-worker.start();       // empieza a correr
-worker.join();        // espera a que termine
+worker.start();       // it starts running
+worker.join();        // it waits for it to end
 ```
 
-- **Cuando se libera la memoria de un hilo, primero se espera a que termine.** Así un hilo nunca vive
-  más que su memoria, y todo lo que usa sigue existiendo mientras corre. Los hilos en la memoria por
-  defecto se esperan al terminar el programa.
-- `start()` arranca el hilo (una sola vez) y `join()` espera a que termine.
+- **When the memory of a thread is freed, it first waits for it to end.** So a thread never lives
+  longer than its memory, and everything it uses keeps existing while it runs. Threads in the default
+  memory are waited for when the program ends.
+- `start()` starts the thread (only once) and `join()` waits for it to end.
 
-### Compartir datos: `synchronized class`
+### Sharing data: `synchronized class`
 
-Dos hilos que cambian lo mismo a la vez corrompen los datos. Por eso un hilo **solo puede usar** de
-fuera dos clases de cosas, y el compilador lo comprueba:
+Two threads that change the same thing at the same time corrupt the data. That is why a thread **can
+only use** two kinds of things from outside, and the compiler checks it:
 
-1. **Valores**, que el hilo recibe copiados: números, `bool`, `String`, y structs, enums y `T[N]` hechos de eso.
-2. **Objetos de una `synchronized class`.**
+1. **Values**, which the thread receives copied: numbers, `bool`, `String`, and structs, enums and `T[N]` made of them.
+2. **Objects of a `synchronized class`.**
 
-Una clase `synchronized` protege sus datos con un candado. Cada método lo toma al empezar y lo suelta al
-salir, por cualquier camino, así que dos hilos nunca están dentro del mismo objeto a la vez:
+A `synchronized` class protects its data with a lock. Each method takes it when it starts and lets it
+go when it leaves, by any path, so two threads are never inside the same object at the same time:
 
 ```actionscript
 synchronized class Counter {
@@ -1825,8 +1827,8 @@ function main(): int32 {
     let shared: byte[*] = [] in heap;
     let counter: Counter = {} in shared;
     {
-        let workers: byte[*] = [] in heap;     // los hilos viven aquí (en la memoria de la vuelta,
-                                               // se esperaría a cada uno al terminar su vuelta)
+        let workers: byte[*] = [] in heap;     // the threads live here (in the memory of the turn,
+                                               // each one would be waited for at the end of its turn)
         for (w in 0..4) {
             let t: Thread = {
                 run: () -> {
@@ -1835,29 +1837,30 @@ function main(): int32 {
             } in workers;
             t.start();
         }
-    }   // al liberarse 'workers', se espera a los 4 hilos
+    }   // when 'workers' is freed, the 4 threads are waited for
     println("${counter.get()}");
     return 0;
 }
 ```
 
-Salida: `1998000`
+Output: `1998000`
 
-Los cuatro hilos corren a la vez porque su memoria está fuera del bucle. El bloque `{ }` sirve para
-decir hasta dónde llegan: al cerrarlo se libera `workers` y, con ella, se espera a los hilos.
+The four threads run at the same time because their memory is outside the loop. The block `{ }` says
+how far they go: when it closes, `workers` is freed and, with it, the threads are waited for.
 
-Las reglas de una clase `synchronized`:
-- Sus campos solo se usan dentro de sus métodos, a través de `self`.
-- Sus métodos reciben y devuelven valores u objetos `synchronized`, nunca listas, objetos normales ni `Any`:
-  así sus datos no salen sin el candado.
-- No hereda ni se hereda, y dentro de sus métodos `self` no se usa en lambdas (podrían ejecutarse sin el candado).
-- Un método puede llamar a otro del mismo objeto: el candado se puede tomar varias veces.
+The rules of a `synchronized` class:
+- Its fields are only used inside its methods, through `self`.
+- Its methods receive and return values or `synchronized` objects, never lists, plain objects or `Any`:
+  so its data does not leave without the lock.
+- It does not inherit and is not inherited, and inside its methods `self` is not used in lambdas
+  (they could run without the lock).
+- A method can call another one of the same object: the lock can be taken several times.
 
-### Esperar a que algo ocurra: `wait until`
+### Waiting for something to happen: `wait until`
 
-Un método de una clase `synchronized` puede decir **cuándo** puede ejecutarse, con `wait until
-(condición)` en su firma. Quien lo llama **espera ahí** (sin gastar procesador y soltando el candado
-mientras tanto) hasta que la condición se cumpla, y entonces el método corre con el candado tomado:
+A method of a `synchronized` class can say **when** it can run, with `wait until (condition)` in its
+signature. Whoever calls it **waits there** (without using the processor and letting go of the lock
+in the meantime) until the condition holds, and then the method runs with the lock taken:
 
 ```actionscript
 synchronized class Queue {
@@ -1868,7 +1871,7 @@ synchronized class Queue {
     function close(): void { self.closed = true; }
 
     function take(): int32 wait until (self.items.length > 0 || self.closed) {
-        if (self.items.length == 0) { return -1; }        // cerrada y vacía
+        if (self.items.length == 0) { return -1; }        // closed and empty
         let v: int32 = self.items[0];
         let rest: int32[64] = [];
         for (i in 1..self.items.length) { rest.push(self.items[i]); }
@@ -1889,7 +1892,7 @@ function main(): int32 {
     let consumer: Thread = {
         run: () -> {
             while (true) {
-                let v: int32 = queue.take();             // espera hasta que haya algo
+                let v: int32 = queue.take();             // it waits until there is something
                 if (v < 0) { break; }
                 total.add(v as int64);
             }
@@ -1904,25 +1907,25 @@ function main(): int32 {
 }
 ```
 
-Salida: `sum 55`
+Output: `sum 55`
 
-- **Se lee en la firma:** "take espera hasta que haya algo o esté cerrada". Quien lee el método sabe que
-  esa llamada puede quedarse esperando.
-- **Nadie avisa a mano.** Cuando termina cualquier método del objeto (`put`, `close`...), quienes
-  esperan vuelven a mirar su condición. No hay `notify` que olvidar.
-- **El cuerpo empieza sabiendo que la condición se cumple**, con el candado tomado: nada la cambia antes
-  de la primera línea.
-- **La condición puede usar los parámetros**: `function serve(ticket: int32): int32 wait until (self.now >=
-  ticket)` deja pasar a cada uno en su turno.
-- **Solo en métodos de una clase `synchronized`**, porque son los únicos cambios que el objeto puede ver.
-- **Se escribe en dos palabras**, como `released by`: las cláusulas que describen una declaración se leen
-  como frase. Las palabras clave que empiezan algo van en una sola pieza (`c_include`, `c_code`).
-- **Varias condiciones a la vez:** una cola con capacidad limitada pone `wait until (self.items.length < 4)`
-  en `put` y `wait until (self.items.length > 0)` en `take`, y cada lado espera lo suyo.
+- **It is read in the signature:** "take waits until there is something or it is closed". Whoever
+  reads the method knows that the call can stay waiting.
+- **Nobody notifies by hand.** When any method of the object ends (`put`, `close`...), the ones
+  waiting look at their condition again. There is no `notify` to forget.
+- **The body starts knowing that the condition holds**, with the lock taken: nothing changes it before
+  the first line.
+- **The condition can use the parameters**: `function serve(ticket: int32): int32 wait until (self.now >=
+  ticket)` lets each one through on its turn.
+- **Only in methods of a `synchronized` class**, because they are the only changes the object can see.
+- **It is written in two words**, like `released by`: the clauses that describe a declaration read
+  like a phrase. The keywords that start something go in a single piece (`c_include`, `c_code`).
+- **Several conditions at once:** a queue with a limited capacity puts `wait until (self.items.length < 4)`
+  on `put` and `wait until (self.items.length > 0)` on `take`, and each side waits for its own.
 
-### Un objeto como trabajo: `Runnable`
+### An object as the work: `Runnable`
 
-En lugar de una lambda, `run` puede ser un objeto `synchronized` que implemente `Runnable`
+Instead of a lambda, `run` can be a `synchronized` object that implements `Runnable`
 (`interface Runnable { function run(): void; }`):
 
 ```actionscript
@@ -1942,25 +1945,25 @@ function main(): int32 {
 }
 ```
 
-Salida: `true`
+Output: `true`
 
-### Funciones para varios hilos: `thread safe`
+### Functions for several threads: `thread safe`
 
-Una función que otros hilos van a llamar, a veces varios a la vez, se marca con **`thread safe`** al final
-de su tipo. La escribe quien diseña la API (un servidor, un grupo de hilos); quien la usa escribe una
-lambda normal:
+A function that other threads will call, sometimes several at the same time, is marked with
+**`thread safe`** at the end of its type. Whoever designs the API (a server, a pool of threads)
+writes it; whoever uses it writes a normal lambda:
 
 ```actionscript
 class Pool {
     let threads: int32 = 4;
-    let work: (int32) -> void thread safe;        // los hilos del Pool la llaman a la vez
+    let work: (int32) -> void thread safe;        // the Pool's threads call it at the same time
     ...
 }
 
 let total: Total = {};                             // synchronized
 let names: String[*] = [];
 
-let pool: Pool = { work: (id: int32) -> { total.add(id as int64); } };     // bien
+let pool: Pool = { work: (id: int32) -> { total.add(id as int64); } };     // fine
 let bad: Pool = { work: (id: int32) -> { names.push("x"); } };              // error
 ```
 
@@ -1968,22 +1971,23 @@ let bad: Pool = { work: (id: int32) -> { names.push("x"); } };              // e
 Semantic Error [src/main.lar:9]: This 'thread safe' lambda uses 'names' (String[*]), which other threads could change at the same time. ...
 ```
 
-- **Una lambda dada donde se espera una función `thread safe` se comprueba como el `run` de un `Thread`**:
-  solo usa valores, objetos de clases `synchronized` y otras funciones `thread safe`, y las funciones que
-  llama no cambian globales. Sus capturas no cambian (como en toda lambda), así que varios hilos pueden
-  ejecutarla a la vez.
-- **Un valor `thread safe` se puede compartir entre hilos**: un `Thread` lo puede usar y un método
-  `synchronized` lo puede recibir. Así se escriben en Larimar normal los servidores de `std.net`.
-- **Una función `thread safe` sirve donde se espera una normal**, pero no al revés: una variable con una
-  lambda normal no se puede dar donde se pide `thread safe` (solo una lambda escrita ahí, que se comprueba).
-- Son dos palabras, como `wait until`, y ninguna está reservada. Con un tipo función dentro de otro, va al
-  más cercano a su izquierda: en `(A) -> (B) -> C thread safe` lo es `(B) -> C`; para el de fuera,
-  paréntesis: `((A) -> (B) -> C) thread safe`.
+- **A lambda given where a `thread safe` function is expected is checked like the `run` of a `Thread`**:
+  it only uses values, objects of `synchronized` classes and other `thread safe` functions, and the
+  functions it calls do not change globals. Its captures do not change (as in every lambda), so
+  several threads can run it at the same time.
+- **A `thread safe` value can be shared between threads**: a `Thread` can use it and a `synchronized`
+  method can receive it. That is how the servers of `std.net` are written in plain Larimar.
+- **A `thread safe` function works where a plain one is expected**, but not the other way around: a
+  variable with a plain lambda cannot be given where `thread safe` is asked for (only a lambda written
+  there, which is checked).
+- It is two words, like `wait until`, and neither is reserved. With a function type inside another,
+  it goes to the nearest one on its left: in `(A) -> (B) -> C thread safe` it is `(B) -> C`; for the
+  outer one, parentheses: `((A) -> (B) -> C) thread safe`.
 
-`synchronized` y `thread safe` son cosas distintas: una clase `synchronized` es un objeto con candado; una
-función `thread safe` no necesita candado porque solo toca cosas que ya son seguras.
+`synchronized` and `thread safe` are different things: a `synchronized` class is an object with a
+lock; a `thread safe` function needs no lock because it only touches things that are already safe.
 
-### Lo que el compilador rechaza
+### What the compiler rejects
 
 ```actionscript
 let hits: int32 = 0;
@@ -2002,22 +2006,22 @@ Semantic Error [src/main.lar:7]: This thread uses 'box' (Box), which could chang
 Semantic Error [src/main.lar:7]: This thread can reach global 'hits' (src/main.lar:7), which can change while threads use it. Keep shared state in an object of a synchronized class.
 ```
 
-La comprobación sigue las funciones que llama el hilo: si alguna, por profunda que esté, cambia una
-variable global o usa una memoria global, el error lo dice. Las globales que nunca cambian (una
-configuración, un texto) sí se pueden leer.
+The check follows the functions the thread calls: if any of them, however deep, changes a global
+variable or uses a global memory, the error says so. Globals that never change (a configuration, a
+text) can be read.
 
-Entre hilos se comparte solo **la memoria por defecto**, que tiene su propio candado: crear algo
-`in default` desde varios hilos es seguro. Las demás memorias son de un solo hilo.
+Between threads only **the default memory** is shared, and it has its own lock: creating something
+`in default` from several threads is safe. The other memories belong to a single thread.
 
-Lo que esto **no** evita son los bloqueos mutuos: dos objetos `synchronized` que se llaman entre sí en
-orden contrario pueden quedarse esperando para siempre. Ningún lenguaje con candados lo impide del todo.
+What this does **not** prevent are deadlocks: two `synchronized` objects that call each other in
+opposite order can stay waiting forever. No language with locks prevents it completely.
 
-Por dentro, Larimar usa los hilos del sistema: POSIX (`pthread`) en Linux y macOS, y la API de
-Windows en Windows. `larimar build` añade lo necesario para compilar.
+Inside, Larimar uses the threads of the system: POSIX (`pthread`) on Linux and macOS, and the Windows
+API on Windows. `larimar build` adds what is needed to compile.
 
 ---
 
-## 23. Llamar a C
+## 23. Calling C
 
 ```actionscript
 c_include "<stdio.h>";
@@ -2032,66 +2036,66 @@ function main(): int32 {
 }
 ```
 
-Salida: `square root of 2 = 1.414214`
+Output: `square root of 2 = 1.414214`
 
-Con `<math.h>`, en algunos sistemas hay que enlazar la biblioteca matemática: `libraries = ["m"]`
-en el `larimar.toml`.
+With `<math.h>`, on some systems the math library has to be linked: `libraries = ["m"]` in the
+`larimar.toml`.
 
-Una biblioteca propia se declara igual. Por ejemplo, para una de ventanas:
+A library of your own is declared the same way. For example, for one of windows:
 
 ```actionscript
 c_include "windows_lib.h";
 
-extern type Window;                                      // un puntero opaco de C
+extern type Window;                                      // an opaque C pointer
 extern function create_window(title: String): Window;
 extern function close_window(w: Window): void;
 ```
 
-- `c_include` añade un `#include` al C generado (dentro de `#when unix` ... `#end`, solo en ese sistema:
-  ver [Cada sistema lo suyo: `#when`](#cada-sistema-lo-suyo-when)).
-- `extern function` declara una función de C. Sus parámetros solo pueden ser números, `bool`, `String`
-  (llega como `const char*`), tipos `extern` (también opcionales, `T?`, que en C son un puntero que puede
-  ser `NULL`), structs de C y punteros de C (`T*`, ver [Punteros de C](#punteros-de-c-t-y-)). `...` permite
-  argumentos variables, como en `printf`.
-- Una función de C puede devolver `String?`: `NULL` llega como `null` (`getenv`).
-- Si el nombre de C choca con uno de Larimar, la función se declara con otro y se dice el de C:
-  `extern function cExit(code: int32): void = c "exit";`.
-- Un **`T[]` de números o `bool`** (`byte[]`, `int32[]`, `float64[]`...) llega a C como **dos argumentos**:
-  un puntero a los elementos y cuántos son. C puede leerlos y escribir en ellos, así que es la forma de que
-  C llene un búfer de Larimar (leer de un archivo o de un socket) sin copiar nada:
+- `c_include` adds an `#include` to the generated C (inside `#when unix` ... `#end`, only on that
+  system: see [Each system its own: `#when`](#each-system-its-own-when)).
+- `extern function` declares a C function. Its parameters can only be numbers, `bool`, `String`
+  (it arrives as `const char*`), `extern` types (optional ones too, `T?`, which in C are a pointer that
+  can be `NULL`), C structs and C pointers (`T*`, see [C pointers](#c-pointers-t-and-)). `...` allows
+  variable arguments, as in `printf`.
+- A C function can return `String?`: `NULL` arrives as `null` (`getenv`).
+- If the C name clashes with a Larimar one, the function is declared with another name and the C one
+  is given: `extern function cExit(code: int32): void = c "exit";`.
+- A **`T[]` of numbers or `bool`** (`byte[]`, `int32[]`, `float64[]`...) arrives in C as **two
+  arguments**: a pointer to the elements and how many there are. C can read them and write to them, so
+  it is the way for C to fill a Larimar buffer (reading from a file or a socket) without copying anything:
 
   ```actionscript
   c_code {
-      static int32_t fill(uint8_t* items, int32_t length) { /* escribe en items[0..length) */ return length; }
+      static int32_t fill(uint8_t* items, int32_t length) { /* writes to items[0..length) */ return length; }
   }
-  extern function fill(buffer: byte[]): int32;      // en C: fill(uint8_t* items, int32_t length)
+  extern function fill(buffer: byte[]): int32;      // in C: fill(uint8_t* items, int32_t length)
 
   let buf: byte[*] = buffer(4096);
-  let n: int32 = fill(buf);                          // una lista, un T[N] o un T[] valen
+  let n: int32 = fill(buf);                          // a list, a T[N] or a T[] work
   ```
-- Si el archivo no tiene ningún `c_include`, el transpilador escribe él mismo el prototipo de C de cada
-  `extern function`. Es lo que hace falta para funciones propias escritas en un `.c` aparte (ver `sources`
-  en el [apartado 26](#26-proyectos-larimartoml-y-larimar-build)). Si la función viene de una cabecera,
-  incluye la cabecera.
-- Una función externa que devuelve `String` debe devolver un texto terminado en cero que siga existiendo:
-  uno estático, o uno creado en una memoria que recibe (ver más abajo).
-- `extern type` declara un tipo que viene de C: opaco, un tipo de C concreto, un struct de C o un puntero a
-  función (ver [Tipos de C](#tipos-de-c-extern-type) más abajo).
-- En `std.lang`, `native type` declara métodos de un tipo primitivo del lenguaje. Un `native function` sin cuerpo
-    declara una operación intrínseca; con `= expresión;` define el método usando una expresión Larimar, a menudo
-    una llamada `extern`. En una clase también se puede escribir `native function ... = expresión;`.
-- `native operator []` declara la indexación intrínseca. `in self` en el retorno indica que el valor devuelto
-    es una vista ligada a la vida del receptor. Los inicializadores de campos de clase se evalúan por cada objeto,
-    dentro de la memoria de ese objeto.
-- En un módulo, el nombre de C no cambia: `public extern function Beep(...)` en el módulo `win` se usa
-  como `win.Beep(...)` y llama a `Beep` de C.
+- If the file has no `c_include`, the transpiler writes the C prototype of each `extern function`
+  itself. That is what is needed for functions of your own written in a separate `.c` (see `sources`
+  in [section 26](#26-projects-larimartoml-and-larimar-build)). If the function comes from a header,
+  include the header.
+- An external function that returns `String` must return a zero-terminated text that keeps existing:
+  a static one, or one created in a memory it receives (see below).
+- `extern type` declares a type that comes from C: opaque, a concrete C type, a C struct or a pointer
+  to a function (see [C types](#c-types-extern-type) below).
+- In `std.lang`, `native type` declares methods of a primitive type of the language. A `native function`
+  without a body declares an intrinsic operation; with `= expression;` it defines the method using a
+  Larimar expression, often an `extern` call. In a class you can also write `native function ... = expression;`.
+- `native operator []` declares the intrinsic indexing. `in self` in the return says that the returned
+  value is a view tied to the life of the receiver. The initializers of class fields are evaluated for
+  each object, inside the memory of that object.
+- In a module, the C name does not change: `public extern function Beep(...)` in the module `win` is
+  used as `win.Beep(...)` and calls C's `Beep`.
 
-### C en el mismo archivo: `c_code`
+### C in the same file: `c_code`
 
-Casi todo lo de C se usa directamente, con declaraciones: funciones, constantes, variables, structs,
-punteros y recursos (secciones siguientes). Para lo que aun así conviene escribir en C (un algoritmo, una
-biblioteca con callbacks, un bloque de Apple), se escribe una función en C dentro del propio archivo y se
-declara con `extern function`:
+Almost everything from C is used directly, with declarations: functions, constants, variables,
+structs, pointers and resources (the following sections). For what is still better written in C (an
+algorithm, a library with callbacks, an Apple block), a C function is written inside the file itself
+and declared with `extern function`:
 
 ```actionscript
 c_code {
@@ -2113,9 +2117,9 @@ function main(): int32 {
 }
 ```
 
-Salida: `35`
+Output: `35`
 
-Por ejemplo, una API de tipo primitivo puede mezclar intrínsecos, métodos implementados en Larimar y llamadas C:
+For example, the API of a primitive type can mix intrinsics, methods implemented in Larimar and C calls:
 
 ```actionscript
 public native type String {
@@ -2126,7 +2130,7 @@ public native type String {
 }
 ```
 
-Una función nativa con implementación delega en una expresión Larimar; esa expresión puede llamar a una función C:
+A native function with an implementation delegates to a Larimar expression; that expression can call a C function:
 
 ```actionscript
 public class StringBuilder {
@@ -2136,30 +2140,30 @@ public class StringBuilder {
 }
 ```
 
-`native type` solo puede nombrar tipos primitivos ya conocidos por el compilador. De los bloques `c_code`
-de la biblioteca estándar solo llega al C lo que se usa: cada función, tipo o variable de C se queda si algo
-que el programa usa la nombra. El `c_code` del propio programa, en cambio, se copia entero.
+`native type` can only name primitive types the compiler already knows. From the `c_code` blocks of the
+standard library only what is used reaches the C: each C function, type or variable stays if something
+the program uses names it. The program's own `c_code`, on the other hand, is copied whole.
 
-Así está escrito `String`: el compilador solo conoce su núcleo (`length`, `[]`, `substring`, `bytes`,
-`split` y `lines`, que son vistas del texto), y todo lo demás (`indexOf`, `replace`, `toUpperCase`,
-`padStart`, `toInt`, `codePoints`...) está escrito en Larimar en `std/lang.lar`, con un `c_code` pequeño
-solo para lo que necesita C (`strtod`, para `toFloat`).
+That is how `String` is written: the compiler only knows its core (`length`, `[]`, `substring`,
+`bytes`, `split` and `lines`, which are views of the text), and everything else (`indexOf`, `replace`,
+`toUpperCase`, `padStart`, `toInt`, `codePoints`...) is written in Larimar in `std/lang.lar`, with a
+small `c_code` only for what needs C (`strtod`, for `toFloat`).
 
-- El contenido se copia tal cual al C generado, después de las cabeceras y antes del programa.
-- **Las puertas entre los dos lenguajes son `extern function` (de C a Larimar) y `export function` (de
-  Larimar a C)**, con sus tipos comprobados. El C no debe usar las variables ni los tipos que genera
-  Larimar, porque sus nombres pueden cambiar.
-- Dentro de `c_code` no hay garantías: el C puede hacer cualquier cosa. Conviene que sea poco y simple.
-- Si el archivo tiene `c_code`, Larimar no escribe prototipos para sus `extern function`: se supone que
-  el bloque los define o incluye.
+- The content is copied as it is to the generated C, after the headers and before the program.
+- **The doors between the two languages are `extern function` (from C to Larimar) and `export function`
+  (from Larimar to C)**, with their types checked. The C must not use the variables or the types that
+  Larimar generates, because their names can change.
+- Inside `c_code` there are no guarantees: the C can do anything. It is best kept small and simple.
+- If the file has `c_code`, Larimar writes no prototypes for its `extern function`s: the block is
+  assumed to define or include them.
 
-### Pasar una memoria a C
+### Passing a memory to C
 
-Una función de C puede recibir una memoria de Larimar (`m: byte[*]` en la declaración) y crear cosas en
-ella. Cuando **la memoria es su primer parámetro**, la llamada no la escribe: C recibe la memoria de la
-llamada, la misma que recibiría una función de Larimar, así que lo que devuelve vive donde diga quien
-llama (su bloque, la lista donde se añade, o la memoria que se escriba con `in`). Es la forma correcta de
-que C devuelva texto:
+A C function can receive a Larimar memory (`m: byte[*]` in the declaration) and create things in it.
+When **the memory is its first parameter**, the call does not write it: C receives the memory of the
+call, the same one a Larimar function would receive, so what it returns lives where the caller says
+(its block, the list it is added to, or the memory written with `in`). It is the right way for C to
+return text:
 
 ```actionscript
 c_code {
@@ -2167,7 +2171,7 @@ c_code {
 
     static const char* shout(RtMem* m, const char* text) {
         size_t n = strlen(text);
-        char* out = (char*)rt_mem_alloc(m, n + 2, 0);     /* memoria a cero: el texto termina solo */
+        char* out = (char*)rt_mem_alloc(m, n + 2, 0);     /* zeroed memory: the text ends by itself */
         for (size_t i = 0; i < n; i++) out[i] = (char)toupper((unsigned char)text[i]);
         out[n] = '!';
         return out;
@@ -2177,26 +2181,26 @@ c_code {
 extern function shout(m: byte[*], text: String): String;
 
 function main(): int32 {
-    println(shout("hello larimar"));                      // en la memoria temporal de la instrucción
+    println(shout("hello larimar"));                      // in the temporary memory of the statement
     let memory: byte[*] = [] in heap;
-    let kept: String = shout("kept") in memory;           // en una memoria propia
+    let kept: String = shout("kept") in memory;           // in a memory of its own
     println(kept);
     return 0;
 }
 ```
 
-Salida:
+Output:
 ```
 HELLO LARIMAR!
 KEPT!
 ```
 
-En C, una memoria llega como `RtMem*`, y `rt_mem_alloc(m, bytes, 0)` reserva espacio dentro de ella
-(con los bytes a cero). Esa es toda la interfaz que el C necesita conocer. La regla es una: **el C usa la
-memoria solo durante la llamada**. Si guardara el puntero para después, la memoria podría liberarse antes.
-Una memoria en otro parámetro (no el primero) se pasa escrita, como cualquier argumento.
+In C, a memory arrives as `RtMem*`, and `rt_mem_alloc(m, bytes, 0)` reserves space inside it (with the
+bytes set to zero). That is the whole interface the C needs to know. The rule is one: **the C uses the
+memory only during the call**. If it kept the pointer for later, the memory could be freed before.
+A memory in another parameter (not the first) is passed written, like any argument.
 
-Así queda el ejemplo de Windows que antes necesitaba un archivo `.c` aparte:
+This is how the Windows example that used to need a separate `.c` file looks:
 
 ```actionscript
 c_code {
@@ -2212,16 +2216,16 @@ c_code {
 extern function computer_name(m: byte[*]): String;
 ```
 
-### Tipos de C: `extern type`
+### C types: `extern type`
 
-Todo lo que viene de C se declara con `extern type`. Después del `=` va su forma:
+Everything that comes from C is declared with `extern type`. After the `=` goes its form:
 
-| Declaración | Qué es | En C |
+| Declaration | What it is | In C |
 |---|---|---|
-| `extern type Handle;` | un puntero opaco: se recibe, se guarda y se pasa, sin mirar dentro | `void*` |
-| `extern type File = c "FILE*";` | un tipo de C concreto, escrito tal cual | `FILE*` |
-| `extern type Point = struct { ... };` | un struct de C, por valor, con los campos que se usan | el struct de C |
-| `extern type Op = (int32, int32) -> int32;` | un puntero a una función de C | `int32_t (*)(int32_t, int32_t)` |
+| `extern type Handle;` | an opaque pointer: it is received, kept and passed, without looking inside | `void*` |
+| `extern type File = c "FILE*";` | a concrete C type, written as it is | `FILE*` |
+| `extern type Point = struct { ... };` | a C struct, by value, with the fields that are used | the C struct |
+| `extern type Op = (int32, int32) -> int32;` | a pointer to a C function | `int32_t (*)(int32_t, int32_t)` |
 
 ```actionscript
 c_code {
@@ -2237,8 +2241,8 @@ c_code {
     static void log_line(FILE* f, const char* text) { fprintf(f, "%s\n", text); }
 }
 
-extern type File = c "FILE*";                                      // un tipo de C concreto
-extern type Point = struct { let x: float32; let y: float32; };    // un struct de C, por valor
+extern type File = c "FILE*";                                      // a concrete C type
+extern type Point = struct { let x: float32; let y: float32; };    // a C struct, by value
 
 extern function point_mid(a: Point, b: Point): Point;
 extern function log_file(): File;
@@ -2254,36 +2258,37 @@ function main(): int32 {
 }
 ```
 
-Salida: `(2.0, 1.0)`, y `listo` en la salida de errores.
+Output: `(2.0, 1.0)`, and `listo` on the error output.
 
-- **Cada `extern type` es un tipo distinto en Larimar**, aunque en C sean lo mismo: no se puede pasar un
-  `File` donde se espera un `Handle`.
-- **`c "..."`** es el tipo exacto de C. Así el compilador de C también comprueba los tipos: con `void*`
-  no notaría que se pasa un `FILE*` donde la biblioteca espera un `sqlite3*`.
-- **Un struct de C** se usa como cualquier struct de Larimar: literales (`{ x: 1, y: 2 }` o
-  `Point { x: 1 }`), campos con valor por defecto, acceso a campos, copia por valor, listas (`Point[*]`).
-  - La definición la pone C (el `.h` o el `c_code`); Larimar no la escribe. Así el orden y la alineación
-    de los campos siempre son los de C.
-  - Basta con declarar los campos que se usan: si el struct de C tiene diez y te interesan tres, declaras tres.
-  - Sus campos solo pueden ser números, `bool`, tipos `extern`, punteros (`T*`), otros structs de C y
-    `String`. Un campo `String` es un texto de C (`char*` o `char[N]`) que **se lee, no se asigna**, y es
-    una vista del texto de C: si C lo cambia o lo libera, la vista también. Para guardarlo, `.clone()`.
-  - Los campos que no se dan en un literal valen cero, como en C: `{ ai_socktype: 1 }`.
-  - No tiene métodos ni operadores.
-  - Si el nombre en C es otro, se escribe tras `struct`: `extern type Rect = struct "struct rect_t" { ... };`.
+- **Each `extern type` is a different type in Larimar**, even if in C they are the same: a `File`
+  cannot be passed where a `Handle` is expected.
+- **`c "..."`** is the exact C type. That way the C compiler also checks the types: with `void*` it
+  would not notice that a `FILE*` is passed where the library expects a `sqlite3*`.
+- **A C struct** is used like any Larimar struct: literals (`{ x: 1, y: 2 }` or `Point { x: 1 }`),
+  fields with a default value, field access, copy by value, lists (`Point[*]`).
+  - C provides the definition (the `.h` or the `c_code`); Larimar does not write it. That way the order
+    and the alignment of the fields are always C's.
+  - It is enough to declare the fields that are used: if the C struct has ten and you care about three,
+    you declare three.
+  - Its fields can only be numbers, `bool`, `extern` types, pointers (`T*`), other C structs and
+    `String`. A `String` field is a C text (`char*` or `char[N]`) that **is read, not assigned**, and it
+    is a view of the C text: if C changes it or frees it, the view does too. To keep it, `.clone()`.
+  - The fields not given in a literal are zero, as in C: `{ ai_socktype: 1 }`.
+  - It has no methods or operators.
+  - If the name in C is different, it is written after `struct`: `extern type Rect = struct "struct rect_t" { ... };`.
 
-### Constantes y variables de C: `extern const`, `extern let`
+### C constants and variables: `extern const`, `extern let`
 
-Las constantes, las macros y las variables globales de C se usan por su nombre, declarándolas con su tipo:
+C constants, macros and global variables are used by their name, declaring them with their type:
 
 ```actionscript
 c_include "<errno.h>";
 c_include "<limits.h>";
 
-extern const INT_MAX: int32;                                       // una macro de C
+extern const INT_MAX: int32;                                       // a C macro
 extern const ENOENT: int32;
-extern const POINTER_SIZE: int32 = c "(int)sizeof(void*)";         // una expresión de C
-extern let errno: int32;                                           // una variable de C
+extern const POINTER_SIZE: int32 = c "(int)sizeof(void*)";         // a C expression
+extern let errno: int32;                                           // a C variable
 
 function main(): int32 {
     println("${INT_MAX} ${POINTER_SIZE} ${errno == ENOENT}");
@@ -2291,23 +2296,22 @@ function main(): int32 {
 }
 ```
 
-- **`extern const`** no cambia; **`extern let`** se puede leer y asignar (`errno = 0;`).
-- Larimar escribe en el C el nombre tal cual, así que valen macros, constantes de `enum` y variables, y
-  también macros que se expanden en algo más complejo (`errno`, `stdout`).
-- **`= c "..."`** da una expresión de C para lo que no tiene nombre: `sizeof`, un cast, una macro con
-  argumentos.
-- Una `extern const` puede ser un `String` (una macro de texto); una `extern let`, no.
+- **`extern const`** does not change; **`extern let`** can be read and assigned (`errno = 0;`).
+- Larimar writes the name as it is in the C, so macros, `enum` constants and variables work, and also
+  macros that expand into something more complex (`errno`, `stdout`).
+- **`= c "..."`** gives a C expression for what has no name: `sizeof`, a cast, a macro with arguments.
+- An `extern const` can be a `String` (a text macro); an `extern let` cannot.
 
-### Punteros de C: `T*` y `&`
+### C pointers: `T*` and `&`
 
-Muchas funciones de C piden o devuelven punteros: una lista enlazada (`getaddrinfo`), un resultado que se
-escribe en una variable (`accept(fd, &addr, &len)`), un búfer. **`T*`** es un puntero de C a un número, a
-`bool`, a un struct de C, a un tipo `extern` o a otro puntero:
+Many C functions ask for or return pointers: a linked list (`getaddrinfo`), a result written into a
+variable (`accept(fd, &addr, &len)`), a buffer. **`T*`** is a C pointer to a number, to `bool`, to a C
+struct, to an `extern` type or to another pointer:
 
 ```actionscript
 c_code {
     typedef struct Node { int value; struct Node* next; const char* name; } Node;
-    static Node nodes[3] = { { 10, &nodes[1], "uno" }, { 20, &nodes[2], "dos" }, { 30, NULL, "tres" } };
+    static Node nodes[3] = { { 10, &nodes[1], "one" }, { 20, &nodes[2], "two" }, { 30, NULL, "three" } };
     static Node* first_node(void) { return &nodes[0]; }
     static void two_results(int* a, int* b) { *a = 7; *b = 42; }
     static int sum_bytes(const unsigned char* p, int n) { int s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }
@@ -2316,7 +2320,7 @@ c_code {
 extern type Node = struct "Node" {
     let value: int32;
     let next: Node*;
-    let name: String;                       // un texto de C: se lee
+    let name: String;                       // a C text: it is read
 };
 extern function first_node(): Node*;
 extern function two_results(a: int32*, b: int32*): void;
@@ -2325,37 +2329,37 @@ extern function sum_bytes(p: byte*, n: int32): int32;
 function main(): int32 {
     let sum: int32 = 0;
     let p: Node* = first_node();
-    while (p != null) {                     // un puntero puede ser null, como en C
-        sum += p.value;                     // p.value es p->value
+    while (p != null) {                     // a pointer can be null, as in C
+        sum += p.value;                     // p.value is p->value
         p = p.next;
     }
     let a: int32 = 0;
     let b: int32 = 0;
-    two_results(&a, &b);                    // C escribe en a y en b
+    two_results(&a, &b);                    // C writes to a and to b
     let bytes: byte[4] = [1, 2, 3, 4];
     println("${sum} ${a} ${b} ${sum_bytes(bytes, bytes.length)}");
     return 0;
 }
 ```
 
-Salida: `60 7 42 10`
+Output: `60 7 42 10`
 
-- **`p.campo`** lee o escribe el campo del struct al que apunta (`p->campo` en C). Si `p` es `null`, el
-  programa se detiene con un error en esa línea, en vez de fallar en C.
-- **`&x`** da la dirección de una variable para que C la lea o escriba. **Solo vale como argumento de una
-  función de C** (`f(&x)`), así que el puntero nunca vive más que la llamada; `x` es una variable cuyo tipo
-  admite punteros. `&x as Otro*` también vale ahí (C pide a veces otro tipo de puntero).
-- **Un arreglo donde C pide `T*`** llega como el puntero a sus elementos: `fread(buffer, 1, buffer.length, f)`.
-- **`as`** convierte entre punteros (un `sockaddr_in*` como `sockaddr*`), y entre un puntero y un tipo
-  `extern` opaco (`void*`).
-- Un puntero no apunta a memoria de Larimar (`&x` solo existe durante la llamada), así que no entra en la
-  regla de vida: lo que hay al otro lado es de C, y C dice cuánto dura.
+- **`p.field`** reads or writes the field of the struct it points to (`p->field` in C). If `p` is
+  `null`, the program stops with an error on that line, instead of failing in C.
+- **`&x`** gives the address of a variable for C to read or write. **It is only allowed as an argument
+  of a C function** (`f(&x)`), so the pointer never lives longer than the call; `x` is a variable whose
+  type allows pointers. `&x as Other*` also works there (C sometimes asks for another pointer type).
+- **An array where C asks for `T*`** arrives as the pointer to its elements: `fread(buffer, 1, buffer.length, f)`.
+- **`as`** converts between pointers (a `sockaddr_in*` as a `sockaddr*`), and between a pointer and an
+  opaque `extern` type (`void*`).
+- A pointer does not point to Larimar memory (`&x` only exists during the call), so it is not part of
+  the lifetime rule: what is on the other side belongs to C, and C says how long it lasts.
 
-### Recursos: `released by`
+### Resources: `released by`
 
-Algunas cosas de C hay que soltarlas: un archivo (`fclose`), un socket (`close`), una ventana
-(`SDL_DestroyWindow`), una base de datos (`sqlite3_close`). Se declara una vez, en su `extern type`, con
-qué función se suelta:
+Some things from C have to be let go: a file (`fclose`), a socket (`close`), a window
+(`SDL_DestroyWindow`), a database (`sqlite3_close`). It is declared once, in its `extern type`, with
+the function that lets it go:
 
 ```actionscript
 c_include "<stdio.h>";
@@ -2369,30 +2373,31 @@ function main(): int32 {
     for (i in 0..1000) {
         let f: CFile? = fopen("log.txt", "a");
         if (f == null) { return 1; }
-        fputs("una línea\n", f!);
-    }   // cada vuelta: su memoria se libera, y con ella el archivo (fclose)
+        fputs("a line\n", f!);
+    }   // each turn: its memory is freed, and with it the file (fclose)
     let g: CFile? = fopen("log.txt", "a");
-    release(g);                            // antes de tiempo, si hace falta
+    release(g);                            // ahead of time, if needed
     return 0;
 }
 ```
 
-- **Un recurso vive en una memoria, como cualquier dato**: donde se guarda lo que devuelve la función de C
-  (el bloque de un `let`, el objeto de un campo, `in scratch`...). **Cuando esa memoria se libera, se suelta.**
-  Lo que se ve en el código es dónde vive, igual que con un `String`.
-- **`release(x)`** lo suelta ya. Soltarlo dos veces no hace nada; usarlo después detiene el programa con
-  `a released CFile was used`.
-- **La función de C que lo crea devuelve `T?`**, porque puede fallar: un puntero `NULL` (o `-1`, como
-  `INVALID_HANDLE_VALUE`) o un número negativo (un descriptor `-1`) llega como `null`.
-- **La función que lo suelta recibe exactamente un `T`**, y solo `release()` puede llamarla: llamarla a mano
-  lo soltaría dos veces. Puede ser una función de C o una de Larimar (para soltar en varios pasos).
-- Un objeto que guarda un recurso **no se puede clonar** (se soltaría dos veces).
-- Si la función que lo suelta existe en un solo sistema (`closedir` en Unix), el recurso solo existe allí.
+- **A resource lives in a memory, like any data**: where what the C function returns is kept (the block
+  of a `let`, the object of a field, `in scratch`...). **When that memory is freed, it is let go.** What
+  is seen in the code is where it lives, just like with a `String`.
+- **`release(x)`** lets it go now. Letting it go twice does nothing; using it afterwards stops the
+  program with `a released CFile was used`.
+- **The C function that creates it returns `T?`**, because it can fail: a `NULL` pointer (or `-1`, like
+  `INVALID_HANDLE_VALUE`) or a negative number (a `-1` descriptor) arrives as `null`.
+- **The function that lets it go receives exactly one `T`**, and only `release()` can call it: calling
+  it by hand would let it go twice. It can be a C function or a Larimar one (to let go in several steps).
+- An object that keeps a resource **cannot be cloned** (it would be let go twice).
+- If the function that lets it go exists on a single system (`closedir` on Unix), the resource only exists there.
 
-### Cada sistema lo suyo: `#when`
+### Each system its own: `#when`
 
-Lo que cambia entre sistemas se escribe entre **`#when`** y **`#end`**, que eligen al compilar el C
-(`#if`), no al ejecutar. Empiezan con `#` para que se vean distintos de la lógica del programa:
+What changes between systems is written between **`#when`** and **`#end`**, which choose when the C is
+compiled (`#if`), not when it runs. They start with `#` so that they look different from the logic of
+the program:
 
 ```actionscript
 c_include "<errno.h>";
@@ -2422,13 +2427,13 @@ function lastError(): int32 {
 }
 ```
 
-- Los sistemas son **`windows`**, **`macos`**, **`linux`** y **`unix`** (todos menos Windows).
-- **Cada directiva va sola en su línea**: `#when <sistema>`, `#else` y `#end` (detrás solo cabe un
-  comentario). Un `#when` tras otro es la siguiente opción, como el `#elif` de C.
-- **Sin llaves y sin bloque.** Lo de dentro pertenece al bloque de alrededor, como las líneas de un `#if`
-  de C. La sangría no es obligatoria, pero ayuda a leerlo.
-- **`#when`, `#else` y `#end` de una misma elección empiezan en la misma columna.** Un `#when` con más
-  sangría está anidado dentro de una rama:
+- The systems are **`windows`**, **`macos`**, **`linux`** and **`unix`** (all but Windows).
+- **Each directive goes alone on its line**: `#when <system>`, `#else` and `#end` (only a comment fits
+  after them). One `#when` after another is the next option, like C's `#elif`.
+- **No braces and no block.** What is inside belongs to the surrounding block, like the lines of a C
+  `#if`. Indentation is not required, but it helps to read it.
+- **The `#when`, `#else` and `#end` of the same choice start in the same column.** A `#when` with more
+  indentation is nested inside a branch:
 
   ```actionscript
   #when windows
@@ -2437,13 +2442,13 @@ function lastError(): int32 {
       #when macos
           let what: String = "mac";
       #else
-          let what: String = "otro unix";
+          let what: String = "other unix";
       #end
       return what;
   #end
   ```
 
-- **Lo que todas las ramas declaran, con el mismo tipo, sigue existiendo después de `#end`**:
+- **What every branch declares, with the same type, keeps existing after `#end`**:
 
   ```actionscript
   #when windows
@@ -2451,82 +2456,82 @@ function lastError(): int32 {
   #else
       let sep: String = "/";
   #end
-  println(sep);              // sep existe aquí
+  println(sep);              // sep exists here
   ```
 
-  Lo que declara una rama sola es solo de esa rama. Si las ramas no cubren todos los sistemas (sin
-  `#else`), nada de lo que declaran queda después: algún sistema no lo tendría.
-- **Fuera de las funciones**, dentro de `#when` solo van `c_include` y declaraciones `extern`, y `#else`
-  solo sigue a `#when windows` o a `#when unix` (el resto es entonces el otro).
-- **El compilador comprueba todas las ramas**, así que un error del código de Windows se ve también
-  compilando en un Mac. Una rama que nunca se elegiría (`#when macos` tras `#when unix`) es un error.
-- **Lo que solo existe en un sistema se usa dentro de su `#when`**: llamar a `closesocket` fuera de
-  `#when windows` es un error del compilador (*'closesocket' exists only on windows*).
-- **Un tipo puede declararse una vez por sistema** (`Socket` arriba), siempre que cubra todos.
+  What a single branch declares belongs only to that branch. If the branches do not cover every system
+  (without `#else`), nothing they declare remains afterwards: some system would not have it.
+- **Outside functions**, inside `#when` only `c_include` and `extern` declarations go, and `#else`
+  only follows `#when windows` or `#when unix` (the rest is then the other one).
+- **The compiler checks every branch**, so an error in the Windows code is also seen when compiling on
+  a Mac. A branch that would never be chosen (`#when macos` after `#when unix`) is an error.
+- **What only exists on one system is used inside its `#when`**: calling `closesocket` outside
+  `#when windows` is a compiler error (*'closesocket' exists only on windows*).
+- **A type can be declared once per system** (`Socket` above), as long as it covers all of them.
 
-Así está escrita la red de la biblioteca estándar (`std/net.lar`): sockets de Unix y de Windows, sin una
-línea de `c_code`. También los archivos (`std.io.file`, `std.io.files`), la consola y `std.os`.
+That is how the network of the standard library (`std/net.lar`) is written: Unix and Windows sockets,
+in plain Larimar. So are the files (`std.io.file`, `std.io.files`), the console and `std.os`.
 
-### Punteros a funciones de C
+### Pointers to C functions
 
-`extern type Op = (A, B) -> R;` declara el tipo de un puntero a función de C. Un valor de ese tipo se
-pasa a C, se guarda y **se llama como una función**:
+`extern type Op = (A, B) -> R;` declares the type of a pointer to a C function. A value of that type is
+passed to C, kept and **called like a function**:
 
 ```actionscript
 c_code {
     typedef int32_t (*op_fn)(int32_t, int32_t);
 
-    static int32_t sumar(int32_t a, int32_t b) { return a + b; }
+    static int32_t add(int32_t a, int32_t b) { return a + b; }
     static int32_t apply(op_fn f, int32_t a, int32_t b) { return f(a, b); }
 }
 
 extern type Operation = (int32, int32) -> int32;
 
-extern function sumar(a: int32, b: int32): int32;
+extern function add(a: int32, b: int32): int32;
 extern function apply(f: Operation, a: int32, b: int32): int32;
 
-export function restar(a: int32, b: int32): int32 {
+export function subtract(a: int32, b: int32): int32 {
     return a - b;
 }
 
 function main(): int32 {
-    println("${apply(sumar, 10, 3)}");      // una función de C
-    println("${apply(restar, 10, 3)}");     // una función de Larimar, llamada desde C
-    let op: Operation = restar;
-    println("${op(20, 5)}");                // un puntero a función se llama como una función
+    println("${apply(add, 10, 3)}");        // a C function
+    println("${apply(subtract, 10, 3)}");   // a Larimar function, called from C
+    let op: Operation = subtract;
+    println("${op(20, 5)}");                // a function pointer is called like a function
     return 0;
 }
 ```
 
-Salida:
+Output:
 ```
 13
 7
 15
 ```
 
-- Donde se espera un `Operation` vale **una función que exista en C con esa firma exacta**: una
-  `extern function` o una `export function`.
-- **Una lambda no vale**, porque no es una función de C: lleva capturas, y C no sabría qué hacer con ellas.
-  Si C necesita contexto, casi todas las bibliotecas reciben además un `void* data`, que se declara como un
-  tipo extern opcional (ver el ejemplo siguiente).
-- Una función de Larimar normal tampoco vale: el compilador pide marcarla `export`.
-- También pueden venir de C: una función de C que devuelve un `Operation`, o un campo de un struct de C.
-- Los tipos permitidos son los de `extern function`. Un `String` llega a C como `const char*`, y uno que
-  devuelve C se lee igual que en una `extern function`.
+- Where an `Operation` is expected, **a function that exists in C with that exact signature** works:
+  an `extern function` or an `export function`.
+- **A lambda does not work**, because it is not a C function: it carries captures, and C would not know
+  what to do with them. If C needs context, almost every library also receives a `void* data`, which is
+  declared as an optional extern type (see the next example).
+- A plain Larimar function does not work either: the compiler asks to mark it `export`.
+- They can also come from C: a C function that returns an `Operation`, or a field of a C struct.
+- The allowed types are the ones of `extern function`. A `String` arrives in C as `const char*`, and one
+  that C returns is read just like in an `extern function`.
 
-### Que C llame a Larimar: `export function`
+### C calling Larimar: `export function`
 
-`export function` es lo contrario de `extern function`: **lleva una función de Larimar a C**. El
-compilador la genera en C con ese mismo nombre y con tipos de C, así que C puede llamarla, guardarla en un
-puntero o recibirla como callback:
+`export function` is the opposite of `extern function`: **it brings a Larimar function to C**. The
+compiler generates it in C with that same name and with C types, so C can call it, keep it in a pointer
+or receive it as a callback:
 
 ```actionscript
 c_code {
     typedef void (*item_fn)(int32_t index, const char* name, void* data);
 
     static void for_each_name(item_fn f, void* data) {
-        const char* names[] = { "uno", "dos", "tres" };
+        const char* names[] = { "one", "two", "three" };
         for (int32_t i = 0; i < 3; i++) f(i, names[i], data);
     }
 }
@@ -2546,55 +2551,56 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 ```
-0: UNO
-1: DOS
-2: TRES
+0: ONE
+1: TWO
+2: THREE
 ```
 
-Lo que garantiza `export function`:
+What `export function` guarantees:
 
-- **El nombre en C es exactamente el suyo**, también dentro de un módulo: `public export function
-  lm_double(...)` en el módulo `gfx.shapes` sigue llamándose `lm_double` en C.
-- **Firma de C limpia**: sin parámetros ocultos. Números y `bool` tal cual, `String` llega como
-  `const char*` (se convierte a texto de Larimar al entrar), tipos extern como su tipo de C y structs de C
-  por valor.
-- **Cada llamada desde C tiene su propia memoria**, que nace al entrar y muere al volver, como cualquier
-  función. Lo que la función crea no se queda colgando en C.
-- **Un `c_code` puede usarla directamente**. Si su firma solo tiene números, `bool`, `String` y tipos extern
-  opacos, el compilador escribe su prototipo antes de los `c_code`. Si usa structs de C o tipos `c "..."`,
-  que quizá define el propio `c_code`, el prototipo va después, y el `c_code` que la llame debe declararla él mismo.
+- **The name in C is exactly its own**, also inside a module: `public export function lm_double(...)`
+  in the module `gfx.shapes` is still called `lm_double` in C.
+- **A clean C signature**: without hidden parameters. Numbers and `bool` as they are, `String` arrives
+  as `const char*` (it is converted to Larimar text on the way in), extern types as their C type and C
+  structs by value.
+- **Each call from C has its own memory**, which is born on the way in and dies on the way back, like
+  any function. What the function creates is not left hanging in C.
+- **A `c_code` can use it directly**. If its signature only has numbers, `bool`, `String` and opaque
+  extern types, the compiler writes its prototype before the `c_code`s. If it uses C structs or
+  `c "..."` types, which the `c_code` itself might define, the prototype goes after, and the `c_code`
+  that calls it must declare it itself.
 
-Y lo que no admite, porque C no podría manejarlo:
+And what it does not allow, because C could not handle it:
 
-- devolver `String` (C no sabría cuándo liberarlo); se devuelve un número, un tipo extern o un struct de C;
-- `throws`: un error no puede atravesar código C, así que se captura dentro;
-- `in` en los parámetros, memorias (`byte[*]`), clases, listas o `Any`;
+- returning `String` (C would not know when to free it); return a number, an extern type or a C struct;
+- `throws`: an error cannot cross C code, so it is caught inside;
+- `in` in the parameters, memories (`byte[*]`), classes, lists or `Any`;
 - `main`.
 
-Si la biblioteca llama a la función desde otro hilo, el compilador no puede saberlo: las reglas de hilos
-de Larimar no la protegen, igual que pasa dentro de un `c_code`.
+If the library calls the function from another thread, the compiler cannot know it: Larimar's thread
+rules do not protect it, just as happens inside a `c_code`.
 
 ---
 
-## 24. Módulos
+## 24. Modules
 
-Un programa puede repartirse en varios archivos. **Cada archivo es un módulo**, y su nombre sale de
-su ruta dentro de la carpeta del archivo principal:
+A program can be split into several files. **Each file is a module**, and its name comes from its path
+inside the folder of the main file:
 
 ```
 src/
-  main.lar            el archivo principal (tiene main)
-  geo/shapes.lar      el módulo geo.shapes
-  util/text.lar       el módulo util.text
+  main.lar            the main file (it has main)
+  geo/shapes.lar      the module geo.shapes
+  util/text.lar       the module util.text
 ```
 
 ### `public`
 
-Lo que declara un módulo es **privado** salvo que lleve `public` delante. Se puede marcar cualquier
-declaración con nombre: funciones, constantes, variables globales, structs, clases, interfaces, enums y
-declaraciones `extern`.
+What a module declares is **private** unless it has `public` in front. Any declaration with a name can
+be marked: functions, constants, global variables, structs, classes, interfaces, enums and `extern`
+declarations.
 
 ```actionscript
 // src/geo/shapes.lar
@@ -2602,7 +2608,7 @@ public const PI: float64 = 3.14159;
 
 public enum Shape { Circle(radius: float64), Rect(width: float64, height: float64), Empty }
 
-function square(x: float64): float64 { return x * x; }     // privada
+function square(x: float64): float64 { return x * x; }     // private
 
 public function area(s: Shape): float64 {
     return switch (s) {
@@ -2613,22 +2619,22 @@ public function area(s: Shape): float64 {
 }
 ```
 
-`public` se aplica al nombre completo: en una clase pública, sus campos y métodos se ven desde fuera.
-`private` también existe, pero es lo mismo que no poner nada.
+`public` applies to the whole name: in a public class, its fields and methods are seen from outside.
+`private` also exists, but it is the same as writing nothing.
 
 ### `import`
 
-Los `import` van al principio del archivo y tienen tres formas:
+The `import`s go at the start of the file and have three forms:
 
 ```actionscript
-import geo.shapes;                   // los nombres se usan con el prefijo: shapes.area(s)
-import geo.shapes as g;              // con otro prefijo: g.area(s)
-import geo.shapes { Shape, area };   // esos nombres, sin prefijo: area(s)
+import geo.shapes;                   // the names are used with the prefix: shapes.area(s)
+import geo.shapes as g;              // with another prefix: g.area(s)
+import geo.shapes { Shape, area };   // those names, without a prefix: area(s)
 ```
 
-Con el prefijo se accede a todo lo público: funciones (`shapes.area(s)`), constantes (`shapes.PI`),
-tipos (`let s: shapes.Shape`, `shapes.Figure { ... }`, `class Wheel extends shapes.Figure`,
-`catch (shapes.ShapeError e)`) y variantes (`shapes.Shape.Circle { radius: 1.0 }`).
+With the prefix everything public is reached: functions (`shapes.area(s)`), constants (`shapes.PI`),
+types (`let s: shapes.Shape`, `shapes.Figure { ... }`, `class Wheel extends shapes.Figure`,
+`catch (shapes.ShapeError e)`) and variants (`shapes.Shape.Circle { radius: 1.0 }`).
 
 ```actionscript
 import geo.shapes;
@@ -2641,131 +2647,131 @@ function main(): int32 {
 }
 ```
 
-Salida: `area 12.56636, pi 3.14159`
+Output: `area 12.56636, pi 3.14159`
 
-### Reglas
+### Rules
 
-- Una variable local puede llamarse como un módulo o como uno de sus nombres; dentro de su bloque, gana la local.
-- Dos módulos pueden tener nombres iguales sin conflicto: `geo.shapes.square` y `util.text.square` son distintos.
-- Los módulos pueden importarse entre sí en círculo (`a` importa `b` y `b` importa `a`).
-- Las variables globales se inicializan módulo por módulo: primero los importados, al final el archivo principal.
-- **Los módulos no ven el archivo principal.** Nadie puede importarlo; lo compartido va en un módulo.
-- Un mismo archivo se carga una sola vez, aunque lo importen varios módulos.
-- Los nombres no pueden contener `__` (doble guion bajo): el C generado lo usa para separar el
-  módulo del nombre (`geo__shapes__area`).
+- A local variable can be named like a module or like one of its names; inside its block, the local wins.
+- Two modules can have equal names without conflict: `geo.shapes.square` and `util.text.square` are different.
+- Modules can import each other in a circle (`a` imports `b` and `b` imports `a`).
+- Global variables are initialized module by module: first the imported ones, the main file last.
+- **Modules do not see the main file.** Nobody can import it; what is shared goes in a module.
+- The same file is loaded only once, even if several modules import it.
+- Names cannot contain `__` (a double underscore): the generated C uses it to separate the module from
+  the name (`geo__shapes__area`).
 
-Los errores dicen en qué archivo están:
+The errors say which file they are in:
 
 ```
 Module Error [src/main.lar:2]: 'square' is private to module 'geo.shapes'; mark it 'public' there to use it here.
 Semantic Error [src/geo/shapes.lar:14]: Initializer of 'x': expected int32 but got String.
 ```
 
-Y los fallos en tiempo de ejecución también: `panic [src/geo/shapes.lar:9]: index 5 out of range (length 3)`.
+And so do the failures at run time: `panic [src/geo/shapes.lar:9]: index 5 out of range (length 3)`.
 
 ---
 
-## 25. Biblioteca estándar
+## 25. Standard library
 
-La biblioteca estándar son módulos que vienen con Larimar y se importan como cualquier otro:
-`import std.os;`. Están escritos en Larimar, con un poco de C (`c_code`) para hablar con el sistema
-operativo, y viven en la carpeta `std/` junto a la herramienta (o en `$LARIMAR_HOME/std`). Solo lo que se
-importa entra en el programa, y el ejecutable no necesita la carpeta `std` para funcionar.
+The standard library is a set of modules that come with Larimar and are imported like any other:
+`import std.os;`. They are written in Larimar, with a little C (`c_code`) to talk to the operating
+system, and they live in the `std/` folder next to the tool (or in `$LARIMAR_HOME/std`). Only what is
+imported goes into the program, and the executable does not need the `std` folder to work.
 
-| Módulo | Para qué |
+| Module | What for |
 |---|---|
-| `std.lang` | tipos y métodos disponibles en todo programa (`String`, `Any`, `Thread`, `StringBuilder`); se ve sin importarlo |
-| `std.io.files` | archivos y carpetas de una vez, como `Files` de Java |
-| `std.io.file` | un archivo abierto (`File`), para leerlo línea a línea o escribirlo por partes |
-| `std.io.streams` | `InputStream` y `OutputStream`: leer y escribir sin importar de dónde |
-| `std.io.console` | la entrada, la salida y la salida de errores |
-| `std.path` | rutas: carpeta, nombre, extensión, unir, normalizar |
-| `std.os` | el entorno: variables, carpeta actual, ejecutar comandos |
-| `std.text` | clasificar bytes (para lexers y parsers) |
-| `std.text.regex` | expresiones regulares: `Regex`, `Match` (escritas en Larimar, sin bibliotecas de C) |
-| `std.json` | JSON a `Any` y `Any` a JSON |
-| `std.net` | TCP, UDP y TLS de servidor: `TcpSocket`, `TcpListener`, `TcpServer`, `UdpSocket`, `UdpServer`, `TlsServer`, `OpenSslProvider`, `StopSignal` |
-| `std.net.http` | cliente HTTP/1.1 y `https://`: `Client`, `Request`; el cuerpo como texto, JSON o stream |
-| `std.net.http.tls` | `TlsProvider` (la interfaz para conexiones cifradas) y `SystemTls` (el TLS del sistema) |
+| `std.lang` | types and methods available in every program (`String`, `Any`, `Thread`, `StringBuilder`); seen without importing it |
+| `std.io.files` | files and folders all at once, like Java's `Files` |
+| `std.io.file` | an open file (`File`), to read it line by line or write it in parts |
+| `std.io.streams` | `InputStream` and `OutputStream`: reading and writing no matter from where |
+| `std.io.console` | the input, the output and the error output |
+| `std.path` | paths: folder, name, extension, join, normalize |
+| `std.os` | the environment: variables, current folder, running commands |
+| `std.text` | classifying bytes (for lexers and parsers) |
+| `std.text.regex` | regular expressions: `Regex`, `Match` (written in Larimar, without C libraries) |
+| `std.json` | JSON to `Any` and `Any` to JSON |
+| `std.net` | TCP, UDP and server TLS: `TcpSocket`, `TcpListener`, `TcpServer`, `UdpSocket`, `UdpServer`, `TlsServer`, `OpenSslProvider`, `StopSignal` |
+| `std.net.http` | HTTP/1.1 and `https://` client: `Client`, `Request`; the body as text, JSON or a stream |
+| `std.net.http.tls` | `TlsProvider` (the interface for encrypted connections) and `SystemTls` (the system's TLS) |
 
-**`std.lang`** es especial: todo programa ve sus nombres sin escribir `import`, y al C solo llega lo que el
-programa nombra (y lo que eso necesita). Un nombre propio del archivo principal tapa al de `std.lang`.
+**`std.lang`** is special: every program sees its names without writing `import`, and only what the
+program names (and what that needs) reaches the C. A name of the main file itself hides the one of `std.lang`.
 
-### `std.io.files`: archivos y carpetas
+### `std.io.files`: files and folders
 
-Se importa con el nombre de Java: `import std.io.files as Files;`. Ninguna función recibe memorias: lo
-que devuelven (el texto de un archivo, los nombres de una carpeta) vive donde diga quien llama, como lo
-de cualquier función (`Files.readString(path) in memory`, si se quiere elegir). Todo lo que puede fallar lanza
-`IoError` (`NotFound(path)`, `Denied(path)` o `Failed(path)`; `Files.message(e)` lo dice en texto).
+It is imported with Java's name: `import std.io.files as Files;`. No function receives memories: what
+they return (the text of a file, the names in a folder) lives where the caller says, like what any
+function returns (`Files.readString(path) in memory`, if you want to choose). Everything that can fail
+throws `IoError` (`NotFound(path)`, `Denied(path)` or `Failed(path)`; `Files.message(e)` says it in text).
 
-| Función | Qué hace |
+| Function | What it does |
 |---|---|
-| `Files.readString(path): String` | el archivo entero, como texto |
-| `Files.writeString(path, text)` | reemplaza el archivo (lo crea si no existe) |
-| `Files.appendString(path, text)` | añade al final |
-| `Files.exists(path)`, `isFile(path)`, `isDirectory(path)` | qué hay en esa ruta |
-| `Files.list(path): String[*]` | los nombres de lo que hay en una carpeta |
-| `Files.createDirectories(path)` | crea la carpeta y las que falten por encima |
-| `Files.copy(from, to)`, `Files.delete(path)` | copiar un archivo; borrar un archivo o una carpeta vacía |
+| `Files.readString(path): String` | the whole file, as text |
+| `Files.writeString(path, text)` | replaces the file (creates it if it does not exist) |
+| `Files.appendString(path, text)` | adds at the end |
+| `Files.exists(path)`, `isFile(path)`, `isDirectory(path)` | what there is at that path |
+| `Files.list(path): String[*]` | the names of what is in a folder |
+| `Files.createDirectories(path)` | creates the folder and the missing ones above it |
+| `Files.copy(from, to)`, `Files.delete(path)` | copy a file; delete a file or an empty folder |
 
-### `std.io.file`: un archivo abierto
+### `std.io.file`: an open file
 
-`open(path)`, `create(path)` (lo vacía) y `append(path)` (escribe al final) dan un `File`. Como stream
-binario implementa `read(buffer: byte[]): int32`, `write(bytes: byte[])`, `flush()` y `close()`. `read`
-devuelve los bytes leídos y `0` al llegar al final. También ofrece `readLine(): String?`, `readAll()` y
-`writeText(text)` como operaciones de texto. **Un `File` se cierra solo cuando se libera la memoria donde
-vive** (normalmente, al cerrar el bloque de su variable); `close()` lo cierra antes.
+`open(path)`, `create(path)` (empties it) and `append(path)` (writes at the end) give a `File`. As a
+binary stream it implements `read(buffer: byte[]): int32`, `write(bytes: byte[])`, `flush()` and
+`close()`. `read` returns the bytes read and `0` at the end. It also offers `readLine(): String?`,
+`readAll()` and `writeText(text)` as text operations. **A `File` closes on its own when the memory
+where it lives is freed** (usually, when the block of its variable closes); `close()` closes it earlier.
 
-### `std.io.streams`: leer y escribir sin importar de dónde
+### `std.io.streams`: reading and writing no matter from where
 
-Lo mínimo, como en Go: bytes que se leen, bytes que se escriben, y algo que se puede cerrar.
+The minimum, as in Go: bytes that are read, bytes that are written, and something that can be closed.
 
-| Interfaz | Métodos |
+| Interface | Methods |
 |---|---|
-| `InputStream` | `read(buffer: byte[]): int32`: llena el búfer desde el inicio y dice cuántos bytes leyó; `0` al final |
-| `OutputStream` | `write(bytes: byte[])` (todos, o lanza `IoError`) y `flush()` |
-| `Closeable` | `close()`: suelta antes de tiempo lo que tiene del sistema (lo suelta igual al liberarse su memoria) |
+| `InputStream` | `read(buffer: byte[]): int32`: fills the buffer from the start and says how many bytes it read; `0` at the end |
+| `OutputStream` | `write(bytes: byte[])` (all of them, or it throws `IoError`) and `flush()` |
+| `Closeable` | `close()`: lets go ahead of time of what it holds from the system (it lets go anyway when its memory is freed) |
 
-Lo implementan `File`, `TcpSocket`, el cuerpo de una respuesta de `std.net.http` y los streams de la consola
-(`Console.input`, `Console.output`, `Console.error`). Además:
+They are implemented by `File`, `TcpSocket`, the body of a `std.net.http` response and the streams of
+the console (`Console.input`, `Console.output`, `Console.error`). Also:
 
-| Nombre | Qué es |
+| Name | What it is |
 |---|---|
-| `Reader { from: stream }` | texto sobre cualquier `InputStream`: `readLine(): String?` (corta en `\n`, quita un `\r` antes), `readAll()`, y bytes con `readInto(buffer, max)`; también es un `InputStream` |
-| `copy(input, output)` | copia todo y hace `flush()`; no cierra ninguno |
-| `buffer(n)` | `n` bytes a cero, para dárselos a `read()` |
-| `MemoryInputStream { data: text }` | lee un `String` (texto o bytes) que ya está en memoria |
-| `MemoryOutputStream {}` | junta lo que se escribe: `toString()`, `toByteArray()` |
+| `Reader { from: stream }` | text over any `InputStream`: `readLine(): String?` (cuts at `\n`, removes a `\r` before it), `readAll()`, and bytes with `readInto(buffer, max)`; it is also an `InputStream` |
+| `copy(input, output)` | copies everything and does `flush()`; it closes neither |
+| `buffer(n)` | `n` zeroed bytes, to give to `read()` |
+| `MemoryInputStream { data: text }` | reads a `String` (text or bytes) that is already in memory |
+| `MemoryOutputStream {}` | gathers what is written: `toString()`, `toByteArray()` |
 
-Un `byte[4096] = []` no sirve como búfer de `read()`: empieza vacío (longitud 0) y `read()` llena solo hasta
-la longitud de lo que recibe; para eso está `buffer(4096)`.
+A `byte[4096] = []` does not work as a buffer for `read()`: it starts empty (length 0) and `read()`
+only fills up to the length of what it receives; that is what `buffer(4096)` is for.
 
-El `Reader` tiene un búfer para toda su vida, y una línea se crea una sola vez, a su tamaño, donde diga quien
-llama. Con una memoria en la pila, leer un archivo (o un socket) de cualquier tamaño no pide memoria en el
-bucle:
+The `Reader` has one buffer for its whole life, and a line is created only once, at its size, where
+the caller says. With a memory on the stack, reading a file (or a socket) of any size asks for no
+memory in the loop:
 
 ```actionscript
 while (true) {
     let scratch: byte[4096] = [];
-    let line: String? = lines.readLine() in scratch;   // la línea vive en scratch, hasta el final de la vuelta
+    let line: String? = lines.readLine() in scratch;   // the line lives in scratch, until the end of the turn
     if (line == null) { break; }
     ...
 }
 ```
 
-`readLine()` y `readInto()` se pueden mezclar: lo que quedó en el búfer después de una línea sale primero en
-`readInto()`. Así se leen protocolos con cabeceras de texto y un cuerpo binario, como HTTP.
+`readLine()` and `readInto()` can be mixed: what was left in the buffer after a line comes out first
+in `readInto()`. That is how protocols with text headers and a binary body, like HTTP, are read.
 
-### `std.io.console`: la consola
+### `std.io.console`: the console
 
-`import std.io.console as Console;` da `Console.readLine(): String?` (una línea de la entrada estándar),
-`Console.printError(text)` (una línea en la salida de errores) y tres streams: `Console.input` (un
-`InputStream`), `Console.output` y `Console.error` (`OutputStream`). Para
-protocolos con longitud (como el de `larimar lsp`): `Console.read(n)` (exactamente `n` bytes, menos solo si
-la entrada se acaba; `Console.lastCount()` dice cuántos), `Console.write(text)` (sin salto de línea),
-`Console.flush()` y `Console.binaryMode()` (en Windows, que `\n` no se convierta en `\r\n`).
+`import std.io.console as Console;` gives `Console.readLine(): String?` (a line of the standard input),
+`Console.printError(text)` (a line on the error output) and three streams: `Console.input` (an
+`InputStream`), `Console.output` and `Console.error` (`OutputStream`). For protocols with lengths (like
+the one of `larimar lsp`): `Console.read(n)` (exactly `n` bytes, fewer only if the input runs out;
+`Console.lastCount()` says how many), `Console.write(text)` (without a line break), `Console.flush()`
+and `Console.binaryMode()` (on Windows, so that `\n` is not turned into `\r\n`).
 
-Un `wc` (contar líneas, palabras y bytes), que sirve para un archivo o para la entrada estándar:
+A `wc` (counting lines, words and bytes), which works for a file or for the standard input:
 
 ```actionscript
 import std.io.files { IoError };
@@ -2780,7 +2786,7 @@ function count(input: InputStream, name: String): void throws IoError {
     let text: Reader = { from: input };
     while (true) {
         let scratch: byte[4096] = [];
-        let line: String? = text.readLine() in scratch;   // una línea a la vez, sin pedir memoria
+        let line: String? = text.readLine() in scratch;   // one line at a time, asking for no memory
         if (line == null) { break; }
         lines += 1;
         bytes += line.length + 1;
@@ -2799,7 +2805,7 @@ function main(args: String[]): int32 {
         if (args.length == 0) {
             count(Console.input, "-");
         } else {
-            count(open(args[0]), args[0]);             // el archivo se cierra al terminar la instrucción
+            count(open(args[0]), args[0]);             // the file closes when the statement ends
         }
         return 0;
     } catch (IoError e) {
@@ -2809,78 +2815,78 @@ function main(args: String[]): int32 {
 }
 ```
 
-### `std.path`: rutas
+### `std.path`: paths
 
-`import std.path as Paths;`. Las rutas que crean estas funciones viven donde diga quien llama, como lo
-de cualquier función; aceptan `/` y `\`.
+`import std.path as Paths;`. The paths these functions create live where the caller says, like what
+any function returns; they accept `/` and `\`.
 
-| Función | Ejemplo |
+| Function | Example |
 |---|---|
-| `Paths.parent(p)` | `"a/b/c.lar"` → `"a/b"` (`""` si no hay carpeta) |
+| `Paths.parent(p)` | `"a/b/c.lar"` → `"a/b"` (`""` if there is no folder) |
 | `Paths.fileName(p)`, `Paths.stem(p)`, `Paths.extension(p)` | `"c.lar"`, `"c"`, `"lar"` |
-| `Paths.join(dir, file)` | `"a/b"` + `"c.lar"` → `"a/b/c.lar"` (si `file` es absoluta, queda igual) |
-| `Paths.isAbsolute(p)` | `"/x"`, `"C:/x"` y `"\\x"` lo son |
+| `Paths.join(dir, file)` | `"a/b"` + `"c.lar"` → `"a/b/c.lar"` (if `file` is absolute, it stays the same) |
+| `Paths.isAbsolute(p)` | `"/x"`, `"C:/x"` and `"\\x"` are |
 | `Paths.normalize(p)` | `"/x/./y/../z"` → `"/x/z"` |
-| `Paths.absolute(p)` | normalizada y desde la carpeta actual si era relativa |
-| `Paths.relative(base, p)` | `p` relativa a `base` si está dentro; si no, absoluta |
+| `Paths.absolute(p)` | normalized and from the current folder if it was relative |
+| `Paths.relative(base, p)` | `p` relative to `base` if it is inside; otherwise, absolute |
 
-### `std.os`: el entorno
+### `std.os`: the environment
 
-| Función | Qué hace |
+| Function | What it does |
 |---|---|
-| `os.env(name): String?` | una variable de entorno, o `null` |
-| `os.cwd(): String` | la carpeta actual |
-| `os.run(command): int32` | ejecuta un comando con el shell del sistema y da su código de salida |
-| `os.programDir(): String` | la carpeta del ejecutable (`""` si no se puede saber) |
-| `os.platform(): String` | `"windows"`, `"linux"`, `"macos"` u `"other"` |
-| `os.exit(code)` | termina el programa ya (sin liberar memorias ni esperar hilos) |
+| `os.env(name): String?` | an environment variable, or `null` |
+| `os.cwd(): String` | the current folder |
+| `os.run(command): int32` | runs a command with the system's shell and gives its exit code |
+| `os.programDir(): String` | the folder of the executable (`""` if it cannot be known) |
+| `os.platform(): String` | `"windows"`, `"linux"`, `"macos"` or `"other"` |
+| `os.exit(code)` | ends the program right away (without freeing memories or waiting for threads) |
 
-### `std.text`: leer texto byte a byte
+### `std.text`: reading text byte by byte
 
-Para lexers y parsers: `text.isDigit(b)`, `isHexDigit`, `isLetter`, `isLetterOrDigit`,
-`isIdentifierPart` (letra, dígito o `_`), `isSpace`, `isUpper`, `isLower` (todas ASCII),
-`text.digitValue(b): int32?`, `text.isAscii(s)` y `text.fromCode(code): String` (el texto de un carácter
-Unicode: `fromCode(241)` es `"ñ"`).
+For lexers and parsers: `text.isDigit(b)`, `isHexDigit`, `isLetter`, `isLetterOrDigit`,
+`isIdentifierPart` (letter, digit or `_`), `isSpace`, `isUpper`, `isLower` (all ASCII),
+`text.digitValue(b): int32?`, `text.isAscii(s)` and `text.fromCode(code): String` (the text of a
+Unicode character: `fromCode(241)` is `"ñ"`).
 
-### `std.text.regex`: expresiones regulares
+### `std.text.regex`: regular expressions
 
-Escritas en Larimar, sin ninguna biblioteca de C: funcionan igual en todos los sistemas.
+Written in Larimar, without any C library: they work the same on every system.
 
 ```actionscript
 import std.text.regex { Regex, Match, RegexError, message };
 
-let email: Regex = Regex.compile("([a-z]+)@([a-z]+)\\.com");      // RegexError si el patrón está mal
-let m: Match? = email.find("escribe a ana@correo.com");
+let email: Regex = Regex.compile("([a-z]+)@([a-z]+)\\.com");      // RegexError if the pattern is wrong
+let m: Match? = email.find("write to ana@mail.com");
 if (m != null) {
-    println("${m.value} es de ${m.group(1) ?? ""}");                // ana@correo.com es de ana
+    println("${m.value} belongs to ${m.group(1) ?? ""}");           // ana@mail.com belongs to ana
 }
 let date: Regex = Regex.compile("(\\d{4})-(\\d{2})-(\\d{2})");
 println(date.replace("2026-10-26", "$3/$2/$1"));                    // 26/10/2026
 ```
 
-- **Qué ofrece:** `matches(text)` (el texto entero), `contains(text)`, `find(text): Match?`,
-  `findAll(text): Match[*]`, `replace(text, reemplazo)` (`$0` es lo encontrado, `$1`..`$9` los grupos,
-  `$$` un `$`) y `split(text)`.
-- **Un `Match`** tiene `start` y `end` (bytes), `value`, y `group(i): String?` (`null` si el grupo no
-  participó; `group(0)` es todo).
-- **Lo que entiende un patrón:**
-  - caracteres (`\.` para un signo tal cual, `\n`, `\t`) y `.` (cualquiera menos `\n`);
-  - clases (`[abc]`, `[a-z]`, `[^0-9]`) y atajos (`\d`, `\w`, `\s` y sus contrarios `\D`, `\W`, `\S`);
-  - anclas: `^`, `$`, `\b` y `\B`;
-  - repeticiones `*`, `+`, `?`, `{n}`, `{n,}` y `{n,m}`; con `?` detrás toman lo menos posible;
-  - grupos `(x)`, sin captura `(?:x)`, y alternativas `x|y`.
-- **Las clases son ASCII.** Una letra con tilde cuenta como un carácter para `.` y `[^...]`, pero no
-  está en `\w` ni puede escribirse dentro de `[...]`.
-- **No se cuelga.** Cada posición del texto se prueba como mucho una vez por instrucción del patrón, así
-  que patrones como `(a*)*b`, que en otros motores tardan una eternidad, aquí responden al momento.
+- **What it offers:** `matches(text)` (the whole text), `contains(text)`, `find(text): Match?`,
+  `findAll(text): Match[*]`, `replace(text, replacement)` (`$0` is what was found, `$1`..`$9` the
+  groups, `$$` a `$`) and `split(text)`.
+- **A `Match`** has `start` and `end` (bytes), `value`, and `group(i): String?` (`null` if the group
+  did not take part; `group(0)` is everything).
+- **What a pattern understands:**
+  - characters (`\.` for a sign as it is, `\n`, `\t`) and `.` (any except `\n`);
+  - classes (`[abc]`, `[a-z]`, `[^0-9]`) and shortcuts (`\d`, `\w`, `\s` and their opposites `\D`, `\W`, `\S`);
+  - anchors: `^`, `$`, `\b` and `\B`;
+  - repetitions `*`, `+`, `?`, `{n}`, `{n,}` and `{n,m}`; with `?` after them they take as little as possible;
+  - groups `(x)`, non-capturing `(?:x)`, and alternatives `x|y`.
+- **Classes are ASCII.** An accented letter counts as one character for `.` and `[^...]`, but it is
+  not in `\w` and cannot be written inside `[...]`.
+- **It does not hang.** Each position of the text is tried at most once per instruction of the
+  pattern, so patterns like `(a*)*b`, which take forever in other engines, answer right away here.
 
 ### `std.net`: TCP
 
-`TcpSocket.connect(host, port)` abre una conexión (con un nombre o una IP, v4 o v6) y
-`TcpListener.bind(host, port)` espera conexiones (`"0.0.0.0"` para todas las direcciones; con el puerto 0
-el sistema elige uno, y `port()` dice cuál). Un `TcpSocket` se usa directamente, como en C (`read(buffer)`,
-`write(bytes)`, `writeText(text)`, `close()`), y además es un `InputStream` y un `OutputStream`: el `Reader`
-lee líneas de él igual que de un archivo, y `copy()` envía cualquier stream por la red.
+`TcpSocket.connect(host, port)` opens a connection (with a name or an IP, v4 or v6) and
+`TcpListener.bind(host, port)` waits for connections (`"0.0.0.0"` for every address; with port 0 the
+system chooses one, and `port()` says which). A `TcpSocket` is used directly, as in C (`read(buffer)`,
+`write(bytes)`, `writeText(text)`, `close()`), and it is also an `InputStream` and an `OutputStream`:
+the `Reader` reads lines from it just like from a file, and `copy()` sends any stream over the network.
 
 ```actionscript
 import std.net { TcpSocket, TcpListener, NetError, message };
@@ -2892,14 +2898,14 @@ function main(): int32 {
     try {
         let server: TcpListener = TcpListener.bind("127.0.0.1", 8080);
         while (true) {
-            let client: TcpSocket = server.accept();     // se cierra solo al final de la vuelta
+            let client: TcpSocket = server.accept();     // it closes on its own at the end of the turn
             client.setTimeout(5000);
             try {
                 let request: Reader = { from: client };
                 while (true) {
                     let scratch: byte[4096] = [];
-                    let line: String? = request.readLine() in scratch;   // sin malloc por línea
-                    if (line == null || line! == "") { break; }          // fin de las cabeceras
+                    let line: String? = request.readLine() in scratch;   // no malloc per line
+                    if (line == null || line! == "") { break; }          // end of the headers
                 }
                 client.writeText("HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n\r\nhola\n");
             } catch (IoError e) {}
@@ -2912,37 +2918,37 @@ function main(): int32 {
 }
 ```
 
-- Los errores de conectar y escuchar son un `NetError`: `HostNotFound(host)`, `Refused`, `Timeout`,
-  `Closed`, `Reset`, `AddressInUse`, `Other(code)`; `message(e)` da el texto. Leer y escribir lanzan
-  `IoError`, como cualquier stream.
-- Los sockets esperan (bloquean): `read` espera a que llegue algo y devuelve 0 cuando el otro lado cerró.
-  `setTimeout(ms)` limita la espera de `read` y `write`.
-- `finishWriting()` le dice al otro lado que ya no se escribirá más (lee el fin), pero se sigue pudiendo
-  leer su respuesta.
-- Un socket se cierra solo cuando se libera la memoria donde vive, así que uno aceptado en un bucle no
-  queda abierto aunque no se llame a `close()`.
-- `read` llena el búfer que recibe, sin crear nada; con el `Reader` y `readLine() in scratch`, leer un
-  millón de líneas de un socket pidió al sistema unas 4.400 asignaciones de memoria en total.
-- Para atender varias conexiones a la vez, `TcpServer` (abajo). En Windows (Winsock) `larimar build`
-  enlaza `ws2_32` automáticamente.
-- `Connection` es la interfaz de una conexión en los dos sentidos (`read`, `write`, `flush`, `close`): la
-  implementa `TcpSocket`, y también lo que da un `TlsProvider` (ver `std.net.http.tls`). Quien habla un
-  protocolo sobre una `Connection` no sabe si va cifrada.
-- `handle()` da el socket del sistema (un `Socket`, el tipo de `std.net`), para una biblioteca de C que
-  trabaje sobre una conexión ya abierta, como una de TLS: una función de C que recibe un `Socket` recibe el
-  descriptor (un `SOCKET` en Windows). El socket sigue siendo del `TcpSocket`, y se cierra con él.
-- `std.net` está escrito en Larimar sobre las funciones de sockets del sistema, sin `c_code`: es un buen
-  ejemplo de [`when`](#cada-sistema-lo-suyo-when), [punteros](#punteros-de-c-t-y-) y
-  [recursos](#recursos-released by).
-- `NetError.Tls(reason)` es un fallo del cifrado (un certificado rechazado, un saludo TLS fallido) y
-  `NetError.TlsUnavailable(what)` que no hay TLS que usar.
+- Errors when connecting and listening are a `NetError`: `HostNotFound(host)`, `Refused`, `Timeout`,
+  `Closed`, `Reset`, `AddressInUse`, `Other(code)`; `message(e)` gives the text. Reading and writing
+  throw `IoError`, like any stream.
+- Sockets wait (they block): `read` waits for something to arrive and returns 0 when the other side
+  closed. `setTimeout(ms)` limits the wait of `read` and `write`.
+- `finishWriting()` tells the other side that nothing more will be written (it reads the end), but
+  its answer can still be read.
+- A socket closes on its own when the memory where it lives is freed, so one accepted in a loop is
+  not left open even if `close()` is not called.
+- `read` fills the buffer it receives, creating nothing; with the `Reader` and `readLine() in scratch`,
+  reading a million lines from a socket asked the system for about 4,400 memory allocations in total.
+- To serve several connections at the same time, `TcpServer` (below). On Windows (Winsock) `larimar build`
+  links `ws2_32` automatically.
+- `Connection` is the interface of a connection in both directions (`read`, `write`, `flush`, `close`):
+  `TcpSocket` implements it, and so does what a `TlsProvider` gives (see `std.net.http.tls`). Whoever
+  speaks a protocol over a `Connection` does not know whether it is encrypted.
+- `handle()` gives the system's socket (a `Socket`, the type of `std.net`), for a C library that works
+  on a connection that is already open, like a TLS one: a C function that receives a `Socket` receives
+  the descriptor (a `SOCKET` on Windows). The socket still belongs to the `TcpSocket`, and closes with it.
+- `std.net` is written in Larimar over the system's socket functions: it is a good example of
+  [`#when`](#each-system-its-own-when), [pointers](#c-pointers-t-and-) and
+  [resources](#resources-released-by).
+- `NetError.Tls(reason)` is a failure of the encryption (a rejected certificate, a failed TLS handshake)
+  and `NetError.TlsUnavailable(what)` that there is no TLS to use.
 
-### `std.net`: servidores TCP y UDP
+### `std.net`: TCP and UDP servers
 
-`TcpServer` y `UdpServer` son el bucle de un servidor ya escrito: se configuran con un literal (que no
-puede fallar) y `run()` hace el trabajo (escuchar puede fallar, y lanza `NetError`). Lo que se hace con
-cada conexión o datagrama es una función `thread safe`, así que el compilador comprueba que los hilos del
-servidor no se pisen.
+`TcpServer` and `UdpServer` are the loop of a server, already written: they are configured with a
+literal (which cannot fail) and `run()` does the work (listening can fail, and it throws `NetError`).
+What is done with each connection or datagram is a `thread safe` function, so the compiler checks that
+the threads of the server do not step on each other.
 
 ```actionscript
 import std.net { TcpServer, TcpSocket, StopSignal, NetError, message };
@@ -2958,8 +2964,8 @@ function main(): int32 {
     let stats: Stats = {};
     let quit: StopSignal = {};
     let server: TcpServer = {
-        port: 8080,                 // host: "127.0.0.1" si no se dice otro ("0.0.0.0": toda la red)
-        threads: 8,                 // conexiones atendidas a la vez (1 si no se dice)
+        port: 8080,                 // host: "127.0.0.1" unless another is given ("0.0.0.0": the whole network)
+        threads: 8,                 // connections served at the same time (1 if not given)
         stop: quit,
         onConnect: (client: TcpSocket) -> {
             client.setTimeout(5000);
@@ -2969,10 +2975,10 @@ function main(): int32 {
                 if (line == "quit") { quit.stop(); }
                 client.writeText("hello #${stats.add()}: ${line}\n");
             } catch (IoError e) {}
-        }                           // al volver, client se cierra y su memoria se libera
+        }                           // on return, client is closed and its memory is freed
     };
     try {
-        server.run();               // espera aquí hasta quit.stop()
+        server.run();               // it waits here until quit.stop()
     } catch (NetError e) {
         println("cannot listen: ${message(e)}");
         return 1;
@@ -2981,17 +2987,18 @@ function main(): int32 {
 }
 ```
 
-- `run()` acepta en el hilo que lo llama y reparte las conexiones entre sus `threads` hilos; cada conexión
-  se atiende con su propia memoria, que se libera al terminar `onConnect`.
-- Un `StopSignal` es un objeto `synchronized` con `stop()`: se le da al literal (`stop: quit`) y se llama
-  desde cualquier sitio, también desde el handler. El servidor lo nota en menos de un quinto de segundo y
-  `run()` vuelve después de las peticiones en curso. Sin `stop`, sirve hasta que el programa termina.
-- Conviene `client.setTimeout(...)` al empezar: un cliente que no envía nada ocupa un hilo mientras espera.
+- `run()` accepts in the thread that calls it and shares the connections among its `threads` threads;
+  each connection is served with its own memory, which is freed when `onConnect` ends.
+- A `StopSignal` is a `synchronized` object with `stop()`: it is given to the literal (`stop: quit`) and
+  called from anywhere, the handler included. The server notices it in less than a fifth of a second and
+  `run()` returns after the requests in progress. Without `stop`, it serves until the program ends.
+- It is a good idea to call `client.setTimeout(...)` at the start: a client that sends nothing takes up
+  a thread while it waits.
 
-`UdpSocket` envía y recibe datagramas: cada uno llega entero o no llega, sin conexión.
-`UdpSocket.bind(host, port)` recibe en un puerto y `UdpSocket.open()` da uno cualquiera para enviar;
-`sendTo(bytes, Address { host, port })` envía y `receive(buffer)` espera uno y da un `Datagram`
-(`length` y `from`, la `Address` de quien lo envió). `UdpServer` es su servidor:
+`UdpSocket` sends and receives datagrams: each one arrives whole or does not arrive, without a
+connection. `UdpSocket.bind(host, port)` receives on a port and `UdpSocket.open()` gives any port to
+send from; `sendTo(bytes, Address { host, port })` sends and `receive(buffer)` waits for one and gives a
+`Datagram` (`length` and `from`, the `Address` of whoever sent it). `UdpServer` is its server:
 
 ```actionscript
 let server: UdpServer = {
@@ -2999,22 +3006,22 @@ let server: UdpServer = {
     threads: 4,
     stop: quit,
     onReceive: (socket: UdpSocket, data: byte[], from: Address) -> {
-        try { socket.sendTo(data, from); } catch (NetError e) {}       // el eco
+        try { socket.sendTo(data, from); } catch (NetError e) {}       // the echo
     }
 };
 server.run();
 ```
 
-- Cada hilo tiene su propia copia del socket, en el mismo puerto: las respuestas salen del puerto al que
-  escribió el cliente.
-- `maxSize` (65507 si no se dice) es el datagrama más grande que se recibe entero.
-- UDP no reenvía: un datagrama puede perderse, y quien envía decide si lo repite.
+- Each thread has its own copy of the socket, on the same port: the answers leave from the port the
+  client wrote to.
+- `maxSize` (65507 if not given) is the biggest datagram received whole.
+- UDP does not resend: a datagram can be lost, and whoever sends decides whether to repeat it.
 
-### `std.net`: servidores TLS (https)
+### `std.net`: TLS servers (https)
 
-`TlsServer` es un `TcpServer` cuyas conexiones llegan ya descifradas. El certificado y su clave se
-cargan una vez con `OpenSslProvider.load(certificado, clave)`, que lanza `NetError` si un archivo no
-sirve o la clave no es la del certificado:
+`TlsServer` is a `TcpServer` whose connections arrive already decrypted. The certificate and its key
+are loaded once with `OpenSslProvider.load(certificate, key)`, which throws `NetError` if a file cannot
+be used or the key is not the certificate's:
 
 ```actionscript
 import std.net { TlsServer, TlsSocket, OpenSslProvider, NetError, message };
@@ -3035,7 +3042,7 @@ function main(): int32 {
                 client.setTimeout(5000);
                 try {
                     let request: Reader = { from: client };
-                    while ((request.readLine() ?? "") != "") {}                 // las cabeceras
+                    while ((request.readLine() ?? "") != "") {}                 // the headers
                     client.writeText("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhola\n");
                 } catch (IoError e) {}
             }
@@ -3049,23 +3056,23 @@ function main(): int32 {
 }
 ```
 
-- Con Let's Encrypt se usan `fullchain.pem` (el certificado con su cadena; `cert.pem` solo no basta para
-  todos los clientes) y `privkey.pem`. Ese archivo solo lo lee root: el programa necesita permiso para
-  leerlo. Cuando el certificado se renueva, hay que reiniciar el servidor.
-- Un `TlsSocket` se usa como un `TcpSocket`: `read`, `write`, `writeText`, `setTimeout`, `Reader`,
-  `copy()`. Se cierra solo al liberarse su memoria.
-- El saludo TLS ocurre en el hilo que atiende, con `handshakeTimeout` (10 segundos si no se dice): un
-  cliente que no lo completa, o que no habla TLS, se descarta sin llegar a `onConnect`.
-- Un `OpenSslProvider` es `synchronized`: lo comparten los hilos del servidor, y varios servidores.
-- Usa OpenSSL 1.1 o 3, que se carga la primera vez que hace falta: en Linux viene con el sistema; en macOS,
-  `brew install openssl@3`. En Windows todavía no está: `load` lanza `NetError.TlsUnavailable`.
+- With Let's Encrypt, `fullchain.pem` (the certificate with its chain; `cert.pem` alone is not enough
+  for every client) and `privkey.pem` are used. Only root reads that file: the program needs permission
+  to read it. When the certificate is renewed, the server has to be restarted.
+- A `TlsSocket` is used like a `TcpSocket`: `read`, `write`, `writeText`, `setTimeout`, `Reader`,
+  `copy()`. It closes on its own when its memory is freed.
+- The TLS handshake happens in the thread that serves, with `handshakeTimeout` (10 seconds if not
+  given): a client that does not complete it, or does not speak TLS, is dropped without reaching `onConnect`.
+- An `OpenSslProvider` is `synchronized`: the threads of the server share it, and so do several servers.
+- It uses OpenSSL 1.1 or 3, loaded the first time it is needed: on Linux it comes with the system; on
+  macOS, `brew install openssl@3`. On Windows it is not available yet: `load` throws `NetError.TlsUnavailable`.
 
-### `std.net.http`: cliente HTTP y HTTPS
+### `std.net.http`: HTTP and HTTPS client
 
-Un `Client` dice **cómo conectarse** (TLS, tiempos de espera, redirecciones, cabeceras de todas las
-peticiones) y una `Request` **qué pedir**. `send` lee la línea de estado y las cabeceras; el cuerpo se lee
-cuando se pide: entero con `text()`, `bytes()` o `json()` (con `std.json`), o por partes desde `body`, que es
-un `InputStream` (sirven `Reader` y `copy()`).
+A `Client` says **how to connect** (TLS, timeouts, redirects, headers of every request) and a `Request`
+**what to ask for**. `send` reads the status line and the headers; the body is read when it is asked
+for: whole with `text()`, `bytes()` or `json()` (with `std.json`), or in parts from `body`, which is an
+`InputStream` (`Reader` and `copy()` work).
 
 ```actionscript
 import std.net.http { Client, Response, Header, HttpError, message };
@@ -3076,18 +3083,18 @@ import std.io.files { IoError };
 function main(): int32 {
     let api: Client = {
         timeout: 10000,
-        headers: [Header { name: "Authorization", value: "Bearer abc" }]     // van en todas las peticiones
+        headers: [Header { name: "Authorization", value: "Bearer abc" }]     // they go in every request
     };
     try {
         let r: Response = api.get("https://api.example.com/users/7");
         if (!r.ok()) {
-            println("status ${r.status} ${r.reason}");      // un 404 es una respuesta, no un error
+            println("status ${r.status} ${r.reason}");      // a 404 is a response, not an error
             return 1;
         }
         let user: Any = r.json();
         println("${user.name} (${r.header("Content-Type") ?? "?"})");
 
-        let saved: Response = api.send({                    // la Request, como literal
+        let saved: Response = api.send({                    // the Request, as a literal
             method: "POST",
             url: "https://api.example.com/users",
             headers: [Header { name: "Content-Type", value: "application/json" }],
@@ -3096,7 +3103,7 @@ function main(): int32 {
         println("created: ${saved.status}");
 
         let big: Response = api.send({ url: "https://mirror.example.com/disk.iso", timeout: 0 });
-        copy(big.body, create("disk.iso"));                 // 4 KB a la vez: nunca entero en memoria
+        copy(big.body, create("disk.iso"));                 // 4 KB at a time: never whole in memory
     } catch (HttpError e) {
         println(message(e));
         return 1;
@@ -3108,35 +3115,36 @@ function main(): int32 {
 }
 ```
 
-- `Client`: todos sus campos tienen valor por defecto, así que `Client {}` ya habla `http://` y `https://`.
-  `tls` (un `TlsProvider`; por defecto `SystemTls {}`), `timeout` en ms (30000; 0 sin límite),
-  `maxRedirects` (5; 0 no las sigue) y `headers` (se envían en todas, antes de las de la petición). Métodos:
-  `send(request)`, `get(url)` y `post(url, body, contentType)`.
-- `Request`: solo `url` es obligatoria (`{ url: "..." }` es un GET). Además `method`, `headers` (un arreglo
-  de `Header { name, value }`: conserva el orden y admite repetidas), `body` (texto, enviado con su
-  `Content-Length`) y `timeout` (-1, el del cliente).
-- `get(url)`, `post(url, body, contentType)` y `send(request)` sueltas usan un `Client {}`: sirven para
-  scripts y pruebas.
-- `Response`: `status`, `reason`, `headers`, `url` (la última, después de las redirecciones), `ok()`
-  (200 a 299), `header(name)` (sin distinguir mayúsculas), `body`, `text()`, `bytes()`, `json()` y `close()`.
-- **`HttpError` es que no hubo respuesta**: `Net(reason)` (no conectó, se cortó, tardó demasiado, o el TLS
-  falló: `"network: tls: certificate rejected: ..."`), `BadResponse(reason)` (el servidor no habla HTTP, o
-  `json()` de algo que no es JSON), `TooManyRedirects`, `BadUrl(url)` y `Unsupported(what)`: `https://`
-  cuando no hay TLS que usar. Un 404 o un 500 son respuestas: se miran con `status` u `ok()`.
-- El cuerpo termina donde termina, sea por `Content-Length`, por `chunked` o porque el servidor cierra; quien
-  lee no ve la diferencia. Las redirecciones 301, 302 y 303 pasan a GET sin cuerpo; 307 y 308 repiten el
-  método. Una redirección de `http://` a `https://` usa el `TlsProvider` del cliente.
-- **Memoria**: la respuesta, sus cabeceras y su conexión viven donde diga quien llama, y la conexión se
-  cierra sola cuando se libera esa memoria. Con `api.get(url) in scratch` dentro de un bucle, 3.000
-  peticiones se mantuvieron en 2 MB de memoria, sin dejar conexiones abiertas. La respuesta puede apuntar al
-  cliente (a su `TlsProvider`), así que el cliente debe vivir al menos tanto como ella.
-- Cada petición abre su conexión (`Connection: close`). **Todo espera** (bloquea) y no hay hilos por
-  dentro. Un `Client` no se comparte entre hilos: cada hilo crea el suyo.
+- `Client`: every field has a default value, so `Client {}` already speaks `http://` and `https://`.
+  `tls` (a `TlsProvider`; by default `SystemTls {}`), `timeout` in ms (30000; 0 without a limit),
+  `maxRedirects` (5; 0 does not follow them) and `headers` (sent in every request, before the ones of
+  the request). Methods: `send(request)`, `get(url)` and `post(url, body, contentType)`.
+- `Request`: only `url` is required (`{ url: "..." }` is a GET). Also `method`, `headers` (an array of
+  `Header { name, value }`: it keeps the order and allows repeated ones), `body` (text, sent with its
+  `Content-Length`) and `timeout` (-1, the client's).
+- The standalone `get(url)`, `post(url, body, contentType)` and `send(request)` use a `Client {}`: they
+  are useful for scripts and tests.
+- `Response`: `status`, `reason`, `headers`, `url` (the last one, after the redirects), `ok()`
+  (200 to 299), `header(name)` (case-insensitive), `body`, `text()`, `bytes()`, `json()` and `close()`.
+- **`HttpError` means there was no response**: `Net(reason)` (it did not connect, it was cut, it took
+  too long, or the TLS failed: `"network: tls: certificate rejected: ..."`), `BadResponse(reason)` (the
+  server does not speak HTTP, or `json()` of something that is not JSON), `TooManyRedirects`,
+  `BadUrl(url)` and `Unsupported(what)`: `https://` when there is no TLS to use. A 404 or a 500 are
+  responses: they are checked with `status` or `ok()`.
+- The body ends where it ends, whether by `Content-Length`, by `chunked` or because the server closes;
+  whoever reads sees no difference. Redirects 301, 302 and 303 switch to GET without a body; 307 and 308
+  repeat the method. A redirect from `http://` to `https://` uses the client's `TlsProvider`.
+- **Memory**: the response, its headers and its connection live where the caller says, and the
+  connection closes on its own when that memory is freed. With `api.get(url) in scratch` inside a loop,
+  3,000 requests stayed within 2 MB of memory, leaving no connections open. The response can point to
+  the client (to its `TlsProvider`), so the client must live at least as long as it does.
+- Each request opens its own connection (`Connection: close`). **Everything waits** (blocks) and there
+  are no threads inside. A `Client` is not shared between threads: each thread creates its own.
 
-#### Peticiones en paralelo
+#### Requests in parallel
 
-Si hacen falta varias a la vez, cada una va en un `Thread` (no hay `sendAsync`: así se ve dónde corre cada
-una, dónde vive su respuesta y cuándo se espera):
+If several are needed at the same time, each one goes in a `Thread` (there is no `sendAsync`: that way
+you see where each one runs, where its response lives and when it is waited for):
 
 ```actionscript
 import std.net.http { get, HttpError, message };
@@ -3154,7 +3162,7 @@ function main(): int32 {
     {
         let threads: byte[*] = [] in heap;
         for (path in paths) {
-            let url: String = "http://127.0.0.1:8080${path}" in threads;   // vive tanto como los hilos
+            let url: String = "http://127.0.0.1:8080${path}" in threads;   // it lives as long as the threads
             let t: Thread = {
                 run: () -> {
                     try { results.add("${url}: ${get(url).text().length} bytes"); }
@@ -3163,16 +3171,16 @@ function main(): int32 {
             } in threads;
             t.start();
         }
-    }   // aquí espera a los tres hilos
+    }   // here it waits for the three threads
     println(results.all());
     return 0;
 }
 ```
 
-### `std.net.http.tls`: conexiones cifradas
+### `std.net.http.tls`: encrypted connections
 
-`https://` no sabe nada de cifrado: le pide a un **`TlsProvider`** una conexión cifrada y habla HTTP sobre
-ella. La interfaz es una sola función:
+`https://` knows nothing about encryption: it asks a **`TlsProvider`** for an encrypted connection and
+speaks HTTP over it. The interface is a single function:
 
 ```actionscript
 public interface TlsProvider {
@@ -3181,38 +3189,38 @@ public interface TlsProvider {
 }
 ```
 
-**`SystemTls`** es la que trae Larimar, y la que usa un `Client` si no se le da otra. Usa lo que ya tiene el
-sistema:
+**`SystemTls`** is the one that comes with Larimar, and the one a `Client` uses if it is not given
+another. It uses what the system already has:
 
-| Sistema | Usa | Certificados de confianza |
+| System | Uses | Trusted certificates |
 |---|---|---|
-| macOS | Network.framework (viene con el sistema) | los del Llavero, como Safari |
-| Windows | SChannel (viene con el sistema) | los del almacén de Windows |
-| Linux y otros | OpenSSL (`libssl.so.3` o `libssl.so.1.1`), cargada la primera vez que se usa | los del sistema (`/etc/ssl/certs`) |
+| macOS | Network.framework (it comes with the system) | the Keychain's, like Safari |
+| Windows | SChannel (it comes with the system) | the Windows store's |
+| Linux and others | OpenSSL (`libssl.so.3` or `libssl.so.1.1`), loaded the first time it is used | the system's (`/etc/ssl/certs`) |
 
-- Comprueba el certificado del servidor y que sea para ese nombre. `SystemTls { verify: false }` acepta
-  cualquiera: solo para probar contra un servidor local con un certificado propio.
-- Un programa que nunca abre `https://` no carga nada, y para compilar no hacen falta cabeceras ni
-  bibliotecas de OpenSSL: `larimar build` enlaza lo necesario (`-framework Network -framework Security` en
-  macOS, `secur32` en Windows, `-ldl` en Linux).
-- Si en el sistema no hay TLS (un Linux sin OpenSSL), la petición da
-  `HttpError.Unsupported("https: OpenSSL not found (tried libssl.so.3, libssl.so.1.1, libssl.so)")`: el
-  mensaje dice qué falta.
-- En Windows, SChannel negocia TLS 1.2 (TLS 1.3 con SChannel necesita otra API, aún no usada aquí).
+- It checks the server's certificate and that it is for that name. `SystemTls { verify: false }`
+  accepts any: only for testing against a local server with a certificate of its own.
+- A program that never opens `https://` loads nothing, and no OpenSSL headers or libraries are needed
+  to compile: `larimar build` links what is needed (`-framework Network -framework Security` on macOS,
+  `secur32` on Windows, `-ldl` on Linux).
+- If there is no TLS on the system (a Linux without OpenSSL), the request gives
+  `HttpError.Unsupported("https: OpenSSL not found (tried libssl.so.3, libssl.so.1.1, libssl.so)")`:
+  the message says what is missing.
+- On Windows, SChannel negotiates TLS 1.2 (TLS 1.3 with SChannel needs another API, not used here yet).
 
-#### Un TLS propio: mbedTLS
+#### A TLS of your own: mbedTLS
 
-Para usar otra biblioteca (para llevar el TLS dentro del ejecutable, por ejemplo), se implementa
-`TlsProvider` y se le da al cliente: `Client { tls: MbedTls {} }`. Un ejemplo completo con
-[mbedTLS](https://github.com/Mbed-TLS/mbedtls) 3.6, que es C puro y se compila con `make`:
+To use another library (to carry the TLS inside the executable, for example), `TlsProvider` is
+implemented and given to the client: `Client { tls: MbedTls {} }`. A complete example with
+[mbedTLS](https://github.com/Mbed-TLS/mbedtls) 3.6, which is plain C and builds with `make`:
 
 ```
 secure/
 ├── larimar.toml
-├── mbedtls/          # el código de mbedTLS (de su página de versiones), compilado con: make lib
+├── mbedtls/          # the mbedTLS code (from its releases page), built with: make lib
 └── src/
     ├── main.lar
-    └── mbed.lar      # el TlsProvider
+    └── mbed.lar      # the TlsProvider
 ```
 
 ```toml
@@ -3222,13 +3230,13 @@ name = "secure"
 [c]
 include_paths = ["mbedtls/include"]
 library_paths = ["mbedtls/library"]
-libraries = ["mbedtls", "mbedx509", "mbedcrypto"]     # en este orden
+libraries = ["mbedtls", "mbedx509", "mbedcrypto"]     # in this order
 ```
 
-`src/mbed.lar` tiene dos partes: el C que llama a mbedTLS (en un `c_code`) y las dos clases que implementan
-las interfaces. La sesión de mbedTLS es un **recurso**: C la crea con `malloc`, y Larimar la suelta con
-`mbed_free` cuando se libera la memoria de la conexión (`released by`), así que el C no necesita saber nada
-de las memorias de Larimar:
+`src/mbed.lar` has two parts: the C that calls mbedTLS (in a `c_code`) and the two classes that
+implement the interfaces. The mbedTLS session is a **resource**: C creates it with `malloc`, and Larimar
+lets it go with `mbed_free` when the memory of the connection is freed (`released by`), so the C needs
+to know nothing about Larimar's memories:
 
 ```actionscript
 import std.net { Connection, TcpSocket, NetError, Socket };
@@ -3379,7 +3387,7 @@ class MbedConnection implements Connection {
 }
 ```
 
-Y `src/main.lar` lo usa como cualquier otro:
+And `src/main.lar` uses it like any other:
 
 ```actionscript
 import std.net.http { Client, Response, HttpError, message };
@@ -3403,21 +3411,21 @@ $ larimar run
 200 text/html; charset=utf-8
 ```
 
-- Las piezas son las mismas que en cualquier `TlsProvider`: abrir el `TcpSocket`, hacer el saludo TLS sobre
-  su socket (`handle()`: C recibe el descriptor) y devolver un objeto que implementa `Connection`. Lo que
-  devuelve `connect` se crea donde dice quien llama (la respuesta HTTP), y con él la sesión, que se suelta
-  sola (`released by mbed_free`).
-- Con `MbedTls { caFile: "mi-ca.pem" }` se confía en un certificado propio (un servidor de pruebas, una red
-  interna) sin desactivar la verificación.
-- mbedTLS va dentro del ejecutable (bibliotecas estáticas): el programa no depende de lo que tenga el
-  sistema. A cambio, actualizar mbedTLS cuando salga un fallo de seguridad es trabajo de quien lo usa.
+- The pieces are the same as in any `TlsProvider`: open the `TcpSocket`, do the TLS handshake over its
+  socket (`handle()`: C receives the descriptor) and return an object that implements `Connection`. What
+  `connect` returns is created where the caller says (the HTTP response), and with it the session,
+  which is let go on its own (`released by mbed_free`).
+- With `MbedTls { caFile: "my-ca.pem" }` a certificate of your own is trusted (a test server, an
+  internal network) without turning off the verification.
+- mbedTLS goes inside the executable (static libraries): the program does not depend on what the
+  system has. In exchange, updating mbedTLS when a security flaw comes out is the job of whoever uses it.
 
 ### `std.json`: JSON
 
-`Json.parse(text): Any throws JsonError` convierte un texto JSON en un `Any`: un objeto es una tabla con
-nombres, un arreglo una tabla por posiciones, los números enteros que caben son `int64` y los demás
-`float64`. `Json.stringify(v)` hace lo contrario (una tabla vacía se escribe `{}`), y `Json.quote(s)` da
-un `String` como cadena JSON, con sus comillas y escapes.
+`Json.parse(text): Any throws JsonError` turns a JSON text into an `Any`: an object is a table with
+names, an array a table by positions, the integers that fit are `int64` and the rest `float64`.
+`Json.stringify(v)` does the opposite (an empty table is written `{}`), and `Json.quote(s)` gives a
+`String` as a JSON string, with its quotes and escapes.
 
 ```actionscript
 import std.json as Json;
@@ -3438,7 +3446,7 @@ function main(): int32 {
 }
 ```
 
-Salida:
+Output:
 
 ```
 port 8080, 2 names
@@ -3448,108 +3456,108 @@ invalid JSON at 5: expected ',' or ']'
 
 ---
 
-## 26. Proyectos: `larimar.toml` y `larimar build`
+## 26. Projects: `larimar.toml` and `larimar build`
 
-Un proyecto es una carpeta con un archivo `larimar.toml`:
+A project is a folder with a `larimar.toml` file:
 
 ```toml
 [project]
-name = "melody"              # obligatorio: nombre del ejecutable
+name = "melody"              # required: name of the executable
 version = "0.1.0"
-main = "src/main.lar"        # por defecto; su carpeta es la raíz de los módulos
-output = "dist/melody"       # por defecto build/<name> (build/<name>.exe en Windows)
+main = "src/main.lar"        # the default; its folder is the root of the modules
+output = "dist/melody"       # by default build/<name> (build/<name>.exe on Windows)
 
 [c]
-compiler = "gcc"             # por defecto la variable CC, o cc (gcc en Windows)
-flags = ["-O2", "-Wall"]     # por defecto ["-O2"]
-sources = ["csrc/helpers.c"] # archivos C propios que se compilan junto al programa
-include_paths = ["include"]  # carpetas de cabeceras (-I)
-libraries = ["user32"]       # bibliotecas (-l): user32 -> user32.dll, tone -> libtone.so
-library_paths = ["libs"]     # dónde están (-L)
+compiler = "gcc"             # by default the CC variable, or cc (gcc on Windows)
+flags = ["-O2", "-Wall"]     # by default ["-O2"]
+sources = ["csrc/helpers.c"] # your own C files, compiled together with the program
+include_paths = ["include"]  # header folders (-I)
+libraries = ["user32"]       # libraries (-l): user32 -> user32.dll, tone -> libtone.so
+library_paths = ["libs"]     # where they are (-L)
 ```
 
-Las rutas son relativas a la carpeta del proyecto. Una clave o sección desconocida es un error, para
-que una errata no pase desapercibida.
+Paths are relative to the project folder. An unknown key or section is an error, so that a typo does
+not go unnoticed.
 
-| Comando | Qué hace |
+| Command | What it does |
 |---|---|
-| `larimar new <name>` | crea la carpeta con `larimar.toml`, `src/main.lar` y `.gitignore` |
-| `larimar build [carpeta]` | escribe `build/<name>.c` y lo compila al ejecutable |
-| `larimar build --debug` | lo mismo, para un depurador (ver [Depurar](#depurar-larimar-build---debug-y-larimar-dap)) |
-| `larimar run [carpeta] [-- args]` | compila y ejecuta, pasándole los argumentos |
-| `larimar check [archivo o carpeta] [--json]` | busca los errores sin generar C (ver [El editor](#el-editor-larimar-check-y-larimar-lsp)) |
-| `larimar lsp` | el servidor de lenguaje para editores |
-| `larimar dap` | el depurador para editores (sobre `lldb-dap`) |
-| `larimar c <archivo.lar>` | muestra el C generado de un archivo (con sus módulos) |
+| `larimar new <name>` | creates the folder with `larimar.toml`, `src/main.lar` and `.gitignore` |
+| `larimar build [folder]` | writes `build/<name>.c` and compiles it to the executable |
+| `larimar build --debug` | the same, for a debugger (see [Debugging](#debugging-larimar-build---debug-and-larimar-dap)) |
+| `larimar run [folder] [-- args]` | compiles and runs, passing it the arguments |
+| `larimar check [file or folder] [--json]` | looks for the errors without generating C (see [The editor](#the-editor-larimar-check-and-larimar-lsp)) |
+| `larimar lsp` | the language server for editors |
+| `larimar dap` | the debugger for editors (over `lldb-dap`) |
+| `larimar c <file.lar>` | shows the generated C of a file (with its modules) |
 
-### Bibliotecas de C: estáticas, dinámicas y código fuente
+### C libraries: static, dynamic and source code
 
-Un programa de Larimar puede usar cualquier biblioteca de C. Se declaran sus funciones con
-`extern function` (y sus tipos con `extern type`) y el `larimar.toml` le dice al compilador de C dónde
-está. Hay cuatro formas de traer una biblioteca, según cómo venga:
+A Larimar program can use any C library. Its functions are declared with `extern function` (and its
+types with `extern type`) and the `larimar.toml` tells the C compiler where it is. There are four ways
+to bring in a library, depending on how it comes:
 
-| Cómo viene | En `[c]` | Resultado |
+| How it comes | In `[c]` | Result |
 |---|---|---|
-| **Código fuente** (`.c`), como SQLite o raygui | `sources = ["vendor/sqlite3.c"]` | se compila junto al programa: queda dentro del ejecutable |
-| **Biblioteca estática** (`.a`, `.lib`) | `library_paths = ["vendor/lib"]` y `libraries = ["sqlite3"]`, o la ruta del `.a` en `sources` | queda dentro del ejecutable |
-| **Biblioteca dinámica propia** (`.so`, `.dylib`, `.dll`) | `library_paths = ["vendor/lib"]` y `libraries = ["tone"]` | el ejecutable la carga al arrancar, desde esa carpeta |
-| **Biblioteca del sistema** (`m`, `pthread`, `user32`, una instalada con el gestor de paquetes) | `libraries = ["m"]` y, si hace falta, `include_paths` / `library_paths` | el ejecutable la carga del sistema |
+| **Source code** (`.c`), like SQLite or raygui | `sources = ["vendor/sqlite3.c"]` | it is compiled together with the program: it ends up inside the executable |
+| **Static library** (`.a`, `.lib`) | `library_paths = ["vendor/lib"]` and `libraries = ["sqlite3"]`, or the path of the `.a` in `sources` | it ends up inside the executable |
+| **Dynamic library of your own** (`.so`, `.dylib`, `.dll`) | `library_paths = ["vendor/lib"]` and `libraries = ["tone"]` | the executable loads it when it starts, from that folder |
+| **System library** (`m`, `pthread`, `user32`, one installed with the package manager) | `libraries = ["m"]` and, if needed, `include_paths` / `library_paths` | the executable loads it from the system |
 
-Un ejemplo con las cuatro a la vez:
+An example with all four at once:
 
 ```toml
 [c]
-include_paths = ["vendor/include"]           # los .h (-I)
-sources = ["vendor/src/embedded.c"]          # código fuente: va dentro del ejecutable
-library_paths = ["vendor/lib"]               # dónde buscar las bibliotecas (-L)
-libraries = ["mylib", "tone", "m"]           # libmylib.a (estática), libtone.so (dinámica), libm (sistema)
+include_paths = ["vendor/include"]           # the .h files (-I)
+sources = ["vendor/src/embedded.c"]          # source code: it goes inside the executable
+library_paths = ["vendor/lib"]               # where to look for the libraries (-L)
+libraries = ["mylib", "tone", "m"]           # libmylib.a (static), libtone.so (dynamic), libm (system)
 ```
 
 ```actionscript
 c_include "vendor.h";
 c_include "<math.h>";
 
-extern function mylib_triple(x: int32): int32;     // de libmylib.a
-extern function tone_play(hz: int32): void;        // de libtone.so
-extern function embedded_add(a: int32, b: int32): int32;   // de embedded.c
-extern function sqrt(x: float64): float64;         // de libm
+extern function mylib_triple(x: int32): int32;     // from libmylib.a
+extern function tone_play(hz: int32): void;        // from libtone.so
+extern function embedded_add(a: int32, b: int32): int32;   // from embedded.c
+extern function sqrt(x: float64): float64;         // from libm
 ```
 
-**Cómo se elige entre estática y dinámica.** `libraries = ["x"]` se convierte en `-lx`, y el enlazador
-busca `libx` en `library_paths` y en las carpetas del sistema. Si solo encuentra la estática (`libx.a`),
-la mete dentro del ejecutable; si encuentra la dinámica (`libx.so`, `.dylib`, `.dll`), la prefiere. Para
-**forzar la estática** aunque exista la dinámica, se pone la ruta del `.a` en `sources`:
+**How static or dynamic is chosen.** `libraries = ["x"]` becomes `-lx`, and the linker looks for
+`libx` in `library_paths` and in the system folders. If it only finds the static one (`libx.a`), it
+puts it inside the executable; if it finds the dynamic one (`libx.so`, `.dylib`, `.dll`), it prefers
+it. To **force the static one** even if the dynamic one exists, put the path of the `.a` in `sources`:
 
 ```toml
 sources = ["vendor/lib/libmylib.a"]
 ```
 
-Lo estático y el código fuente son lo más portátil: el ejecutable es un solo archivo, sin nada que copiar
-ni instalar.
+Static libraries and source code are the most portable: the executable is a single file, with nothing
+to copy or install.
 
-**Cuándo se busca cada una.** Una biblioteca dinámica se busca dos veces, en momentos distintos:
+**When each one is looked for.** A dynamic library is looked for twice, at different moments:
 
-1. **Al compilar.** El compilador de C la busca en sus propias carpetas (MinGW trae las de Windows, como
-   `user32`) y en `library_paths` (`-L`).
-2. **Al ejecutar.** El sistema operativo carga el archivo (`.dll`, `.so`, `.dylib`). Si no lo encuentra, el
-   programa no arranca.
+1. **When compiling.** The C compiler looks for it in its own folders (MinGW brings the Windows ones,
+   like `user32`) and in `library_paths` (`-L`).
+2. **When running.** The operating system loads the file (`.dll`, `.so`, `.dylib`). If it does not find
+   it, the program does not start.
 
-Por eso `larimar build` **no copia ninguna biblioteca dinámica**. Se quedan donde están:
+That is why `larimar build` **copies no dynamic library**. They stay where they are:
 
-- **Las del sistema** las busca el ejecutable en las rutas normales del sistema, y la máquina donde se
-  ejecute debe tenerlas instaladas.
-- **Las de `library_paths`**: en Linux y macOS, el ejecutable se compila con la instrucción de buscarlas
-  en esas mismas carpetas (`-Wl,-rpath,...`), así que `larimar run` funciona sin copiar nada. En Windows,
-  una `.dll` se busca junto al `.exe` o en el `PATH`.
+- **System libraries** are looked for by the executable in the usual system paths, and the machine
+  where it runs must have them installed.
+- **The ones in `library_paths`**: on Linux and macOS, the executable is compiled with the instruction
+  to look for them in those same folders (`-Wl,-rpath,...`), so `larimar run` works without copying
+  anything. On Windows, a `.dll` is looked for next to the `.exe` or in the `PATH`.
 
-Llevar las dinámicas a otra máquina (un instalador, un paquete del sistema, una dependencia documentada)
-es decisión de quien distribuye el programa, y de sus licencias. Si el ejecutable debe ser un solo
-archivo, la biblioteca se enlaza de forma estática o se compila como código fuente.
+Taking the dynamic libraries to another machine (an installer, a system package, a documented
+dependency) is up to whoever distributes the program, and to their licenses. If the executable must be
+a single file, the library is linked statically or compiled as source code.
 
-### Un ejemplo con Windows
+### An example with Windows
 
 ```actionscript
-// src/win.lar: el módulo que habla con Windows
+// src/win.lar: the module that talks to Windows
 c_include "<windows.h>";
 
 public extern type HWND;
@@ -3573,131 +3581,128 @@ function main(): int32 {
 }
 ```
 
-con `libraries = ["user32"]` en `[c]`. Declarar todo lo de Windows en un módulo `win` evita repetir
-las declaraciones `extern`: cada `extern type` es un tipo distinto en cada módulo que lo declara, así
-que el `HWND` debe venir de un solo sitio.
+with `libraries = ["user32"]` in `[c]`. Declaring everything about Windows in a `win` module avoids
+repeating the `extern` declarations: each `extern type` is a different type in each module that
+declares it, so the `HWND` must come from a single place.
 
-### El editor: `larimar check` y `larimar lsp`
+### The editor: `larimar check` and `larimar lsp`
 
-**`larimar check`** enlaza y analiza un programa igual que `larimar build`, pero no genera C ni llama
-al compilador de C: es la forma rápida de saber si hay errores.
+**`larimar check`** links and analyzes a program just like `larimar build`, but generates no C and
+does not call the C compiler: it is the quick way to know whether there are errors.
 
 ```sh
-larimar check                    # el proyecto de esta carpeta (su larimar.toml)
-larimar check src/tools.lar      # un archivo suelto, como programa
-larimar check . --json           # para herramientas: [{ "file", "line", "message", "kind" }]
+larimar check                    # the project in this folder (its larimar.toml)
+larimar check src/tools.lar      # a loose file, as a program
+larimar check . --json           # for tools: [{ "file", "line", "message", "kind" }]
 ```
 
-Sin `--json` escribe los errores en la salida de error (o `no errors`); el código de salida es 1 si hay
-errores.
+Without `--json` it writes the errors to the error output (or `no errors`); the exit code is 1 if
+there are errors.
 
-**`larimar lsp`** es el servidor de lenguaje (Language Server Protocol): el editor lo arranca y le
-habla por la entrada y la salida estándar. Responde:
+**`larimar lsp`** is the language server (Language Server Protocol): the editor starts it and talks to
+it through the standard input and output. It answers:
 
-| Qué | Cómo se ve en el editor |
+| What | How it looks in the editor |
 |---|---|
-| Errores en vivo | subrayados mientras escribes (cuando dejas de teclear un momento), en todos los archivos del programa |
-| Hover | la declaración (firma, campos de un struct, variantes de un enum) y el comentario `/** ... */` o `//` que tiene encima |
-| Ir a la definición | también a otro módulo o a `std` |
-| Referencias | los usos de una variable, función, método, campo, variante o tipo |
-| Símbolos del archivo | el esquema (Outline): funciones, tipos y sus miembros |
-| Autocompletado | tras `.`: campos y métodos según el tipo, nombres públicos de un módulo (`shapes.`), variantes de un enum; sin `.`: variables locales, nombres visibles, módulos y palabras clave |
-| Ayuda de firma | los parámetros de la función que estás llamando, con el actual resaltado |
+| Live errors | underlined while you type (when you stop typing for a moment), in every file of the program |
+| Hover | the declaration (signature, fields of a struct, variants of an enum) and the `/** ... */` or `//` comment above it |
+| Go to definition | also into another module or into `std` |
+| References | the uses of a variable, function, method, field, variant or type |
+| File symbols | the Outline: functions, types and their members |
+| Completion | after `.`: fields and methods according to the type, public names of a module (`shapes.`), variants of an enum; without `.`: local variables, visible names, modules and keywords |
+| Signature help | the parameters of the function you are calling, with the current one highlighted |
 
-Cómo trabaja:
+How it works:
 
-- Guarda en memoria el texto de los archivos abiertos (lo que aún no has guardado incluido), en memoria
-  de C que se libera cuando el texto cambia: el servidor puede estar horas abierto sin crecer.
-- Cada pregunta la responde un proceso nuevo (`fork()`): enlaza y analiza el programa con esos textos,
-  responde y termina. Así ningún análisis deja memoria atrás ni ve el estado del anterior, y si uno
-  falla solo se pierde esa respuesta. En el compilador mismo (unas 16.000 líneas) cada respuesta tarda
-  unos 0,2 s.
-- El programa de un archivo es el `main` del `larimar.toml` que tiene encima; si ese programa no lo
-  importa (o no hay `larimar.toml`), el archivo se analiza como programa por sí solo.
-- Donde no hay `fork()` (Windows), o con `LARIMAR_LSP_NO_FORK=1`, cada pregunta va a un
-  `larimarc lsp-worker` a través de dos archivos temporales.
-- Los mensajes de diagnóstico del servidor van a la salida de error (el editor los muestra en su
-  panel de salida); la salida estándar es solo del protocolo.
+- It keeps in memory the text of the open files (including what you have not saved yet), in C memory
+  that is freed when the text changes: the server can stay open for hours without growing.
+- Each question is answered by a new process (`fork()`): it links and analyzes the program with those
+  texts, answers and ends. That way no analysis leaves memory behind or sees the state of the previous
+  one, and if one fails only that answer is lost. On the compiler itself (some 16,000 lines) each answer
+  takes about 0.2 s.
+- The program of a file is the `main` of the `larimar.toml` above it; if that program does not import
+  it (or there is no `larimar.toml`), the file is analyzed as a program on its own.
+- Where there is no `fork()` (Windows), or with `LARIMAR_LSP_NO_FORK=1`, each question goes to a
+  `larimarc lsp-worker` through two temporary files.
+- The server's diagnostic messages go to the error output (the editor shows them in its output panel);
+  the standard output is only for the protocol.
 
-Límites: el análisis se hace del programa entero, así que un error de sintaxis (que impide enlazar)
-deja sin respuestas hasta corregirlo; las columnas se buscan en el texto de la línea (el compilador
-guarda la línea de cada nodo, no la columna), así que si un nombre aparece dos veces en la misma línea
-con significados distintos, el primero gana.
+Limits: the analysis is done on the whole program, so a syntax error (which prevents linking) leaves
+no answers until it is fixed; columns are looked for in the text of the line (the compiler keeps the
+line of each node, not the column), so if a name appears twice on the same line with different
+meanings, the first one wins.
 
 #### VS Code
 
-La extensión está en `editors/vscode` (y su paquete `larimar-0.7.0.vsix`):
+The Larimar extension for VS Code is installed from its package:
 
 ```sh
-code --install-extension larimar-0.7.0.vsix
-# o, desde el código:
-cd editors/vscode && npm install && npm run compile && npx vsce package
+code --install-extension larimar-<version>.vsix
 ```
 
-Busca Larimar en este orden: el ajuste `larimar.home`, la variable `LARIMAR_HOME`, `larimar` en el
-`PATH` y, en macOS y Linux, el `LARIMAR_HOME` de tu shell de inicio (VS Code abierto desde el Dock no
-ve lo que exporta `~/.zshrc`). Arranca `$LARIMAR_HOME/bin/larimarc lsp`. Añade los comandos
-**Larimar: Run Project** y **Debug Project** (también en el botón ▷ del editor), **Build Project**,
-**Check Project**, **Show Generated C** y **Restart Language Server**.
+It looks for Larimar in this order: the `larimar.home` setting, the `LARIMAR_HOME` variable, `larimar`
+on the `PATH` and, on macOS and Linux, the `LARIMAR_HOME` of your login shell (VS Code opened from the
+Dock does not see what `~/.zshrc` exports). It starts `$LARIMAR_HOME/bin/larimarc lsp`. It adds the
+commands **Larimar: Run Project** and **Debug Project** (also on the ▷ button of the editor), **Build
+Project**, **Check Project**, **Show Generated C** and **Restart Language Server**.
 
-Otros editores (Neovim, Helix, Zed, Sublime...) solo necesitan que se les diga que arranquen
-`larimarc lsp` para los archivos `.lar`, con `LARIMAR_HOME` en el entorno.
+Other editors (Neovim, Helix, Zed, Sublime...) only need to be told to start `larimarc lsp` for `.lar`
+files, with `LARIMAR_HOME` in the environment.
 
-### Depurar: `larimar build --debug` y `larimar dap`
+### Debugging: `larimar build --debug` and `larimar dap`
 
-`larimar build --debug` (también `larimar run --debug`, y `larimar archivo.lar -o archivo.c --debug`)
-compila con `-g -O0` (sin las `-O` de `flags`) y pone en el C directivas `#line` que dicen de qué línea
-del `.lar` viene cada parte. Dentro de una función, cada línea de C lleva la línea del `.lar` de la
-sentencia de la que viene, y la cabecera de la función la línea donde se declara; las funciones del
-runtime y los ayudantes generados se ven como el C que son. Además escribe junto al C el **mapa de
-depuración** (`build/<name>.debug.json`): cada función de C con su nombre de Larimar y sus variables
-(su nombre en Larimar, su nombre en C y su tipo), las globales y la forma de cada tipo.
+`larimar build --debug` (also `larimar run --debug`, and `larimar file.lar -o file.c --debug`) compiles
+with `-g -O0` (without the `-O` of `flags`) and puts `#line` directives in the C that say which line of
+the `.lar` each part comes from. Inside a function, each C line carries the `.lar` line of the statement
+it comes from, and the header of the function the line where it is declared; the functions of the
+runtime and the generated helpers are seen as the C they are. It also writes the **debug map** next to
+the C (`build/<name>.debug.json`): each C function with its Larimar name and its variables (their name
+in Larimar, their name in C and their type), the globals and the shape of each type.
 
-**`larimar dap`** es el depurador para editores (Debug Adapter Protocol), escrito en Larimar. Va entre
-el editor y `lldb-dap`, el adaptador de LLVM que ejecuta el programa bajo lldb:
+**`larimar dap`** is the debugger for editors (Debug Adapter Protocol), written in Larimar. It sits
+between the editor and `lldb-dap`, LLVM's adapter that runs the program under lldb:
 
 ```
 VS Code  <-- DAP -->  larimar dap  <-- DAP -->  lldb-dap  -->  build/demo
 ```
 
-Lo que pasa por él sin cambios: arrancar, puntos de interrupción, continuar, paso a paso, hilos. Lo que
-responde él, con el mapa:
+What goes through it unchanged: starting, breakpoints, continuing, stepping, threads. What it answers
+itself, with the map:
 
-- **La pila** con los nombres de Larimar (`main`, `Dog.bark`, `geo.shapes.area`); los marcos del
-  runtime y de C salen atenuados y con `[C]`, y el editor enfoca el primero de Larimar.
-- **Las variables** con sus nombres de Larimar (`total`, no `total_12`), sin los temporales del
-  compilador, solo las ya declaradas en esa línea, y cada valor leído y mostrado como Larimar:
+- **The stack** with the Larimar names (`main`, `Dog.bark`, `geo.shapes.area`); the frames of the
+  runtime and of C come out dimmed and with `[C]`, and the editor focuses the first Larimar one.
+- **The variables** with their Larimar names (`total`, not `total_12`), without the compiler's
+  temporaries, only the ones already declared on that line, and each value read and shown as Larimar:
 
-  | Valor | Se ve como |
+  | Value | It looks like |
   |---|---|
   | `String` | `"Larimar ñ"` |
-  | `T[*]`, `T[]` | `[3] ["a", "b", "c"]`, y al abrirlo `[0]`, `[1]`... |
-  | `T?` | su valor, o `null` |
-  | struct | `Point {x=1, y=2}`, y sus campos |
-  | enum | `Circle(r=1.5)`, y sus campos |
-  | objeto de clase | con su clase real (un `Animal` que es un `Dog` se ve como `Dog`) y los campos de todos los niveles |
-  | interfaz | el objeto que hay detrás |
-  | `Any` | lo que guarda: `42`, `"x"`, `{ 2 items, 2 entries }` con sus entradas al abrirlo, o el objeto |
+  | `T[*]`, `T[]` | `[3] ["a", "b", "c"]`, and when opened `[0]`, `[1]`... |
+  | `T?` | its value, or `null` |
+  | struct | `Point {x=1, y=2}`, and its fields |
+  | enum | `Circle(r=1.5)`, and its fields |
+  | class object | with its real class (an `Animal` that is a `Dog` looks like `Dog`) and the fields of every level |
+  | interface | the object behind it |
+  | `Any` | what it holds: `42`, `"x"`, `{ 2 items, 2 entries }` with its entries when opened, or the object |
 
-  Los valores se leen con expresiones de C que lldb evalúa (`(long long)(x).len`, `memory read`...):
-  no hay nada que instalar en lldb. Un ámbito **C** muestra además todo lo que ve lldb, tal cual.
-- **La consola de depuración y el hover** entienden caminos de Larimar: `a.name`, `list[2]`,
-  `pts[1].y`, `data.inner`, `list.length`. Lo demás (una expresión de C, un comando de lldb empezando
-  con `` ` ``) va a lldb.
-- **Puntos de interrupción de función** con nombres de Larimar (`main`, `Dog.bark`).
-- **Entrar en una función** se salta el runtime (no acabas dentro de `rt_str` o `List_s_push`).
-- **Panics**: con el filtro *Panics* (activo por defecto), el programa para donde ocurre un panic
-  (índice fuera de rango, `!` sobre `null`, `panic(...)`) y el editor lo muestra como una excepción con
-  su mensaje: *index 3 out of range (length 3)*.
+  The values are read with C expressions that lldb evaluates (`(long long)(x).len`, `memory read`...):
+  there is nothing to install in lldb. A **C** scope also shows everything lldb sees, as it is.
+- **The debug console and the hover** understand Larimar paths: `a.name`, `list[2]`, `pts[1].y`,
+  `data.inner`, `list.length`. The rest (a C expression, an lldb command starting with `` ` ``) goes to lldb.
+- **Function breakpoints** with Larimar names (`main`, `Dog.bark`).
+- **Stepping into a function** skips the runtime (you do not end up inside `rt_str` or `List_s_push`).
+- **Panics**: with the *Panics* filter (on by default), the program stops where a panic happens (index
+  out of range, `!` on `null`, `panic(...)`) and the editor shows it as an exception with its message:
+  *index 3 out of range (length 3)*.
 
-Necesita `lldb-dap`: en macOS viene con las herramientas de Xcode recientes (`xcrun --find lldb-dap`)
-o con el LLVM de Homebrew; en Linux, con el paquete de lldb (`lldb-dap` o `lldb-dap-18`, por ejemplo);
-en Windows, con LLVM. `larimar dap --backend <ruta>` o `LARIMAR_LLDB_DAP` dicen cuál usar.
+It needs `lldb-dap`: on macOS it comes with recent Xcode tools (`xcrun --find lldb-dap`) or with
+Homebrew's LLVM; on Linux, with the lldb package (`lldb-dap` or `lldb-dap-18`, for example); on
+Windows, with LLVM. `larimar dap --backend <path>` or `LARIMAR_LLDB_DAP` say which one to use.
 
-**En VS Code**, **Larimar: Debug Project** o F5 en un archivo `.lar` compila con `--debug` y arranca
-`larimar dap`. Un `launch.json` puede fijar el proyecto, los argumentos, el entorno, si para al
-empezar (en el `main` de Larimar) y si la salida va a la consola de depuración o a la terminal (para
-programas que leen el teclado):
+**In VS Code**, **Larimar: Debug Project** or F5 on a `.lar` file compiles with `--debug` and starts
+`larimar dap`. A `launch.json` can set the project, the arguments, the environment, whether it stops at
+the start (in Larimar's `main`) and whether the output goes to the debug console or to the terminal
+(for programs that read the keyboard):
 
 ```json
 {
@@ -3712,9 +3717,9 @@ programas que leen el teclado):
 }
 ```
 
-**Desde la terminal**, o con otros depuradores, `debug/` trae formateadores que enseñan a lldb y gdb a
-mostrar los mismos valores (no los nombres: ahí las variables se llaman como en el C, `total_12`, y se
-ven los temporales):
+**From the terminal**, or with other debuggers, `debug/` brings formatters that teach lldb and gdb to
+show the same values (not the names: there the variables are called as in the C, `total_12`, and the
+temporaries are seen):
 
 ```sh
 larimar build --debug
@@ -3725,36 +3730,36 @@ lldb build/demo
 (lldb) frame variable
 ```
 
-Con gdb: `source $LARIMAR_HOME/debug/larimar_gdb.py` y `break main.lar:12`. En VS Code, el ajuste
-`larimar.debugger` puede usar CodeLLDB o la extensión C/C++ con gdb en lugar de `larimar dap`, con
-estos formateadores.
+With gdb: `source $LARIMAR_HOME/debug/larimar_gdb.py` and `break main.lar:12`. In VS Code, the
+`larimar.debugger` setting can use CodeLLDB or the C/C++ extension with gdb instead of `larimar dap`,
+with these formatters.
 
 ---
 
-## 27. Qué genera el transpilador
+## 27. What the transpiler generates
 
-El resultado es **un único archivo C99** (`build/<name>.c`) que contiene el runtime y todo el programa,
-con todos sus módulos, sin dependencias más allá de la biblioteca estándar de C. `larimar build` lo
-compila, pero también se puede compilar a mano con cualquier compilador de C:
+The result is **a single C99 file** (`build/<name>.c`) that contains the runtime and the whole program,
+with all its modules, with no dependencies beyond the C standard library. `larimar build` compiles it,
+but it can also be compiled by hand with any C compiler:
 
 ```sh
 larimar c src/main.lar > program.c
 gcc -std=c99 -O2 program.c -o program
 ```
 
-El C generado compila sin avisos con `gcc -std=c99 -Wall -Wextra -pedantic`, y **solo lleva lo que el
-programa usa**. Se decide en dos pasos, siguiendo los nombres:
+The generated C compiles without warnings with `gcc -std=c99 -Wall -Wextra -pedantic`, and **only
+carries what the program uses**. It is decided in two steps, following the names:
 
-1. **El programa.** Se parte de `main`, de las `export function` y del C que el programa escribió él mismo
-   (`c_include`, `c_code`), y se queda cada función, método, tipo, variable global o función auxiliar que
-   algo de eso nombra, y así sucesivamente. Un método de `String` que el programa no llama, el `Opt_i64`
-   que solo aparecía en su firma o la función de `std` que nadie usa no llegan al C.
-2. **El runtime.** Del runtime se añaden las piezas que define algún nombre de lo que quedó (y las que
-   esas usan), con sus `#include`. Un programa que no usa memorias no lleva el código de memorias; uno que
-   no divide no lleva las comprobaciones de división; un `println` de números y textos se escribe con
-   `printf`.
+1. **The program.** It starts from `main`, the `export function`s and the C the program wrote itself
+   (`c_include`, `c_code`), and keeps each function, method, type, global variable or helper function
+   that any of that names, and so on. A `String` method the program does not call, the `Opt_i64` that
+   only appeared in its signature or the `std` function nobody uses do not reach the C.
+2. **The runtime.** The pieces of the runtime that define some name of what was kept (and the ones
+   those use) are added, with their `#include`s. A program that uses no memories does not carry the
+   memory code; one that does not divide does not carry the division checks; a `println` of numbers
+   and texts is written with `printf`.
 
-Un "hola mundo" queda así:
+A "hello world" looks like this:
 
 ```c
 /* Generated by the transpiler. Runtime first, then the program. */
@@ -3777,54 +3782,55 @@ int main(void) {
 }
 ```
 
-Y es legible:
+And it is readable:
 
-| En Larimar | En C |
+| In Larimar | In C |
 |---|---|
-| `struct` | `struct` normal; los métodos son funciones que reciben `S*` |
-| `class` | `struct` con una cabecera (vtable y memoria); la subclase contiene a su padre como `_super` |
-| métodos virtuales | una tabla de punteros a función por clase |
+| `struct` | a plain `struct`; methods are functions that receive `S*` |
+| `class` | a `struct` with a header (vtable and memory); the subclass contains its parent as `_super` |
+| virtual methods | a table of function pointers per class |
 | `interface` | `{ void* obj; const Table* t; }` |
 | `enum` | `{ int32_t tag; union { ... } as; }` |
-| lambda | `{ puntero a función; entorno con las capturas }`, por valor |
+| lambda | `{ function pointer; environment with the captures }`, by value |
 | `T[N]` | `{ int32_t length; T items[N]; }` |
-| `throws` | un parámetro extra `RtError*`, comprobado después de cada llamada |
-| memorias automáticas | un `RtMem` por bloque (`mem_N`) y por instrucción (`tmp_N`), creado solo si algo vive ahí y liberado en todas las salidas |
-| lo que devuelve una función | un primer parámetro `RtMem* rt_dest`: la memoria de la llamada (`NULL` si la función no crea su resultado) |
-| `geo.shapes.area` | `geo__shapes__area` (el archivo principal conserva sus nombres) |
-| `main` | `user_main`, llamada desde el `main` de C |
+| `throws` | an extra `RtError*` parameter, checked after each call |
+| automatic memories | an `RtMem` per block (`mem_N`) and per statement (`tmp_N`), created only if something lives there and freed on every exit |
+| what a function returns | a first parameter `RtMem* rt_dest`: the memory of the call (`NULL` if the function does not create its result) |
+| `geo.shapes.area` | `geo__shapes__area` (the main file keeps its names) |
+| `main` | `user_main`, called from C's `main` |
 | `extern type X;` / `= c "T";` | `typedef void* Ext_X;` / `typedef T Ext_X;` |
 | `extern type X = (A) -> R;` | `typedef R (*Ext_X)(A);` |
-| `extern type X = struct { ... };` | el struct de C, con su nombre; Larimar no lo define |
-| `export function f` | la función de Larimar (`larimar_f`) y una función `f` con tipos de C que la llama |
-| `Any` | `RtAny`: `{ kind; union de valores }`; una tabla es un `RtTable*` con índice hash; un struct va en una copia |
-| `Thread`, `synchronized` | hilos del sistema (`pthread` o Windows); un candado recursivo por objeto |
+| `extern type X = struct { ... };` | the C struct, with its name; Larimar does not define it |
+| `export function f` | the Larimar function (`larimar_f`) and a function `f` with C types that calls it |
+| `Any` | `RtAny`: `{ kind; union of values }`; a table is an `RtTable*` with a hash index; a struct goes in a copy |
+| `Thread`, `synchronized` | system threads (`pthread` or Windows); a recursive lock per object |
 
-### Comprobar la memoria
+### Checking the memory
 
-Para comprobar un programa durante el desarrollo, compila con los detectores de errores de gcc o clang:
+To check a program during development, compile it with the error detectors of gcc or clang:
 
 ```toml
 [c]
 flags = ["-g", "-fsanitize=address,undefined"]
 ```
 
-Con AddressSanitizer activado, **el runtime le enseña a ver dentro de las memorias**. Una memoria pide al
-sistema bloques grandes y reparte trozos de ellos, así que, sin ayuda, AddressSanitizer solo vería el
-bloque entero y no notaría que algo se sale de su trozo. El runtime lo resuelve así:
+With AddressSanitizer on, **the runtime teaches it to see inside the memories**. A memory asks the
+system for big blocks and hands out pieces of them, so, without help, AddressSanitizer would only see
+the whole block and would not notice that something goes outside its piece. The runtime solves it
+like this:
 
-- la parte de cada bloque que todavía no se ha repartido está envenenada;
-- cada trozo desenvenena exactamente los bytes que se pidieron;
-- en las memorias que crecen, entre un trozo y el siguiente queda un hueco envenenado.
+- the part of each block that has not been handed out yet is poisoned;
+- each piece unpoisons exactly the bytes that were asked for;
+- in the memories that grow, there is a poisoned gap between one piece and the next.
 
-Así, leer o escribir un solo byte de más se detiene en esa línea, con el error y la pila de llamadas.
-Pasa sobre todo con código C (`c_code`) que escribe en una memoria:
+That way, reading or writing a single byte too many stops at that line, with the error and the call
+stack. It happens above all with C code (`c_code`) that writes into a memory:
 
 ```actionscript
 c_code {
     static const char* bad(RtMem* m) {
         char* out = (char*)rt_mem_alloc(m, 4, 0);
-        for (int i = 0; i <= 4; i++) out[i] = 'A';      /* un byte de más */
+        for (int i = 0; i <= 4; i++) out[i] = 'A';      /* one byte too many */
         out[3] = 0;
         return out;
     }
@@ -3837,84 +3843,84 @@ WRITE of size 1 at 0x531000000815 thread T0
     #0 in bad program.c:274
 ```
 
-Sin las comprobaciones, ese byte pisaría en silencio lo siguiente de la memoria. Lo que ya murió también
-se detecta: una memoria liberada devuelve sus bloques al sistema, y AddressSanitizer avisa si algo los
-lee después.
+Without the checks, that byte would silently step on what comes next in the memory. What has already
+died is detected too: a freed memory gives its blocks back to the system, and AddressSanitizer warns if
+something reads them afterwards.
 
-- Las comprobaciones solo existen al compilar con `-fsanitize=address`. Sin esa opción no cuestan nada:
-  el C es el mismo, sin huecos ni comprobaciones.
-- Con `-DRT_DEBUG_MEMORY` (sin AddressSanitizer) se dejan los mismos huecos, y los bloques liberados se
-  rellenan con `0xDD`: un valor que sobrevivió a su memoria se lee como basura en vez de parecer correcto.
-- Las memorias sobre un búfer de la pila o estático (`in byte[N]`) no se envenenan, porque ese búfer no es
-  del runtime.
+- The checks only exist when compiling with `-fsanitize=address`. Without that option they cost
+  nothing: the C is the same, without gaps or checks.
+- With `-DRT_DEBUG_MEMORY` (without AddressSanitizer) the same gaps are left, and the freed blocks are
+  filled with `0xDD`: a value that outlived its memory reads as garbage instead of looking right.
+- Memories over a stack or static buffer (`in byte[N]`) are not poisoned, because that buffer does not
+  belong to the runtime.
 
-**Si el compilador se equivoca.** Si el generador encuentra algo que el análisis debería haber resuelto
-(por ejemplo, una llamada que crea su resultado y se quedó sin memoria), no escribe C que fallaría al
-ejecutar, sino que se detiene con un error:
+**If the compiler gets it wrong.** If the generator finds something the analysis should have resolved
+(for example, a call that creates its result and was left without a memory), it does not write C that
+would fail when running, but stops with an error:
 
 ```
 Internal Error [main.lar:7]: 'buffer' creates its result, but this call was given no memory for it.
 This is a bug of the compiler, not of your program: please report it.
 ```
 
-Y si aun así algo intentara crear un valor sin memoria, el programa se detiene con un `panic` que lo dice,
-en lugar de fallar con un error de segmentación.
+And if even so something tried to create a value without a memory, the program stops with a `panic`
+that says so, instead of failing with a segmentation fault.
 
 ---
 
-## 28. Larimar escrito en Larimar
+## 28. Larimar written in Larimar
 
-El compilador de Larimar, **larimarc**, y la herramienta `larimar` están escritos en Larimar. Su código
-está en la carpeta `larimar-compiler/`:
+The Larimar compiler, **larimarc**, and the `larimar` tool are written in Larimar. The repository has:
 
 ```
-larimar-compiler/
-  src/                   el compilador (Larimar), con larimar check y larimar lsp
-  std/                   la biblioteca estándar
-  tests/                 las pruebas (tests/lsp: check y el servidor de lenguaje)
-  editors/vscode/        la extensión de VS Code
-  debug/                 formateadores de valores para lldb y gdb
-  bin/larimar            el lanzador que se instala
-  MANUAL.md              este manual
-  larimarc_bootstrap.c   el compilador ya traducido a C, para arrancar sin Larimar
-  build-bootstrap.sh     construye el compilador e instala la carpeta larimar/
+larimar/
+  src/                   the compiler (Larimar), with larimar check, larimar lsp and larimar dap
+  std/                   the standard library
+  tests/                 the tests (tests/lsp: check and the language server)
+  debug/                 value formatters for lldb and gdb
+  bin/larimar            the launcher that is installed
+  MANUAL.md              this manual (MANUAL_ES.md: in Spanish)
+  larimarc_bootstrap.c   the compiler already translated to C, to start without Larimar
+  build-bootstrap.sh     builds the compiler and installs the ../out/larimar folder
 ```
 
-Para construirlo solo hace falta un compilador de C:
+To build it only a C compiler is needed:
 
 ```sh
-cd larimar-compiler
+cd larimar
 ./build-bootstrap.sh --verify
 ```
 
-1. Compila `larimarc_bootstrap.c` y obtiene `larimarc`.
-2. Con `--verify`, compila `src/` tres veces: con ese larimarc (`build/stage1.c`), con el compilador que
-   sale de ahí (`build/stage2.c`) y con el que sale de este (`build/stage3.c`). `stage2.c` y `stage3.c`
-   deben ser idénticos byte a byte: el compilador, compilado por sí mismo, se produce a sí mismo. Si
-   `larimarc_bootstrap.c` es más antiguo que `src/`, lo avisa e instala el compilador hecho desde `src/`.
-3. Instala en `../larimar` (o en `LARIMAR_PREFIX`) el resultado: `bin/larimarc`, `bin/larimar`, una copia
-   de `std/` y de este manual. Esa carpeta se puede borrar y regenerar cuando se quiera; todo se edita en
-   `larimar-compiler/`.
+1. It compiles `larimarc_bootstrap.c` and gets `larimarc`.
+2. With `--verify`, it compiles `src/` three times: with that larimarc (`build/stage1.c`), with the
+   compiler that comes out of it (`build/stage2.c`) and with the one that comes out of that one
+   (`build/stage3.c`). `stage2.c` and `stage3.c` must be identical byte by byte: the compiler, compiled
+   by itself, produces itself. If `larimarc_bootstrap.c` is older than `src/`, it says so and installs
+   the compiler made from `src/`.
+3. It installs the result in `../out/larimar` (or in `LARIMAR_PREFIX`): `bin/larimarc`, `bin/larimar`,
+   a copy of `std/`, of `debug/` and of this manual. That folder can be deleted and regenerated whenever
+   you want; everything is edited in the repository.
 
-Después de cambiar el compilador, `./build-bootstrap.sh --verify` lo comprueba e instala, y el C de
-arranque se actualiza con lo que indica:
+After changing the compiler, `./build-bootstrap.sh --verify` checks and installs it, and the bootstrap C
+is updated with what it says:
 
 ```sh
 cp build/stage2.c larimarc_bootstrap.c
 ```
 
-`bin/larimar` fija `LARIMAR_HOME` en la carpeta de la instalación, y el compilador busca la biblioteca
-estándar en `$LARIMAR_HOME/std`.
+`bin/larimar` sets `LARIMAR_HOME` to the folder of the installation, and the compiler looks for the
+standard library in `$LARIMAR_HOME/std`.
 
-**Una regla al cambiar el lenguaje.** El compilador se construye con su propia biblioteca estándar, así
-que `std/` solo puede usar lo que ya entiende el compilador que lo compila. Si añades algo al lenguaje
-(como `panic`) y quieres usarlo en `std/`, primero se añade al compilador, se regenera
-`larimarc_bootstrap.c` con un compilador que ya lo entiende, y después se usa en `std/`.
+**A rule when changing the language.** The compiler is built with its own standard library, so `std/`
+can only use what the compiler that compiles it already understands. If you add something to the
+language (like `panic`) and want to use it in `std/`, it is first added to the compiler,
+`larimarc_bootstrap.c` is regenerated with a compiler that already understands it, and then it is used
+in `std/`.
 
-### Las pruebas
+### The tests
 
-`tests/run-tests.sh` compila y ejecuta todos los programas de `tests/`, cada uno con AddressSanitizer y
-UBSan. Cada archivo dice en sus primeras líneas qué espera:
+`tests/run-tests.sh` compiles and runs every program in `tests/`, each one with AddressSanitizer and
+UBSan. Each file says in its first lines what it expects:
 
 ```actionscript
 // expect: run
@@ -3923,89 +3929,94 @@ function make(n: int32): String { return "hola ${n}"; }
 function main(): int32 { println(make(3)); return 0; }
 ```
 
-| Primera línea | La prueba pasa si... |
+| First line | The test passes if... |
 |---|---|
-| `// expect: run` | compila, se ejecuta sin errores de memoria, termina con 0 e imprime las líneas `// output:` |
-| `// expect: error texto` | el compilador lo rechaza con un mensaje que contiene `texto` |
-| `// expect: panic texto` | compila, y se detiene al ejecutar (`panic`) con `texto` |
-| `// expect: memory-error` | compila, y los detectores encuentran un error de memoria al ejecutar |
+| `// expect: run` | it compiles, runs without memory errors, ends with 0 and prints the `// output:` lines |
+| `// expect: error text` | the compiler rejects it with a message that contains `text` |
+| `// expect: panic text` | it compiles, and stops when running (`panic`) with `text` |
+| `// expect: memory-error` | it compiles, and the detectors find a memory error when running |
 
 ```sh
-./build-bootstrap.sh --verify --test  # construir, comprobar que se compila a sí mismo, probar e instalar
-tests/run-tests.sh                    # todas, con ./larimarc
-tests/run-tests.sh memory             # solo las que tienen "memory" en la ruta
+./build-bootstrap.sh --verify --test  # build, check that it compiles itself, test and install
+tests/run-tests.sh                    # all of them, with the larimarc that build-bootstrap.sh made
+tests/run-tests.sh memory             # only the ones with "memory" in the path
 LARIMARC=build/larimarc_stage2 tests/run-tests.sh
 ```
 
-`tests/memory/` cubre el modelo de memoria: lo que devuelve una función (creado, vista de un argumento,
-uno de sus argumentos), llamadas anidadas, valores por defecto de campos, interpolación, bucles, `map` y
-`filter`, lambdas guardadas, `in default`, memorias propias, `clone()`, excepciones con temporales
-vivos, `switch` que crea, objetos, `Any`, hilos, `export function` llamada desde C, y lo que debe
-rechazarse. **Cada fallo que se encuentre entra primero como prueba**, y después se arregla.
+`tests/memory/` covers the memory model: what a function returns (created, a view of an argument, one
+of its arguments), nested calls, default values of fields, interpolation, loops, `map` and `filter`,
+kept lambdas, `in default`, memories of your own, `clone()`, exceptions with live temporaries, a
+`switch` that creates, objects, `Any`, threads, `export function` called from C, and what must be
+rejected. **Each failure that is found first goes in as a test**, and then it is fixed.
 
-`tests/lsp/lsp_test.py` (lo lanza `run-tests.sh` si hay `python3`) prueba `larimar check --json` y habla
-con `larimar lsp` sobre el proyecto de `tests/lsp/project`: errores publicados, hover, definición,
-referencias, símbolos, autocompletado y ayuda de firma, con `fork()` y con `LARIMAR_LSP_NO_FORK=1`.
-`tests/debug/debug_test.py` compila `tests/debug/values.lar` con `--debug`, para con lldb y con gdb (los
-que haya) en una línea del `.lar` y comprueba cómo se ven los valores; con `lldb-dap`, habla con
-`larimar dap` como un editor (pila, variables, hijos, caminos en evaluate, y un panic de
-`tests/debug/panic.lar` como excepción con su mensaje).
-`tests/tls/tls_test.py` levanta un servidor HTTPS local con el certificado propio de `tests/tls` y compila
-`tests/tls/client.lar`: el certificado rechazado por defecto, y con `SystemTls { verify: false }` un GET, un
-cuerpo `chunked`, uno grande con `copy()`, un POST, una redirección de `http://` a `https://` y un
-`TlsProvider` propio; en Linux, además, el mensaje cuando falta OpenSSL.
-
----
-
-## 29. Limitaciones actuales
-
-- No hay `defer` ni genéricos.
-- Un `Any` no guarda listas `[*]`, lambdas ni interfaces.
-- Una clase `synchronized` no puede heredar, y `wait until` no tiene tiempo límite (espera hasta que la condición se cumpla).
-- La biblioteca estándar es pequeña: archivos, consola, rutas, entorno, bytes, JSON, TCP y un cliente HTTP y HTTPS (`std.io.*`, `std.path`, `std.os`, `std.text`, `std.text.regex`, `std.json`, `std.net`, `std.net.http`). La red aún no tiene servidor HTTP, WebSockets, UDP, un bucle de eventos ni conexiones HTTP reutilizadas (keep-alive). El TLS de macOS y Windows está escrito y compila, pero sus pruebas solo se han ejecutado en Linux.
-- Algunas operaciones de `String` y `Any` siguen siendo intrínsecas del compilador; las listas aún no se declaran en `std.lang`.
-- A C solo se le pueden pasar funciones de C (`extern` o `export`), no lambdas con capturas; el contexto
-  viaja por el `void* data` de la biblioteca. Un struct de C no puede tener campos arreglo (salvo un texto,
-  `char name[32]`, que se lee como `String`) ni uniones; se leen con una función en `c_code`.
-- Un puntero de C (`T*`) no se indexa (`p[i]`) ni se le suma; para un arreglo de C, una función en `c_code`.
-  `&x` solo vale como argumento de una función de C.
-- La función que suelta un recurso (`released by`) recibe solo el recurso: si necesita más contexto (una
-  tabla de funciones cargada con `dlopen`, como OpenSSL en `std.net.http.tls`), va en `c_code`.
-- No se puede vaciar una memoria a mano (`clear()`); se libera al final de su bloque.
-- El compilador decide sin ejecutar si una función crea su resultado. Si a veces devuelve algo nuevo y a
-  veces algo que ya existía, se la trata como si siempre creara: lo que devuelve vive en la memoria de
-  la llamada (para guardarlo más tiempo, `in default` o `clone()`).
-- Las lambdas, y por tanto los literales de interfaz, no pueden lanzar errores.
-- Una lambda no puede capturar otra del mismo tipo.
-- Un enum no puede contener otro valor de su mismo tipo (usa una clase para estructuras recursivas).
-- Los nombres de tipos, métodos y variantes deben ser ASCII; las variables y los campos pueden usar cualquier letra.
-- Ningún nombre puede contener `__`.
+`tests/lsp/lsp_test.py` (`run-tests.sh` runs it if there is `python3`) tests `larimar check --json` and
+talks to `larimar lsp` over the project in `tests/lsp/project`: published errors, hover, definition,
+references, symbols, completion and signature help, with `fork()` and with `LARIMAR_LSP_NO_FORK=1`.
+`tests/debug/debug_test.py` compiles `tests/debug/values.lar` with `--debug`, stops with lldb and with
+gdb (whichever there are) on a line of the `.lar` and checks how the values look; with `lldb-dap`, it
+talks to `larimar dap` like an editor (stack, variables, children, paths in evaluate, and a panic of
+`tests/debug/panic.lar` as an exception with its message).
+`tests/tls/tls_test.py` starts a local HTTPS server with the certificate of `tests/tls` and compiles
+`tests/tls/client.lar`: the certificate rejected by default, and with `SystemTls { verify: false }` a
+GET, a `chunked` body, a big one with `copy()`, a POST, a redirect from `http://` to `https://` and a
+`TlsProvider` of its own; on Linux, also the message when OpenSSL is missing.
 
 ---
 
-## 30. Referencia rápida
+## 29. Current limitations
+
+- There is no `defer` and there are no generics.
+- An `Any` does not keep `[*]` lists, lambdas or interfaces.
+- A `synchronized` class cannot inherit, and `wait until` has no time limit (it waits until the condition holds).
+- The standard library is small: files, console, paths, environment, bytes, regular expressions, JSON,
+  TCP and UDP with their servers, a TLS server, and an HTTP and HTTPS client (`std.io.*`, `std.path`,
+  `std.os`, `std.text`, `std.text.regex`, `std.json`, `std.net`, `std.net.http`). The network does not
+  have an HTTP server, WebSockets, an event loop or reused HTTP connections (keep-alive) yet. The TLS
+  server is not available on Windows yet. The client TLS of macOS and Windows is written and compiles,
+  but its tests have only run on Linux.
+- Some operations of `String` and `Any` are still intrinsics of the compiler; lists are not declared in `std.lang` yet.
+- Only C functions (`extern` or `export`) can be passed to C, not lambdas with captures; the context
+  travels in the library's `void* data`. A C struct cannot have array fields (except a text,
+  `char name[32]`, which is read as a `String`) or unions; they are read with a function in `c_code`.
+- A C pointer (`T*`) is not indexed (`p[i]`) or added to; for a C array, a function in `c_code`.
+  `&x` only works as an argument of a C function.
+- The function that lets a resource go (`released by`) receives only the resource: if it needs more
+  context (a table of functions loaded with `dlopen`, like OpenSSL in `std.net`), it goes in `c_code`.
+- A memory cannot be emptied by hand (`clear()`); it is freed at the end of its block.
+- The compiler decides without running whether a function creates its result. If it sometimes returns
+  something new and sometimes something that already existed, it is treated as if it always created:
+  what it returns lives in the memory of the call (to keep it longer, `in default` or `clone()`).
+- Lambdas, and therefore interface literals, cannot throw errors.
+- A lambda cannot capture another one of the same type.
+- An enum cannot contain another value of its own type (use a class for recursive structures).
+- The names of types, methods and variants must be ASCII; variables and fields can use any letter.
+- No name can contain `__`.
+
+---
+
+## 30. Quick reference
 
 ```actionscript
-// Módulos
+// Modules
 import geo.shapes;                      // shapes.area(s)
 import geo.shapes as g;                 // g.area(s)
 import geo.shapes { Shape, area };      // area(s)
 public function exported(): void { }
 
-// Declaraciones
+// Declarations
 const MAX: int32 = 10;
 let global: int32 = 0;
 function f(a: int32, b: String): bool throws MyError { ... }
-function add(p: Node, k: Node in p): void { p.kids.push(k); }   // k vive tanto como p (también: in default, in self)
+function add(p: Node, k: Node in p): void { p.kids.push(k); }   // k lives as long as p (also: in default, in self)
 struct S { let field: int32 = 0; function m(): void { } operator +(o: S): S { ... } }
 class C extends Parent implements I { let field: String; override function m(): void { super.m(); } }
 interface I { function m(): void; }
 enum E { A, B(x: int32) }
 
-// Variables y valores
+// Variables and values
 let x: int32 = 5;
 let s: S = { field: 1 };
-let o: C = C { field: "x" };                  // vive en la memoria de su bloque
+let o: C = C { field: "x" };                  // it lives in the memory of its block
 let e: E = E.B { x: 3 };
 let q: int32? = null;
 let arr: int32[8] = [1, 2];
@@ -4013,11 +4024,11 @@ let items: int32[*] = [];
 let last: int32 = items.pop();
 let fn: (int32) -> int32 = (n) -> { return n + x; };
 
-// Memoria (automática: temporales de la instrucción, memoria del bloque, la de quien llama)
-let text: String = "hello ${x}";                // en la memoria del bloque
-let kept: String = "for ever ${x}" in default;  // todo el programa
-let memory: byte[*] = [] in heap;               // una memoria propia
-let made: String = build(x) in memory;          // el resultado de una llamada, ahí
+// Memory (automatic: temporaries of the statement, memory of the block, the caller's)
+let text: String = "hello ${x}";                // in the memory of the block
+let kept: String = "for ever ${x}" in default;  // the whole program
+let memory: byte[*] = [] in heap;               // a memory of your own
+let made: String = build(x) in memory;          // the result of a call, there
 let copy: String = text.clone();
 
 // Control
@@ -4030,50 +4041,50 @@ if (pet is Dog d) { println(d.breed); }
 try { f(1, "a"); } catch (MyError err) { }
 throw MyError.Something;
 
-// Opcionales
+// Optionals
 let v: int32 = q ?? 0;
 let w: int32 = q!;
 if (q != null) { let z: int32 = q + 1; }
-if (q == null) { return; }              // desde aquí, q no es null
+if (q == null) { return; }              // from here on, q is not null
 let k: String = q > 0 ? "pos" : "neg";
 
 // C
 c_include "<stdio.h>";
 extern function puts(text: String): int32;
-extern function cExit(code: int32): void = c "exit";           // otro nombre en C
+extern function cExit(code: int32): void = c "exit";           // another name in C
 extern const EOF: int32;
 extern const SIZE: int32 = c "(int)sizeof(long)";
 extern let errno: int32;
-extern type CFile = c "FILE*" released by fclose;               // un recurso: se suelta con su memoria
+extern type CFile = c "FILE*" released by fclose;               // a resource: let go with its memory
 extern function fopen(path: String, mode: String): CFile?;
 extern function fclose(f: CFile): int32;
 extern type Node = struct "struct node" { let next: Node*; let name: String; };
-two_results(&a, &b);                                            // & solo como argumento de C
-release(file);                                                  // soltarlo antes
-#when windows                                                   // elegido al compilar el C; cada directiva
-    let sep: String = "\\";                                     // sola en su línea; #when, #else y #end
-#else                                                           // de una elección, en la misma columna
+two_results(&a, &b);                                            // & only as an argument of C
+release(file);                                                  // let it go earlier
+#when windows                                                   // chosen when compiling the C; each directive
+    let sep: String = "\\";                                     // alone on its line; #when, #else and #end
+#else                                                           // of one choice, in the same column
     let sep: String = "/";
-#end                                                            // sep sigue: todas las ramas lo declaran
+#end                                                            // sep goes on: every branch declares it
 
-// Literales
+// Literals
 let c: byte = 'a';
 let page: String = """
     <p>${text}</p>
     """;
 let sql: String = raw"""
     SELECT * FROM users WHERE name = "x\y";
-    """;                                  // tal cual: sin escapes ni ${...}
+    """;                                  // as it is: no escapes or ${...}
 
-// Texto
-let w: String = text.trim().substring(0, 3);          // vistas
-let up: String = text.toUpperCase();                 // texto nuevo
+// Text
+let w: String = text.trim().substring(0, 3);          // views
+let up: String = text.toUpperCase();                 // new text
 let n: int64 = "42".toInt() ?? 0;
 let sb: StringBuilder = {};
 sb.add("x = ${n}");
 
-// Programa y biblioteca estándar
-// main puede recibir los argumentos: main(args: String[])
+// Program and standard library
+// main can receive the arguments: main(args: String[])
 import std.io.files as Files;
 let content: String = Files.readString(args[0]);
 
@@ -4082,23 +4093,23 @@ let t: Any = { 1, "two", name: "x", inner: { 3 } };
 let n: int32 = t.port as int32 ?? 80;
 for (k, v in t.fields) { }
 
-// Hilos
+// Threads
 synchronized class Box { let n: int32 = 0; function inc(): void { self.n += 1; } }
-function take(): int32 wait until (self.n > 0) { ... }           // en una clase synchronized: espera a que se cumpla
-let onConnect: (TcpSocket) -> void thread safe;                 // la llaman otros hilos: su lambda se comprueba
-let th: Thread = { run: () -> { box.inc(); } };   // al liberarse su memoria, se espera a que termine
+function take(): int32 wait until (self.n > 0) { ... }           // in a synchronized class: it waits until it holds
+let onConnect: (TcpSocket) -> void thread safe;                 // other threads call it: its lambda is checked
+let th: Thread = { run: () -> { box.inc(); } };   // when its memory is freed, it waits for it to end
 th.start();
 th.join();
 
-// Fallos del programa
-panic("no debería pasar: ${x}");                     // se detiene con el mensaje (código 101)
+// Failures of the program
+panic("should not happen: ${x}");                    // it stops with the message (code 101)
 
 // C
 c_include "<math.h>";
 extern function sqrt(x: float64): float64;
 extern type Handle;                                   // void*
-extern type File = c "FILE*";                         // un tipo de C concreto
-extern type Point = struct { let x: float32; let y: float32; };   // un struct de C
-extern type Op = (int32, int32) -> int32;             // un puntero a función de C
-export function restar(a: int32, b: int32): int32 { return a - b; }   // C puede llamarla
+extern type File = c "FILE*";                         // a concrete C type
+extern type Point = struct { let x: float32; let y: float32; };   // a C struct
+extern type Op = (int32, int32) -> int32;             // a pointer to a C function
+export function subtract(a: int32, b: int32): int32 { return a - b; }   // C can call it
 ```

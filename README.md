@@ -16,13 +16,13 @@ larimar-compiler/
 │   ├── session.lar          # One analysis without C (larimar check)
 │   ├── lsp.lar, ide.lar     # Language server (larimar lsp) and its answers
 │   └── ...
-├── std/                     # Standard library source (edit it here); std/net.lar: TCP; std/net/http.lar: HTTP client; std/net/http/tls.lar: TLS
+├── std/                     # Standard library source (edit it here); std/net.lar: TCP, UDP and their servers, TLS servers; std/net/http.lar: HTTP client; std/net/http/tls.lar: TLS
 │                            # (net, io and os are written in Larimar over the system's C functions: extern, #when, T*, released by)
 ├── tests/                   # Tests (tests/run-tests.sh; tests/lsp for check and lsp)
-├── editors/vscode/          # VS Code extension (language server and debugger)
 ├── debug/                   # lldb and gdb formatters for Larimar values (installed in larimar/debug)
 ├── bin/larimar              # Wrapper installed as larimar/bin/larimar
-├── MANUAL.md                # Language manual (Spanish)
+├── MANUAL.md                # Language manual (English)
+├── MANUAL_ES.md             # Language manual (Spanish)
 ├── larimarc_bootstrap.c     # C bootstrap
 ├── build-bootstrap.sh       # Build from the C bootstrap and install
 ├── larimar.toml             # Project configuration
@@ -96,7 +96,7 @@ Test the compiler:
 
 ```bash
 ./larimarc --version
-# Should output: larimar 0.2.0
+# Should output: larimar 0.2.1
 
 # Compile a test program
 echo 'function main(): void { println("Hello!"); }' > test.lar
@@ -121,23 +121,18 @@ talks LSP to `larimar lsp`: errors, hover, definition, references, symbols, comp
 with `fork()` and with `LARIMAR_LSP_NO_FORK=1`.
 `tests/tls/tls_test.py` runs `https://` against a local HTTPS server (the certificate in `tests/tls`).
 
-## Editors
+## Editor support
 
 `larimar check [file|folder] [--json]` reports the errors without generating C. `larimar lsp` is the
-language server (see "El editor" in section 26 of `MANUAL.md`): the server keeps the open documents
+language server (see "The editor" in section 26 of `MANUAL.md`): the server keeps the open documents
 (`docstore.lar`) and answers each request in a forked process that links and analyzes the program
-(`session.lar`) and answers from the analysis (`ide.lar`). `editors/vscode` is the VS Code extension:
-
-```bash
-cd editors/vscode && npm install && npm run compile && npx vsce package
-code --install-extension larimar-0.4.0.vsix
-```
+(`session.lar`) and answers from the analysis (`ide.lar`).
 
 `larimar build --debug` compiles with `-g -O0`, `#line` directives to the `.lar` files and a debug map
 (`build/<name>.debug.json`, from `debugmap.lar`). `larimar dap` (`dap.lar`) is the debugger for editors:
 a DAP adapter written in Larimar over LLVM's `lldb-dap`, which shows the stack, variables and values
 as Larimar (names, real classes, Any, enums), understands Larimar paths in evaluate and stops on
-panics as exceptions. In VS Code, F5 on a `.lar` file builds and starts it. `debug/larimar_lldb.py` and
+panics as exceptions. `debug/larimar_lldb.py` and
 `debug/larimar_gdb.py` show the same values in lldb and gdb from a terminal. `tests/debug/debug_test.py`
 checks all of it.
 
@@ -156,30 +151,28 @@ flags = ["-O2"]
 
 ## Source Files Overview
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| analyzer.lar | ~2,377 | Semantic analysis, type checking, lifetime analysis |
-| checkexpr.lar | ~2,280 | Expression type checking, method resolution |
-| genexpr.lar | ~1,711 | C code generation for expressions |
-| gen.lar | ~1,439 | C code generation for statements |
-| runtime.lar | ~1,167 | Runtime C code (strings, memory, Any) |
-| parser.lar | ~1,025 | Syntax parsing, AST construction |
-| sema.lar | ~818 | Type system, symbol tables |
-| linker.lar | ~694 | Module linking, C compilation |
-| lexer.lar | ~538 | Tokenization |
-| ast.lar | ~489 | AST node definitions |
-| main.lar | ~432 | CLI, project management |
-| rtselect.lar | ~356 | Runtime selection |
-| prune.lar | ~250 | Keeps only the generated C the program reaches |
-| ide.lar | ~1,460 | Editor answers: hover, definition, references, symbols, completion |
-| lsp.lar | ~460 | Language server: JSON-RPC, documents, forked analyses |
-| session.lar | ~145 | One analysis without C; larimar check |
-| docstore.lar | ~70 | The editor's open documents (freeable C memory) |
-| dap.lar | ~1,350 | Debugger: DAP adapter over lldb-dap, values shown as Larimar |
-| debugmap.lar | ~230 | Debug map: C names and types of every variable, for the debugger |
-| toml.lar | ~229 | TOML parser |
-
-**Total:** ~16,350 lines (91% Larimar, 9% embedded C in runtime.lar)
+| File | Purpose |
+|------|---------|
+| analyzer.lar | Semantic analysis, type checking, lifetime analysis |
+| checkexpr.lar | Expression type checking, method resolution |
+| genexpr.lar | C code generation for expressions |
+| gen.lar | C code generation for statements |
+| runtime.lar | Runtime C code (strings, memory, Any) |
+| parser.lar | Syntax parsing, AST construction |
+| sema.lar | Type system, symbol tables |
+| linker.lar | Module linking, C compilation |
+| lexer.lar | Tokenization |
+| ast.lar | AST node definitions |
+| main.lar | CLI, project management |
+| rtselect.lar | Runtime selection |
+| prune.lar | Keeps only the generated C the program reaches |
+| ide.lar | Editor answers: hover, definition, references, symbols, completion |
+| lsp.lar | Language server: JSON-RPC, documents, forked analyses |
+| session.lar | One analysis without C; larimar check |
+| docstore.lar | The editor's open documents (freeable C memory) |
+| dap.lar | Debugger: DAP adapter over lldb-dap, values shown as Larimar |
+| debugmap.lar | Debug map: C names and types of every variable, for the debugger |
+| toml.lar | TOML parser |
 
 ## Self-Hosting
 
@@ -200,7 +193,7 @@ larimar build
 ./build/larimarc --version
 ```
 
-Install it (copies the compiler, `std/` and `MANUAL.md` into `../larimar`):
+Install it (copies the compiler, `std/` and `MANUAL.md` into `../out/larimar`):
 
 ```bash
 ./build-bootstrap.sh --verify
