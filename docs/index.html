@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="meta.title">Larimar: a small language that compiles to C</title>
+  <meta name="description" data-i18n-content="meta.description" content="Larimar is an experimental language that transpiles to C99, with no garbage collector.">
+  <script>
+    // Hidden for a moment while i18n.json loads, so the page does not flash in the other language.
+    document.documentElement.classList.add('i18n-pending');
+    setTimeout(function () { document.documentElement.classList.remove('i18n-pending'); }, 1500);
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    :root {
+      --bg-dark: #080b0f;
+      --bg-card: rgba(15, 20, 25, 0.6);
+      --border-color: #383e48;
+      --larimar: #3fc9c4;
+      --larimar-light: #72e2dd;
+      --gem: #34d399;
+      --text-main: #ecedf1;
+      --text-muted: #828e9c;
+    }
+
+    *, ::before, ::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      border: 0 solid var(--border-color);
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 6rem;
+      font-family: Inter, system-ui, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+    }
+
+    body {
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    ul { list-style: none; }
+
+    .container {
+      width: 100%;
+      max-width: 80rem;
+      margin: 0 auto;
+      padding: 0 1.25rem;
+    }
+
+    @media (min-width: 640px) { .container { padding: 0 2rem; } }
+    @media (min-width: 1024px) { .container { padding: 0 3rem; } }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      border-radius: 0.75rem;
+      background-color: var(--larimar);
+      padding: 0.75rem 1.25rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #080b0f;
+      box-shadow: 0 0 40px -10px rgba(34, 170, 166, 0.45);
+      transition: background-color 0.2s, transform 0.1s;
+      cursor: pointer;
+    }
+    .btn-primary:hover { background-color: #55dcd7; }
+    .btn-primary:active { transform: scale(0.98); }
+
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      border-radius: 0.75rem;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-card);
+      padding: 0.75rem 1.25rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-main);
+      backdrop-filter: blur(8px);
+      transition: border-color 0.2s, background-color 0.2s;
+      cursor: pointer;
+    }
+    .btn-ghost:hover { border-color: rgba(63, 201, 196, 0.4); background-color: rgba(56, 62, 72, 0.8); }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-radius: 9999px;
+      border: 1px solid rgba(63, 201, 196, 0.3);
+      background-color: rgba(34, 170, 166, 0.1);
+      padding: 0.25rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--larimar-light);
+    }
+
+    code { overflow-wrap: anywhere; }
+
+    .card {
+      border-radius: 1rem;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-card);
+      backdrop-filter: blur(8px);
+      transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+    }
+    .card:hover {
+      transform: translateY(-0.25rem);
+      border-color: rgba(63, 201, 196, 0.4);
+      box-shadow: 0 16px 40px -12px rgba(15, 20, 25, 0.25);
+    }
+
+    .code-block {
+      border-radius: 1rem;
+      border: 1px solid var(--border-color);
+      background-color: rgba(8, 11, 15, 0.8);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.875rem;
+      line-height: 1.625;
+      overflow-x: auto;
+    }
+
+    .gradient-text {
+      background: linear-gradient(to right, var(--larimar-light), var(--larimar), var(--gem));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* HEADER AL 100% DE ANCHO */
+    header {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      z-index: 50;
+      background: rgba(8, 11, 15, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      width: 100%;
+    }
+
+    .nav-container {
+      display: flex;
+      height: 4rem;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 100%;
+      padding: 0 2rem;
+    }
+
+    @media (min-width: 1024px) { 
+      .nav-container { 
+        padding: 0 4rem; 
+      } 
+    }
+
+    .nav-links {
+      display: none;
+      gap: 2rem;
+    }
+    @media(min-width: 768px) { .nav-links { display: flex; } }
+    .nav-links a { font-size: 0.875rem; font-weight: 500; color: var(--text-muted); transition: color 0.2s; }
+    .nav-links a:hover { color: var(--larimar-light); }
+
+    .section {
+      padding: 6rem 0;
+      scroll-margin-top: 5rem;
+    }
+
+    .tok-kw { color: var(--larimar-light); }
+    .tok-type { color: #6ee7b7; }
+    .tok-str { color: #fde68a; }
+    .tok-num { color: #fda4af; }
+    .tok-com { font-style: italic; color: #647180; }
+    .tok-fn { color: #7dd3fc; }
+    .tok-punct { color: #aeb6c0; }
+
+    /* GRID DEL HERO Y SECCIONES */
+    .hero-grid {
+      display: grid;
+      align-items: center;
+      gap: 3.5rem;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    @media (min-width: 1024px) {
+      .hero-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 3rem;
+      }
+    }
+
+    .grid-3 { display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr); }
+    @media(min-width: 640px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
+    @media(min-width: 1024px) { .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+
+    .tok-plain { color: var(--text-main); }
+
+    .footer-bottom {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+    @media(min-width: 640px) { .footer-bottom { flex-direction: row; } }
+
+    .footer-grid {
+      display: grid;
+      gap: 2.5rem;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    @media(min-width: 768px) { .footer-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media(min-width: 1024px) { .footer-grid { grid-template-columns: 1.5fr 1fr 1fr 1fr; } }
+  
+    /* while i18n.json loads (at most 1.5 s), so the page does not flash in the other language */
+    html.i18n-pending body { opacity: 0; }
+    body { transition: opacity 0.15s; }
+
+    pre { padding: 1rem 1.25rem; overflow-x: auto; }
+    .code-title {
+      display: flex; align-items: center; gap: 0.5rem;
+      border-bottom: 1px solid var(--border-color);
+      background: rgba(15,20,25,0.8);
+      padding: 0.625rem 1rem;
+      font-size: 0.75rem; color: var(--text-muted);
+    }
+
+    .h2 { font-size: clamp(1.75rem, 3.5vw, 2.25rem); font-weight: 700; margin-top: 1.25rem; }
+    .h3 { font-size: clamp(1.5rem, 3vw, 1.875rem); font-weight: 700; margin-top: 1.25rem; }
+    .lead { color: var(--text-muted); font-size: 1.125rem; line-height: 1.6; margin-top: 1.25rem; }
+    .text { color: var(--text-muted); line-height: 1.6; margin-top: 1rem; }
+    .card-title { font-size: 1.125rem; font-weight: 600; }
+    .card-body { color: var(--text-muted); font-size: 0.875rem; line-height: 1.6; margin-top: 0.625rem; }
+    .card-h4 { color: var(--larimar-light); font-weight: 600; }
+    .card-small { color: var(--text-muted); font-size: 0.875rem; line-height: 1.55; margin-top: 0.5rem; }
+    .caption { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; }
+
+    .split {
+      display: grid; align-items: center; gap: 3.5rem;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    @media (min-width: 1024px) { .split { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3rem; } }
+    @media (max-width: 1023px) { .split > * { order: 0 !important; } }
+
+    .stack { display: flex; flex-direction: column; gap: 1rem; }
+    .bullets { margin-top: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; color: var(--text-muted); font-size: 0.875rem; }
+    .bullets li { padding-left: 1rem; position: relative; line-height: 1.55; }
+    .bullets li::before { content: "•"; position: absolute; left: 0; color: var(--larimar); }
+    .mini-code {
+      margin-top: 1.5rem; border-radius: 0.75rem; border: 1px solid var(--border-color);
+      background: rgba(15,20,25,0.5); padding: 1rem;
+      font-family: "JetBrains Mono", monospace; font-size: 0.875rem; overflow-x: auto;
+    }
+
+    .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; margin-top: 1rem; text-align: center; }
+    .stat-n { font-size: 1.25rem; font-weight: 700; color: var(--larimar); }
+    .stat-l { font-size: 0.75rem; color: var(--text-muted); }
+
+    .pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+    .pair-k { font-size: 0.75rem; font-weight: 600; color: var(--larimar-light); font-family: "JetBrains Mono", monospace; }
+    .pair-v { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.125rem; }
+
+    .cmd { padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; font-size: 0.875rem; }
+    .cmd span { color: var(--text-muted); font-size: 0.75rem; text-align: right; }
+
+    .step { padding: 1.5rem; display: flex; flex-direction: column; justify-content: space-between; }
+    .step-n { font-size: 1.5rem; font-weight: 700; color: var(--border-color); }
+    .step-title { font-size: 1.25rem; font-weight: 600; margin-top: 0.75rem; }
+    .step-code { padding: 0.75rem; margin-top: 1rem; font-size: 0.75rem; white-space: pre; }
+
+    .status-note {
+      margin-top: 1.5rem; padding: 0.875rem 1rem;
+      border-radius: 0.75rem; border: 1px solid rgba(251, 191, 36, 0.3);
+      background: rgba(251, 191, 36, 0.06);
+      color: var(--text-muted); font-size: 0.875rem; line-height: 1.55;
+    }
+    .status-note strong { color: #fde68a; font-weight: 600; }
+
+    .lang-toggle {
+      position: relative; display: inline-grid; grid-template-columns: 1fr 1fr;
+      width: 4.75rem; height: 2rem; padding: 0.1875rem;
+      border: 1px solid var(--border-color); border-radius: 9999px;
+      background: var(--bg-card); cursor: pointer; font: inherit;
+    }
+    .lang-toggle:disabled { cursor: not-allowed; opacity: 0.6; }
+    .lt-knob {
+      position: absolute; top: 0.1875rem; left: 0.1875rem;
+      width: calc(50% - 0.1875rem); height: calc(100% - 0.375rem);
+      border-radius: 9999px; background: rgba(63, 201, 196, 0.2);
+      border: 1px solid rgba(63, 201, 196, 0.45);
+      transition: transform 0.2s ease;
+    }
+    .lang-toggle[data-current="en"] .lt-knob { transform: translateX(100%); }
+    .lt-opt {
+      position: relative; z-index: 1; display: grid; place-items: center;
+      font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; color: var(--text-muted);
+      transition: color 0.2s;
+    }
+    .lang-toggle[data-current="es"] .lt-opt[data-lang="es"],
+    .lang-toggle[data-current="en"] .lt-opt[data-lang="en"] { color: var(--larimar-light); }
+    @media (prefers-reduced-motion: reduce) { .lt-knob, .lt-opt { transition: none; } }
+    .lang-toggle:focus-visible, .btn-primary:focus-visible, .btn-ghost:focus-visible, a:focus-visible {
+      outline: 2px solid var(--larimar); outline-offset: 2px;
+    }
+
+    footer { border-top: 1px solid var(--border-color); background: rgba(8,11,15,0.8); margin-top: 6rem; padding: 4rem 0; }
+    .footer-h { font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .footer-list { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; font-size: 0.875rem; color: var(--text-muted); }
+    .footer-list a:hover { color: var(--larimar-light); }
+    .footer-bottom { border-top: 1px solid var(--border-color); margin-top: 3rem; padding-top: 2rem; font-size: 0.75rem; color: var(--text-muted); }
+    .nav-container { gap: 1rem; }
+    @media (max-width: 639px) { .nav-container { padding: 0 1rem; } }
+
+    .tok-wait { color: #7dd3fc; }
+    pre { font-size: 0.8125rem; }
+    .error-box {
+      margin-top: 0.5rem; padding: 0.75rem 1rem; border-radius: 0.75rem;
+      border: 1px solid rgba(244, 63, 94, 0.35); background: rgba(244, 63, 94, 0.07);
+      color: #fda4af; font-family: "JetBrains Mono", monospace; font-size: 0.75rem; line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="nav-container">
+      <a href="#top" style="display: flex; align-items: center; gap: 0.6rem; font-weight: 700; font-size: 1.125rem;">
+        <span style="display:grid; place-items:center; width:2.25rem; height:2.25rem; border-radius:0.5rem; background:linear-gradient(to bottom right, var(--larimar), var(--gem)); color:#080b0f;">⚡</span>
+        Larimar
+      </a>
+      <nav class="nav-links">
+        <a href="#features" data-i18n="nav.features">Language</a>
+        <a href="#memory" data-i18n="nav.memory">Memory</a>
+        <a href="#concurrency" data-i18n="nav.concurrency">Threads</a>
+        <a href="#interop" data-i18n="nav.interop">C</a>
+        <a href="#docs" data-i18n="nav.docs">Tools</a>
+      </nav>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <button type="button" class="lang-toggle" role="switch" aria-checked="true" data-current="en" data-i18n-label="nav.langLabel" aria-label="Language">
+          <span class="lt-knob" aria-hidden="true"></span>
+          <span class="lt-opt" data-lang="es">ES</span>
+          <span class="lt-opt" data-lang="en">EN</span>
+        </button>
+        <a href="#install" class="btn-ghost" style="padding: 0.5rem 1rem;" data-i18n="nav.try">Try it</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- HERO -->
+    <section id="top" class="section" style="padding-top: 9rem;">
+      <div class="container">
+        <div class="hero-grid">
+          <div>
+            <div class="eyebrow"><span style="width:0.375rem; height:0.375rem; border-radius:50%; background:var(--larimar);"></span><span data-i18n="hero.eyebrow">v0.2 · experimental · transpiles to C99</span></div>
+            <h1 style="font-size: clamp(2.25rem, 4.5vw, 3.75rem); font-weight: 700; line-height: 1.1; margin-top: 1.5rem; letter-spacing: -0.025em;" data-i18n-html="hero.title.html">A small language that <span class="gradient-text">compiles to C</span>.</h1>
+            <p style="color: var(--text-muted); font-size: 1.125rem; line-height: 1.625; margin-top: 1.5rem;" data-i18n="hero.body">Larimar transpiles to a single C99 file, has no garbage collector (memory is freed in blocks, at points you can see in the code), and its compiler is written in Larimar itself.</p>
+            <div class="status-note" data-i18n-html="hero.status.html"><strong>Status:</strong> 97 tests on Linux and macOS: memory, threads, network and debugger.</div>
+            <div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;">
+              <a href="#install" class="btn-primary" data-i18n="hero.try">Try it</a>
+              <a href="#features" class="btn-ghost" data-i18n="hero.examples">See examples</a>
+            </div>
+            <div style="margin-top: 2.5rem;">
+              <div class="code-block" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem;">
+                <code style="font-size: 0.875rem;"><span style="color: var(--text-muted);">$</span> <span class="tok-fn">larimar</span> new hello <span style="color:var(--text-muted)">&amp;&amp;</span> cd hello <span style="color:var(--text-muted)">&amp;&amp;</span> larimar run</code>
+              </div>
+              <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;" data-i18n="hero.needs">You need gcc or clang (MinGW on Windows).</p>
+            </div>
+          </div>
+
+          <div>
+            <div class="code-block">
+              <div class="code-title">
+                <span style="width:0.75rem; height:0.75rem; border-radius:50%; background:#f43f5e;"></span>
+                <span style="width:0.75rem; height:0.75rem; border-radius:50%; background:#fbbf24;"></span>
+                <span style="width:0.75rem; height:0.75rem; border-radius:50%; background:#34d399;"></span>
+                <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: 0.5rem;">src/main.lar</span>
+              </div>
+              <pre><span class="tok-kw">function</span> <span class="tok-fn">main</span>(): <span class="tok-type">int32</span> {
+    <span class="tok-fn">println</span>(<span class="tok-str">"Hello, world"</span>);
+    <span class="tok-kw">return</span> <span class="tok-num">0</span>;
+}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features" class="section">
+      <div class="container">
+        <div style="text-align: center; max-width: 48rem; margin: 0 auto;">
+          <div class="eyebrow" data-i18n="features.eyebrow">The language</div>
+          <h2 class="h2" data-i18n="features.title">What the language brings</h2>
+          <p class="lead" data-i18n="features.body">The ideas the design rests on, implemented and tested.</p>
+        </div>
+
+        <div class="grid-3" style="margin-top: 4rem;">
+          <div class="card" style="padding: 1.5rem;">
+            <h3 class="card-title" data-i18n="f1.title">Checks at compile time and at run time</h3>
+            <p class="card-body" data-i18n="f1.body">Types are required and there are no uninitialized variables. Integers that overflow wrap around, with no undefined behavior. An index out of range or a division by zero stops the program with a message instead of corrupting memory.</p>
+          </div>
+          <div class="card" style="padding: 1.5rem;">
+            <h3 class="card-title" data-i18n="f2.title">No garbage collector</h3>
+            <p class="card-body" data-i18n="f2.body">Memories are freed in whole blocks, at visible points in the code. A lifetime rule, checked at compile time, keeps anything from pointing to memory that was already freed.</p>
+          </div>
+          <div class="card" style="padding: 1.5rem;">
+            <h3 class="card-title" data-i18n="f3.title">Threads checked at compile time</h3>
+            <p class="card-body" data-i18n="f3.body">The compiler rejects sharing mutable state between threads. Only values and objects of synchronized classes cross over, with one lock per object.</p>
+          </div>
+          <div class="card" style="padding: 1.5rem;">
+            <h3 class="card-title" data-i18n="f4.title">UTF-8 text</h3>
+            <p class="card-body" data-i18n="f4.body">Immutable UTF-8 String, interpolation, views without copies, text blocks and raw text. StringBuilder to build long texts without extra copying.</p>
+          </div>
+          <div class="card" style="padding: 1.5rem;">
+            <h3 class="card-title" data-i18n="f5.title">Patterns and enums</h3>
+            <p class="card-body" data-i18n="f5.body">switch with patterns over enums, classes and Any, guards with when, and the is operator to tell types apart in one line.</p>
+          </div>
+          <div class="card" style="padding: 1.5rem;">
+            <h3 class="card-title" data-i18n="f6.title">Modules and projects</h3>
+            <p class="card-body" data-i18n="f6.body">Each file is a module with its own namespace. Projects with larimar.toml, built into a single executable that can link C libraries.</p>
+          </div>
+        </div>
+
+        <!-- Patterns and enums -->
+        <div style="margin-top: 5rem;" class="split">
+          <div>
+            <div class="eyebrow" data-i18n="patterns.eyebrow">Patterns and enums</div>
+            <h3 class="h3" data-i18n="patterns.title">A switch over an enum covers every case</h3>
+            <p class="text" data-i18n="patterns.body">A switch over an enum must cover all of its variants (or have a default). If you add one tomorrow, the compiler points at every switch to revisit. Cases do not fall through, and fields are taken out by name.</p>
+            <ul class="bullets">
+              <li data-i18n-html="patterns.li1.html">Several values in one case: <code style="color:var(--larimar-light);">case 1, 2, 3 -&gt; ...</code></li>
+              <li data-i18n-html="patterns.li2.html">Guards: <code style="color:var(--larimar-light);">case Circle { radius } when radius &gt; 10.0 -&gt; ...</code></li>
+              <li data-i18n-html="patterns.li3.html">Type pattern: <code style="color:var(--larimar-light);">case Dog d -&gt; ...</code></li>
+              <li data-i18n-html="patterns.li4.html">In a condition: <code style="color:var(--larimar-light);">if (pet is Dog d) { ... }</code></li>
+            </ul>
+          </div>
+          <div class="code-block">
+            <div class="code-title"><span>patterns.lar</span></div>
+            <pre><span class="tok-kw">enum</span> <span class="tok-plain">Shape</span> {
+    <span class="tok-fn">Circle</span>(radius: <span class="tok-type">float64</span>),
+    <span class="tok-fn">Rect</span>(width: <span class="tok-type">float64</span>, height: <span class="tok-type">float64</span>),
+    <span class="tok-plain">Empty</span>
+}
+
+<span class="tok-kw">function</span> <span class="tok-fn">area</span>(s: Shape): <span class="tok-type">float64</span> {
+    <span class="tok-kw">return</span> <span class="tok-kw">switch</span> (s) {
+        <span class="tok-kw">case</span> Circle { radius } -&gt; <span class="tok-num">3.0</span> * radius * radius;
+        <span class="tok-kw">case</span> Rect { width: w, height: h } -&gt; w * h;
+        <span class="tok-kw">case</span> Empty -&gt; <span class="tok-num">0.0</span>;
+    };
+}</pre>
+          </div>
+        </div>
+
+        <!-- Modules -->
+        <div style="margin-top: 5rem;" class="split">
+          <div class="code-block" style="order: 2;">
+            <div class="code-title"><span>src/geo/shapes.lar</span></div>
+            <pre><span class="tok-com">// src/geo/shapes.lar</span>
+<span class="tok-kw">public</span> <span class="tok-kw">const</span> PI: <span class="tok-type">float64</span> = <span class="tok-num">3.14159</span>;
+
+<span class="tok-kw">public</span> <span class="tok-kw">enum</span> Shape {
+    <span class="tok-fn">Circle</span>(radius: <span class="tok-type">float64</span>),
+    <span class="tok-fn">Rect</span>(width: <span class="tok-type">float64</span>, height: <span class="tok-type">float64</span>),
+    <span class="tok-plain">Empty</span>
+}</pre>
+          </div>
+          <div style="order: 1;">
+            <div class="eyebrow" data-i18n="modules.eyebrow">Modules</div>
+            <h3 class="h3" data-i18n="modules.title">Each file is a module</h3>
+            <p class="text" data-i18n-html="modules.body.html">What you declare is private unless you mark it public. You import with a prefix, with an alias, or just the names you need. Modules may import each other in a cycle, and in the generated C each name carries its module: <code style="color:var(--larimar-light);">geo__shapes__area</code>.</p>
+            <div class="mini-code">
+              <div style="color: var(--text-muted);" data-i18n="modules.three">// Three ways to import</div>
+              <div style="margin-top: 0.5rem;"><span class="tok-kw">import</span> geo.shapes; <span style="color:var(--text-muted);">// shapes.area(s)</span></div>
+              <div style="margin-top: 0.25rem;"><span class="tok-kw">import</span> geo.shapes <span class="tok-kw">as</span> g; <span style="color:var(--text-muted);">// g.area(s)</span></div>
+              <div style="margin-top: 0.25rem;"><span class="tok-kw">import</span> geo.shapes { Shape, area }; <span style="color:var(--text-muted);">// area(s)</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MEMORY -->
+    <section id="memory" class="section">
+      <div class="container">
+        <div style="text-align: center; max-width: 48rem; margin: 0 auto;">
+          <div class="eyebrow" data-i18n="memory.eyebrow">Memory</div>
+          <h2 class="h2" data-i18n="memory.title">Memory without a collector</h2>
+          <p class="lead" data-i18n="memory.body">Larimar has no GC and no free(). Everything that is made lives in a memory (an arena), and each memory has an owner you can see in the code: a statement, a block, an object. When the owner ends, its memory is freed whole, at once. That is why no memory is left behind.</p>
+        </div>
+
+        <!-- the ; and the } -->
+        <div style="margin-top: 4rem;" class="split">
+          <div>
+            <div class="eyebrow" data-i18n="arena.eyebrow">Arenas</div>
+            <h3 class="h3" data-i18n-html="arena.title.html">The <code style="color:var(--larimar-light);">;</code> and the <code style="color:var(--larimar-light);">}</code> free memory</h3>
+            <p class="text" data-i18n="arena.body">A memory asks the system for big blocks and hands out pieces of them; nothing is freed on its own. The compiler picks each thing&#x27;s memory by how long it must live, without you writing anything:</p>
+            <ul class="bullets">
+              <li data-i18n-html="arena.li1.html">What is not stored anywhere (arguments, parts of an expression, the text of a <code style="color:var(--larimar-light);">println</code>) lives in the statement's memory, freed at the <code style="color:var(--larimar-light);">;</code>.</li>
+              <li data-i18n-html="arena.li2.html">A variable's data lives in its block's memory, freed at the <code style="color:var(--larimar-light);">}</code>. In a loop, on every turn.</li>
+              <li data-i18n="arena.li3">A program that runs for a long time (a server, a loop over files) does not pile up: what each turn makes is freed every turn.</li>
+              <li data-i18n="arena.li4">It is freed by any exit from the block: at the end, with return, break, continue, or when an error leaves.</li>
+            </ul>
+          </div>
+          <div>
+            <div class="code-block">
+              <div class="code-title"><span>loop.lar</span></div>
+              <pre><span class="tok-kw">function</span> <span class="tok-fn">greet</span>(name: <span class="tok-type">String</span>): <span class="tok-kw">void</span> {
+    <span class="tok-com">// the upper-case text: freed at the ;</span>
+    <span class="tok-fn">println</span>(<span class="tok-str">"hello ${name.<span class="tok-fn">toUpperCase</span>()}"</span>);
+}
+
+<span class="tok-kw">function</span> <span class="tok-fn">main</span>(): <span class="tok-type">int32</span> {
+    <span class="tok-kw">for</span> (i <span class="tok-kw">in</span> <span class="tok-num">0</span>..<span class="tok-num">3</span>) {
+        <span class="tok-com">// in this turn's memory</span>
+        <span class="tok-kw">let</span> label: <span class="tok-type">String</span> = <span class="tok-str">"item ${i}"</span>;
+        <span class="tok-fn">greet</span>(label);
+    }   <span class="tok-com">// freed at the }, every turn</span>
+    <span class="tok-kw">return</span> <span class="tok-num">0</span>;
+}</pre>
+            </div>
+            <div class="code-block" style="margin-top: 1rem;">
+              <div class="code-title"><span>loop.c</span></div>
+              <pre><span class="tok-com">/* the C that Larimar writes, trimmed */</span>
+<span class="tok-kw">void</span> <span class="tok-fn">greet</span>(<span class="tok-type">RtString</span> name) {
+    <span class="tok-type">RtMem</span> tmp_11 = <span class="tok-fn">rt_mem_growable</span>();
+    <span class="tok-type">RtString</span> t_12 = <span class="tok-fn">String_toUpperCase</span>(name, &amp;tmp_11);
+    <span class="tok-fn">printf</span>(<span class="tok-str">"hello %.*s\n"</span>, (<span class="tok-kw">int</span>)t_12.len, t_12.ptr);
+    <span class="tok-fn">rt_mem_free</span>(&amp;tmp_11);             <span class="tok-com">/* the ; */</span>
+}
+
+<span class="tok-kw">for</span> (<span class="tok-type">int32_t</span> i = from_13; i &lt; to_14; i++) {
+    <span class="tok-type">RtMem</span> mem_0 = <span class="tok-fn">rt_mem_growable</span>();
+    ...
+    <span class="tok-fn">greet</span>(label);
+    <span class="tok-fn">rt_mem_free</span>(&amp;mem_0);              <span class="tok-com">/* the } */</span>
+}</pre>
+            </div>
+            <p class="caption" data-i18n="arena.caption">The C the compiler writes, trimmed: one memory per statement and one per turn, each with its release.</p>
+          </div>
+        </div>
+
+        <!-- an arena of its own, and clone() -->
+        <div style="margin-top: 5rem;" class="split">
+          <div style="order: 2;">
+            <div class="eyebrow" data-i18n="clone.eyebrow">clone()</div>
+            <h3 class="h3" data-i18n-html="clone.title.html">An arena of your own, and <code style="color:var(--gem);">clone()</code> for what stays</h3>
+            <p class="text" data-i18n-html="clone.body.html">When a task makes a lot and you only need part of it, you give it its own memory: <code style="color:var(--larimar-light);">byte[*] in heap</code>. Everything the task makes goes there, and it is freed together when the block ends.</p>
+            <ul class="bullets">
+              <li data-i18n-html="clone.li1.html">The rows, the list and the joined text live in <code style="color:var(--larimar-light);">scratch</code>, and are freed together when <code style="color:var(--larimar-light);">fill</code> returns.</li>
+              <li data-i18n-html="clone.li2.html">Only the summary survives: <code style="color:var(--larimar-light);">clone()</code> copies it into <code style="color:var(--larimar-light);">r</code>'s memory.</li>
+              <li data-i18n-html="clone.li3.html"><strong>The lifetime rule:</strong> a value cannot be stored somewhere that lives longer than the memory it was made in. Without <code style="color:var(--larimar-light);">clone()</code>, the program does not compile, instead of leaving <code style="color:var(--larimar-light);">r</code> pointing to freed memory.</li>
+            </ul>
+          </div>
+          <div style="order: 1;">
+            <div class="code-block">
+              <div class="code-title"><span>report.lar</span></div>
+              <pre><span class="tok-kw">class</span> <span class="tok-plain">Report</span> {
+    <span class="tok-kw">let</span> summary: <span class="tok-type">String</span> = <span class="tok-str">""</span>;
+}
+
+<span class="tok-kw">function</span> <span class="tok-fn">fill</span>(r: Report, rows: <span class="tok-type">int32</span>): <span class="tok-kw">void</span> {
+    <span class="tok-kw">let</span> scratch: <span class="tok-kw">byte</span>[*] = [] <span class="tok-kw">in</span> heap;  <span class="tok-com">// an arena</span>
+    <span class="tok-kw">let</span> lines: <span class="tok-type">String</span>[*] = [] <span class="tok-kw">in</span> scratch;
+    <span class="tok-kw">for</span> (i <span class="tok-kw">in</span> <span class="tok-num">0</span>..rows) {
+        lines.<span class="tok-fn">push</span>(<span class="tok-str">"row ${i}"</span>);         <span class="tok-com">// in scratch</span>
+    }
+    <span class="tok-kw">let</span> text: <span class="tok-type">String</span> = lines.<span class="tok-fn">join</span>(<span class="tok-str">", "</span>) <span class="tok-kw">in</span> scratch;
+    r.summary = text.<span class="tok-fn">clone</span>();      <span class="tok-com">// only this stays</span>
+}                                     <span class="tok-com">// scratch: freed whole</span></pre>
+            </div>
+            <p class="caption" data-i18n="clone.without">What the compiler says if the clone() is removed:</p>
+            <div class="error-box">Semantic Error [report.lar:12]: This value lives in memory 'scratch', but field 'summary' lives longer (in 'r' (owned by the caller)). Use .clone() to copy it there.</div>
+          </div>
+        </div>
+
+        <div class="grid-3" style="margin-top: 4rem;">
+          <div class="card" style="padding: 1.25rem;">
+            <h4 class="card-h4" data-i18n="m1.title">What a function returns</h4>
+            <p class="card-small" data-i18n="m1.body">It is made directly in the caller&#x27;s memory, without copies: let puts it in its block, push in the list, a field in its object.</p>
+          </div>
+          <div class="card" style="padding: 1.25rem;">
+            <h4 class="card-h4" data-i18n="m2.title">The default memory</h4>
+            <p class="card-small" data-i18n-html="m2.body.html"><code style="color:var(--larimar-light);">in default</code> lives for the whole program: configuration, caches, global data. Nothing ends up there without it showing in the code.</p>
+          </div>
+          <div class="card" style="padding: 1.25rem;">
+            <h4 class="card-h4" data-i18n="m3.title">Memory on the stack</h4>
+            <p class="card-small" data-i18n-html="m3.body.html"><code style="color:var(--larimar-light);">byte[4096]</code> is a fixed-size memory on the stack, with nothing asked from the system. If it fills up, the program stops with a message.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONCURRENCY -->
+    <section id="concurrency" class="section">
+      <div class="container">
+        <div class="split">
+          <div>
+            <div class="eyebrow" data-i18n="conc.eyebrow">Concurrency</div>
+            <h2 class="h2" data-i18n-html="conc.title.html">Threads <span class="gradient-text">checked at compile time</span></h2>
+            <p class="text" data-i18n="conc.body">A Thread is an object that lives in a memory, and its run is a lambda. When the thread&#x27;s memory is freed, the program waits for it to finish: it never outlives its memory.</p>
+            <div class="stack" style="margin-top: 2rem;">
+              <div class="card" style="padding: 1.25rem;">
+                <h3 style="font-weight: 600;" data-i18n="c1.title">synchronized class</h3>
+                <p class="card-small" data-i18n="c1.body">Protects its data with a lock. Each method takes it on entry and releases it on exit: two threads are never inside the same object at once.</p>
+              </div>
+              <div class="card" style="padding: 1.25rem;">
+                <h3 style="font-weight: 600;" data-i18n="c2.title">What the compiler rejects</h3>
+                <p class="card-small" data-i18n="c2.body">A thread that changes a global variable, touches a plain object, or uses a shared memory other than the default one: a compile error.</p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="code-block">
+              <div class="code-title"><span>threads.lar</span></div>
+              <pre><span class="tok-kw">synchronized</span> <span class="tok-kw">class</span> <span class="tok-plain">Counter</span> {
+    <span class="tok-kw">let</span> total: <span class="tok-type">int64</span> = <span class="tok-num">0</span>;
+    <span class="tok-kw">function</span> <span class="tok-fn">add</span>(n: <span class="tok-type">int64</span>): <span class="tok-kw">void</span> { <span class="tok-kw">self</span>.total += n; }
+    <span class="tok-kw">function</span> <span class="tok-fn">get</span>(): <span class="tok-type">int64</span> { <span class="tok-kw">return</span> <span class="tok-kw">self</span>.total; }
+}
+
+<span class="tok-kw">function</span> <span class="tok-fn">main</span>(): <span class="tok-type">int32</span> {
+    <span class="tok-kw">let</span> shared: <span class="tok-kw">byte</span>[*] = [] <span class="tok-kw">in</span> heap;
+    <span class="tok-kw">let</span> counter: Counter = {} <span class="tok-kw">in</span> shared;
+    {
+        <span class="tok-kw">let</span> workers: <span class="tok-kw">byte</span>[*] = [] <span class="tok-kw">in</span> heap;
+        <span class="tok-kw">for</span> (w <span class="tok-kw">in</span> <span class="tok-num">0</span>..<span class="tok-num">4</span>) {
+            <span class="tok-kw">let</span> t: Thread = {
+                run: () -&gt; {
+                    <span class="tok-kw">for</span> (k <span class="tok-kw">in</span> <span class="tok-num">0</span>..<span class="tok-num">1000</span>) { counter.<span class="tok-fn">add</span>(k <span class="tok-kw">as</span> <span class="tok-type">int64</span>); }
+                }
+            } <span class="tok-kw">in</span> workers;
+            t.<span class="tok-fn">start</span>();
+        }
+    }
+    <span class="tok-fn">println</span>(<span class="tok-str">"${counter.<span class="tok-fn">get</span>()}"</span>);
+    <span class="tok-kw">return</span> <span class="tok-num">0</span>;
+}</pre>
+            </div>
+            <p class="caption" data-i18n-html="conc.sum.html">4 threads × 1000 additions. Output: <span style="font-family:monospace; color:var(--text-main);">1998000</span></p>
+          </div>
+        </div>
+
+        <!-- wait until -->
+        <div style="margin-top: 5rem; align-items: start;" class="split">
+          <div>
+            <div class="code-block">
+              <div class="code-title"><span>queue.lar</span></div>
+              <pre><span class="tok-kw">synchronized</span> <span class="tok-kw">class</span> <span class="tok-plain">Queue</span> {
+    <span class="tok-kw">let</span> items: <span class="tok-type">int32</span>[<span class="tok-num">8</span>] = [];
+    <span class="tok-kw">let</span> closed: <span class="tok-type">bool</span> = <span class="tok-kw">false</span>;
+
+    <span class="tok-kw">function</span> <span class="tok-fn">put</span>(v: <span class="tok-type">int32</span>): <span class="tok-kw">void</span>
+            <span class="tok-wait">wait until</span> (<span class="tok-kw">self</span>.items.length &lt; <span class="tok-num">8</span>) {
+        <span class="tok-kw">self</span>.items.<span class="tok-fn">push</span>(v);
+    }
+
+    <span class="tok-kw">function</span> <span class="tok-fn">close</span>(): <span class="tok-kw">void</span> { <span class="tok-kw">self</span>.closed = <span class="tok-kw">true</span>; }
+
+    <span class="tok-kw">function</span> <span class="tok-fn">take</span>(): <span class="tok-type">int32</span>
+            <span class="tok-wait">wait until</span> (<span class="tok-kw">self</span>.items.length &gt; <span class="tok-num">0</span> || <span class="tok-kw">self</span>.closed) {
+        <span class="tok-kw">if</span> (<span class="tok-kw">self</span>.items.length == <span class="tok-num">0</span>) { <span class="tok-kw">return</span> <span class="tok-num">-1</span>; }  <span class="tok-com">// closed</span>
+        <span class="tok-kw">let</span> v: <span class="tok-type">int32</span> = <span class="tok-kw">self</span>.items[<span class="tok-num">0</span>];
+        <span class="tok-kw">let</span> rest: <span class="tok-type">int32</span>[<span class="tok-num">8</span>] = [];
+        <span class="tok-kw">for</span> (i <span class="tok-kw">in</span> <span class="tok-num">1</span>..<span class="tok-kw">self</span>.items.length) {
+            rest.<span class="tok-fn">push</span>(<span class="tok-kw">self</span>.items[i]);
+        }
+        <span class="tok-kw">self</span>.items = rest;
+        <span class="tok-kw">return</span> v;
+    }
+}</pre>
+            </div>
+          </div>
+          <div>
+            <div class="eyebrow" data-i18n="wait.eyebrow">wait until</div>
+            <h3 class="h3" data-i18n="wait.title">Waiting for something to happen</h3>
+            <p class="text" data-i18n="wait.body">A method of a synchronized class can say in its signature when it may run. Whoever calls it waits there, without using the processor, until the condition holds.</p>
+            <ul class="bullets">
+              <li data-i18n-html="wait.li1.html"><code style="color:var(--larimar-light);">put</code> waits for room; <code style="color:var(--larimar-light);">take</code>, for an item or for the queue to be closed.</li>
+              <li data-i18n="wait.li2">Nobody notifies by hand: when any method of the object ends, the waiting threads look at their condition again.</li>
+              <li data-i18n="wait.li3">The body starts with the condition true and the lock held.</li>
+            </ul>
+            <div class="code-block" style="margin-top: 1.5rem;">
+              <div class="code-title"><span data-i18n="wait.mainTitle">in main</span></div>
+              <pre><span class="tok-kw">let</span> queue: Queue = {};
+<span class="tok-kw">let</span> consumer: Thread = {
+    run: () -&gt; {
+        <span class="tok-kw">let</span> sum: <span class="tok-type">int64</span> = <span class="tok-num">0</span>;
+        <span class="tok-kw">while</span> (<span class="tok-kw">true</span>) {
+            <span class="tok-kw">let</span> v: <span class="tok-type">int32</span> = queue.<span class="tok-fn">take</span>();
+            <span class="tok-kw">if</span> (v &lt; <span class="tok-num">0</span>) { <span class="tok-kw">break</span>; }
+            sum += v <span class="tok-kw">as</span> <span class="tok-type">int64</span>;
+        }
+        <span class="tok-fn">println</span>(<span class="tok-str">"sum ${sum}"</span>);
+    }
+};
+consumer.<span class="tok-fn">start</span>();
+<span class="tok-kw">for</span> (i <span class="tok-kw">in</span> <span class="tok-num">1</span>..<span class="tok-num">101</span>) { queue.<span class="tok-fn">put</span>(i); }
+queue.<span class="tok-fn">close</span>();
+consumer.<span class="tok-fn">join</span>();</pre>
+            </div>
+            <p class="caption" data-i18n-html="wait.out.html">main produces 100 numbers and the thread adds them up, through a queue of 8. Output: <span style="font-family:monospace; color:var(--text-main);">sum 5050</span></p>
+          </div>
+        </div>
+
+        <!-- thread safe and servers -->
+        <div style="margin-top: 5rem; align-items: start;" class="split">
+          <div>
+            <div class="eyebrow" data-i18n="srv.eyebrow">thread safe</div>
+            <h3 class="h3" data-i18n="srv.title">Functions that several threads call</h3>
+            <p class="text" data-i18n="srv.body">Whoever designs an API marks with thread safe the function its threads will call at the same time. Whoever uses it writes a plain lambda, and the compiler checks it like the run of a Thread.</p>
+            <ul class="bullets">
+              <li data-i18n-html="srv.li1.html">Using <code style="color:var(--larimar-light);">stats</code> is fine: it is <code style="color:var(--larimar-light);">synchronized</code>. Using a plain list inside <code style="color:var(--larimar-light);">onConnect</code> does not compile.</li>
+              <li data-i18n-html="srv.li2.html"><code style="color:var(--larimar-light);">std.net</code> brings <code style="color:var(--larimar-light);">TcpServer</code>, <code style="color:var(--larimar-light);">UdpServer</code> and <code style="color:var(--larimar-light);">TlsServer</code> (https with OpenSSL), written in Larimar on top of this rule.</li>
+              <li data-i18n="srv.li3">Each connection is served with its own memory, freed when it ends.</li>
+            </ul>
+          </div>
+          <div>
+            <div class="code-block">
+              <div class="code-title"><span>server.lar</span></div>
+              <pre><span class="tok-com">// in std.net</span>
+<span class="tok-kw">public</span> <span class="tok-kw">class</span> <span class="tok-plain">TcpServer</span> {
+    ...
+    <span class="tok-kw">let</span> onConnect: (TcpSocket) -&gt; <span class="tok-kw">void</span> <span class="tok-wait">thread safe</span>;
+}
+
+<span class="tok-kw">synchronized</span> <span class="tok-kw">class</span> <span class="tok-plain">Stats</span> {
+    <span class="tok-kw">let</span> served: <span class="tok-type">int32</span> = <span class="tok-num">0</span>;
+    <span class="tok-kw">function</span> <span class="tok-fn">add</span>(): <span class="tok-type">int32</span> { <span class="tok-kw">self</span>.served += <span class="tok-num">1</span>; <span class="tok-kw">return</span> <span class="tok-kw">self</span>.served; }
+}
+
+<span class="tok-kw">let</span> stats: Stats = {};
+<span class="tok-kw">let</span> server: TcpServer = {
+    port: <span class="tok-num">8080</span>,
+    threads: <span class="tok-num">8</span>,
+    onConnect: (client: TcpSocket) -&gt; {
+        client.<span class="tok-fn">writeText</span>(<span class="tok-str">"hello #${stats.<span class="tok-fn">add</span>()}\n"</span>);
+    }
+};
+server.<span class="tok-fn">run</span>();</pre>
+            </div>
+            <p class="caption" data-i18n-html="srv.out.html">8 threads serve at the same time, without races: the compiler checked it.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INTEROPERABILITY -->
+    <section id="interop" class="section">
+      <div class="container">
+        <div style="text-align: center; max-width: 48rem; margin: 0 auto;">
+          <div class="eyebrow" data-i18n="interop.eyebrow">Interoperability</div>
+          <h2 class="h2" data-i18n="interop.title">Calling C</h2>
+          <p class="lead" data-i18n-html="interop.body.html">The functions, constants, globals, structs, pointers and resources of a C library are declared, not wrapped. And with <code style="color:var(--larimar-light);">export function</code>, C can call Larimar too.</p>
+        </div>
+
+        <div style="margin-top: 4rem;" class="split">
+          <div>
+            <div class="code-block">
+              <div class="code-title"><span>interop.lar</span></div>
+              <pre><span class="tok-kw">c_include</span> <span class="tok-str">"&lt;stdio.h&gt;"</span>;
+<span class="tok-kw">c_include</span> <span class="tok-str">"&lt;math.h&gt;"</span>;
+
+<span class="tok-kw">extern</span> <span class="tok-kw">function</span> <span class="tok-fn">printf</span>(format: <span class="tok-type">String</span>, ...): <span class="tok-type">int32</span>;
+<span class="tok-kw">extern</span> <span class="tok-kw">function</span> <span class="tok-fn">sqrt</span>(x: <span class="tok-type">float64</span>): <span class="tok-type">float64</span>;
+
+<span class="tok-kw">function</span> <span class="tok-fn">main</span>(): <span class="tok-type">int32</span> {
+    <span class="tok-fn">printf</span>(<span class="tok-str">"sqrt(2) = %f\n"</span>, <span class="tok-fn">sqrt</span>(<span class="tok-num">2.0</span>));
+    <span class="tok-kw">return</span> <span class="tok-num">0</span>;
+}</pre>
+            </div>
+            <div class="pairs">
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">c_include</div><div class="pair-v" data-i18n="i1">Adds a C #include.</div></div>
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">extern function</div><div class="pair-v" data-i18n="i2">Declares a C function.</div></div>
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">extern type</div><div class="pair-v" data-i18n="i3">An opaque pointer, a C type or a C struct.</div></div>
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">export function</div><div class="pair-v" data-i18n="i4">Makes a function callable from C.</div></div>
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">released by</div><div class="pair-v" data-i18n="i5">A C resource (FILE*, a socket) is released with its memory.</div></div>
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">#when windows</div><div class="pair-v" data-i18n="i6">What each system needs, chosen at compile time; every branch is checked.</div></div>
+            </div>
+          </div>
+
+          <div>
+            <h3 style="font-size: 1.5rem; font-weight: 700;" data-i18n-html="any.title.html"><code style="color:var(--gem);">Any</code> for free-form data</h3>
+            <p class="text" data-i18n-html="any.body.html">For data whose shape you do not know in advance (configuration, JSON, messages) there is <code style="color:var(--gem);">Any</code>: a value that can be a number, bool, String, null, object, struct, enum or table.</p>
+            <div class="code-block" style="margin-top: 1.5rem;">
+              <div class="code-title"><span>any.lar</span></div>
+              <pre><span class="tok-kw">function</span> <span class="tok-fn">main</span>(): <span class="tok-type">int32</span> {
+    <span class="tok-kw">let</span> config: <span class="tok-type">Any</span> = {
+        <span class="tok-str">"web"</span>, <span class="tok-str">"api"</span>,
+        name: <span class="tok-str">"server"</span>,
+        port: <span class="tok-num">8080</span>,
+    };
+    <span class="tok-kw">let</span> port: <span class="tok-type">int32</span> = config.port <span class="tok-kw">as</span> <span class="tok-type">int32</span> ?? <span class="tok-num">80</span>;
+    <span class="tok-fn">println</span>(<span class="tok-str">"${config.name} on ${port}"</span>);
+    <span class="tok-kw">return</span> <span class="tok-num">0</span>;
+}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BY DESIGN -->
+    <section id="design" class="section">
+      <div class="container">
+        <div style="text-align: center; max-width: 48rem; margin: 0 auto;">
+          <div class="eyebrow" data-i18n="design.eyebrow">By design</div>
+          <h2 class="h2" data-i18n="design.title">What Larimar does not have</h2>
+          <p class="lead" data-i18n="design.body">Decisions, not a to-do list: each one with what you use instead.</p>
+        </div>
+
+        <div class="grid-3" style="margin-top: 4rem;">
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n-html="d1.title.html">No generics</h3><p class="card-body" data-i18n-html="d1.body.html">Arrays (<code style="color:var(--larimar-light);">T[N]</code>, <code style="color:var(--larimar-light);">T[*]</code>) and <code style="color:var(--larimar-light);">Any</code> already hold any type, and interfaces cover the rest.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n-html="d2.title.html">No garbage collector</h3><p class="card-body" data-i18n-html="d2.body.html">Memory is freed at the <code style="color:var(--larimar-light);">;</code> and at the <code style="color:var(--larimar-light);">}</code>: you always see where.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n-html="d3.title.html">No constructors</h3><p class="card-body" data-i18n-html="d3.body.html">A literal creates the object; when something must be validated, a plain function does it.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n-html="d4.title.html">No overloading</h3><p class="card-body" data-i18n-html="d4.body.html">Each name is one function, and the generated C reads without guessing.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n-html="d5.title.html">No hidden jumps</h3><p class="card-body" data-i18n-html="d5.body.html">An error is a value that is returned, and <code style="color:var(--larimar-light);">throws</code> announces it in the signature.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n-html="d6.title.html">No hidden threads or async</h3><p class="card-body" data-i18n-html="d6.body.html">Threads are created in plain sight, and the compiler checks what they share.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n-html="d7.title.html">No surprise <code style="color:var(--larimar-light);">null</code></h3><p class="card-body" data-i18n-html="d7.body.html">Only what carries <code style="color:var(--larimar-light);">?</code> can be <code style="color:var(--larimar-light);">null</code>.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n-html="d8.title.html">No implicit conversions</h3><p class="card-body" data-i18n-html="d8.body.html">Numeric types are converted with <code style="color:var(--larimar-light);">as</code>, in plain sight: <code style="color:var(--larimar-light);">int32 + int64</code> does not compile.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n-html="d9.title.html">No undefined behavior</h3><p class="card-body" data-i18n-html="d9.body.html">Integers wrap around, indexes are checked, and a failure stops with its file and line.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TOOLS -->
+    <section id="docs" class="section">
+      <div class="container">
+        <div style="text-align: center; max-width: 48rem; margin: 0 auto;">
+          <div class="eyebrow" data-i18n="docs.eyebrow">Tools</div>
+          <h2 class="h2" data-i18n="docs.title">What comes with the compiler</h2>
+          <p class="lead" data-i18n="docs.body">All written in Larimar, like the compiler.</p>
+        </div>
+
+        <div class="grid-3" style="margin-top: 4rem;">
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n="t1.title">Language server</h3><p class="card-body" data-i18n="t1.body">Errors as you type, hover, go to definition, references, completion and signature help.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n="t2.title">Debugger</h3><p class="card-body" data-i18n="t2.body">larimar dap sits between the editor and lldb-dap: the stack with Larimar names, its variables, and panics as exceptions.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n="t3.title">Readable C and AddressSanitizer</h3><p class="card-body" data-i18n="t3.body">The generated C compiles with no warnings under -Wall -Wextra -pedantic, and the runtime teaches AddressSanitizer to see inside memories.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n="t4.title">Standard library</h3><p class="card-body" data-i18n="t4.body">Files, console, streams, paths, JSON, regular expressions, TCP and UDP with their servers, a TLS server, and an HTTP and HTTPS client. Almost all written in Larimar.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n="t5.title">VS Code extension</h3><p class="card-body" data-i18n="t5.body">Highlighting, live errors and debugging with breakpoints, on top of larimar lsp and larimar dap.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n="t6.title">Linux, macOS and Windows</h3><p class="card-body" data-i18n="t6.body">Meant for all three; what differs between them is written with #when. For now, the tests run mostly on Linux.</p></div>
+        </div>
+
+        <div style="margin-top: 4rem;" class="split">
+          <div>
+            <h3 style="font-size: 1.5rem; font-weight: 700;" data-i18n-html="tool.title.html">The <code style="color:var(--larimar-light);">larimar</code> tool</h3>
+            <p class="text" data-i18n="tool.body">One program to create, build, run, check, and serve the editor.</p>
+            <div class="stack" style="margin-top: 1.5rem; gap: 0.75rem;">
+              <div class="card cmd"><code style="color:var(--larimar-light);">larimar new hello</code><span data-i18n="cmd.new">Creates a project</span></div>
+              <div class="card cmd"><code style="color:var(--larimar-light);">larimar run</code><span data-i18n="cmd.run">Builds and runs</span></div>
+              <div class="card cmd"><code style="color:var(--larimar-light);">larimar build</code><span data-i18n="cmd.build">Builds the executable</span></div>
+              <div class="card cmd"><code style="color:var(--larimar-light);">larimar check</code><span data-i18n="cmd.check">Looks for errors without building</span></div>
+              <div class="card cmd"><code style="color:var(--larimar-light);">larimar lsp / dap</code><span data-i18n="cmd.lsp">For the editor and the debugger</span></div>
+            </div>
+          </div>
+          <div>
+            <h3 style="font-size: 1.5rem; font-weight: 700;" data-i18n-html="errors.title.html">Errors with <code style="color:var(--gem);">throws</code></h3>
+            <p class="text" data-i18n-html="errors.body.html">Expected errors are enums: the signature says what each function may throw, and the compiler makes you catch it with <code style="color:var(--larimar-light);">try / catch</code> or declare it.</p>
+            <div class="code-block" style="margin-top: 1.5rem;">
+              <div class="code-title"><span>errors.lar</span></div>
+              <pre><span class="tok-kw">enum</span> <span class="tok-plain">FileError</span> {
+    <span class="tok-plain">NotFound</span>,
+    <span class="tok-fn">Denied</span>(user: <span class="tok-type">String</span>)
+}
+
+<span class="tok-kw">function</span> <span class="tok-fn">open</span>(path: <span class="tok-type">String</span>): <span class="tok-type">int32</span> <span class="tok-kw">throws</span> FileError {
+    <span class="tok-kw">if</span> (path == <span class="tok-str">""</span>) { <span class="tok-kw">throw</span> FileError.NotFound; }
+    <span class="tok-kw">return</span> path.length;
+}
+
+<span class="tok-kw">function</span> <span class="tok-fn">main</span>(): <span class="tok-type">int32</span> {
+    <span class="tok-kw">try</span> {
+        <span class="tok-fn">println</span>(<span class="tok-str">"read ${open("data")}"</span>);
+    } <span class="tok-kw">catch</span> (FileError e) {
+        <span class="tok-kw">switch</span> (e) {
+            <span class="tok-kw">case</span> NotFound -&gt; <span class="tok-fn">println</span>(<span class="tok-str">"not found"</span>);
+            <span class="tok-kw">case</span> Denied { user } -&gt; <span class="tok-fn">println</span>(<span class="tok-str">"denied to ${user}"</span>);
+        }
+    }
+    <span class="tok-kw">return</span> <span class="tok-num">0</span>;
+}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRY IT -->
+    <section id="install" class="section">
+      <div class="container">
+        <div style="text-align: center; max-width: 48rem; margin: 0 auto;">
+          <div class="eyebrow" data-i18n="install.eyebrow">Try it</div>
+          <h2 class="h2" data-i18n="install.title">Your first program</h2>
+          <p class="lead" data-i18n="install.body">All you need is a C compiler. There is no package manager or published binary yet: you build it from source.</p>
+        </div>
+
+        <div class="grid-3" style="margin-top: 4rem;">
+          <div class="card step">
+            <div>
+              <span class="step-n">01</span>
+              <h3 class="step-title" data-i18n="s1.title">Build the compiler</h3>
+              <p class="card-body" data-i18n="s1.body">With gcc or clang. Then add its folder to your PATH.</p>
+            </div>
+            <div class="code-block step-code">./build-bootstrap.sh
+export PATH="$PWD/../larimar/bin:$PATH"</div>
+          </div>
+          <div class="card step">
+            <div>
+              <span class="step-n">02</span>
+              <h3 class="step-title" data-i18n="s2.title">Create a project</h3>
+              <p class="card-body" data-i18n="s2.body">larimar new makes the folder with larimar.toml and a main.</p>
+            </div>
+            <div class="code-block step-code">larimar new hello
+cd hello</div>
+          </div>
+          <div class="card step">
+            <div>
+              <span class="step-n">03</span>
+              <h3 class="step-title" data-i18n="s3.title">Run it</h3>
+              <p class="card-body" data-i18n="s3.body">Transpiles to C, builds with gcc or clang and runs, in one command.</p>
+            </div>
+            <div class="code-block step-code">larimar run</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 5rem;" class="split">
+          <div>
+            <h3 style="font-size: 1.75rem; font-weight: 700;" data-i18n="toml.title">The project file</h3>
+            <p class="text" data-i18n-html="toml.body.html">A <code style="color:var(--larimar-light);">larimar.toml</code> describes the project and how to build the generated C. An unknown key is an error, so a typo does not go unnoticed.</p>
+            <ul class="bullets">
+              <li data-i18n-html="toml.li1.html"><code style="color:var(--larimar-light);">sources</code>: your own .c files, built with the program</li>
+              <li data-i18n-html="toml.li2.html"><code style="color:var(--larimar-light);">libraries</code>: libraries to link (-l)</li>
+              <li data-i18n-html="toml.li3.html"><code style="color:var(--larimar-light);">library_paths</code>: where to look for them (-L)</li>
+              <li data-i18n-html="toml.li4.html"><code style="color:var(--larimar-light);">include_paths</code>: header folders (-I)</li>
+              <li data-i18n-html="toml.li5.html"><code style="color:var(--larimar-light);">flags</code>: options for the C compiler</li>
+            </ul>
+          </div>
+          <div>
+            <div class="code-block">
+              <div class="code-title"><span>larimar.toml</span></div>
+              <pre><span class="tok-kw">[project]</span>
+name = <span class="tok-str">"hello"</span>
+version = <span class="tok-str">"0.1.0"</span>
+main = <span class="tok-str">"src/main.lar"</span>
+output = <span class="tok-str">"dist/hello"</span>
+
+<span class="tok-kw">[c]</span>
+compiler = <span class="tok-str">"gcc"</span>
+flags = [<span class="tok-str">"-O2"</span>, <span class="tok-str">"-Wall"</span>]
+sources = [<span class="tok-str">"csrc/helpers.c"</span>]
+libraries = [<span class="tok-str">"m"</span>]</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <a href="#top" style="display: flex; align-items: center; gap: 0.6rem; font-weight: 700; font-size: 1.125rem;">
+            <span style="display:grid; place-items:center; width:2.25rem; height:2.25rem; border-radius:0.5rem; background:linear-gradient(to bottom right, var(--larimar), var(--gem)); color:#080b0f;">⚡</span>
+            Larimar
+          </a>
+          <p class="card-body" style="margin-top: 1rem; max-width: 20rem;" data-i18n="footer.body">An experimental language that transpiles to C99, with no garbage collector.</p>
+        </div>
+        <div>
+          <h4 class="footer-h" data-i18n="footer.language">Language</h4>
+          <ul class="footer-list">
+            <li><a href="#features" data-i18n="nav.features">Language</a></li>
+            <li><a href="#memory" data-i18n="nav.memory">Memory</a></li>
+            <li><a href="#concurrency" data-i18n="nav.concurrency">Threads</a></li>
+            <li><a href="#interop" data-i18n="nav.interop">C</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="footer-h" data-i18n="footer.tools">Tools</h4>
+          <ul class="footer-list">
+            <li><a href="#install" data-i18n="footer.start">Try it</a></li>
+            <li><a href="#docs" data-i18n="footer.lsp">Language server</a></li>
+            <li><a href="#docs" data-i18n="footer.debugger">Debugger</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="footer-h" data-i18n="footer.resources">Resources</h4>
+          <ul class="footer-list">
+            <li><a href="https://github.com/zerh/larimar/blob/main/MANUAL.md" data-i18n="footer.manual">Manual</a></li>
+            <li><a href="https://github.com/zerh/larimar/blob/main/MANUAL.md#25-standard-library" data-i18n="footer.std">Standard library</a></li>
+            <li><a href="https://github.com/zerh/larimar">GitHub</a></li>
+            <li><a href="https://github.com/zerh/larimar/tree/main/tests" data-i18n="footer.examples">Examples</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p data-i18n="footer.copy">© 2026 Larimar · experimental project</p>
+        <p data-i18n="footer.self">Written in Larimar, compiled by itself</p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // The language: ?lang=es or ?lang=en, then the one chosen before (ES / EN), then the browser's
+    // languages in order of preference, then English. The texts are in i18n.json, next to this file;
+    // if it cannot be loaded, the page stays in English as written here.
+    (function () {
+      var SUPPORTED = ['en', 'es'];
+      var KEY = 'larimar-lang';
+      var texts = null;
+
+      function supported(tag) {
+        var base = String(tag || '').toLowerCase().split('-')[0];
+        return SUPPORTED.indexOf(base) >= 0 ? base : null;
+      }
+
+      function chosen() {
+        var fromUrl = supported(new URLSearchParams(location.search).get('lang'));
+        if (fromUrl) { return fromUrl; }
+        try {
+          var saved = supported(localStorage.getItem(KEY));
+          if (saved) { return saved; }
+        } catch (e) { /* storage not available: ignore */ }
+        var prefs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || navigator.userLanguage];
+        for (var i = 0; i < prefs.length; i++) {
+          var lang = supported(prefs[i]);
+          if (lang) { return lang; }
+        }
+        return 'en';
+      }
+
+      function apply(lang, animate) {
+        var t = texts[lang];
+        if (!t) { return; }
+        document.documentElement.lang = lang;
+        document.querySelectorAll('[data-i18n]').forEach(function (el) {
+          var v = t[el.getAttribute('data-i18n')];
+          if (v != null) { el.textContent = v; }
+        });
+        document.querySelectorAll('[data-i18n-html]').forEach(function (el) {
+          var v = t[el.getAttribute('data-i18n-html')];
+          if (v != null) { el.innerHTML = v; }
+        });
+        document.querySelectorAll('[data-i18n-content]').forEach(function (el) {
+          var v = t[el.getAttribute('data-i18n-content')];
+          if (v != null) { el.setAttribute('content', v); }
+        });
+        document.querySelectorAll('[data-i18n-label]').forEach(function (el) {
+          var v = t[el.getAttribute('data-i18n-label')];
+          if (v != null) { el.setAttribute('aria-label', v); }
+        });
+        var toggle = document.querySelector('.lang-toggle');
+        var knob = toggle.querySelector('.lt-knob');
+        if (!animate) { knob.style.transition = 'none'; }
+        toggle.setAttribute('data-current', lang);
+        toggle.setAttribute('aria-checked', lang === 'en' ? 'true' : 'false');
+        if (!animate) { void knob.offsetWidth; knob.style.transition = ''; }   // first time: no slide
+      }
+
+      function ready() { document.documentElement.classList.remove('i18n-pending'); }
+
+      fetch('i18n.json')
+        .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.json(); })
+        .then(function (json) {
+          texts = json;
+          apply(chosen());
+          document.querySelector('.lang-toggle').addEventListener('click', function () {
+            var lang = document.documentElement.lang === 'es' ? 'en' : 'es';
+            try { localStorage.setItem(KEY, lang); } catch (err) { /* ignore */ }
+            apply(lang, true);
+          });
+          ready();
+        })
+        .catch(function () {
+          // Opened as a file (file://): the browser does not let the page read i18n.json.
+          var toggle = document.querySelector('.lang-toggle');
+          toggle.disabled = true;
+          toggle.title = 'To switch language, open the page through a web server (for example: python3 -m http.server)';
+          ready();
+        });
+    })();
+  </script>
+</body>
+</html>
