@@ -362,6 +362,22 @@
       line-height: 1;
     }
     .logo-mark > span { transform: translateY(0.07em); }   /* a capital sits high in its line box */
+
+    /* download buttons of the latest release */
+    .downloads { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; margin-top: 2rem; }
+    .downloads .btn-primary { display: inline-flex; align-items: baseline; gap: 0.4rem; }
+    .dl-note { font-weight: 500; font-size: 0.8em; opacity: 0.75; }
+    .dl-more { margin-top: 1rem; font-size: 0.875rem; }
+    .dl-more a { color: var(--larimar-light); text-decoration: none; }
+    .dl-more a:hover { text-decoration: underline; }
+
+    /* two columns (one on narrow screens) */
+    .grid-2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+    @media (min-width: 900px) { .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .get-notes { margin-top: 1rem; font-size: 0.875rem; }
+    .get .step-code { margin-top: 0.75rem; }
+    .step-code { overflow-x: auto; }
+    .get .step { justify-content: flex-start; }
   </style>
 </head>
 <body>
@@ -938,22 +954,48 @@ server.<span class="tok-fn">run</span>();</pre>
         <div style="text-align: center; max-width: 48rem; margin: 0 auto;">
           <div class="eyebrow" data-i18n="install.eyebrow">Try it</div>
           <h2 class="h2" data-i18n="install.title">Your first program</h2>
-          <p class="lead" data-i18n="install.body">All you need is a C compiler. There is no package manager or published binary yet: you build it from source.</p>
+          <p class="lead" data-i18n="install.body">Download the latest version for your system. To build your programs you need a C compiler (gcc or clang; MinGW on Windows).</p>
+          <!-- the latest release, built by GitHub Actions for each system -->
+          <div class="downloads">
+            <a class="btn-primary" href="https://github.com/zerh/larimar/releases/latest/download/larimar-macos-x86_64.tar.gz">macOS <span class="dl-note">Apple Silicon</span></a>
+            <a class="btn-primary" href="https://github.com/zerh/larimar/releases/latest/download/larimar-linux-x86_64.tar.gz">Linux <span class="dl-note">x86_64</span></a>
+            <a class="btn-primary" href="https://github.com/zerh/larimar/releases/latest/download/larimar-windows-x86_64.zip">Windows <span class="dl-note">x86_64</span></a>
+          </div>
+          <p class="dl-more"><a href="https://github.com/zerh/larimar/releases" data-i18n="install.all">All versions and release notes on GitHub</a></p>
         </div>
 
-        <div class="grid-3" style="margin-top: 4rem;">
+        <!-- two ways to get it: the release built by GitHub Actions, or from the source -->
+        <div class="grid-2 get" style="margin-top: 3.5rem;">
           <div class="card step">
             <div>
-              <span class="step-n">01</span>
-              <h3 class="step-title" data-i18n="s1.title">Build the compiler</h3>
-              <p class="card-body" data-i18n="s1.body">With gcc or clang. Then add its folder to your PATH.</p>
+              <h3 class="step-title" data-i18n="get.dl.title">After downloading</h3>
+              <p class="card-body" data-i18n-html="get.dl.path.html">Unpack it wherever you like: inside is the <code style="color:var(--larimar-light);">larimar</code> folder (<code style="color:var(--larimar-light);">bin</code>, <code style="color:var(--larimar-light);">std</code> and the manual). For the terminal to find the <code style="color:var(--larimar-light);">larimar</code> command, add <code style="color:var(--larimar-light);">larimar/bin</code> to the <code style="color:var(--larimar-light);">PATH</code> environment variable:</p>
             </div>
-            <div class="code-block step-code">./build-bootstrap.sh
-export PATH="$PWD/../larimar/bin:$PATH"</div>
+            <div class="code-block step-code">tar -xzf larimar-*.tar.gz
+export PATH="$PWD/larimar/bin:$PATH"</div>
+            <ul class="bullets get-notes">
+              <li data-i18n-html="get.dl.keep.html">To keep it in every new terminal, put that <code style="color:var(--larimar-light);">export</code> line in <code style="color:var(--larimar-light);">~/.zshrc</code> (macOS) or <code style="color:var(--larimar-light);">~/.bashrc</code> (Linux), with the full path.</li>
+              <li data-i18n-html="get.dl.win.html">On Windows: unpack the <code style="color:var(--larimar-light);">.zip</code> and add <code style="color:var(--larimar-light);">larimar\bin</code> to <code style="color:var(--larimar-light);">Path</code> in <em>Edit the system environment variables</em>.</li>
+              <li data-i18n-html="get.dl.mac.html">On macOS, if it warns that it cannot verify the developer: <code style="color:var(--larimar-light);">xattr -dr com.apple.quarantine larimar</code>. There is no need to set <code style="color:var(--larimar-light);">LARIMAR_HOME</code>: <code style="color:var(--larimar-light);">larimar</code> takes it from its own folder.</li>
+            </ul>
           </div>
           <div class="card step">
             <div>
-              <span class="step-n">02</span>
+              <h3 class="step-title" data-i18n="get.src.title">Or build it yourself</h3>
+              <p class="card-body" data-i18n="get.src.body">From the source, with gcc or clang. The compiler is built from its C version and checked by compiling itself.</p>
+            </div>
+            <div class="code-block step-code">git clone https://github.com/zerh/larimar
+cd larimar
+./build-bootstrap.sh --verify
+export PATH="$PWD/../out/larimar/bin:$PATH"</div>
+            <p class="card-body" style="margin-top: 1rem;" data-i18n-html="get.src.note.html">It installs into <code style="color:var(--larimar-light);">../out/larimar</code>, with the same layout as the download. It is the way to go if you want to change the compiler or use a version not yet released.</p>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 1.5rem;">
+          <div class="card step">
+            <div>
+              <span class="step-n">01</span>
               <h3 class="step-title" data-i18n="s2.title">Create a project</h3>
               <p class="card-body" data-i18n="s2.body">larimar new makes the folder with larimar.toml and a main.</p>
             </div>
@@ -962,7 +1004,7 @@ cd hello</div>
           </div>
           <div class="card step">
             <div>
-              <span class="step-n">03</span>
+              <span class="step-n">02</span>
               <h3 class="step-title" data-i18n="s3.title">Run it</h3>
               <p class="card-body" data-i18n="s3.body">Transpiles to C, builds with gcc or clang and runs, in one command.</p>
             </div>
