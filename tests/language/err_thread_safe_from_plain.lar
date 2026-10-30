@@ -1,0 +1,6 @@
+// expect: error expected (int32) -> void thread safe but got (int32) -> void
+function main(): int32 {
+    let g: (int32) -> void = (x: int32) -> {};
+    let h: (int32) -> void thread safe = g;
+    return 0;
+}

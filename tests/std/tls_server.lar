@@ -1,0 +1,99 @@
+// expect: run
+// output: bad key rejected: true
+// output: served: 3
+// output: client: hello 0 over tls | hello 1 over tls | hello 2 over tls | plain client dropped
+// std.net: a TlsServer with OpenSslProvider (tests/tls/cert.pem, self-signed) and threads; a client with
+// SystemTls (verify: false), and one that does not speak TLS, which never reaches onConnect.
+import std.net { TlsServer, TlsSocket, TcpSocket, OpenSslProvider, StopSignal, Connection, NetError, message };
+import std.net.http.tls { SystemTls };
+import std.io.streams { Reader, buffer };
+import std.io.files { IoError };
+
+synchronized class Counter {
+    let n: int32 = 0;
+    function add(): void { self.n += 1; }
+    function get(): int32 { return self.n; }
+}
+
+synchronized class Result {
+    let text: String = "";
+    function add(t: String): void { self.text = (self.text == "" ? t : "${self.text} | ${t}").clone(); }
+    function get(): String { return self.text; }
+}
+
+/** Connects with TLS, retrying while the server is not listening yet. */
+function connectTls(port: int32): Connection throws NetError {
+    let tls: SystemTls = { verify: false };
+    let tries: int32 = 0;
+    while (true) {
+        try {
+            return tls.connect("127.0.0.1", port, 5000);
+        } catch (NetError e) {
+            tries += 1;
+            if (tries > 1000000) { throw e; }
+        }
+    }
+    throw NetError.Refused;
+}
+
+function clients(result: Result, quit: StopSignal): void throws NetError {
+    for (k in 0..3) {
+        let c: Connection = connectTls(47823);
+        try {
+            c.write("hello ${k}\n".bytes());
+            let data: byte[*] = buffer(100);
+            let n: int32 = c.read(data);
+            result.add(stringOfRange(data, 0, n > 0 && data[n - 1] == '\n' ? n - 1 : n));
+        } catch (IoError e) { result.add("io error"); }
+    }
+    let plain: TcpSocket = TcpSocket.connect("127.0.0.1", 47823);     // not TLS: the handshake fails
+    plain.setTimeout(5000);
+    try {
+        plain.writeText("GET / HTTP/1.0\r\n\r\n");
+        let data: byte[*] = buffer(100);
+        let n: int32 = plain.read(data);
+        result.add(n == 0 ? "plain client dropped" : "plain client got ${n} bytes");
+    } catch (IoError e) { result.add("plain client dropped"); }
+    quit.stop();
+}
+
+function main(): int32 {
+    try {
+        OpenSslProvider.load("tests/tls/cert.pem", "tests/tls/other_key.pem");     // a key, but not this one
+    } catch (NetError e) {        // OpenSSL 3 says it when loading the key, 1.1 when comparing them
+        let m: String = message(e);
+        println("bad key rejected: ${m.contains("other_key.pem")}");
+    }
+
+    let result: Result = {};
+    let served: Counter = {};
+    let quit: StopSignal = {};
+    let t: Thread = {
+        run: () -> {
+            try { clients(result, quit); } catch (NetError e) { result.add("client: ${message(e)}"); quit.stop(); }
+        }
+    };
+    try {
+        let tls: OpenSslProvider = OpenSslProvider.load("tests/tls/cert.pem", "tests/tls/key.pem");
+        t.start();
+        let server: TlsServer = {
+            port: 47823,
+            threads: 3,
+            stop: quit,
+            tls: tls,
+            onConnect: (client: TlsSocket) -> {
+                try {
+                    let lines: Reader = { from: client };
+                    let line: String = lines.readLine() ?? "";
+                    client.writeText("${line} over tls\n");
+                    served.add();
+                } catch (IoError e) {}
+            }
+        };
+        server.run();
+    } catch (NetError e) { println("server: ${message(e)}"); }
+    t.join();
+    println("served: ${served.get()}");
+    println("client: ${result.get()}");
+    return 0;
+}

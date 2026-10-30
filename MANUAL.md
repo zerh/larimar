@@ -1944,6 +1944,45 @@ function main(): int32 {
 
 Salida: `true`
 
+### Funciones para varios hilos: `thread safe`
+
+Una función que otros hilos van a llamar, a veces varios a la vez, se marca con **`thread safe`** al final
+de su tipo. La escribe quien diseña la API (un servidor, un grupo de hilos); quien la usa escribe una
+lambda normal:
+
+```actionscript
+class Pool {
+    let threads: int32 = 4;
+    let work: (int32) -> void thread safe;        // los hilos del Pool la llaman a la vez
+    ...
+}
+
+let total: Total = {};                             // synchronized
+let names: String[*] = [];
+
+let pool: Pool = { work: (id: int32) -> { total.add(id as int64); } };     // bien
+let bad: Pool = { work: (id: int32) -> { names.push("x"); } };              // error
+```
+
+```
+Semantic Error [src/main.lar:9]: This 'thread safe' lambda uses 'names' (String[*]), which other threads could change at the same time. ...
+```
+
+- **Una lambda dada donde se espera una función `thread safe` se comprueba como el `run` de un `Thread`**:
+  solo usa valores, objetos de clases `synchronized` y otras funciones `thread safe`, y las funciones que
+  llama no cambian globales. Sus capturas no cambian (como en toda lambda), así que varios hilos pueden
+  ejecutarla a la vez.
+- **Un valor `thread safe` se puede compartir entre hilos**: un `Thread` lo puede usar y un método
+  `synchronized` lo puede recibir. Así se escriben en Larimar normal los servidores de `std.net`.
+- **Una función `thread safe` sirve donde se espera una normal**, pero no al revés: una variable con una
+  lambda normal no se puede dar donde se pide `thread safe` (solo una lambda escrita ahí, que se comprueba).
+- Son dos palabras, como `wait until`, y ninguna está reservada. Con un tipo función dentro de otro, va al
+  más cercano a su izquierda: en `(A) -> (B) -> C thread safe` lo es `(B) -> C`; para el de fuera,
+  paréntesis: `((A) -> (B) -> C) thread safe`.
+
+`synchronized` y `thread safe` son cosas distintas: una clase `synchronized` es un objeto con candado; una
+función `thread safe` no necesita candado porque solo toca cosas que ya son seguras.
+
 ### Lo que el compilador rechaza
 
 ```actionscript
@@ -2645,7 +2684,7 @@ importa entra en el programa, y el ejecutable no necesita la carpeta `std` para 
 | `std.text` | clasificar bytes (para lexers y parsers) |
 | `std.text.regex` | expresiones regulares: `Regex`, `Match` (escritas en Larimar, sin bibliotecas de C) |
 | `std.json` | JSON a `Any` y `Any` a JSON |
-| `std.net` | conexiones TCP: `TcpSocket`, `TcpListener` |
+| `std.net` | TCP, UDP y TLS de servidor: `TcpSocket`, `TcpListener`, `TcpServer`, `UdpSocket`, `UdpServer`, `TlsServer`, `OpenSslProvider`, `StopSignal` |
 | `std.net.http` | cliente HTTP/1.1 y `https://`: `Client`, `Request`; el cuerpo como texto, JSON o stream |
 | `std.net.http.tls` | `TlsProvider` (la interfaz para conexiones cifradas) y `SystemTls` (el TLS del sistema) |
 
@@ -2884,7 +2923,7 @@ function main(): int32 {
   queda abierto aunque no se llame a `close()`.
 - `read` llena el búfer que recibe, sin crear nada; con el `Reader` y `readLine() in scratch`, leer un
   millón de líneas de un socket pidió al sistema unas 4.400 asignaciones de memoria en total.
-- Para atender varias conexiones a la vez, cada una en un `Thread`. En Windows (Winsock) `larimar build`
+- Para atender varias conexiones a la vez, `TcpServer` (abajo). En Windows (Winsock) `larimar build`
   enlaza `ws2_32` automáticamente.
 - `Connection` es la interfaz de una conexión en los dos sentidos (`read`, `write`, `flush`, `close`): la
   implementa `TcpSocket`, y también lo que da un `TlsProvider` (ver `std.net.http.tls`). Quien habla un
@@ -2897,6 +2936,129 @@ function main(): int32 {
   [recursos](#recursos-released by).
 - `NetError.Tls(reason)` es un fallo del cifrado (un certificado rechazado, un saludo TLS fallido) y
   `NetError.TlsUnavailable(what)` que no hay TLS que usar.
+
+### `std.net`: servidores TCP y UDP
+
+`TcpServer` y `UdpServer` son el bucle de un servidor ya escrito: se configuran con un literal (que no
+puede fallar) y `run()` hace el trabajo (escuchar puede fallar, y lanza `NetError`). Lo que se hace con
+cada conexión o datagrama es una función `thread safe`, así que el compilador comprueba que los hilos del
+servidor no se pisen.
+
+```actionscript
+import std.net { TcpServer, TcpSocket, StopSignal, NetError, message };
+import std.io.streams { Reader };
+import std.io.files { IoError };
+
+synchronized class Stats {
+    let served: int32 = 0;
+    function add(): int32 { self.served += 1; return self.served; }
+}
+
+function main(): int32 {
+    let stats: Stats = {};
+    let quit: StopSignal = {};
+    let server: TcpServer = {
+        port: 8080,                 // host: "127.0.0.1" si no se dice otro ("0.0.0.0": toda la red)
+        threads: 8,                 // conexiones atendidas a la vez (1 si no se dice)
+        stop: quit,
+        onConnect: (client: TcpSocket) -> {
+            client.setTimeout(5000);
+            try {
+                let lines: Reader = { from: client };
+                let line: String = lines.readLine() ?? "";
+                if (line == "quit") { quit.stop(); }
+                client.writeText("hello #${stats.add()}: ${line}\n");
+            } catch (IoError e) {}
+        }                           // al volver, client se cierra y su memoria se libera
+    };
+    try {
+        server.run();               // espera aquí hasta quit.stop()
+    } catch (NetError e) {
+        println("cannot listen: ${message(e)}");
+        return 1;
+    }
+    return 0;
+}
+```
+
+- `run()` acepta en el hilo que lo llama y reparte las conexiones entre sus `threads` hilos; cada conexión
+  se atiende con su propia memoria, que se libera al terminar `onConnect`.
+- Un `StopSignal` es un objeto `synchronized` con `stop()`: se le da al literal (`stop: quit`) y se llama
+  desde cualquier sitio, también desde el handler. El servidor lo nota en menos de un quinto de segundo y
+  `run()` vuelve después de las peticiones en curso. Sin `stop`, sirve hasta que el programa termina.
+- Conviene `client.setTimeout(...)` al empezar: un cliente que no envía nada ocupa un hilo mientras espera.
+
+`UdpSocket` envía y recibe datagramas: cada uno llega entero o no llega, sin conexión.
+`UdpSocket.bind(host, port)` recibe en un puerto y `UdpSocket.open()` da uno cualquiera para enviar;
+`sendTo(bytes, Address { host, port })` envía y `receive(buffer)` espera uno y da un `Datagram`
+(`length` y `from`, la `Address` de quien lo envió). `UdpServer` es su servidor:
+
+```actionscript
+let server: UdpServer = {
+    port: 9000,
+    threads: 4,
+    stop: quit,
+    onReceive: (socket: UdpSocket, data: byte[], from: Address) -> {
+        try { socket.sendTo(data, from); } catch (NetError e) {}       // el eco
+    }
+};
+server.run();
+```
+
+- Cada hilo tiene su propia copia del socket, en el mismo puerto: las respuestas salen del puerto al que
+  escribió el cliente.
+- `maxSize` (65507 si no se dice) es el datagrama más grande que se recibe entero.
+- UDP no reenvía: un datagrama puede perderse, y quien envía decide si lo repite.
+
+### `std.net`: servidores TLS (https)
+
+`TlsServer` es un `TcpServer` cuyas conexiones llegan ya descifradas. El certificado y su clave se
+cargan una vez con `OpenSslProvider.load(certificado, clave)`, que lanza `NetError` si un archivo no
+sirve o la clave no es la del certificado:
+
+```actionscript
+import std.net { TlsServer, TlsSocket, OpenSslProvider, NetError, message };
+import std.io.streams { Reader };
+import std.io.files { IoError };
+
+function main(): int32 {
+    try {
+        let tls: OpenSslProvider = OpenSslProvider.load(
+            "/etc/letsencrypt/live/example.com/fullchain.pem",
+            "/etc/letsencrypt/live/example.com/privkey.pem");
+        let server: TlsServer = {
+            host: "0.0.0.0",
+            port: 443,
+            threads: 8,
+            tls: tls,
+            onConnect: (client: TlsSocket) -> {
+                client.setTimeout(5000);
+                try {
+                    let request: Reader = { from: client };
+                    while ((request.readLine() ?? "") != "") {}                 // las cabeceras
+                    client.writeText("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhola\n");
+                } catch (IoError e) {}
+            }
+        };
+        server.run();
+    } catch (NetError e) {
+        println(message(e));
+        return 1;
+    }
+    return 0;
+}
+```
+
+- Con Let's Encrypt se usan `fullchain.pem` (el certificado con su cadena; `cert.pem` solo no basta para
+  todos los clientes) y `privkey.pem`. Ese archivo solo lo lee root: el programa necesita permiso para
+  leerlo. Cuando el certificado se renueva, hay que reiniciar el servidor.
+- Un `TlsSocket` se usa como un `TcpSocket`: `read`, `write`, `writeText`, `setTimeout`, `Reader`,
+  `copy()`. Se cierra solo al liberarse su memoria.
+- El saludo TLS ocurre en el hilo que atiende, con `handshakeTimeout` (10 segundos si no se dice): un
+  cliente que no lo completa, o que no habla TLS, se descarta sin llegar a `onConnect`.
+- Un `OpenSslProvider` es `synchronized`: lo comparten los hilos del servidor, y varios servidores.
+- Usa OpenSSL 1.1 o 3, que se carga la primera vez que hace falta: en Linux viene con el sistema; en macOS,
+  `brew install openssl@3`. En Windows todavía no está: `load` lanza `NetError.TlsUnavailable`.
 
 ### `std.net.http`: cliente HTTP y HTTPS
 
@@ -3923,6 +4085,7 @@ for (k, v in t.fields) { }
 // Hilos
 synchronized class Box { let n: int32 = 0; function inc(): void { self.n += 1; } }
 function take(): int32 wait until (self.n > 0) { ... }           // en una clase synchronized: espera a que se cumpla
+let onConnect: (TcpSocket) -> void thread safe;                 // la llaman otros hilos: su lambda se comprueba
 let th: Thread = { run: () -> { box.inc(); } };   // al liberarse su memoria, se espera a que termine
 th.start();
 th.join();

@@ -25,6 +25,8 @@ public class Type {
     let used: bool = false;           // in usedTypes (the generator emits it)
     let funcId: int32 = -1;           // Func: the id of its closure type
     let order: int32 = 0;             // computeTypeOrder: 0 new, 1 visiting, 2 done
+    let safe: bool = false;           // Func: `thread safe` (other threads may call it at the same time)
+    let plain: Type? = null;          // Func thread safe: the same type without it (the same C type)
 }
 
 let typeIndex: Any = {} in default;
@@ -77,7 +79,7 @@ public function named(name: String in default, nk: NamedK): Type {
     return intern(Type { kind: TyK.Named, name, nk, text: name } in default);
 }
 
-public function funcT(params: Type[*] in default, ret: Type in default): Type {
+public function funcT(params: Type[*] in default, ret: Type in default, safe: bool): Type {
     let sb: StringBuilder = {} in default;
     sb.add("(");
     for (i, p in params) {
@@ -85,7 +87,27 @@ public function funcT(params: Type[*] in default, ret: Type in default): Type {
         sb.add(p.text);
     }
     sb.add(") -> ${ret.text}");
-    return intern(Type { kind: TyK.Func, params, elem: ret, text: sb.toString() } in default);
+    let plain: Type = intern(Type { kind: TyK.Func, params, elem: ret, text: sb.toString() } in default);
+    if (!safe) { return plain; }
+    sb.add(" thread safe");
+    let t: Type = intern(Type { kind: TyK.Func, params, elem: ret, safe: true, text: sb.toString() } in default);
+    t.plain = plain;
+    return t;
+}
+
+/** Is there a `thread safe` function type in t (itself, or the element of an optional or an array)? */
+public function hasThreadSafe(t: Type in default): bool {
+    if (t.kind == TyK.Func) { return t.safe; }
+    if (t.kind == TyK.Opt || t.kind == TyK.Array) { return hasThreadSafe(t.elem!); }
+    return false;
+}
+
+/** The type C sees: t without `thread safe` (the same closure type), also inside optionals and arrays. */
+public function cTypeOf(t: Type in default): Type {
+    if (t.kind == TyK.Func && t.safe) { return t.plain!; }
+    if (t.kind == TyK.Opt && hasThreadSafe(t)) { return optT(cTypeOf(t.elem!)); }
+    if (t.kind == TyK.Array && hasThreadSafe(t)) { return arrayT(cTypeOf(t.elem!), t.ak, t.size); }
+    return t;
 }
 
 public function arrayT(elem: Type in default, ak: ArrK, size: int64): Type {
