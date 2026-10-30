@@ -8,8 +8,16 @@ http:// to https:// and a TlsProvider of its own. On Linux, also the message whe
 import http.server, os, socketserver, ssl, subprocess, sys, tempfile, threading, shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+def default_compiler(root):
+    """larimarc where build-bootstrap.sh leaves it: ../out/larimar/bin, bin/, or the repository's root."""
+    for p in (os.path.join(root, "..", "out", "larimar", "bin", "larimarc"), os.path.join(root, "bin", "larimarc"),
+              os.path.join(root, "larimarc")):
+        if os.path.exists(p) or os.path.exists(p + ".exe"):
+            return p
+    return os.path.join(root, "larimarc")
+
 ROOT = os.path.dirname(os.path.dirname(HERE))
-EXE = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "larimarc"))
+EXE = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else default_compiler(ROOT))
 CC = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("CC", "cc")
 CFLAGS = ["-std=c99", "-g", "-O1", "-fno-omit-frame-pointer", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
 LIBS = ["-pthread", "-lm"] + (["-ldl"] if sys.platform.startswith("linux") else []) + \

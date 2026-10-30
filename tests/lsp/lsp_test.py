@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
 """larimar check and larimar lsp, end to end: python3 tests/lsp/lsp_test.py <larimarc>"""
-import json, os, subprocess, sys, time
+import json, os, subprocess, sys, time, urllib.parse
 
-EXE = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "larimarc")
+def default_compiler(root):
+    """larimarc where build-bootstrap.sh leaves it: ../out/larimar/bin, bin/, or the repository's root."""
+    for p in (os.path.join(root, "..", "out", "larimar", "bin", "larimarc"), os.path.join(root, "bin", "larimarc"),
+              os.path.join(root, "larimarc")):
+        if os.path.exists(p) or os.path.exists(p + ".exe"):
+            return p
+    return os.path.join(root, "larimarc")
+
+
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+EXE = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else default_compiler(REPO))
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "project")
 MAIN = os.path.join(ROOT, "src", "main.lar")
 SHAPES = os.path.join(ROOT, "src", "geo", "shapes.lar")
@@ -55,7 +65,7 @@ def run(env_extra):
             if m.get("id") == ids[0]:
                 return m.get("result")
             notes.append(m)
-    def uri(path): return "file://" + path
+    def uri(path): return "file://" + urllib.parse.quote(path)     # a space is %20
     def at(path, line, ch): return {"textDocument": {"uri": uri(path)}, "position": {"line": line, "character": ch}}
     def change(path, text, v):
         send({"jsonrpc": "2.0", "method": "textDocument/didChange", "params": {"textDocument": {"uri": uri(path), "version": v}, "contentChanges": [{"text": text}]}})

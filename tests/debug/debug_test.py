@@ -6,11 +6,19 @@ that Larimar's formatters (debug/larimar_lldb.py, debug/larimar_gdb.py) show the
 values, with lldb and gdb (whichever are installed). Then, with lldb-dap, talks to larimar dap (the
 debugger written in Larimar) like an editor: Larimar names in the stack and the variables, values,
 children, Larimar paths in evaluate, and a panic shown as an exception with its message."""
-import json, os, shutil, subprocess, sys, tempfile
+import json, os, shutil, subprocess, sys, tempfile, threading
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+def default_compiler(root):
+    """larimarc where build-bootstrap.sh leaves it: ../out/larimar/bin, bin/, or the repository's root."""
+    for p in (os.path.join(root, "..", "out", "larimar", "bin", "larimarc"), os.path.join(root, "bin", "larimarc"),
+              os.path.join(root, "larimarc")):
+        if os.path.exists(p) or os.path.exists(p + ".exe"):
+            return p
+    return os.path.join(root, "larimarc")
+
 ROOT = os.path.dirname(os.path.dirname(HERE))
-EXE = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "larimarc"))
+EXE = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else default_compiler(ROOT))
 CC = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("CC", "cc")
 SRC = os.path.join(HERE, "values.lar")
 LINE = next(i + 1 for i, l in enumerate(open(SRC, encoding="utf-8")) if "// break here" in l)
@@ -76,11 +84,21 @@ class Dap:
                 n = int(line.split(b":")[1])
         return json.loads(self.p.stdout.read(n))
 
-    def wait(self, pred):
-        while True:
-            m = self.recv()
-            if pred(m):
-                return m
+    def wait(self, pred, seconds=30):
+        """The next message that pred accepts; a test fails (it does not hang) after seconds without it."""
+        timer = threading.Timer(seconds, self.p.kill)
+        timer.start()
+        try:
+            while True:
+                m = self.recv()
+                if pred(m):
+                    return m
+        except RuntimeError:
+            if not timer.is_alive():
+                raise RuntimeError("no answer from larimar dap in %d seconds" % seconds)
+            raise
+        finally:
+            timer.cancel()
 
     def req(self, cmd, args=None):
         s = self.send(cmd, args)
@@ -196,7 +214,7 @@ try:
         ran = True
         cmds = os.path.join(tmp, "lldb.txt")
         with open(cmds, "w") as f:
-            f.write("command script import %s\n" % os.path.join(ROOT, "debug", "larimar_lldb.py"))
+            f.write("command script import \"%s\"\n" % os.path.join(ROOT, "debug", "larimar_lldb.py"))     # a path with spaces
             f.write("breakpoint set --file values.lar --line %d\nrun\n" % LINE)
             f.write("frame variable %s\n" % " ".join(v for v, _ in EXPECT))
             f.write("bt 1\nkill\nquit\n")
