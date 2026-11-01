@@ -1,0 +1,16 @@
+// expect: run
+// output: built without its tests
+// c-lacks: onlyInTests
+// larimar build leaves test functions out: they are not checked against main, and not in the C.
+import std.test { checkInt };
+
+function twice(n: int32): int32 { return n * 2; }
+
+test function onlyInTests(): void {
+    checkInt(4, twice(2));
+}
+
+function main(): int32 {
+    println("built without its tests");
+    return 0;
+}

@@ -1,0 +1,99 @@
+// std.text.regex, as test functions (larimar test).
+import std.test { check, checkText, checkInt };
+import std.text.regex { Regex, Match, RegexError, message };
+
+test function findsGroups(): void throws RegexError {
+    let m: Match? = Regex.compile("([a-z]+)@([a-z]+)\\.com").find("write to ana@mail.com today");
+    check(m != null, "should find the address");
+    if (m == null) { return; }
+    checkText("ana@mail.com", m.value);
+    checkText("ana", m.group(1) ?? "");
+    checkText("mail", m.group(2) ?? "");
+}
+
+test function matchesWholeText(): void throws RegexError {
+    let digits: Regex = Regex.compile("\\d+");
+    check(digits.matches("123"), "123 is digits");
+    check(!digits.matches("12a"), "12a is not");
+    check(Regex.compile("a|ab").matches("ab"), "a|ab matches ab");
+    check(!digits.matches(""), "nothing is not digits");
+}
+
+test function findsAll(): void throws RegexError {
+    let nums: String[*] = [];
+    for (x in Regex.compile("\\d+").findAll("on 12 of 7, 2026")) { nums.push(x.value.clone()); }
+    checkText("12 7 2026", nums.join(" "));
+}
+
+test function replacesWithGroups(): void throws RegexError {
+    checkText("26/10/2026", Regex.compile("(\\d{4})-(\\d{2})-(\\d{2})").replace("2026-10-26", "$3/$2/$1"));
+}
+
+test function splits(): void throws RegexError {
+    checkText("a|b|c|d", Regex.compile("\\s*,\\s*").split("a , b,c ,d").join("|"));
+}
+
+test function classes(): void throws RegexError {
+    let hex: Regex = Regex.compile("[0-9a-fA-F]+");
+    check(hex.matches("1fA9"), "1fA9 is hex");
+    check(Regex.compile("\"[^\"]*\"").matches("\"hi there\""), "a quoted text");
+    check(!hex.matches("xyz"), "xyz is not hex");
+    check(Regex.compile("[]a]+").matches("]a]"), "] first in a class");
+}
+
+test function lazyAndGreedy(): void throws RegexError {
+    checkText("<b>", Regex.compile("<.+?>").find("<b>x</b>")!.value);
+    checkText("<b>x</b>", Regex.compile("<.+>").find("<b>x</b>")!.value);
+}
+
+test function alternation(): void throws RegexError {
+    let animals: String[*] = [];
+    for (x in Regex.compile("cat|dog|cow").findAll("a cat, a dog and a cow")) { animals.push(x.value.clone()); }
+    checkText("cat dog cow", animals.join(" "));
+}
+
+test function countedRepeats(): void throws RegexError {
+    let three: Regex = Regex.compile("^a{2,3}$");
+    check(three.matches("aa"), "aa");
+    check(!three.matches("a"), "a is too short");
+    check(three.matches("aaa"), "aaa");
+    check(!three.matches("aaaa"), "aaaa is too long");
+}
+
+test function anchorsAndBoundaries(): void throws RegexError {
+    check(Regex.compile("^hello").contains("hello world"), "^ at the start");
+    check(!Regex.compile("world$").contains("world hello"), "$ only at the end");
+    checkInt(2, Regex.compile("\\bis\\b").findAll("this is it, is it").length);
+}
+
+test function optionalGroupIsNull(): void throws RegexError {
+    check(Regex.compile("a(b)?c").find("ac")!.group(1) == null, "the group did not take part");
+}
+
+test function utf8(): void throws RegexError {
+    let words: String[*] = [];
+    for (x in Regex.compile("[^ ]+").findAll("café niño")) { words.push(x.value.clone()); }
+    checkText("café niño", words.join(" "));
+}
+
+// (a*)*b on many a's without a b: exponential for a plain backtracker, quick here
+test function noBlowUp(): void throws RegexError {
+    let longA: StringBuilder = {};
+    for (i in 0..2000) { longA.add("a"); }
+    check(!Regex.compile("(a*)*b").contains(longA.toString()), "no b, so no match");
+}
+
+test function errorsSayWhere(): void {
+    try {
+        Regex.compile("(ab");
+        check(false, "(ab should not compile");
+    } catch (RegexError e) {
+        checkText("missing ')' at 3", message(e));
+    }
+    try {
+        Regex.compile("*a");
+        check(false, "*a should not compile");
+    } catch (RegexError e) {
+        checkText("'*' with nothing to repeat at 0", message(e));
+    }
+}

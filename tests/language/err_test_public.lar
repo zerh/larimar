@@ -1,0 +1,3 @@
+// expect: error A test function cannot be 'public'
+public test function adds(): void { }
+function main(): int32 { return 0; }

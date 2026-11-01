@@ -15,10 +15,11 @@ larimar-compiler/
 │   ├── runtime.lar          # Runtime C code
 │   ├── session.lar          # One analysis without C (larimar check)
 │   ├── lsp.lar, ide.lar     # Language server (larimar lsp) and its answers
+│   ├── testing.lar          # Test runner (larimar test)
 │   └── ...
 ├── std/                     # Standard library source (edit it here); std/net.lar: TCP, UDP and their servers, TLS servers; std/net/http.lar: HTTP client; std/net/http/tls.lar: TLS
 │                            # (net, io and os are written in Larimar over the system's C functions: extern, #when, T*, released by)
-├── tests/                   # Tests (tests/run-tests.sh; tests/lsp for check and lsp)
+├── tests/                   # Tests (larimarc test, tests/run-tests.sh; tests/lsp for check and lsp)
 ├── debug/                   # lldb and gdb formatters for Larimar values (installed in larimar/debug)
 ├── bin/larimar              # Wrapper installed as larimar/bin/larimar
 ├── MANUAL.md                # Language manual (English)
@@ -96,7 +97,7 @@ Test the compiler:
 
 ```bash
 ./larimarc --version
-# Should output: larimar 0.2.1
+# Should output: larimar 0.3.0
 
 # Compile a test program
 echo 'function main(): void { println("Hello!"); }' > test.lar
@@ -108,18 +109,21 @@ cc -std=c99 -O2 test.c -o test
 ## Tests
 
 ```bash
-tests/run-tests.sh            # every test in tests/, compiled and run with AddressSanitizer and UBSan
-tests/run-tests.sh memory     # only tests/memory
+tests/run-tests.sh            # everything: larimarc test on tests/, plus the runner check and std-check
+tests/run-tests.sh memory     # only the tests whose path or name contains "memory"
+bin/larimarc test tests/std   # only larimarc test, on one folder
 ```
 
-Each test file says what it expects in its first lines (`// expect: run` with `// output:` lines,
-`// expect: error <text>`, `// expect: panic <text>` or `// expect: memory-error`). See section 28 of
-`MANUAL.md`. Every bug found goes in as a test first.
+Tests are of two kinds, and `larimarc test` runs both (with AddressSanitizer and UBSan): `test function`s
+with `std.test` checks, like `tests/std/regex_test.lar` (MANUAL.md, section 26), and files that say what
+they expect in their first lines (`// expect: run` with `// output:` lines, `// expect: error <text>`,
+`// expect: panic <text>` or `// expect: memory-error`), which test the compiler itself (section 28).
+Every bug found goes in as a test first.
 
-`tests/lsp/lsp_test.py` (run by `run-tests.sh` when `python3` exists) checks `larimar check --json` and
-talks LSP to `larimar lsp`: errors, hover, definition, references, symbols, completion, signature help,
-with `fork()` and with `LARIMAR_LSP_NO_FORK=1`.
-`tests/tls/tls_test.py` runs `https://` against a local HTTPS server (the certificate in `tests/tls`).
+`tests/lsp/lsp_test.lar`, `tests/debug/debug_test.lar` and `tests/tls/tls_test.lar` start the compiler,
+the debuggers and a client as other programs (`std.process`) and talk to them like an editor would:
+`larimar check --json` and `larimar lsp`, `larimar --debug` with lldb, gdb and `larimar dap`, and
+`https://` against a local HTTPS server (the certificate in `tests/tls`). No Python is needed.
 
 ## Editor support
 
@@ -133,7 +137,7 @@ language server (see "The editor" in section 26 of `MANUAL.md`): the server keep
 a DAP adapter written in Larimar over LLVM's `lldb-dap`, which shows the stack, variables and values
 as Larimar (names, real classes, Any, enums), understands Larimar paths in evaluate and stops on
 panics as exceptions. `debug/larimar_lldb.py` and
-`debug/larimar_gdb.py` show the same values in lldb and gdb from a terminal. `tests/debug/debug_test.py`
+`debug/larimar_gdb.py` show the same values in lldb and gdb from a terminal. `tests/debug/debug_test.lar`
 checks all of it.
 
 ## Project Configuration
@@ -142,7 +146,7 @@ checks all of it.
 ```toml
 [project]
 name = "larimarc"
-version = "0.2.1"
+version = "0.3.0"
 main = "src/main.lar"
 
 [c]
@@ -173,6 +177,8 @@ flags = ["-O2"]
 | dap.lar | Debugger: DAP adapter over lldb-dap, values shown as Larimar |
 | debugmap.lar | Debug map: C names and types of every variable, for the debugger |
 | toml.lar | TOML parser |
+| testing.lar | Test runner: larimar test, test functions and `// expect:` files |
+| cc.lar | Calling the C compiler and other programs |
 
 ## Self-Hosting
 

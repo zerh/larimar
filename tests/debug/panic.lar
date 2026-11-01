@@ -1,5 +1,5 @@
 // expect: panic index 3 out of range
-// Also used by debug_test.py: larimar dap stops on a panic and shows its message.
+// Also used by debug_test.lar: larimar dap stops on a panic and shows its message.
 function pick(xs: int32[*], i: int32): int32 {
     return xs[i];
 }

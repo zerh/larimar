@@ -207,12 +207,25 @@ function cCodeUses(code: String in default, cSymbols: Any in default): bool {
     return false;
 }
 
+/**
+ * Which test functions stay in the program: "none" (larimar build: they are not compiled), "all" (larimar
+ * check and the editor: they are checked like the rest) or "main" (larimar test: the main file's).
+ */
+public let testsKept: String = "none";
+
 function parse(m: Module in default, source: String in default): void {
     addWords(source);
     let p: Program = parseProgram(source, m.index * FILE_LINES + 1);
     if (parseError != "") {
         errors.push(parseError);
         return;
+    }
+    if (testsKept != "all" && !(testsKept == "main" && m == root)) {
+        let kept: Node[*] = [] in default;
+        for (d in p.decls) {
+            if (!(d is FunctionDecl f && f.isTest)) { kept.push(d); }
+        }
+        p.decls = kept;
     }
     m.program = p;
     for (d in p.decls) {

@@ -2620,7 +2620,8 @@ public function area(s: Shape): float64 {
 ```
 
 `public` applies to the whole name: in a public class, its fields and methods are seen from outside.
-`private` also exists, but it is the same as writing nothing.
+There is no `private`: writing it is an error (`'private' is not needed: ...`), because without `public`
+it already is.
 
 ### `import`
 
@@ -2838,8 +2839,55 @@ any function returns; they accept `/` and `\`.
 | `os.cwd(): String` | the current folder |
 | `os.run(command): int32` | runs a command with the system's shell and gives its exit code |
 | `os.programDir(): String` | the folder of the executable (`""` if it cannot be known) |
+| `os.programPath(): String` | the full path of the executable (`""` if it cannot be known) |
 | `os.platform(): String` | `"windows"`, `"linux"`, `"macos"` or `"other"` |
 | `os.exit(code)` | ends the program right away (without freeing memories or waiting for threads) |
+
+### `std.process`: other programs
+
+Starts a program and talks to it through its input and output. The literal says what to run (it cannot
+fail); `start()` runs it. Every read says how long it may wait, so a program that does not answer never
+hangs the caller.
+
+```actionscript
+import std.process { Process, ProcessError, message };
+
+function main(): int32 {
+    let cat: Process = { program: "cat" };
+    try {
+        cat.start();
+        cat.write("hola\n");
+        println(cat.readLine(5000) ?? "nothing in 5 s");
+        cat.closeInput();
+        println("exit ${cat.wait(5000) ?? -1}");
+    } catch (ProcessError e) {
+        println(message(e));            // cannot start cat: not found
+    }
+    return 0;
+}
+```
+
+| In the literal | What it is |
+|---|---|
+| `program` | the program: a path, or a name looked for in the PATH |
+| `args` | its arguments (each arrives as it is, without a shell) |
+| `env` | `"NAME=value"` added to this program's environment for it |
+| `quiet` | `true`: its error output is thrown away (else it goes where this program's goes) |
+
+| Method | What it does |
+|---|---|
+| `start()` | runs it; `throws ProcessError.CannotStart` when it cannot (not found, not allowed) |
+| `write(text)` | writes to its input; `throws ProcessError.NotRunning` when it does not read it any more |
+| `closeInput()` | closes its input: it reads the end (a `cat` finishes) |
+| `readLine(ms): String?` | the next line of its output, without the line end; `null` if it did not come in `ms`, or it ended |
+| `read(count, ms): String?` | exactly `count` bytes of its output (`null` if they did not all come in `ms`) |
+| `readAll(ms): String` | all of its output until it ends (what came, if it did not end in `ms`) |
+| `wait(ms): int32?` | waits up to `ms` (`-1`: as long as it takes) for it to end: its exit code, or `null` |
+| `kill()` | ends it now |
+
+`findProgram(name): String?` says where a program is in the PATH. A `Process` that is still running when
+its memory is freed is killed. The tests that talk to `larimar lsp`, `larimar dap` and the debuggers are
+written with `std.process`.
 
 ### `std.text`: reading text byte by byte
 
@@ -3734,6 +3782,109 @@ With gdb: `source $LARIMAR_HOME/debug/larimar_gdb.py` and `break main.lar:12`. I
 `larimar.debugger` setting can use CodeLLDB or the C/C++ extension with gdb instead of `larimar dap`,
 with these formatters.
 
+### Tests: `test function` and `larimar test`
+
+A test is a function marked with `test`. It takes nothing (or a *setup*, below) and returns nothing;
+inside, the functions of `std.test` check what must happen:
+
+```actionscript
+// tests/shapes_test.lar
+import std.test { check, checkText, checkInt, checkFloat };
+import geo.shapes { Shape, area, name };
+
+test function circleArea(): void {
+    checkFloat(12.56636, area(Shape.Circle { radius: 2.0 }), 0.0001);
+}
+
+test function names(): void {
+    checkText("circle", name(Shape.Circle { radius: 1.0 }));
+    check(name(Shape.Empty) != "", "every shape has a name");
+}
+```
+
+```
+$ larimar test
+  ok    tests/shapes_test.lar: circleArea
+  FAIL  tests/shapes_test.lar: names
+        check failed: expected "circle" but got "Circle"
+
+1 passed, 1 failed
+failed:
+  tests/shapes_test.lar: names
+```
+
+| From `std.test` | Fails when... |
+|---|---|
+| `check(cond, message)` | `cond` is `false` (it says the message) |
+| `checkText(expected, actual)` | the two texts differ |
+| `checkInt(expected, actual)`, `checkInt64` | the two numbers differ |
+| `checkFloat(expected, actual, tolerance)` | they are further apart than the tolerance |
+| `fail(message)` | always |
+| `skip(reason)` | never: the test is skipped (a program is missing, another platform); then `return` |
+
+A check that fails says why and the test goes on (to stop it there, `return`); the test fails if any
+check failed. If the test calls something that can throw an error, it declares it like any function
+(`test function x(): void throws ParseError`); if the error reaches the top, the test fails with
+`the test threw ParseError`.
+
+**A setup** gets something ready before each test and cleans it after. It is a class that implements
+`TestSetup`, and the test receives it as its parameter:
+
+```actionscript
+import std.test { checkText, fail, TestSetup };
+import std.io.files as Files;
+import std.io.files { IoError };
+
+class TempFile implements TestSetup {
+    let path: String = "build/test/tmp.txt";
+
+    function beforeEach(): void {
+        try { Files.writeString(self.path, "hola"); } catch (IoError e) { fail("cannot write ${self.path}"); }
+    }
+
+    function afterEach(): void {
+        try { Files.delete(self.path); } catch (IoError e) { }
+    }
+}
+
+test function readsBack(f: TempFile): void throws IoError {
+    checkText("hola", Files.readString(f.path));
+}
+```
+
+For each test a new `TempFile {}` is made (its fields need default values), then `beforeEach()`, the test
+and `afterEach()` are called, always, also when something failed. If a check fails in `beforeEach()`,
+the test does not run.
+
+**How it works.** `larimar test` hides nothing:
+
+- It looks for the `.lar` files in `tests/` (or the files and folders it is given). Those with
+  `test function` are tests; the rest (modules the tests import) are not run.
+- For each file it writes a copy with a `main` added at the end, which runs the test whose name it
+  receives. The copy stays in `build/test/<file>.lar` to read; the original file is not touched.
+- It compiles that copy with AddressSanitizer and UBSan (except on Windows or with `--no-sanitize`) and runs
+  **each test in its own process**: a `panic` or a memory error marks that test and the others go on,
+  and nothing is shared between tests.
+- It ends with exit code 0 if everything passed and 1 if something failed.
+
+```sh
+larimar test                      # all of tests/
+larimar test tests/shapes_test.lar
+larimar test --only circle        # the ones with "circle" in their name or path
+larimar test --no-sanitize
+```
+
+The rules:
+
+- `larimar build` leaves `test function`s out: they do not reach the executable. `larimar check` and the
+  editor do check them.
+- A file with tests has no `main` (`larimar test` writes it), and a `test function` cannot be `public`.
+- In a project, the tests import from the folder of the project's `main` (`src/`), so `import geo.shapes`
+  finds `src/geo/shapes.lar`; they are compiled with the libraries of `[c]`. Without a `larimar.toml`,
+  they import from their own folder.
+- The checks are used from the test's thread (they keep how many failed in a global variable, which the
+  lambdas of a `Thread` cannot touch).
+
 ---
 
 ## 27. What the transpiler generates
@@ -3919,8 +4070,11 @@ in `std/`.
 
 ### The tests
 
-`tests/run-tests.sh` compiles and runs every program in `tests/`, each one with AddressSanitizer and
-UBSan. Each file says in its first lines what it expects:
+`tests/run-tests.sh` runs `larimarc test` on `tests/` and what needs more than one program (below). Some
+tests are `test function`s ([section 26](#tests-test-function-and-larimar-test)), like
+`tests/std/regex_test.lar`; most are programs that say in their first lines what they expect, because
+they test the compiler itself (an error it must give, the C it generates). `larimar test` runs both
+kinds, with AddressSanitizer and UBSan:
 
 ```actionscript
 // expect: run
@@ -3935,11 +4089,13 @@ function main(): int32 { println(make(3)); return 0; }
 | `// expect: error text` | the compiler rejects it with a message that contains `text` |
 | `// expect: panic text` | it compiles, and stops when running (`panic`) with `text` |
 | `// expect: memory-error` | it compiles, and the detectors find a memory error when running |
+| `// c-has: name`, `// c-lacks: name` | (also) the generated C contains, or does not contain, that identifier |
 
 ```sh
 ./build-bootstrap.sh --verify --test  # build, check that it compiles itself, test and install
 tests/run-tests.sh                    # all of them, with the larimarc that build-bootstrap.sh made
-tests/run-tests.sh memory             # only the ones with "memory" in the path
+tests/run-tests.sh memory             # only the ones with "memory" in their path or name
+larimarc test tests/memory            # only larimarc test, on one folder
 LARIMARC=build/larimarc_stage2 tests/run-tests.sh
 ```
 
@@ -3949,17 +4105,19 @@ kept lambdas, `in default`, memories of your own, `clone()`, exceptions with liv
 `switch` that creates, objects, `Any`, threads, `export function` called from C, and what must be
 rejected. **Each failure that is found first goes in as a test**, and then it is fixed.
 
-`tests/lsp/lsp_test.py` (`run-tests.sh` runs it if there is `python3`) tests `larimar check --json` and
-talks to `larimar lsp` over the project in `tests/lsp/project`: published errors, hover, definition,
-references, symbols, completion and signature help, with `fork()` and with `LARIMAR_LSP_NO_FORK=1`.
-`tests/debug/debug_test.py` compiles `tests/debug/values.lar` with `--debug`, stops with lldb and with
+Three test files start other programs with `std.process` and talk to them as an editor would, without
+Python. `tests/lsp/lsp_test.lar` tests `larimar check --json` and talks to `larimar lsp` over the project
+in `tests/lsp/project`: published errors, hover, definition, references, symbols, completion and
+signature help, with `fork()` and with `LARIMAR_LSP_NO_FORK=1`.
+`tests/debug/debug_test.lar` compiles `tests/debug/values.lar` with `--debug`, stops with lldb and with
 gdb (whichever there are) on a line of the `.lar` and checks how the values look; with `lldb-dap`, it
 talks to `larimar dap` like an editor (stack, variables, children, paths in evaluate, and a panic of
-`tests/debug/panic.lar` as an exception with its message).
-`tests/tls/tls_test.py` starts a local HTTPS server with the certificate of `tests/tls` and compiles
+`tests/debug/panic.lar` as an exception with its message). What is not installed is skipped.
+`tests/tls/tls_test.lar` serves HTTPS (with the certificate of `tests/tls`) and HTTP, and builds and runs
 `tests/tls/client.lar`: the certificate rejected by default, and with `SystemTls { verify: false }` a
 GET, a `chunked` body, a big one with `copy()`, a POST, a redirect from `http://` to `https://` and a
-`TlsProvider` of its own; on Linux, also the message when OpenSSL is missing.
+`TlsProvider` of its own; on Linux, also the message when OpenSSL is missing. They take the compiler
+from `$LARIMARC` (`run-tests.sh` sets it) or the PATH.
 
 ---
 
@@ -3985,8 +4143,9 @@ What Larimar does not have, and will not have, with what is used instead:
 - An `Any` does not keep `[*]` lists, lambdas or interfaces.
 - A `synchronized` class cannot inherit, and `wait until` has no time limit (it waits until the condition holds).
 - The standard library is small: files, console, paths, environment, bytes, regular expressions, JSON,
-  TCP and UDP with their servers, a TLS server, and an HTTP and HTTPS client (`std.io.*`, `std.path`,
-  `std.os`, `std.text`, `std.text.regex`, `std.json`, `std.net`, `std.net.http`). The network does not
+  other programs, TCP and UDP with their servers, a TLS server, and an HTTP and HTTPS client (`std.io.*`,
+  `std.path`, `std.os`, `std.process`, `std.test`, `std.text`, `std.text.regex`, `std.json`, `std.net`,
+  `std.net.http`). The network does not
   have an HTTP server, WebSockets, an event loop or reused HTTP connections (keep-alive) yet. The TLS
   server is not available on Windows yet. The client TLS of macOS and Windows is written and compiles,
   but its tests have only run on Linux.
@@ -4028,6 +4187,7 @@ struct S { let field: int32 = 0; function m(): void { } operator +(o: S): S { ..
 class C extends Parent implements I { let field: String; override function m(): void { super.m(); } }
 interface I { function m(): void; }
 enum E { A, B(x: int32) }
+test function adds(): void { checkInt(4, 2 + 2); }     // larimar test runs it (std.test)
 
 // Variables and values
 let x: int32 = 5;

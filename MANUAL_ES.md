@@ -2615,7 +2615,7 @@ public function area(s: Shape): float64 {
 ```
 
 `public` se aplica al nombre completo: en una clase pública, sus campos y métodos se ven desde fuera.
-`private` también existe, pero es lo mismo que no poner nada.
+No hay `private`: escribirlo es un error (`'private' is not needed: ...`), porque sin `public` ya lo es.
 
 ### `import`
 
@@ -2833,8 +2833,55 @@ de cualquier función; aceptan `/` y `\`.
 | `os.cwd(): String` | la carpeta actual |
 | `os.run(command): int32` | ejecuta un comando con el shell del sistema y da su código de salida |
 | `os.programDir(): String` | la carpeta del ejecutable (`""` si no se puede saber) |
+| `os.programPath(): String` | la ruta completa del ejecutable (`""` si no se puede saber) |
 | `os.platform(): String` | `"windows"`, `"linux"`, `"macos"` u `"other"` |
 | `os.exit(code)` | termina el programa ya (sin liberar memorias ni esperar hilos) |
+
+### `std.process`: otros programas
+
+Lanza un programa y le habla por su entrada y su salida. El literal dice qué ejecutar (no puede fallar);
+`start()` lo ejecuta. Cada lectura dice cuánto puede esperar, así que un programa que no responde nunca
+deja colgado al que lo llama.
+
+```actionscript
+import std.process { Process, ProcessError, message };
+
+function main(): int32 {
+    let cat: Process = { program: "cat" };
+    try {
+        cat.start();
+        cat.write("hola\n");
+        println(cat.readLine(5000) ?? "nothing in 5 s");
+        cat.closeInput();
+        println("exit ${cat.wait(5000) ?? -1}");
+    } catch (ProcessError e) {
+        println(message(e));            // cannot start cat: not found
+    }
+    return 0;
+}
+```
+
+| Del literal | Qué es |
+|---|---|
+| `program` | el programa: una ruta, o un nombre que se busca en el PATH |
+| `args` | sus argumentos (cada uno llega tal cual, sin pasar por un shell) |
+| `env` | `"NOMBRE=valor"` que se añaden al entorno de este programa para él |
+| `quiet` | `true`: su salida de errores se descarta (si no, va a donde va la de este programa) |
+
+| Método | Qué hace |
+|---|---|
+| `start()` | lo ejecuta; `throws ProcessError.CannotStart` si no puede (no existe, sin permiso) |
+| `write(text)` | escribe en su entrada; `throws ProcessError.NotRunning` si ya no la lee |
+| `closeInput()` | cierra su entrada: lee el final (un `cat` termina) |
+| `readLine(ms): String?` | la siguiente línea de su salida, sin el fin de línea; `null` si no llegó en `ms` o terminó |
+| `read(count, ms): String?` | exactamente `count` bytes de su salida (`null` si no llegaron todos en `ms`) |
+| `readAll(ms): String` | toda su salida hasta que termine (lo que llegó, si no terminó en `ms`) |
+| `wait(ms): int32?` | espera hasta `ms` (`-1`: lo que haga falta) a que termine: su código de salida, o `null` |
+| `kill()` | lo termina ya |
+
+`findProgram(name): String?` dice dónde está un programa en el PATH. Un `Process` que sigue ejecutándose
+cuando se libera su memoria se termina. Con `std.process` están escritas las pruebas que hablan con
+`larimar lsp`, `larimar dap` y los depuradores.
 
 ### `std.text`: leer texto byte a byte
 
@@ -3728,6 +3775,110 @@ Con gdb: `source $LARIMAR_HOME/debug/larimar_gdb.py` y `break main.lar:12`. En V
 `larimar.debugger` puede usar CodeLLDB o la extensión C/C++ con gdb en lugar de `larimar dap`, con
 estos formateadores.
 
+### Pruebas: `test function` y `larimar test`
+
+Una prueba es una función marcada con `test`. No recibe nada (o un *setup*, abajo) y no devuelve nada;
+dentro, las funciones de `std.test` comprueban lo que debe pasar:
+
+```actionscript
+// tests/shapes_test.lar
+import std.test { check, checkText, checkInt, checkFloat };
+import geo.shapes { Shape, area, name };
+
+test function circleArea(): void {
+    checkFloat(12.56636, area(Shape.Circle { radius: 2.0 }), 0.0001);
+}
+
+test function names(): void {
+    checkText("circle", name(Shape.Circle { radius: 1.0 }));
+    check(name(Shape.Empty) != "", "every shape has a name");
+}
+```
+
+```
+$ larimar test
+  ok    tests/shapes_test.lar: circleArea
+  FAIL  tests/shapes_test.lar: names
+        check failed: expected "circle" but got "Circle"
+
+1 passed, 1 failed
+failed:
+  tests/shapes_test.lar: names
+```
+
+| De `std.test` | Falla cuando... |
+|---|---|
+| `check(cond, mensaje)` | `cond` es `false` (dice el mensaje) |
+| `checkText(esperado, real)` | los dos textos son distintos |
+| `checkInt(esperado, real)`, `checkInt64` | los dos números son distintos |
+| `checkFloat(esperado, real, tolerancia)` | están más lejos que la tolerancia |
+| `fail(mensaje)` | siempre |
+| `skip(motivo)` | nunca: la prueba se salta (falta un programa, otra plataforma); después, `return` |
+
+Una comprobación que falla dice por qué y la prueba sigue (para cortarla ahí, `return`); la prueba falla si
+falló alguna. Si la prueba llama a algo que puede lanzar un error, lo declara como cualquier función
+(`test function x(): void throws ParseError`); si el error llega hasta arriba, la prueba falla con
+`the test threw ParseError`.
+
+**Un setup** prepara algo antes de cada prueba y lo limpia después. Es una clase que implementa
+`TestSetup`, y la prueba la recibe como parámetro:
+
+```actionscript
+import std.test { checkText, fail, TestSetup };
+import std.io.files as Files;
+import std.io.files { IoError };
+
+class TempFile implements TestSetup {
+    let path: String = "build/test/tmp.txt";
+
+    function beforeEach(): void {
+        try { Files.writeString(self.path, "hola"); } catch (IoError e) { fail("cannot write ${self.path}"); }
+    }
+
+    function afterEach(): void {
+        try { Files.delete(self.path); } catch (IoError e) { }
+    }
+}
+
+test function readsBack(f: TempFile): void throws IoError {
+    checkText("hola", Files.readString(f.path));
+}
+```
+
+Para cada prueba se crea un `TempFile {}` nuevo (sus campos necesitan valores por defecto), se llama a
+`beforeEach()`, a la prueba y a `afterEach()`, siempre, también si algo falló. Si falla una comprobación
+en `beforeEach()`, la prueba no se ejecuta.
+
+**Cómo funciona.** `larimar test` no tiene nada escondido:
+
+- Busca los `.lar` de `tests/` (o los archivos y carpetas que se le den). Los que tienen `test function`
+  son pruebas; los demás (módulos que las pruebas importan) no se ejecutan.
+- Por cada archivo escribe una copia con un `main` añadido al final, que ejecuta la prueba cuyo nombre
+  recibe. La copia queda en `build/test/<archivo>.lar` para leerla; el archivo original no se toca.
+- Compila esa copia con AddressSanitizer y UBSan (salvo en Windows o con `--no-sanitize`) y ejecuta **cada
+  prueba en su propio proceso**: un `panic` o un error de memoria marcan esa prueba y las demás siguen,
+  y nada se comparte entre pruebas.
+- Termina con código 0 si todo pasó y 1 si algo falló.
+
+```sh
+larimar test                      # todas las de tests/
+larimar test tests/shapes_test.lar
+larimar test --only circle        # las que tienen "circle" en el nombre o la ruta
+larimar test --no-sanitize
+```
+
+Las reglas:
+
+- `larimar build` deja fuera las `test function`: no llegan al ejecutable. `larimar check` y el editor sí
+  las revisan.
+- Un archivo con pruebas no tiene `main` (lo escribe `larimar test`), y una `test function` no puede ser
+  `public`.
+- En un proyecto, las pruebas importan desde la carpeta del `main` del proyecto (`src/`), así que
+  `import geo.shapes` encuentra `src/geo/shapes.lar`; se compilan con las bibliotecas de `[c]`.
+  Sin `larimar.toml`, importan desde su propia carpeta.
+- Las comprobaciones se usan desde el hilo de la prueba (guardan cuántas fallaron en una variable global,
+  que los lambdas de un `Thread` no pueden tocar).
+
 ---
 
 ## 27. Qué genera el transpilador
@@ -3911,8 +4062,11 @@ que `std/` solo puede usar lo que ya entiende el compilador que lo compila. Si a
 
 ### Las pruebas
 
-`tests/run-tests.sh` compila y ejecuta todos los programas de `tests/`, cada uno con AddressSanitizer y
-UBSan. Cada archivo dice en sus primeras líneas qué espera:
+`tests/run-tests.sh` ejecuta `larimarc test` sobre `tests/` y lo que necesita más de un programa (abajo).
+Algunas pruebas son `test function` ([sección 26](#pruebas-test-function-y-larimar-test)), como
+`tests/std/regex_test.lar`; la mayoría son programas que dicen en sus primeras líneas qué esperan, porque
+prueban al compilador mismo (un error que debe dar, el C que genera). `larimar test` ejecuta los dos
+tipos, con AddressSanitizer y UBSan:
 
 ```actionscript
 // expect: run
@@ -3927,11 +4081,13 @@ function main(): int32 { println(make(3)); return 0; }
 | `// expect: error texto` | el compilador lo rechaza con un mensaje que contiene `texto` |
 | `// expect: panic texto` | compila, y se detiene al ejecutar (`panic`) con `texto` |
 | `// expect: memory-error` | compila, y los detectores encuentran un error de memoria al ejecutar |
+| `// c-has: nombre`, `// c-lacks: nombre` | (además) el C generado contiene, o no, ese identificador |
 
 ```sh
 ./build-bootstrap.sh --verify --test  # construir, comprobar que se compila a sí mismo, probar e instalar
 tests/run-tests.sh                    # todas, con el larimarc que hizo build-bootstrap.sh
-tests/run-tests.sh memory             # solo las que tienen "memory" en la ruta
+tests/run-tests.sh memory             # solo las que tienen "memory" en la ruta o el nombre
+larimarc test tests/memory            # solo larimarc test, sobre una carpeta
 LARIMARC=build/larimarc_stage2 tests/run-tests.sh
 ```
 
@@ -3941,17 +4097,19 @@ uno de sus argumentos), llamadas anidadas, valores por defecto de campos, interp
 vivos, `switch` que crea, objetos, `Any`, hilos, `export function` llamada desde C, y lo que debe
 rechazarse. **Cada fallo que se encuentre entra primero como prueba**, y después se arregla.
 
-`tests/lsp/lsp_test.py` (lo lanza `run-tests.sh` si hay `python3`) prueba `larimar check --json` y habla
-con `larimar lsp` sobre el proyecto de `tests/lsp/project`: errores publicados, hover, definición,
-referencias, símbolos, autocompletado y ayuda de firma, con `fork()` y con `LARIMAR_LSP_NO_FORK=1`.
-`tests/debug/debug_test.py` compila `tests/debug/values.lar` con `--debug`, para con lldb y con gdb (los
+Tres archivos de pruebas lanzan otros programas con `std.process` y les hablan como lo haría un editor,
+sin Python. `tests/lsp/lsp_test.lar` prueba `larimar check --json` y habla con `larimar lsp` sobre el
+proyecto de `tests/lsp/project`: errores publicados, hover, definición, referencias, símbolos,
+autocompletado y ayuda de firma, con `fork()` y con `LARIMAR_LSP_NO_FORK=1`.
+`tests/debug/debug_test.lar` compila `tests/debug/values.lar` con `--debug`, para con lldb y con gdb (los
 que haya) en una línea del `.lar` y comprueba cómo se ven los valores; con `lldb-dap`, habla con
 `larimar dap` como un editor (pila, variables, hijos, caminos en evaluate, y un panic de
-`tests/debug/panic.lar` como excepción con su mensaje).
-`tests/tls/tls_test.py` levanta un servidor HTTPS local con el certificado propio de `tests/tls` y compila
+`tests/debug/panic.lar` como excepción con su mensaje). Lo que no está instalado se salta.
+`tests/tls/tls_test.lar` sirve HTTPS (con el certificado propio de `tests/tls`) y HTTP, y compila y ejecuta
 `tests/tls/client.lar`: el certificado rechazado por defecto, y con `SystemTls { verify: false }` un GET, un
 cuerpo `chunked`, uno grande con `copy()`, un POST, una redirección de `http://` a `https://` y un
-`TlsProvider` propio; en Linux, además, el mensaje cuando falta OpenSSL.
+`TlsProvider` propio; en Linux, además, el mensaje cuando falta OpenSSL. Toman el compilador de
+`$LARIMARC` (lo pone `run-tests.sh`) o del PATH.
 
 ---
 
@@ -3976,7 +4134,7 @@ Lo que Larimar no tiene, ni va a tener, con lo que se usa en su lugar:
 - No hay `defer`.
 - Un `Any` no guarda listas `[*]`, lambdas ni interfaces.
 - Una clase `synchronized` no puede heredar, y `wait until` no tiene tiempo límite (espera hasta que la condición se cumpla).
-- La biblioteca estándar es pequeña: archivos, consola, rutas, entorno, bytes, expresiones regulares, JSON, TCP y UDP con sus servidores, un servidor TLS y un cliente HTTP y HTTPS (`std.io.*`, `std.path`, `std.os`, `std.text`, `std.text.regex`, `std.json`, `std.net`, `std.net.http`). La red aún no tiene servidor HTTP, WebSockets, un bucle de eventos ni conexiones HTTP reutilizadas (keep-alive). El servidor TLS aún no está en Windows. El TLS de cliente de macOS y Windows está escrito y compila, pero sus pruebas solo se han ejecutado en Linux.
+- La biblioteca estándar es pequeña: archivos, consola, rutas, entorno, bytes, expresiones regulares, JSON, otros programas, TCP y UDP con sus servidores, un servidor TLS y un cliente HTTP y HTTPS (`std.io.*`, `std.path`, `std.os`, `std.process`, `std.test`, `std.text`, `std.text.regex`, `std.json`, `std.net`, `std.net.http`). La red aún no tiene servidor HTTP, WebSockets, un bucle de eventos ni conexiones HTTP reutilizadas (keep-alive). El servidor TLS aún no está en Windows. El TLS de cliente de macOS y Windows está escrito y compila, pero sus pruebas solo se han ejecutado en Linux.
 - Algunas operaciones de `String` y `Any` siguen siendo intrínsecas del compilador; las listas aún no se declaran en `std.lang`.
 - A C solo se le pueden pasar funciones de C (`extern` o `export`), no lambdas con capturas; el contexto
   viaja por el `void* data` de la biblioteca. Un struct de C no puede tener campos arreglo (salvo un texto,
@@ -4015,6 +4173,7 @@ struct S { let field: int32 = 0; function m(): void { } operator +(o: S): S { ..
 class C extends Parent implements I { let field: String; override function m(): void { super.m(); } }
 interface I { function m(): void; }
 enum E { A, B(x: int32) }
+test function adds(): void { checkInt(4, 2 + 2); }     // la ejecuta larimar test (std.test)
 
 // Variables y valores
 let x: int32 = 5;

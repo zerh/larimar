@@ -64,18 +64,26 @@ public function cwd(): String {
     return ok ? cText(b) : ".";
 }
 
-/** Runs a command with the system's shell and gives its exit code. */
+/**
+ * Runs a command with the system's shell and gives its exit code. On Windows the shell is cmd.exe, which
+ * removes the first and the last quote of a command that starts with one ("C:\a b\x.exe" "arg" loses
+ * both): the command goes inside one more pair of quotes, which cmd removes, so it runs as written.
+ */
 public function run(command: String): int32 {
     fflush(stdout);
-    let r: int32 = system(command);
+    #when windows
+        let r: int32 = system("\"${command}\"");
+    #else
+        let r: int32 = system(command);
+    #end
     #when unix
         if (r != -1 && (r & 0x7f) == 0) { r = (r >> 8) & 0xff; }        // the exit status, not the wait status
     #end
     return r;
 }
 
-/** The folder this program's executable is in, or "" if it cannot be known. */
-public function programDir(): String {
+/** This program's executable (its full path), or "" if it cannot be known. */
+public function programPath(): String {
     let b: byte[*] = pathBuffer();
     #when windows
         GetModuleFileNameA(null, b, 4095);
@@ -85,7 +93,12 @@ public function programDir(): String {
         let size: uint32 = 4095;
         _NSGetExecutablePath(b, &size);
     #end
-    let path: String = cText(b);
+    return cText(b).clone();
+}
+
+/** The folder this program's executable is in, or "" if it cannot be known. */
+public function programDir(): String {
+    let path: String = programPath();
     let cut: int32? = path.lastIndexOf("/");
     let back: int32? = path.lastIndexOf("\\");
     if (back != null && (cut == null || back! > cut!)) { cut = back; }

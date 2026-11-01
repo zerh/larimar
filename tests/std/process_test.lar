@@ -1,0 +1,95 @@
+// std.process: starting programs and talking to them (with the programs every Unix has: cat, sh, sleep).
+import std.test { check, checkText, checkInt, fail, skip };
+import std.process { Process, ProcessError, message, findProgram };
+
+/** The tests use Unix programs; on Windows they are skipped. */
+function unix(): bool {
+    #when windows
+        skip("uses cat, sh and sleep");
+        return false;
+    #else
+        return true;
+    #end
+}
+
+test function readsWhatItWrites(): void throws ProcessError {
+    if (!unix()) { return; }
+    let cat: Process = { program: "cat" };
+    cat.start();
+    cat.write("hola\r\nmundo\n");
+    checkText("hola", cat.readLine(5000) ?? "(nothing)");
+    checkText("mundo", cat.readLine(5000) ?? "(nothing)");
+    cat.closeInput();
+    check(cat.readLine(5000) == null, "after its input closes, cat ends: no more lines");
+    checkInt(0, cat.wait(5000) ?? -1);
+}
+
+test function readLineWaitsOnlyAsLongAsItIsTold(): void throws ProcessError {
+    if (!unix()) { return; }
+    let cat: Process = { program: "cat" };
+    cat.start();
+    check(cat.readLine(100) == null, "nothing was written, so nothing comes");
+    cat.write("late\n");
+    checkText("late", cat.readLine(5000) ?? "(nothing)");
+    cat.kill();
+}
+
+test function readsAnExactCount(): void throws ProcessError {
+    if (!unix()) { return; }
+    let cat: Process = { program: "cat" };
+    cat.start();
+    cat.write("Content-Length: 5\r\n\r\nhola!rest");
+    checkText("Content-Length: 5", cat.readLine(5000) ?? "(nothing)");
+    checkText("", cat.readLine(5000) ?? "(nothing)");
+    checkText("hola!", cat.read(5, 5000) ?? "(nothing)");
+    check(cat.read(10, 200) == null, "only 4 bytes are left: 10 do not come");
+    cat.kill();
+}
+
+test function argumentsEnvironmentAndExitCode(): void throws ProcessError {
+    if (!unix()) { return; }
+    let sh: Process = { program: "sh", args: ["-c", "echo \"$GREETING\" \"$1\"; exit 3", "sh", "two words"], env: ["GREETING=hola mundo"] };
+    sh.start();
+    checkText("hola mundo two words\n", sh.readAll(5000));
+    checkInt(3, sh.wait(5000) ?? -1);
+}
+
+test function aProgramThatIsNotThere(): void {
+    if (!unix()) { return; }
+    let missing: Process = { program: "no-such-program-for-larimar" };
+    try {
+        missing.start();
+        fail("it should not start");
+    } catch (ProcessError e) {
+        checkText("cannot start no-such-program-for-larimar: not found", message(e));
+    }
+}
+
+test function killEndsIt(): void throws ProcessError {
+    if (!unix()) { return; }
+    let sleeper: Process = { program: "sleep", args: ["30"] };
+    sleeper.start();
+    check(sleeper.wait(100) == null, "sleep 30 has not ended after 0.1 s");
+    sleeper.kill();
+    checkInt(137, sleeper.wait(5000) ?? -1);       // 128 + SIGKILL
+}
+
+test function writingToAnEndedProcess(): void throws ProcessError {
+    if (!unix()) { return; }
+    let quick: Process = { program: "sh", args: ["-c", "exit 0"] };
+    quick.start();
+    checkInt(0, quick.wait(5000) ?? -1);
+    quick.closeInput();
+    try {
+        quick.write("anyone?\n");
+        fail("its input is closed");
+    } catch (ProcessError e) {
+        checkText("the process is not running", message(e));
+    }
+}
+
+test function findsProgramsInThePath(): void {
+    if (!unix()) { return; }
+    check(findProgram("sh") != null, "sh is in the PATH");
+    check(findProgram("no-such-program-for-larimar") == null, "an unknown program is not found");
+}

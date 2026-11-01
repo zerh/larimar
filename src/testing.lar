@@ -1,0 +1,515 @@
+// testing: larimar test, the test runner.
+//
+//   larimar test [file|folder]... [--only <text>] [--no-sanitize]
+//
+// A test passes (exit 0), fails (1: a check failed; 101: a panic; a memory error...) or is skipped (3:
+// std.test's skip(), when it cannot run here).
+//
+// It runs the .lar files under tests/ (or the ones given), which are of two kinds (a file that says what it
+// expects is of the second kind, even when it has test functions):
+//
+//   - Files with test functions (`test function name(): void { ... }`). For each file, `larimarc test-main`
+//     writes the file again with a main of its own (build/test/<file>.lar, to read), and compiles it.
+//     Each test then runs alone, in its own process: `program <test name>`.
+//   - Files that say what they expect in a first line, `// expect: run`, `// expect: error <text>`... (the
+//     compiler's own tests; MANUAL, chapter "Tests").
+//
+// Other .lar files (modules that the tests import) are not run. With AddressSanitizer and UBSan, except
+// on Windows or with --no-sanitize.
+
+import std.os;
+import std.text { isIdentifierPart };
+import std.path as Paths;
+import std.io.files as Files;
+import std.io.files { IoError };
+import ast { Program, FunctionDecl, TK };
+import parser { parseProgram, parseError };
+import cc { windows, quote, commandLine, systemLibraries, selfPath };
+
+/** How the tests are compiled: the project's [c] settings, or the defaults when there is no project. */
+public class TestSettings {
+    let compiler: String;
+    let libraries: String[*];
+    let libraryPaths: String[*];
+    let includePaths: String[*];
+    let sources: String[*];
+    let root: String;          // where the tests' `import a.b` looks ("" = next to each file)
+    let outDir: String;        // build/test
+}
+
+// =========================================================================
+// test-main: a file of tests, with a main
+// =========================================================================
+
+/** A test function of a file. */
+public class TestFunction {
+    let name: String;
+    let setup: String;         // the type of its parameter ("" when it has none)
+    let error: String;         // what it says it throws ("" when nothing)
+}
+
+/** The test functions of a file, in order (none when it has syntax errors: the compiler shows them). */
+public function testFunctions(source: String in default): TestFunction[*] {
+    let out: TestFunction[*] = [];
+    let p: Program = parseProgram(source, 1);
+    if (parseError != "") { return out; }
+    for (d in p.decls) {
+        if (d is FunctionDecl f && f.isTest) {
+            let setup: String = "";
+            if (f.params.length == 1 && f.params[0].type != null) { setup = f.params[0].type!.name; }
+            let error: String = f.throwsType != null ? f.throwsType!.name : "";
+            out.push(TestFunction { name: f.name.clone(), setup: setup.clone(), error: error.clone() });
+        }
+    }
+    return out;
+}
+
+/** Whether the file declares a main of its own. */
+public function hasMain(source: String in default): bool {
+    let p: Program = parseProgram(source, 1);
+    for (d in p.decls) {
+        if (d is FunctionDecl f && f.name == "main" && f.typeName == "") { return true; }
+    }
+    return false;
+}
+
+/**
+ * The file with a main added: `program <name>` runs that test and ends with 0 (it passed), 1 (a check
+ * failed), 3 (it was skipped) or 2 (no test has that name). std.test is imported on the first line,
+ * so the lines of the file do not move and its errors keep their line numbers.
+ */
+public function withMain(source: String, tests: TestFunction[*]): String {
+    let sb: StringBuilder = {};
+    sb.add("import std.test as lmtest; ");
+    sb.add(source);
+    if (!source.endsWith("\n")) { sb.add("\n"); }
+    sb.add("\n// ---- added by larimar test: runs one test, the one named by the argument ----\n");
+    sb.add("function main(args: String[]): int32 {\n");
+    sb.add("    if (args.length != 1) {\n");
+    sb.add("        println(\"This program runs one test, by name: larimar test runs it once for each.\");\n");
+    sb.add("        return 2;\n");
+    sb.add("    }\n");
+    for (t in tests) {
+        sb.add("    if (args[0] == \"${t.name}\") {\n");
+        let call: String = t.setup != "" ? "${t.name}(setup)" : "${t.name}()";
+        let run: String = t.error != "" ? "try { ${call}; } catch (${t.error} e) { lmtest.fail(\"the test threw ${t.error}\"); }" : "${call};";
+        if (t.setup != "") {
+            sb.add("        let setup: ${t.setup} = ${t.setup} {};\n");
+            sb.add("        setup.beforeEach();\n");
+            sb.add("        if (lmtest.failedChecks() == 0) {\n");
+            sb.add("            ${run}\n");
+            sb.add("        } else {\n");
+            sb.add("            lmtest.fail(\"beforeEach() failed, so the test did not run\");\n");
+            sb.add("        }\n");
+            sb.add("        setup.afterEach();\n");
+        } else {
+            sb.add("        ${run}\n");
+        }
+        sb.add("        if (lmtest.failedChecks() > 0) { return 1; }\n");
+        sb.add("        return lmtest.skipReason() != \"\" ? 3 : 0;\n");
+        sb.add("    }\n");
+    }
+    sb.add("    println(\"No test is named '\${args[0]}'.\");\n");
+    sb.add("    return 2;\n");
+    sb.add("}\n");
+    return sb.toString();
+}
+
+// =========================================================================
+// larimar test
+// =========================================================================
+
+let passed: int32 = 0;
+let failedCount: int32 = 0;
+let skipped: int32 = 0;
+let failedNames: String[*] = [] in default;
+
+let settings: TestSettings? = null;
+let sanitize: bool = true;
+let only: String = "";
+
+public function runTests(args: String[*], s: TestSettings in default): int32 {
+    settings = s;
+    sanitize = !windows();
+    let paths: String[*] = [];
+    let i: int32 = 0;
+    while (i < args.length) {
+        if (args[i] == "--no-sanitize") {
+            sanitize = false;
+        } else if (args[i] == "--only") {
+            if (i + 1 >= args.length) {
+                println("larimar: --only needs a text: larimar test --only parse");
+                return 2;
+            }
+            only = args[i + 1].clone() in default;
+            i += 1;
+        } else {
+            paths.push(args[i]);
+        }
+        i += 1;
+    }
+    if (paths.length == 0) { paths.push("tests"); }
+    let files: String[*] = [];
+    for (p in paths) {
+        if (Files.isDirectory(p)) {
+            collect(p, files);
+        } else if (Files.isFile(p)) {
+            files.push(p);
+        } else {
+            println("larimar: ${p} does not exist");
+            return 2;
+        }
+    }
+    sortTexts(files);
+    try {
+        Files.createDirectories(s.outDir);
+    } catch (IoError e) {
+        println("larimar: cannot create ${s.outDir}");
+        return 2;
+    }
+    for (f in files) {
+        let source: String? = null;
+        try { source = Files.readString(f); } catch (IoError e) { continue; }
+        let shown: String = Paths.relative(os.cwd(), Paths.absolute(f));
+        if (header(source!, "expect") != null) {
+            if (only == "" || shown.contains(only)) { runExpectFile(f, shown, source!); }
+        } else if (hasTestFunctions(source!)) {
+            runTestFile(f, shown, source!);
+        }
+    }
+    println("");
+    let tail: String = skipped > 0 ? ", ${skipped} skipped" : "";
+    println("${passed} passed, ${failedCount} failed${tail}");
+    if (failedCount > 0) {
+        println("failed:");
+        for (n in failedNames) { println("  ${n}"); }
+        return 1;
+    }
+    return 0;
+}
+
+/** The .lar files of a folder and its folders. */
+function collect(dir: String, into: String[*]): void {
+    let names: String[*] = [];
+    try { names = Files.list(dir); } catch (IoError e) { return; }
+    for (n in names) {
+        let path: String = Paths.join(dir, n);
+        if (Files.isDirectory(path)) {
+            collect(path, into);
+        } else if (n.endsWith(".lar")) {
+            into.push(path.clone());
+        }
+    }
+}
+
+/** Sorts texts by their bytes (the order of the files every time). */
+function sortTexts(xs: String[*]): void {
+    let i: int32 = 1;
+    while (i < xs.length) {
+        let j: int32 = i;
+        while (j > 0 && before(xs[j], xs[j - 1])) {
+            let t: String = xs[j];
+            xs[j] = xs[j - 1];
+            xs[j - 1] = t;
+            j -= 1;
+        }
+        i += 1;
+    }
+}
+
+function before(a: String, b: String): bool {
+    let n: int32 = a.length < b.length ? a.length : b.length;
+    let i: int32 = 0;
+    while (i < n) {
+        if (a[i] != b[i]) { return a[i] < b[i]; }
+        i += 1;
+    }
+    return a.length < b.length;
+}
+
+function hasTestFunctions(source: String): bool {
+    for (line in source.lines()) {
+        if (line.trim().startsWith("test function ")) { return true; }
+    }
+    return false;
+}
+
+/** The text after "// <key>:" on the first line that has it, or null. */
+function header(source: String, key: String): String? {
+    let start: String = "// ${key}:";
+    for (line in source.lines()) {
+        if (line.startsWith(start)) { return line.substring(start.length).trim().clone(); }
+    }
+    return null;
+}
+
+/** build/test/<the file's path, with '_' for the folders>: where the files of one test go. */
+function base(shown: String): String {
+    let name: String = shown.replace("\\", "/").replace("../", "").replace("/", "_");
+    if (name.endsWith(".lar")) { name = name.substring(0, name.length - 4); }
+    return Paths.join(settings!.outDir, name);
+}
+
+function pass(name: String): void {
+    passed += 1;
+    println("  ok    ${name}");
+}
+
+function failed(name: String, problem: String): void {
+    failedCount += 1;
+    failedNames.push(name.clone());
+    println("  FAIL  ${name}");
+    for (line in problem.trim().lines()) { println("        ${line}"); }
+}
+
+function skip(name: String, why: String): void {
+    skipped += 1;
+    println("  skip  ${name} (${why})");
+}
+
+function read(path: String): String {
+    try { return Files.readString(path).replace("\r", ""); } catch (IoError e) { return ""; }
+}
+
+/** The first lines of a text (what a failure shows). */
+function head(text: String, count: int32): String {
+    let lines: String[*] = text.trim().lines();
+    let out: String[*] = [];
+    for (i, line in lines) {
+        if (i >= count) {
+            out.push("...");
+            break;
+        }
+        out.push(line);
+    }
+    return out.join("\n");
+}
+
+/** Compiles the C of a test into an executable; "" when it worked, else what the C compiler said. */
+function compileC(cFile: String, exe: String): String {
+    let s: TestSettings = settings!;
+    let c: String = read(cFile);
+    let cmd: String[*] = [s.compiler, "-std=c99", "-g"];
+    if (sanitize) {
+        let flags: String[] = ["-O1", "-fno-omit-frame-pointer", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"];
+        for (f in flags) { cmd.push(f); }
+    } else {
+        cmd.push("-O0");
+    }
+    cmd.push("-o");
+    cmd.push(exe);
+    cmd.push(cFile);
+    for (src in s.sources) { cmd.push(src); }
+    for (ip in s.includePaths) { cmd.push("-I${ip}"); }
+    for (lp in s.libraryPaths) { cmd.push("-L${lp}"); }
+    for (l in s.libraries) { cmd.push("-l${l}"); }
+    if (!windows()) {
+        for (lp in s.libraryPaths) { cmd.push("-Wl,-rpath,${lp}"); }
+        cmd.push("-lm");
+    }
+    for (l in systemLibraries(c)) { cmd.push(l.clone()); }
+    let log: String = "${cFile}.cc.txt";
+    let code: int32 = os.run("${commandLine(cmd)} > ${quote(log)} 2>&1");
+    if (code == 0) { return ""; }
+    if (code == 127) { return "cannot run the C compiler '${s.compiler}'"; }
+    return "the C compiler failed:\n${head(read(log), 20)}";
+}
+
+/** Runs a program, its output to <base>.out and <base>.err; gives its exit code. */
+function runProgram(exe: String, args: String[*], outFile: String, errFile: String): int32 {
+    let env: String = sanitize ? "ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 " : "";
+    let all: String[*] = [exe];
+    for (a in args) { all.push(a); }
+    return os.run("${env}${commandLine(all)} > ${quote(outFile)} 2> ${quote(errFile)}");
+}
+
+function memoryError(err: String): bool {
+    return err.contains("ERROR: AddressSanitizer") || err.contains("runtime error:");
+}
+
+/** The lines of a sanitizer's report that say what happened. */
+function memoryReport(err: String): String {
+    let out: String[*] = [];
+    for (line in err.lines()) {
+        let t: String = line.trim();
+        if (t.contains("ERROR") || t.contains("SUMMARY") || t.contains("runtime error") || t.startsWith("#0 ") || t.startsWith("#1 ") || t.startsWith("#2 ") || t.startsWith("#3 ")) {
+            out.push(line.clone());
+        }
+        if (out.length >= 12) { break; }
+    }
+    return out.join("\n");
+}
+
+/** What a skipped test said: the text after "skipped: ". */
+function skipText(out: String): String {
+    for (line in out.lines()) {
+        if (line.startsWith("skipped: ")) { return line.substring(9).clone(); }
+    }
+    return "skipped";
+}
+
+function exeName(b: String): String { return windows() ? "${b}.exe" : b; }
+
+/** A file of test functions: compiled once with a main, then each test runs alone. */
+function runTestFile(file: String, shown: String, source: String): void {
+    let b: String = base(shown);
+    let cFile: String = "${b}.c";
+    let exe: String = exeName(b);
+    let log: String = "${b}.compile.txt";
+    let cmd: String[*] = [selfPath(), "test-main", file, "-o", cFile];
+    if (settings!.root != "") {
+        cmd.push("--root");
+        cmd.push(settings!.root);
+    }
+    if (os.run("${commandLine(cmd)} > ${quote(log)} 2>&1") != 0) {
+        failed(shown, "did not compile (the file with its main: ${b}.lar):\n${head(read(log), 30)}");
+        return;
+    }
+    let problem: String = compileC(cFile, exe);
+    if (problem != "") {
+        failed(shown, problem);
+        return;
+    }
+    for (name in read("${b}.tests").trim().lines()) {
+        if (name == "") { continue; }
+        let full: String = "${shown}: ${name}";
+        if (only != "" && !name.contains(only) && !shown.contains(only)) { continue; }
+        let outFile: String = "${b}.${name}.out";
+        let errFile: String = "${b}.${name}.err";
+        let code: int32 = runProgram(exe, [name], outFile, errFile);
+        let out: String = read(outFile);
+        let err: String = read(errFile);
+        if (memoryError(err)) {
+            failed(full, "memory error:\n${memoryReport(err)}");
+        } else if (code == 0) {
+            pass(full);
+        } else if (code == 1) {
+            failed(full, head(out, 20));
+        } else if (code == 3) {
+            skip(full, skipText(out));
+        } else if (code == 101) {
+            failed(full, "${head(out, 10)}\n${head(err, 5)}");
+        } else {
+            failed(full, "exit ${code}:\n${head(out, 10)}\n${head(err, 10)}");
+        }
+    }
+}
+
+/** The lines after "// <key>:", in order (// output:, // c-has:, // c-lacks:). */
+function headers(source: String, key: String): String[*] {
+    let start: String = "// ${key}:";
+    let out: String[*] = [];
+    for (line in source.lines()) {
+        if (line.startsWith(start)) {
+            let rest: String = line.substring(start.length);
+            out.push((rest.startsWith(" ") ? rest.substring(1) : rest).clone());
+        }
+    }
+    return out;
+}
+
+/** Whether `word` appears in the text as a whole identifier. */
+function hasWord(text: String, word: String): bool {
+    let from: int32 = 0;
+    while (true) {
+        let at: int32? = text.indexOf(word, from);
+        if (at == null) { return false; }
+        let end: int32 = at! + word.length;
+        let left: bool = at! == 0 || !isIdentifierPart(text[at! - 1]);
+        let right: bool = end >= text.length || !isIdentifierPart(text[end]);
+        if (left && right) { return true; }
+        from = at! + 1;
+    }
+    return false;
+}
+
+/** A file that says what it expects: `// expect: run | error <text> | panic <text> | memory-error`. */
+function runExpectFile(file: String, shown: String, source: String): void {
+    let expect: String = header(source, "expect")!;
+    let space: int32? = expect.indexOf(" ");
+    let kind: String = space != null ? expect.substring(0, space!) : expect;
+    let want: String = space != null ? expect.substring(space! + 1).trim() : "";
+    let b: String = base(shown);
+    let cFile: String = "${b}.c";
+    let exe: String = exeName(b);
+    let log: String = "${b}.compile.txt";
+    let compiled: bool = os.run("${commandLine([selfPath(), file, "-o", cFile])} > ${quote(log)} 2>&1") == 0;
+    let compileOut: String = read(log);
+    if (kind == "error") {
+        if (compiled) {
+            failed(shown, "expected a compile error containing: ${want}");
+        } else if (!compileOut.contains(want)) {
+            failed(shown, "the error does not contain: ${want}\n${head(compileOut, 10)}");
+        } else {
+            pass(shown);
+        }
+        return;
+    }
+    if (kind != "run" && kind != "panic" && kind != "memory-error") {
+        failed(shown, "unknown '// expect: ${kind}' (run, error, panic or memory-error)");
+        return;
+    }
+    if (kind == "memory-error" && !sanitize) {
+        skip(shown, "needs the sanitizers");
+        return;
+    }
+    if (!compiled) {
+        failed(shown, "did not compile:\n${head(compileOut, 20)}");
+        return;
+    }
+    let c: String = read(cFile);
+    let missing: String[*] = [];
+    for (n in headers(source, "c-has")) { if (!hasWord(c, n.trim())) { missing.push(n.trim().clone()); } }
+    if (missing.length > 0) {
+        failed(shown, "the generated C should contain: ${missing.join(" ")}");
+        return;
+    }
+    let extra: String[*] = [];
+    for (n in headers(source, "c-lacks")) { if (hasWord(c, n.trim())) { extra.push(n.trim().clone()); } }
+    if (extra.length > 0) {
+        failed(shown, "the generated C should not contain: ${extra.join(" ")}");
+        return;
+    }
+    let problem: String = compileC(cFile, exe);
+    if (problem != "") {
+        failed(shown, problem);
+        return;
+    }
+    let outFile: String = "${b}.out";
+    let errFile: String = "${b}.err";
+    let code: int32 = runProgram(exe, [], outFile, errFile);
+    let out: String = read(outFile);
+    let err: String = read(errFile);
+    if (kind == "memory-error") {
+        if (memoryError(err)) { pass(shown); } else { failed(shown, "expected the sanitizers to report a memory error (exit ${code})"); }
+        return;
+    }
+    if (memoryError(err)) {
+        failed(shown, "memory error at run time:\n${memoryReport(err)}");
+        return;
+    }
+    if (kind == "run" && code != 0) {
+        failed(shown, "exit ${code}:\n${head(err, 10)}");
+        return;
+    }
+    if (kind == "panic" && (code != 101 || !err.contains(want))) {
+        failed(shown, "expected a panic containing: ${want} (exit ${code})\n${head(err, 5)}");
+        return;
+    }
+    let wanted: String[*] = headers(source, "output");
+    if (wanted.length > 0) {
+        let got: String[*] = out.endsWith("\n") ? out.substring(0, out.length - 1).split("\n") : out.split("\n");
+        if (out == "") { got = []; }
+        let i: int32 = 0;
+        while (i < wanted.length || i < got.length) {
+            let w: String = i < wanted.length ? wanted[i] : "(nothing)";
+            let g: String = i < got.length ? got[i] : "(nothing)";
+            if (w != g) {
+                failed(shown, "wrong output, line ${i + 1}:\n  expected: ${w}\n  got:      ${g}");
+                return;
+            }
+            i += 1;
+        }
+    }
+    pass(shown);
+}
