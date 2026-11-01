@@ -17,20 +17,21 @@ import std.path as Paths;
 import std.io.files as Files;
 import std.io.files { IoError };
 import std.io.console as Console;
-import ast { Program };
-import linker { linkErrors, decode, readSource, testsKept };
-import analyzer { analysisErrors };
-import session { analyzeFile, readErrors, stdDir, checkCommand, sourceRoot };
-import docstore { setDocument };
-import testing { TestSettings, TestFunction, runTests, testFunctions, hasMain, withMain };
-import lsp { serve, worker };
-import dap { serveDebugger };
-import gen { generate, generatorErrors, debugLines, spreadLines };
-import debugmap { debugMap };
-import cc { windows, quote, commandLine, systemLibraries };
-import toml { TomlK, TomlValue, TomlSection, parseToml, tomlError, sectionOf, valueOf };
+import syntax.ast { Program };
+import semantics.linker { linkErrors, decode, readSource, testsKept };
+import semantics.analyzer { analysisErrors };
+import editor.session { analyzeFile, readErrors, stdDir, checkCommand, sourceRoot };
+import editor.docstore { setDocument };
+import project.testing { TestSettings, TestFunction, runTests, testFunctions, hasMain, withMain };
+import editor.lsp { serve, worker };
+import editor.dap { serveDebugger };
+import codegen.gen { generate, generatorErrors, debugLines, spreadLines };
+import codegen.debugmap { debugMap };
+import project.cc { windows, quote, commandLine, systemLibraries };
+import std.toml as Toml;
+import std.toml { TomlError };
 
-const VERSION: String = "0.3.0";
+const VERSION: String = "0.4.0";
 
 /** Set when a command fails; main prints it as "larimar: ...". */
 let toolError: String = "";
@@ -298,12 +299,14 @@ function load(dir: String): Project? {
         toolError = "no larimar.toml in ${dir}. Create a project with 'larimar new <name>'." in default;
         return null;
     }
-    let sections: TomlSection[*] = parseToml(source, "larimar.toml");
-    if (tomlError != "") {
-        compileErrors.push(tomlError);
+    let config: Any = null;
+    try {
+        config = Toml.parse(source!);
+    } catch (TomlError e) {
+        switch (e) { case Invalid { line, why } -> compileErrors.push("Project Error [larimar.toml:${line}]: ${why}"); }
         return null;
     }
-    return project(dir, sections);
+    return project(dir, config);
 }
 
 let problems: String[*] = [] in default;
@@ -315,23 +318,36 @@ function allowedKey(section: String, key: String): bool {
     return section == "project" ? key == "name" || key == "version" || key == "main" || key == "output" || key == "build_dir" : key == "compiler" || key == "flags" || key == "libraries" || key == "library_paths" || key == "include_paths" || key == "sources";
 }
 
-function project(dir: String, toml: TomlSection[*]): Project? {
-    for (s in toml) {
-        if (s.name == "") {
-            if (s.keys.length > 0) { problems.push("keys must go inside [project] or [c]: [${s.keys.join(", ")}]"); }
+function project(dir: String, config: Any): Project? {
+    let topKeys: String[*] = [];
+    for (sectionName, section in config.fields) {
+        if (!isSection(section)) {
+            topKeys.push(sectionName.clone());
             continue;
         }
-        if (s.name != "project" && s.name != "c") {
-            problems.push("unknown section [${s.name}] (sections: [project], [c])");
+        if (sectionName == "dependencies") { continue; }      // for a dependency manager (Minero): the compiler does not read it
+        if (sectionName != "project" && sectionName != "c") {
+            problems.push("unknown section [${sectionName}] (sections: [project], [c], [dependencies])");
             continue;
         }
-        let allowed: String = s.name == "project" ? PROJECT_KEYS : C_KEYS;
-        for (k in s.keys) {
-            if (!allowedKey(s.name, k)) { problems.push("unknown key '${k}' in [${s.name}] (keys: ${allowed})"); }
+        let allowed: String = sectionName == "project" ? PROJECT_KEYS : C_KEYS;
+        for (key, value in section.fields) {
+            if (sectionName == "c" && isSection(value)) {               // [c.linux], [c.macos], [c.windows], [c.unix]
+                if (!isPlatform(key)) {
+                    problems.push("unknown section [c.${key}] (platforms: [c.linux], [c.macos], [c.windows], [c.unix])");
+                    continue;
+                }
+                for (platformKey, platformValue in value.fields) {
+                    if (!allowedKey("c", platformKey)) { problems.push("unknown key '${platformKey}' in [c.${key}] (keys: ${C_KEYS})"); }
+                }
+            } else if (!allowedKey(sectionName, key)) {
+                problems.push("unknown key '${key}' in [${sectionName}] (keys: ${allowed})");
+            }
         }
     }
-    let p: TomlSection? = sectionOf(toml, "project");
-    let c: TomlSection? = sectionOf(toml, "c");
+    if (topKeys.length > 0) { problems.push("keys must go inside [project] or [c]: [${topKeys.join(", ")}]"); }
+    let p: Any = config.project;
+    let c: Any = config.c;
     let name: String = text(p, "name", "");
     if (name == "") {
         problems.push("[project] needs a name: name = \"my-program\"");
@@ -347,12 +363,24 @@ function project(dir: String, toml: TomlSection[*]): Project? {
         cc = "cc";
         if (windows()) { cc = "gcc"; }
     }
-    let compiler: String = text(c, "compiler", cc);
+    // [c] for every platform, then [c.unix] (Linux and macOS) and [c.<this platform>]: their lists are added
+    // to [c]'s, and a compiler there replaces [c]'s
+    let unix: Any = windows() ? null : c.unix;
+    let here: Any = c[os.platform()];
+    let compiler: String = text(here, "compiler", text(unix, "compiler", text(c, "compiler", cc)));
     let flags: String[*] = list(c, "flags", ["-O2"]);
     let libraries: String[*] = list(c, "libraries", []);
     let libraryPaths: String[*] = list(c, "library_paths", []);
     let includePaths: String[*] = list(c, "include_paths", []);
     let sources: String[*] = list(c, "sources", []);
+    let platformSections: Any[] = [unix, here];
+    for (platform in platformSections) {
+        for (x in list(platform, "flags", [])) { flags.push(x.clone()); }
+        for (x in list(platform, "libraries", [])) { libraries.push(x.clone()); }
+        for (x in list(platform, "library_paths", [])) { libraryPaths.push(x.clone()); }
+        for (x in list(platform, "include_paths", [])) { includePaths.push(x.clone()); }
+        for (x in list(platform, "sources", [])) { sources.push(x.clone()); }
+    }
     if (problems.length > 0) {
         for (m in problems) { compileErrors.push("Project Error [larimar.toml]: ${m}"); }
         return null;
@@ -360,18 +388,47 @@ function project(dir: String, toml: TomlSection[*]): Project? {
     return Project { dir, name, main, output, buildDir, compiler, flags, libraries, libraryPaths, includePaths, sources };
 }
 
-function text(t: TomlSection?, key: String, def: String): String {
-    let v: TomlValue? = valueOf(t, key);
-    if (v == null) { return def; }
-    if (v.kind == TomlK.Text) { return v.text; }
+/** The platforms of [c.<platform>]: the same names as #when. */
+function isPlatform(name: String): bool {
+    return name == "linux" || name == "macos" || name == "windows" || name == "unix";
+}
+
+/** A [section] of larimar.toml: a table with named entries (a list has positions). */
+function isSection(value: Any): bool {
+    return switch (value) {
+        case Any table -> table.length == 0;
+        default -> false;
+    };
+}
+
+function text(section: Any, key: String, def: String): String {
+    let value: Any = section[key];
+    if (value == null) { return def; }
+    let found: String? = value as String;
+    if (found != null) { return found!.clone(); }
     problems.push("'${key}' must be a \"string\"");
     return def;
 }
 
-function list(t: TomlSection?, key: String, def: String[*]): String[*] {
-    let v: TomlValue? = valueOf(t, key);
-    if (v == null) { return def; }
-    if (v.kind == TomlK.List) { return v.items; }
+function list(section: Any, key: String, def: String[*]): String[*] {
+    let value: Any = section[key];
+    if (value == null) { return def; }
+    let items: String[*] = [];
+    let isList: bool = switch (value) {
+        case Any table -> true;
+        default -> false;
+    };
+    if (isList) {
+        for (i, item in value) {
+            let text: String? = item as String;
+            if (text == null) {
+                problems.push("'${key}' must be a list of strings: ${key} = [\"...\"]");
+                return def;
+            }
+            items.push(text!.clone());
+        }
+        return items;
+    }
     problems.push("'${key}' must be a list: ${key} = [\"...\"]");
     return def;
 }

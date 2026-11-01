@@ -1,4 +1,4 @@
-// session: one analysis of a program, without generating C (larimar check, larimar lsp).
+// editor.session: one analysis of a program, without generating C (larimar check, larimar lsp).
 // It links and analyzes like a compilation; the errors stay in linkErrors and analysisErrors (with the
 // line numbers that also say the file), and the analyzed program stays in `program` for the questions
 // of the editor (ide.lar).
@@ -8,11 +8,12 @@ import std.path as Paths;
 import std.io.files as Files;
 import std.json as Json;
 import std.io.console as Console;
-import ast { Program };
-import linker { link, linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES };
-import sema { files };
-import analyzer { analyze, analysisErrors };
-import toml { TomlK, TomlValue, TomlSection, parseToml, tomlError, sectionOf, valueOf };
+import syntax.ast { Program };
+import semantics.linker { link, linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES };
+import semantics.types { files };
+import semantics.analyzer { analyze, analysisErrors };
+import std.toml as Toml;
+import std.toml { TomlError };
 
 /** The program of the last analysis (empty when it could not be linked). */
 public let program: Program = Program { line: 1 } in default;
@@ -107,11 +108,12 @@ public function projectMain(file: String): String {
 function tomlMain(path: String): String {
     let source: String? = readSource(path);
     if (source == null) { return ""; }
-    let sections: TomlSection[*] = parseToml(source!, "larimar.toml");
-    if (tomlError != "") { return ""; }
-    let v: TomlValue? = valueOf(sectionOf(sections, "project"), "main");
-    if (v != null && v.kind == TomlK.Text) { return v.text; }
-    return "src/main.lar";
+    try {
+        let config: Any = Toml.parse(source!);
+        return (config.project.main as String ?? "src/main.lar").clone();
+    } catch (TomlError e) {
+        return "";
+    }
 }
 
 /**

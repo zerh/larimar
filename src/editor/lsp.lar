@@ -1,4 +1,4 @@
-// lsp: larimar lsp, the language server editors start (Language Server Protocol, JSON-RPC on stdin and
+// editor.lsp: larimar lsp, the language server editors start (Language Server Protocol, JSON-RPC on stdin and
 // stdout, each message after a "Content-Length: N" header).
 //
 // The server keeps the texts of the open documents (docstore.lar, freed when they change) and nothing
@@ -18,9 +18,10 @@ import std.io.console as Console;
 import std.json as Json;
 import std.json { JsonError };
 import std.io.files { IoError };
-import session { analyzeFile, projectMain };
-import docstore { setDocument, removeDocument, document, documentCount, documentPath };
-import ide {
+import editor.session { analyzeFile, projectMain };
+import project.cc { selfPath };
+import editor.docstore { setDocument, removeDocument, document, documentCount, documentPath };
+import editor.ide {
     hoverJson, definitionJson, referencesJson, symbolsJson, completionJson, signatureJson, diagnosticsJson,
     prepareCompletion, pathOfUri, fileIndex
 };
@@ -428,11 +429,6 @@ function askWorker(body: String): String {
 
 /** The worker's standard output goes to the standard error: the standard output is the editor's. */
 function quiet(): String { return "1>&2"; }
-
-function selfPath(): String {
-    let exe: String = os.platform() == "windows" ? "larimarc.exe" : "larimarc";
-    return Paths.join(os.programDir(), exe);
-}
 
 /** larimarc lsp-worker: answers one question written to a file by the server. */
 public function worker(reqPath: String, respPath: String): int32 {

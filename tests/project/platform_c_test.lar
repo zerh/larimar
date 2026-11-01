@@ -1,0 +1,82 @@
+// larimar.toml: [c] for every platform, and [c.<platform>] added to it on that platform only. Each test
+// writes a small project in build/test/ and builds it with the compiler under test ($LARIMARC, else the PATH).
+import std.test { check, checkText, checkInt, fail };
+import std.process { Process, ProcessError, message, findProgram };
+import std.io.files as Files;
+import std.io.files { IoError };
+import std.path as Paths;
+import std.os;
+
+function compiler(): String {
+    let fromEnvironment: String = os.env("LARIMARC") ?? "";
+    if (fromEnvironment != "") { return Paths.absolute(fromEnvironment); }
+    return findProgram("larimarc") ?? "larimarc";
+}
+
+/** Another platform than this one: its [c.<platform>] must not be used here. */
+function otherPlatform(): String { return os.platform() == "linux" ? "macos" : "linux"; }
+
+/** Writes a project: its larimar.toml, a main that calls two C functions, and their C files. */
+function writeProject(dir: String, toml: String): void throws IoError {
+    Files.createDirectories(Paths.join(dir, "src"));
+    Files.createDirectories(Paths.join(dir, "c"));
+    Files.writeString(Paths.join(dir, "larimar.toml"), toml);
+    Files.writeString(Paths.join(dir, "src/main.lar"), """
+        extern function common_value(): int32;
+        extern function here_value(): int32;
+        function main(): int32 {
+            println("\${common_value() + here_value()}");
+            return 0;
+        }
+        """);
+    Files.writeString(Paths.join(dir, "c/common.c"), "int common_value(void) { return 40; }\n");
+    Files.writeString(Paths.join(dir, "c/here.c"), "int here_value(void) { return 2; }\n");
+}
+
+/** Runs the compiler (`larimarc <args>`): its exit code, and what it printed (errors too) into `output`. */
+function larimarc(args: String[*], output: String[*]): int32 throws ProcessError {
+    let p: Process = { program: compiler(), args: args, mergeErrors: true };
+    p.start();
+    output.push(p.readAll(120000));
+    return p.wait(10000) ?? -1;
+}
+
+test function thisPlatformsSectionIsAdded(): void throws ProcessError {
+    let dir: String = Paths.absolute("build/test/platform-c");
+    try {
+        writeProject(dir, """
+            [project]
+            name = "platformc"
+
+            [c]
+            sources = ["c/common.c"]
+
+            [c.${os.platform()}]
+            sources = ["c/here.c"]
+
+            [c.${otherPlatform()}]
+            sources = ["c/not-there.c"]
+            """);
+    } catch (IoError e) {
+        fail("cannot write the project in ${dir}");
+        return;
+    }
+    let output: String[*] = [];
+    checkInt(0, larimarc(["run", dir], output));
+    check(output.join("").contains("42"), "common.c and here.c are both compiled, and not-there.c is not: ${output.join("")}");
+}
+
+test function anUnknownPlatformIsAnError(): void throws ProcessError {
+    let dir: String = Paths.absolute("build/test/platform-c-unknown");
+    try {
+        writeProject(dir, "[project]\nname = \"unknown\"\n[c.solaris]\nsources = [\"c/here.c\"]\n[c.linux]\nmystery = 1\n");
+    } catch (IoError e) {
+        fail("cannot write the project in ${dir}");
+        return;
+    }
+    let output: String[*] = [];
+    checkInt(1, larimarc(["build", dir], output));
+    let text: String = output.join("");
+    check(text.contains("unknown section [c.solaris] (platforms: [c.linux], [c.macos], [c.windows], [c.unix])"), "the platform is unknown: ${text}");
+    check(text.contains("unknown key 'mystery' in [c.linux]"), "the key is checked inside [c.linux] too: ${text}");
+}

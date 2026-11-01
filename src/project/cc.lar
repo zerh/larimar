@@ -1,4 +1,4 @@
-// cc: calling the C compiler and other programs (larimar build, larimar test).
+// project.cc: calling the C compiler and other programs (larimar build, larimar test).
 
 import std.os;
 import std.path as Paths;

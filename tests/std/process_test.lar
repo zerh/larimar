@@ -93,3 +93,10 @@ test function findsProgramsInThePath(): void {
     check(findProgram("sh") != null, "sh is in the PATH");
     check(findProgram("no-such-program-for-larimar") == null, "an unknown program is not found");
 }
+
+test function errorsComeWithTheOutput(): void throws ProcessError {
+    if (!unix()) { return; }
+    let sh: Process = { program: "sh", args: ["-c", "echo out; echo err 1>&2"], mergeErrors: true };
+    sh.start();
+    checkText("out\nerr\n", sh.readAll(5000));
+}

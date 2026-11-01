@@ -249,9 +249,5 @@ test function languageServerWithoutFork(): void throws ProcessError {
         skip("Windows always works without fork()");
         return;
     #end
-    if (Paths.fileName(compiler()) != "larimarc") {
-        skip("the worker is started as larimarc, and the compiler under test has another name");
-        return;
-    }
     session(["LARIMAR_LSP_NO_FORK=1"]);
 }

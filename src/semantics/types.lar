@@ -1,9 +1,9 @@
-// sema: what the analyzer knows. Types, regions (where data lives), scopes, symbols,
+// semantics.types: what the analyzer knows. Types, regions (where data lives), scopes, symbols,
 // the information about declarations, and the per-node facts the generator reads.
 // It follows Types.java and Analysis.java of the Java version.
 
 import std.text { isAscii };
-import ast { Expr, Stmt, Param, FunctionDecl, ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, StructDecl, ClassDecl, Lambda, VarDecl };
+import syntax.ast { Expr, Stmt, Param, FunctionDecl, ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, StructDecl, ClassDecl, Lambda, VarDecl };
 
 // =====================================================================================
 // Types. Each type exists once (they are interned by their text), so == compares them.
@@ -631,7 +631,7 @@ public class Conversion {
 }
 
 public enum CallK { Direct, Closure, Method, InterfaceMethod, Super, EnumCtor, NativeMethod, Builtin, StaticMethod, CPointer }
-public enum BK { None, Print, Println, Panic, Release, Push, Pop, Clear, Map, Filter, Clone, AnyLength, AnyPush, AnyRemove, AnyRemoveAt, AnyClear, AnyRemoveIf, AnyContains, AnyContainsKey, Wait, StringMethod, Join, Contains }
+public enum BK { None, Print, Println, Panic, Release, Push, Pop, Clear, Map, Filter, Clone, AnyLength, AnyPush, AnyRemove, AnyRemoveAt, AnyClear, AnyRemoveIf, AnyContains, AnyContainsKey, Wait, StringMethod, Join, Contains, Sort }
 
 public class CallInfo {
     let kind: CallK;

@@ -1,13 +1,13 @@
-// checkexpr: semantic analysis (Analyzer.java), part 2: types as written, constants,
+// semantics.expressions: semantic analysis (Analyzer.java), part 2: types as written, constants,
 // expressions, conversions, calls, switch and patterns.
 
-import ast {
+import syntax.ast {
     Node, Expr, Stmt, TK, TypeRef, Param, IntLit, FloatLit, StringLit, BoolLit, NullLit, Ident, SelfExpr, SuperMember,
     Member, Index, Call, Unary, Binary, Ternary, IsExpr, Cast, Unwrap, Lambda, FieldInit, ObjectLit, ArrayLit, Placed,
     Pattern, SwitchCase, SwitchExpr, YieldStmt, ThrowStmt, IfStmt, TryStmt, BlockStmt, ExternFunctionDecl, ExternValueDecl,
     PL_MEMORY, PL_HEAP, PL_STACK, PL_DEFAULT, PT_NAME, PT_TYPE, PT_DESTRUCTURE, PT_CONSTANT, PT_NULL
 };
-import sema {
+import semantics.types {
     hasThreadSafe, cTypeOf,
     Type, TyK, NamedK, ArrK, T_INT8, T_INT16, T_INT32, T_INT64, T_BYTE, T_UINT16, T_UINT32, T_UINT64,
     T_FLOAT32, T_FLOAT64, T_BOOL, T_STRING, T_VOID, T_ANY, T_ERROR, T_NULL, primByName, isPrimName, named, functionOf,
@@ -21,7 +21,7 @@ import sema {
     findMethod, allFields, isSubclass, implementor, chain, externSig, ptrT, isPtr, pointable, isResource, externInfoOf,
     platformWithin, ExternTypeInfo, isExternStruct
 };
-import analyzer {
+import semantics.analyzer {
     error, wrong, frame, frames, frameTop, state, scope, pushFrame, popFrame, pushScope, popScope, declare, lookup,
     narrowedType, noteCapture, declareParam, checkReturns, analyzeStmts, analyzeBlock, analyzeThrow, requireBool,
     requireHandled, lifetime, requireOutlives, livesHint, isReference, storageRegion, placeFor, rootSymbol, isLValue,
@@ -1977,10 +1977,32 @@ function checkArrayMethod(c: Call in default, m: Member in default, at: Type in 
             return T_VOID;
         }
         case "map", "filter" -> { return checkMapFilter(c, obj, name == "map", at, expected, place); }
+        case "sort" -> { return checkSort(c, obj, at); }
         default -> {}
     }
-    error(m.line, "Arrays have length, push, pop, clear, contains, map, filter, join and clone (got '${name}').");
+    error(m.line, "Arrays have length, push, pop, clear, contains, sort, map, filter, join and clone (got '${name}').");
     return checkAllArgs(c);
+}
+
+/**
+ * list.sort(): numbers and Strings in their natural order. list.sort(compare): any elements, in the order
+ * that compare(a, b) says (negative: a goes first; zero: equal; positive: b goes first). Stable, in place.
+ */
+function checkSort(c: Call in default, obj: Expr in default, at: Type in default): Type {
+    if (at.ak == ArrK.Fixed && !isLValue(obj)) { error(c.line, "sort() needs a variable or a field, not a temporary array."); }
+    let element: Type = at.elem!;
+    if (c.args.length == 0) {
+        if (!isError(element) && !isNumeric(element) && element != T_STRING) {
+            return wrong(c.line, "${element.text} has no natural order: give sort() a comparator, list.sort((a: ${element.text}, b: ${element.text}) -> ...) that gives a negative number, zero or a positive one.");
+        }
+    } else if (c.args.length == 1) {
+        let parameters: Type[*] = [element, element] in default;
+        coerce(c.args[0], noted(funcT(parameters, T_INT32, false)), P_TEMP, "Comparator of sort()");
+    } else {
+        return wrong(c.line, "sort() takes nothing, or one comparator: (a, b) -> int32.");
+    }
+    changesArray(c, obj, at, BK.Sort);
+    return T_VOID;
 }
 
 function checkMapFilter(c: Call in default, obj: Expr in default, isMap: bool, at: Type in default, expected: Type? in default, place: Place in default): Type {

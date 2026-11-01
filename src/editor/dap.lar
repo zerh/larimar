@@ -1,4 +1,4 @@
-// dap: larimar dap, the debugger for editors (Debug Adapter Protocol on stdin and stdout).
+// editor.dap: larimar dap, the debugger for editors (Debug Adapter Protocol on stdin and stdout).
 //
 // It sits between the editor and lldb-dap (LLVM's debug adapter, which runs the program under lldb):
 //

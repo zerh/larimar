@@ -1,4 +1,4 @@
-// docstore: the texts of the documents open in the editor, by file path (larimar lsp).
+// editor.docstore: the texts of the documents open in the editor, by file path (larimar lsp).
 // They live in C memory (malloc), so a text can be freed when the editor sends a new one: the server
 // runs for hours and its documents change on every key. The linker reads a file from here when it is
 // open in the editor (with its changes not saved yet), and from the disk otherwise.

@@ -1,0 +1,91 @@
+// std.toml: reading and writing TOML.
+import std.test { check, checkText, checkInt, fail };
+import std.toml as Toml;
+import std.toml { TomlError, message };
+
+test function readsSectionsAndValues(): void throws TomlError {
+    let config: Any = Toml.parse("""
+        # a project
+        title = "top"
+
+        [project]
+        name = "demo"            # a comment after a value
+        version = "1.2.0"
+        workers = 4
+        debug = true
+
+        [c]
+        flags = ["-O2",
+                 "-Wall"]
+        """);
+    checkText("top", config.title as String ?? "");
+    checkText("demo", config.project.name as String ?? "");
+    checkText("1.2.0", config.project.version as String ?? "");
+    checkInt(4, config.project.workers as int32 ?? 0);
+    check(config.project.debug as bool ?? false, "debug = true");
+    checkInt(2, config.c.flags.length);
+    checkText("-Wall", config.c.flags[1] as String ?? "");
+}
+
+test function sectionsInsideSections(): void throws TomlError {
+    let config: Any = Toml.parse("[c]\nflags = [\"-O2\"]\n[c.linux]\nlibraries = [\"SDL3\", \"m\"]\n[c.macos]\nlibraries = [\"SDL3\"]\n");
+    checkText("-O2", config.c.flags[0] as String ?? "");
+    checkText("m", config.c.linux.libraries[1] as String ?? "");
+    checkInt(1, config.c.macos.libraries.length);
+}
+
+// a key named like a word of Larimar is read with brackets, as an entry named length or push
+test function keysThatAreWordsOfLarimar(): void throws TomlError {
+    let config: Any = Toml.parse("[options]\ndefault = \"yes\"\n");
+    checkText("yes", config.options["default"] as String ?? "");
+}
+
+test function keysWithDashesAndOrder(): void throws TomlError {
+    let config: Any = Toml.parse("[dependencies]\nambar = \"github.com/zerh/ambar@v0.3.0\"\nbox2d-lar = \"github.com/zerh/box2d-lar@v1.4.0\"\n");
+    let names: String[*] = [];
+    for (name, value in config.dependencies.fields) { names.push(name.clone()); }
+    checkText("ambar box2d-lar", names.join(" "));
+    checkText("github.com/zerh/box2d-lar@v1.4.0", config.dependencies["box2d-lar"] as String ?? "");
+}
+
+test function escapesInStrings(): void throws TomlError {
+    let config: Any = Toml.parse("text = \"a \\\"quote\\\" # not a comment\\n\"\n");
+    checkText("a \"quote\" # not a comment\n", config.text as String ?? "");
+}
+
+function errorOf(text: String): String {
+    try {
+        Toml.parse(text);
+        return "(no error)";
+    } catch (TomlError e) {
+        return message(e);
+    }
+}
+
+test function errorsSayTheLine(): void {
+    checkText("line 2: Expected key = value", errorOf("[a]\nnothing here\n"));
+    checkText("line 3: Section [a] appears twice", errorOf("[a]\nx = 1\n[a]\n"));
+    checkText("line 3: Key 'x' appears twice in [a]", errorOf("[a]\nx = 1\nx = 2\n"));
+    checkText("line 1: Expected ']' to close the list", errorOf("x = [\"a\", \"b\"\n"));
+    checkText("line 1: Unknown value 'maybe' (use \"text\", a number, true/false or [\"a\", \"b\"])", errorOf("x = maybe\n"));
+    checkText("line 1: Invalid key 'a b'", errorOf("a b = 1\n"));
+}
+
+test function writesWhatItReads(): void throws TomlError {
+    let config: Any = {
+        name: "lock",
+        ambar: { git: "https://github.com/zerh/ambar", tag: "v0.3.0", commit: "a91f3c2" },
+        targets: { linux: { links: { "SDL3", "m" } } }
+    };
+    let text: String = Toml.stringify(config);
+    checkText("name = \"lock\"\n\n[ambar]\ngit = \"https://github.com/zerh/ambar\"\ntag = \"v0.3.0\"\ncommit = \"a91f3c2\"\n\n[targets.linux]\nlinks = [\"SDL3\", \"m\"]\n", text);
+    let back: Any = Toml.parse(text);
+    checkText("v0.3.0", back.ambar.tag as String ?? "");
+    checkText("m", back.targets.linux.links[1] as String ?? "");
+}
+
+test function writesEscapes(): void throws TomlError {
+    let text: String = Toml.stringify({ say: "a \"b\" \\ c\n", count: 3, on: false });
+    checkText("say = \"a \\\"b\\\" \\\\ c\\n\"\ncount = 3\non = false\n", text);
+    checkText("a \"b\" \\ c\n", Toml.parse(text).say as String ?? "");
+}
