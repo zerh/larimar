@@ -1,4 +1,4 @@
-// ide: answers the editor's questions (larimar lsp) from an analyzed program: errors, hover, go to
+// editor.ide: answers the editor's questions (larimar lsp) from an analyzed program: errors, hover, go to
 // definition, references, the symbols of a file, completion and the signature being written.
 //
 // It runs in a process made only for one question (see lsp.lar): it may keep what it builds for the
@@ -10,20 +10,20 @@
 import std.path as Paths;
 import std.text { isIdentifierPart };
 import std.json as Json;
-import ast {
+import syntax.ast {
     Node, Expr, Stmt, Program, FunctionDecl, StructDecl, ClassDecl, InterfaceDecl, NativeTypeDecl, EnumDecl,
     EnumVariant, VarDecl, ConstDecl, FieldDecl, Param, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ForStmt, TryStmt,
     Ident, Member, Call, Lambda, ObjectLit, IsExpr, allStmts, allExprs, exprAll
 };
-import sema {
+import semantics.types {
     Symbol, SymK, Type, TyK, NamedK, ArrK, FunctionInfo, MethodInfo, FieldInfo, StructInfo, ClassInfo, InterfaceInfo,
     EnumInfo, VariantInfo, MemberInfo, MbK, CallInfo, CallK, LambdaInfo, functions, structs, classes, interfaces,
     enums, nativeMethods, externInfos, ExternTypeInfo, structOf, classOf, interfaceOf, enumOf, functionOf,
     externInfoOf, allFields, findMethod, chain, T_STRING, T_ANY
 };
-import linker { isLangHelper, filePaths, fileSources, FILE_LINES, decode, namesOfFile, aliasesOfFile, publicsOfModule, fileOfModule };
-import session { program, stdDir, diagnostics, Diagnostic };
-import docstore { document, setDocument };
+import semantics.linker { isLangHelper, filePaths, fileSources, FILE_LINES, decode, namesOfFile, aliasesOfFile, publicsOfModule, fileOfModule };
+import editor.session { program, stdDir, diagnostics, Diagnostic };
+import editor.docstore { document, setDocument };
 import std.io.console as Console;
 
 // =====================================================================================

@@ -10,8 +10,9 @@
 //
 // The literal says what to run (it cannot fail); start() runs it. Its output is read through a pipe,
 // and every read says how long it may wait, so a program that does not answer never hangs the caller.
-// Its error output goes where this program's goes, or nowhere with `quiet: true`. A Process that is
-// still running when its memory is freed is killed.
+// Its error output goes where this program's goes, nowhere with `quiet: true`, or into its output (read
+// with the rest) with `mergeErrors: true`. A Process that is still running when its memory is freed is
+// killed.
 
 #when unix
     c_include "<unistd.h>";
@@ -39,6 +40,7 @@ typedef struct LmProcess {
     char** env;             /* "NAME=value" added to this program's environment */
     int envCount;
     int quiet;
+    int mergeErrors;        /* its error output goes into its output */
     int started, exited, code;
 #if defined(_WIN32)
     HANDLE process, input, output;
@@ -65,10 +67,11 @@ static void lm_proc_push(char*** list, int* count, const char* s) {
     *count += 1;
 }
 
-static LmProcess* lm_proc_new(const char* program, int quiet) {
+static LmProcess* lm_proc_new(const char* program, int quiet, int mergeErrors) {
     LmProcess* p = (LmProcess*)calloc(1, sizeof(LmProcess));
     if (!p) rt_panic("out of memory starting a process", 0);
     p->quiet = quiet;
+    p->mergeErrors = mergeErrors;
 #if defined(_WIN32)
     p->process = p->input = p->output = NULL;
 #else
@@ -175,7 +178,7 @@ static int lm_proc_start(LmProcess* p) {
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdInput = inRead;
     si.hStdOutput = outWrite;
-    si.hStdError = p->quiet && errTarget != INVALID_HANDLE_VALUE ? errTarget : GetStdHandle(STD_ERROR_HANDLE);
+    si.hStdError = p->mergeErrors ? outWrite : p->quiet && errTarget != INVALID_HANDLE_VALUE ? errTarget : GetStdHandle(STD_ERROR_HANDLE);
     ok = CreateProcessA(NULL, line, NULL, NULL, TRUE, 0, block, NULL, &si, &pi);
     int error = ok ? 0 : (int)GetLastError();
     free(line);
@@ -208,7 +211,9 @@ static int lm_proc_start(LmProcess* p) {
     if (pid == 0) {                                 /* the new process */
         dup2(in[0], 0);
         dup2(out[1], 1);
-        if (p->quiet) {
+        if (p->mergeErrors) {
+            dup2(out[1], 2);
+        } else if (p->quiet) {
             int null = open("/dev/null", O_WRONLY);
             if (null >= 0) { dup2(null, 2); close(null); }
         }
@@ -369,7 +374,7 @@ static void lm_proc_free(LmProcess* p) {
 
 extern type ProcessHandle = c "LmProcess*" released by lm_proc_free;
 extern function lm_proc_free(p: ProcessHandle): void;
-extern function lm_proc_new(program: String, quiet: int32): ProcessHandle?;
+extern function lm_proc_new(program: String, quiet: int32, mergeErrors: int32): ProcessHandle?;
 extern function lm_proc_arg(p: ProcessHandle, arg: String): void;
 extern function lm_proc_env(p: ProcessHandle, entry: String): void;
 extern function lm_proc_start(p: ProcessHandle): int32;
@@ -407,6 +412,8 @@ public class Process {
     let env: String[*] = [];
     /** true: its error output is thrown away (else it goes where this program's goes). */
     let quiet: bool = false;
+    /** true: its error output comes with its output, read together (it wins over quiet). */
+    let mergeErrors: bool = false;
 
     let handle: ProcessHandle? = null;
     /** What was read and not given yet: from `taken` on. */
@@ -417,7 +424,7 @@ public class Process {
 
     /** Starts it. Throws ProcessError.CannotStart when it cannot (not found, not allowed). */
     function start(): void throws ProcessError {
-        self.handle = lm_proc_new(self.program, self.quiet ? 1 : 0);
+        self.handle = lm_proc_new(self.program, self.quiet ? 1 : 0, self.mergeErrors ? 1 : 0);
         if (self.handle == null) { throw ProcessError.CannotStart { program: self.program.clone(), why: "out of memory" }; }
         for (a in self.args) { lm_proc_arg(self.handle!, a); }
         for (e in self.env) { lm_proc_env(self.handle!, e); }

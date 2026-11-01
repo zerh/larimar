@@ -1,4 +1,4 @@
-// gen: C99 code generation (Gen.java), part 1: the file, types, classes and interfaces,
+// codegen.gen: C99 code generation (Gen.java), part 1: the file, types, classes and interfaces,
 // globals, bodies and statements. Expressions are in genexpr.lar.
 //
 //  - struct     -> C struct, copied by value; methods are plain functions on S*.
@@ -12,12 +12,12 @@
 //  - errors     -> a function that throws takes RtError* err_out; every call checks it.
 //  - memories   -> RtMem; heap memories are freed on every exit of their block.
 
-import ast {
+import syntax.ast {
     ExternTypeDecl,
     Expr, Stmt, VarDecl, AssignStmt, ReturnStmt, ExprStmt, IfStmt, WhileStmt, ForStmt, BreakStmt, ContinueStmt, ThrowStmt,
     YieldStmt, TryStmt, SwitchStmt, BlockStmt, Member, Index, Call, IsExpr, SwitchExpr, allStmts, allExprs
 };
-import sema {
+import semantics.types {
     Type, TyK, NamedK, ArrK, T_STRING, T_VOID, T_ANY, T_BOOL, T_INT32, isError, isClass, isStruct, isInterface, isEnumT,
     isExternT, isOpt, isArray, optIsPointer, ascii, isCReserved, escapeName, Symbol, SymK, MemK, isMemory,
     FieldInfo, FunctionInfo, MethodInfo, StructInfo, ClassInfo, InterfaceInfo, VariantInfo, EnumInfo, LambdaInfo,
@@ -26,11 +26,11 @@ import sema {
     lambdaList, funcTypes, typeOrder, structOf, classOf, interfaceOf, enumOf, parentOf, chain, findMethod, allFields, classDepth, primByName,
     externInfos, externInfoOf, ExternTypeInfo, cCodeStd, includeWhens, isResource, platformCondition
 };
-import rtselect { selectRuntime };
-import prune { prune, braceDelta };
-import linker { filePaths, FILE_LINES };
-import checkexpr { hasRefs };
-import genexpr {
+import codegen.runtimeselect { selectRuntime };
+import codegen.prune { prune, braceDelta };
+import semantics.linker { filePaths, FILE_LINES };
+import semantics.expressions { hasRefs };
+import codegen.expressions {
     expr, value, hoist, strip, lazyPre, lazy, zero, stringLiteral, addrOf, discard, patternTest, bindPattern,
     boxDescriptors, cloneFunctions, requireClone, mangle, cType, structName, tname, lvalue, placeMemOf,
     cloneTypeList, cloneHeader, needsDeepClone, cloneOf, classFieldPath

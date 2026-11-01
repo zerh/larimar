@@ -1,11 +1,11 @@
-// rtselect: only the runtime the program uses (Runtime.select in the Java version).
+// codegen.runtimeselect: only the runtime the program uses (Runtime.select in the Java version).
 //
 // The runtime is cut into paragraphs (blank lines outside braces and #if blocks; each #include is
 // one). A paragraph is kept when it defines a name the program uses, or a name a kept paragraph uses.
 // #ifdef RT_THREADS and #ifdef RT_FILES are decided here.
 
 import std.text { isIdentifierPart, isDigit };
-import runtime { RUNTIME, RUNTIME_ANY };
+import codegen.runtime { RUNTIME, RUNTIME_ANY };
 
 /** What each standard header gives (enough for the runtime and for the generated code). */
 const HEADER_NAMES: String = "stdint.h stdbool.h stddef.h stdio.h stdlib.h string.h";

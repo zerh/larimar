@@ -1,4 +1,4 @@
-// debugmap: with larimar build --debug, what the debugger (larimar dap) needs to show the program as
+// codegen.debugmap: with larimar build --debug, what the debugger (larimar dap) needs to show the program as
 // Larimar: for each C function, its Larimar name and the variables it has (their Larimar names, their
 // names in C and their types), the globals, and the shape of every type (fields with their C paths,
 // enum variants, classes). Written next to the C as <name>.debug.json.
@@ -8,14 +8,14 @@
 // "types", so a type that contains itself is no problem.
 
 import std.json as Json;
-import ast { Stmt, Expr, VarDecl, ForStmt, TryStmt, SwitchStmt, IsExpr, SwitchExpr, allStmts, allExprs };
-import sema {
+import syntax.ast { Stmt, Expr, VarDecl, ForStmt, TryStmt, SwitchStmt, IsExpr, SwitchExpr, allStmts, allExprs };
+import semantics.types {
     Type, TyK, NamedK, ArrK, T_STRING, T_ANY, Symbol, FunctionInfo, MethodInfo, LambdaInfo, ClassInfo, StructInfo, EnumInfo,
     InterfaceInfo, FieldInfo, functions, structs, classes, interfaces, enums, nativeMethods, globals, lambdaList,
     structOf, classOf, interfaceOf, enumOf, optIsPointer, escapeName, hasCapture
 };
-import linker { filePaths, FILE_LINES, decode };
-import gen { methodName, envField };
+import semantics.linker { filePaths, FILE_LINES, decode };
+import codegen.gen { methodName, envField };
 
 let typesOut: String[*] = [] in default;     // "name": {...} entries of "types"
 let typesSeen: Any = {} in default;

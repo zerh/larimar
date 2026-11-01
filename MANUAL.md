@@ -375,7 +375,7 @@ let code: String = raw"""
 - As with `"""`, it starts with `raw"""` and a line break, and the common indentation is removed.
 - If the text has three quotes in a row, it is opened with more quotes and closed with the same:
   `raw""""` ... `""""`.
-- The compiler writes its runtime this way (`src/runtime.lar`): the C goes as it is, escaping nothing.
+- The compiler writes its runtime this way (`src/codegen/runtime.lar`): the C goes as it is, escaping nothing.
 
 ### Methods
 
@@ -1112,6 +1112,7 @@ It grows inside its memory. If the memory has a fixed size and fills up, `push` 
 | `.pop()` → the last one (and removes it) | yes | no | yes |
 | `.contains(v)` → `bool` (compares with `==`) | yes | yes | yes |
 | `.filter(f)`, `.map(f)` | give `T[N]` | give `T[*]` | give `T[*]` |
+| `.sort()`, `.sort(compare)` (in place) | yes | yes | yes |
 | `.join(sep)` (lists of `String`) | yes | yes | yes |
 | `.clone()` | yes | no | yes |
 
@@ -1138,6 +1139,39 @@ Output:
 
 The result of `filter` and `map` on a list is created in the same memory as the list, unless you say
 another one with `in`.
+
+
+### Sorting: `sort`
+
+`sort()` sorts numbers and `String`s in their natural order (texts byte by byte). For other elements, or
+another order, `sort` takes a comparator: a function `(a, b) -> int32` that gives a negative number if
+`a` goes first, zero if they are equal and a positive one if it goes after, like `Comparator` in Java.
+It sorts the list in place and is stable: of two equal elements, the one that was first stays first.
+
+```actionscript
+class User {
+    let name: String;
+    let age: int32;
+}
+
+function main(): int32 {
+    let words: String[*] = ["luis", "ana", "eva"];
+    words.sort();                                     // ana eva luis
+
+    let users: User[*] = [User { name: "Eva", age: 30 }, User { name: "Ana", age: 25 }];
+    let byName: (User, User) -> int32 = (a: User, b: User) -> { return a.name.compareTo(b.name); };
+    users.sort(byName);                               // kept in a variable, it is reused
+    users.sort((a: User, b: User) -> { return b.age - a.age; });          // oldest first
+    println("${words.join(" ")} | ${users[0].name}");
+    return 0;
+}
+```
+
+Output: `ana eva luis | Eva`
+
+For several criteria, the comparator chains them:
+`a.age != b.age ? a.age - b.age : a.name.compareTo(b.name)`. Without a comparator, a list of objects is
+an error: `User has no natural order: give sort() a comparator ...`.
 
 ---
 
@@ -2873,6 +2907,7 @@ function main(): int32 {
 | `args` | its arguments (each arrives as it is, without a shell) |
 | `env` | `"NAME=value"` added to this program's environment for it |
 | `quiet` | `true`: its error output is thrown away (else it goes where this program's goes) |
+| `mergeErrors` | `true`: its error output comes with its output, and is read with it |
 
 | Method | What it does |
 |---|---|
@@ -3502,6 +3537,44 @@ port 8080, 2 names
 invalid JSON at 5: expected ',' or ']'
 ```
 
+### `std.toml`: TOML
+
+`Toml.parse(text): Any` (`throws TomlError`) and `Toml.stringify(table): String`, like `std.json`. It
+covers what configuration files use: `[sections]` (also `[a.b]`, a table inside a table), `key = value`
+with texts, whole numbers, `true`/`false` and lists (which may span several lines), and comments with
+`#`. It is the same reader the compiler uses for `larimar.toml`.
+
+```actionscript
+import std.toml as Toml;
+import std.toml { TomlError, message };
+
+function main(): int32 {
+    try {
+        let config: Any = Toml.parse("[project]\nname = \"demo\"\n[c]\nflags = [\"-O2\", \"-Wall\"]\n");
+        println("${config.project.name} ${config.c.flags.length}");
+        println(Toml.stringify({ server: { port: 8080, hosts: { "a", "b" } } }));
+        Toml.parse("[a]\nnothing\n");
+    } catch (TomlError e) {
+        println(message(e));
+    }
+    return 0;
+}
+```
+
+Output:
+```
+demo 2
+[server]
+port = 8080
+hosts = ["a", "b"]
+
+line 2: Expected key = value
+```
+
+A section is a table with names and a list a table with positions; the order of the file is kept.
+A key named like a word of Larimar is read with brackets, as `length` or `push` are:
+`config.options["default"]`. `stringify` writes a new file: it does not keep the comments of one that was read.
+
 ---
 
 ## 26. Projects: `larimar.toml` and `larimar build`
@@ -3525,7 +3598,23 @@ library_paths = ["libs"]     # where they are (-L)
 ```
 
 Paths are relative to the project folder. An unknown key or section is an error, so that a typo does
-not go unnoticed.
+not go unnoticed. The `[dependencies]` section is left for a dependency manager: the compiler does not
+read it.
+
+**Per platform.** `[c.linux]`, `[c.macos]`, `[c.windows]` and `[c.unix]` (Linux and macOS) take the same
+keys as `[c]` and count only on that platform: their lists are added to `[c]`'s, and a `compiler` there
+replaces `[c]`'s. The names are the same as in `#when`.
+
+```toml
+[c]
+sources = ["c/common.c"]
+
+[c.linux]
+libraries = ["SDL3", "m"]
+
+[c.windows]
+libraries = ["SDL3", "ws2_32"]
+```
 
 | Command | What it does |
 |---|---|
@@ -4025,7 +4114,13 @@ The Larimar compiler, **larimarc**, and the `larimar` tool are written in Larima
 
 ```
 larimar/
-  src/                   the compiler (Larimar), with larimar check, larimar lsp and larimar dap
+  src/                   the compiler (Larimar), one folder per stage:
+    main.lar               the commands (new, build, run, test, check, lsp, dap)
+    syntax/                from text to tree: lexer, parser, ast
+    semantics/             understanding the program: modules (linker), types, analysis, expressions
+    codegen/               from tree to C: gen, expressions, runtime, prune, debug map
+    editor/                larimar check, lsp and dap
+    project/               the C compiler, larimar test (larimar.toml is read with std.toml)
   std/                   the standard library
   tests/                 the tests (tests/lsp: check and the language server)
   debug/                 value formatters for lldb and gdb
@@ -4143,8 +4238,8 @@ What Larimar does not have, and will not have, with what is used instead:
 - An `Any` does not keep `[*]` lists, lambdas or interfaces.
 - A `synchronized` class cannot inherit, and `wait until` has no time limit (it waits until the condition holds).
 - The standard library is small: files, console, paths, environment, bytes, regular expressions, JSON,
-  other programs, TCP and UDP with their servers, a TLS server, and an HTTP and HTTPS client (`std.io.*`,
-  `std.path`, `std.os`, `std.process`, `std.test`, `std.text`, `std.text.regex`, `std.json`, `std.net`,
+  TOML, other programs, TCP and UDP with their servers, a TLS server, and an HTTP and HTTPS client (`std.io.*`,
+  `std.path`, `std.os`, `std.process`, `std.test`, `std.text`, `std.text.regex`, `std.json`, `std.toml`, `std.net`,
   `std.net.http`). The network does not
   have an HTTP server, WebSockets, an event loop or reused HTTP connections (keep-alive) yet. The TLS
   server is not available on Windows yet. The client TLS of macOS and Windows is written and compiles,

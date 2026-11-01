@@ -1,4 +1,4 @@
-// linker: modules (Linker.java). Each file is a module; `import a.b` loads a/b.lar.
+// semantics.linker: modules (Linker.java). Each file is a module; `import a.b` loads a/b.lar.
 //
 // Every module is parsed, its top-level declarations are renamed with its path
 // (geo.shapes.Circle becomes geo__shapes__Circle; the main file keeps its names), every
@@ -11,15 +11,15 @@ import std.path as Paths;
 import std.io.files as Files;
 import std.io.files { IoError };
 import std.text { isIdentifierPart, isDigit };
-import ast {
+import syntax.ast {
     Node, Expr, Stmt, TK, TypeRef, Program, CIncludeDecl, CCodeDecl, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ConstDecl,
     Param, FunctionDecl, FieldDecl, StructDecl, ClassDecl, InterfaceDecl, NativeTypeDecl, EnumDecl, declName, isTypeDecl, VarDecl,
     AssignStmt, ReturnStmt, ExprStmt, IfStmt, WhileStmt, ForStmt, ThrowStmt, YieldStmt, TryStmt, SwitchStmt,
     BlockStmt, StringLit, Ident, Member, Index, Call, Unary, Binary, Ternary, IsExpr, Cast, Unwrap, Lambda, ObjectLit,
     ArrayLit, Placed, Pattern, SwitchExpr, PT_NAME, PT_CONSTANT, PT_NULL
 };
-import parser { parseProgram, parseError };
-import docstore { document };
+import syntax.parser { parseProgram, parseError };
+import editor.docstore { document };
 
 public const FILE_LINES: int32 = 1000000;
 

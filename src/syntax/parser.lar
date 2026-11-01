@@ -1,4 +1,4 @@
-// parser: tokens -> syntax tree.
+// syntax.parser: tokens -> syntax tree.
 //
 // A recursive descent parser: each function reads one construction of the language, and the comment above
 // it shows that construction's form, in this notation:
@@ -10,7 +10,7 @@
 // The first syntax error is kept; after it every token reads as the end of the file, so the parser
 // unwinds quickly and its result is thrown away.
 
-import ast {
+import syntax.ast {
     Node, Expr, Stmt, TK, TypeRef, typeNamed, Program, ImportDecl, CIncludeDecl, CCodeDecl, ExternTypeDecl,
     ExternFunctionDecl, ExternValueDecl, ConstDecl, Param, FunctionDecl, FieldDecl, StructDecl, ClassDecl, InterfaceDecl, EnumVariant,
     EnumDecl, NativeTypeDecl, declName, VarDecl, AssignStmt, ReturnStmt, ExprStmt, IfStmt, WhileStmt, ForStmt, BreakStmt,
@@ -19,7 +19,7 @@ import ast {
     Lambda, FieldInit, ObjectLit, ArrayLit, Placed, Pattern, SwitchCase, SwitchExpr,
     PL_MEMORY, PL_HEAP, PL_STACK, PL_DEFAULT, PT_NAME, PT_TYPE, PT_DESTRUCTURE, PT_CONSTANT, PT_NULL
 };
-import lexer { TT, Token, tokenize, lexError };
+import syntax.lexer { TT, Token, tokenize, lexError };
 
 /** The first error: a lexical or a syntax error ("" when there is none). */
 public let parseError: String = "";

@@ -6,17 +6,13 @@ The Larimar compiler, written in Larimar. Self-hosting compiler that compiles to
 
 ```
 larimar-compiler/
-├── src/                     # Compiler source code (Larimar)
-│   ├── main.lar             # Entry point
-│   ├── lexer.lar            # Lexical analysis
-│   ├── parser.lar           # Syntax analysis
-│   ├── analyzer.lar         # Semantic analysis
-│   ├── gen.lar              # Code generation
-│   ├── runtime.lar          # Runtime C code
-│   ├── session.lar          # One analysis without C (larimar check)
-│   ├── lsp.lar, ide.lar     # Language server (larimar lsp) and its answers
-│   ├── testing.lar          # Test runner (larimar test)
-│   └── ...
+├── src/                     # Compiler source code (Larimar), one folder per stage
+│   ├── main.lar             # Entry point: the commands
+│   ├── syntax/              # lexer, parser, ast
+│   ├── semantics/           # linker (modules), types, analyzer, expressions
+│   ├── codegen/             # gen, expressions, runtime, runtimeselect, prune, debugmap
+│   ├── editor/              # session (larimar check), lsp, ide, docstore, dap
+│   └── project/             # cc (the C compiler), testing (larimar test)
 ├── std/                     # Standard library source (edit it here); std/net.lar: TCP, UDP and their servers, TLS servers; std/net/http.lar: HTTP client; std/net/http/tls.lar: TLS
 │                            # (net, io and os are written in Larimar over the system's C functions: extern, #when, T*, released by)
 ├── tests/                   # Tests (larimarc test, tests/run-tests.sh; tests/lsp for check and lsp)
@@ -97,7 +93,7 @@ Test the compiler:
 
 ```bash
 ./larimarc --version
-# Should output: larimar 0.3.0
+# Should output: larimar 0.4.0
 
 # Compile a test program
 echo 'function main(): void { println("Hello!"); }' > test.lar
@@ -129,11 +125,11 @@ the debuggers and a client as other programs (`std.process`) and talk to them li
 
 `larimar check [file|folder] [--json]` reports the errors without generating C. `larimar lsp` is the
 language server (see "The editor" in section 26 of `MANUAL.md`): the server keeps the open documents
-(`docstore.lar`) and answers each request in a forked process that links and analyzes the program
-(`session.lar`) and answers from the analysis (`ide.lar`).
+(`editor/docstore.lar`) and answers each request in a forked process that links and analyzes the program
+(`editor/session.lar`) and answers from the analysis (`editor/ide.lar`).
 
 `larimar build --debug` compiles with `-g -O0`, `#line` directives to the `.lar` files and a debug map
-(`build/<name>.debug.json`, from `debugmap.lar`). `larimar dap` (`dap.lar`) is the debugger for editors:
+(`build/<name>.debug.json`, from `codegen/debugmap.lar`). `larimar dap` (`editor/dap.lar`) is the debugger for editors:
 a DAP adapter written in Larimar over LLVM's `lldb-dap`, which shows the stack, variables and values
 as Larimar (names, real classes, Any, enums), understands Larimar paths in evaluate and stops on
 panics as exceptions. `debug/larimar_lldb.py` and
@@ -146,7 +142,7 @@ checks all of it.
 ```toml
 [project]
 name = "larimarc"
-version = "0.3.0"
+version = "0.4.0"
 main = "src/main.lar"
 
 [c]
@@ -157,28 +153,27 @@ flags = ["-O2"]
 
 | File | Purpose |
 |------|---------|
-| analyzer.lar | Semantic analysis, type checking, lifetime analysis |
-| checkexpr.lar | Expression type checking, method resolution |
-| genexpr.lar | C code generation for expressions |
-| gen.lar | C code generation for statements |
-| runtime.lar | Runtime C code (strings, memory, Any) |
-| parser.lar | Syntax parsing, AST construction |
-| sema.lar | Type system, symbol tables |
-| linker.lar | Module linking, C compilation |
-| lexer.lar | Tokenization |
-| ast.lar | AST node definitions |
 | main.lar | CLI, project management |
-| rtselect.lar | Runtime selection |
-| prune.lar | Keeps only the generated C the program reaches |
-| ide.lar | Editor answers: hover, definition, references, symbols, completion |
-| lsp.lar | Language server: JSON-RPC, documents, forked analyses |
-| session.lar | One analysis without C; larimar check |
-| docstore.lar | The editor's open documents (freeable C memory) |
-| dap.lar | Debugger: DAP adapter over lldb-dap, values shown as Larimar |
-| debugmap.lar | Debug map: C names and types of every variable, for the debugger |
-| toml.lar | TOML parser |
-| testing.lar | Test runner: larimar test, test functions and `// expect:` files |
-| cc.lar | Calling the C compiler and other programs |
+| syntax/lexer.lar | Tokenization |
+| syntax/parser.lar | Syntax parsing, AST construction (its grammar above each function) |
+| syntax/ast.lar | AST node definitions |
+| semantics/linker.lar | Modules and imports |
+| semantics/types.lar | Type system, symbol tables |
+| semantics/analyzer.lar | Semantic analysis, type checking, lifetime analysis |
+| semantics/expressions.lar | Expression type checking, method resolution |
+| codegen/gen.lar | C code generation for statements |
+| codegen/expressions.lar | C code generation for expressions |
+| codegen/runtime.lar | Runtime C code (strings, memory, Any) |
+| codegen/runtimeselect.lar | Runtime selection |
+| codegen/prune.lar | Keeps only the generated C the program reaches |
+| codegen/debugmap.lar | Debug map: C names and types of every variable, for the debugger |
+| editor/session.lar | One analysis without C; larimar check |
+| editor/lsp.lar | Language server: JSON-RPC, documents, forked analyses |
+| editor/ide.lar | Editor answers: hover, definition, references, symbols, completion |
+| editor/docstore.lar | The editor's open documents (freeable C memory) |
+| editor/dap.lar | Debugger: DAP adapter over lldb-dap, values shown as Larimar |
+| project/cc.lar | Calling the C compiler and other programs |
+| project/testing.lar | Test runner: larimar test, test functions and `// expect:` files |
 
 ## Self-Hosting
 

@@ -1,4 +1,4 @@
-// lexer: source text -> tokens (Lexer.java).
+// syntax.lexer: source text -> tokens (Lexer.java).
 //
 // String literals keep their raw text (escapes and ${...} included); the parser splits
 // them and lexes each ${...} again. An error stops the lexer: lexError says why.

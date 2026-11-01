@@ -1,4 +1,4 @@
-// runtime: the C a program may need, written as plain C (a raw text block: no escapes, no ${...}).
+// codegen.runtime: the C a program may need, written as plain C (a raw text block: no escapes, no ${...}).
 // The compiler does not run it: it writes it into the C of each program, and rtselect keeps only the
 // parts that program uses (a part is kept when it defines a name the program, or a kept part, uses).
 

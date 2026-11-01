@@ -1,4 +1,4 @@
-// analyzer: semantic analysis (Analyzer.java), part 1: declarations, statements, regions
+// semantics.analyzer: semantic analysis (Analyzer.java), part 1: declarations, statements, regions
 // and the final passes. Expressions are in checkexpr.lar.
 //
 //  - Types: declarations, expressions with expected types, implicit conversions.
@@ -9,14 +9,14 @@
 //  - Switch: patterns resolved, enums covered completely.
 
 import std.text { isAscii };
-import ast {
+import syntax.ast {
     Node, Expr, Stmt, TK, TypeRef, Program, CIncludeDecl, CCodeDecl, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ConstDecl,
     Param, FunctionDecl, StructDecl, ClassDecl, InterfaceDecl, NativeTypeDecl, EnumDecl, VarDecl, AssignStmt, ReturnStmt, ExprStmt,
     IfStmt, WhileStmt, ForStmt, BreakStmt, ContinueStmt, ThrowStmt, YieldStmt, TryStmt, SwitchStmt, BlockStmt,
     IntLit, FloatLit, StringLit, BoolLit, NullLit, Ident, SelfExpr, Member, Index, Call, Unary, Binary, IsExpr, Lambda,
     ObjectLit, ArrayLit, Placed, SwitchExpr, Unwrap, Cast, Ternary, SuperMember, allStmts, allExprs, exprAll, PL_HEAP, PL_MEMORY
 };
-import sema {
+import semantics.types {
     hasThreadSafe, cTypeOf,
     Type, TyK, NamedK, ArrK, T_INT32, T_INT64, T_BYTE, T_BOOL, T_STRING, T_VOID, T_ANY, T_ERROR, isPrimName, named,
     funcT, arrayT, optT, isFloat, isInteger, isError, isClass, isStruct, isInterface, isEnumT, isExternT, isOpt, isArray,
@@ -30,7 +30,7 @@ import sema {
     findField, findMethod, isSubclass, implementor, P_GLOBAL, P_RESULT, primByName, ExternTypeInfo, externInfos,
     isCValue, isExternStruct, cCodeStd, CallInfo, CallK, BK, includeWhens, isResource, externInfoOf, platformWithin, isPtr
 };
-import checkexpr {
+import semantics.expressions {
     check, coerce, typeOf, regionOf, hasRefs, note, resolveType, resolveTop, resolveValue, evalConst, ConstVal,
     analyzeSwitch, TC_PARAM, TC_LET, TC_OTHER, intFits, namedHasRefs
 };
@@ -1997,7 +1997,7 @@ function methodCreates(m: Member, args: bool, any: bool, declared: Declared): bo
         case "substring", "trim", "trimStart", "trimEnd", "bytes", "pop" -> receiver;
         case "length", "isEmpty", "isBlank", "contains", "containsKey", "startsWith", "endsWith", "equalsIgnoreCase", "count",
              "compareTo", "codePointCount", "indexOf", "lastIndexOf", "toInt", "toFloat", "toBool", "push", "clear",
-             "remove", "removeAt", "removeIf", "__wait" -> false;
+             "remove", "removeAt", "removeIf", "sort", "__wait" -> false;
         case "toUpperCase", "toLowerCase", "replace", "repeat", "padStart", "padEnd", "split", "lines", "codePoints",
              "join", "clone", "map", "filter" -> true;
         // a method of the program that does not create: its result may point to the receiver or the arguments

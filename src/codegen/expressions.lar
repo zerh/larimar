@@ -1,12 +1,12 @@
-// genexpr: C99 code generation (Gen.java), part 2: expressions.
+// codegen.expressions: C99 code generation (Gen.java), part 2: expressions.
 // An expression becomes a C expression; what needs statements first writes them with line().
 
 import std.text { isIdentifierPart, isDigit };
-import ast {
+import syntax.ast {
     Expr, IntLit, FloatLit, StringLit, BoolLit, NullLit, Ident, SelfExpr, Member, Index, Call, Unary, Binary, Ternary,
     IsExpr, Cast, Unwrap, Lambda, ObjectLit, ArrayLit, Placed, SwitchExpr
 };
-import sema {
+import semantics.types {
     Type, TyK, NamedK, ArrK, T_INT8, T_INT16, T_INT32, T_INT64, T_BYTE, T_UINT16, T_UINT32, T_UINT64, T_FLOAT32,
     T_FLOAT64, T_BOOL, T_STRING, T_VOID, T_ANY, isError, isClass, isStruct, isInterface, isEnumT, isExternT, isOpt,
     isArray, isFloat, isInteger, isSigned, isNumeric, bits, optIsPointer, ascii, isCReserved, escapeName, arrayT,
@@ -15,7 +15,7 @@ import sema {
     MemberInfo, MbK, PatternInfo, PatK, classes, structOf, classOf, interfaceOf, enumOf, parentOf, findMethod, allFields,
     isPtr, isResource, externInfoOf, ExternTypeInfo
 };
-import gen {
+import codegen.gen {
     fn, line, tmp, counter, indent4, Block, block, cleanupsUntil, propagate, switchCode, methodName, dispatchName,
     ifaceCallName, paramCTypes, envField, body, samInterfaces, samSeen, literalTypes, literalPrototypes, literalTables,
     literalThunks, lambdaDefs, lambdaDone, resizeHelpers, resizeSeen, loopBlock, rootBlock, topBlock, returnsData, tempMem, lambdaHeader,
@@ -1181,6 +1181,7 @@ function builtin(c: Call in default, b: CallInfo in default): String {
         }
         case Clear -> "((void)(${paren(at.ak == ArrK.Growable ? expr(obj) : addrOf(obj))}->length = 0))";
         case Map, Filter -> mapFilter(c, b);
+        case Sort -> sortList(c, at);
         case AnyPush -> {
             let o: String = hoist("RtAny", expr(obj));
             yield "rt_any_push(${o}, ${value(c.args[0])}, ${c.line})";
@@ -1319,6 +1320,49 @@ function anyRemoveIf(c: Call in default): String {
     fn.indent -= 1;
     line("}");
     return removed;
+}
+
+/**
+ * list.sort(...): a merge sort, bottom up, in place (stable: of two equal elements the first stays first),
+ * with a buffer for one copy of the elements while it runs.
+ */
+function sortList(c: Call in default, at: Type in default): String {
+    let element: Type = at.elem!;
+    let elementC: String = cType(element);
+    let list: String[*] = itemsOf(at, receiver(c));
+    let items: String = tmp("items");
+    let count: String = tmp("count");
+    let spare: String = tmp("spare");
+    line("${elementC}* ${items} = ${list[0]};");
+    line("int64_t ${count} = ${list[1]};");
+    let compare: String = "";
+    if (c.args.length == 1) {
+        let f: Expr = c.args[0];
+        let comparator: String = hoist(cType(f.ty!), value(f));
+        compare = "call_Closure_${f.ty!.funcId}(${comparator}, @A, @B)";
+    } else if (element == T_STRING) {          // byte by byte, then the shorter first
+        compare = "(memcmp((@A).ptr, (@B).ptr, (size_t)((@A).len < (@B).len ? (@A).len : (@B).len)) != 0 ? memcmp((@A).ptr, (@B).ptr, (size_t)((@A).len < (@B).len ? (@A).len : (@B).len)) : (@A).len - (@B).len)";
+    } else {
+        compare = "((@A) < (@B) ? -1 : (@A) > (@B) ? 1 : 0)";
+    }
+    let before: String = compare.replace("@A", "${items}[right]").replace("@B", "${items}[left]");
+    line("if (${count} > 1) {");
+    line("    ${elementC}* ${spare} = (${elementC}*)malloc(sizeof(${elementC}) * (size_t)${count});");
+    line("    if (!${spare}) rt_panic(\"out of memory sorting a list\", ${c.line});");
+    line("    for (int64_t width = 1; width < ${count}; width *= 2) {");
+    line("        for (int64_t low = 0; low < ${count}; low += 2 * width) {");
+    line("            int64_t middle = low + width < ${count} ? low + width : ${count};");
+    line("            int64_t high = low + 2 * width < ${count} ? low + 2 * width : ${count};");
+    line("            int64_t left = low, right = middle, out = low;");
+    line("            while (left < middle && right < high) ${spare}[out++] = ${before} < 0 ? ${items}[right++] : ${items}[left++];");
+    line("            while (left < middle) ${spare}[out++] = ${items}[left++];");
+    line("            while (right < high) ${spare}[out++] = ${items}[right++];");
+    line("        }");
+    line("        memcpy(${items}, ${spare}, sizeof(${elementC}) * (size_t)${count});");
+    line("    }");
+    line("    free(${spare});");
+    line("}");
+    return "";
 }
 
 function mapFilter(c: Call in default, b: CallInfo): String {

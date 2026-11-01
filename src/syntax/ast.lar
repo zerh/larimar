@@ -1,7 +1,7 @@
-// ast: the syntax tree (Ast.java). One class per kind of node; the analyzer writes what it
+// syntax.ast: the syntax tree (Ast.java). One class per kind of node; the analyzer writes what it
 // finds into the fields of Node, and the generator reads them from there.
 
-import sema {
+import semantics.types {
     Type, Region, Conversion, Symbol, CallInfo, MemberInfo, Place, LambdaInfo, SwitchInfo, ForInfo,
     CatchInfo, MethodInfo, VariantInfo, PatternInfo, ClassInfo
 };
