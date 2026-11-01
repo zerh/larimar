@@ -1,0 +1,35 @@
+// std.json, as test functions (larimar test).
+import std.test { check, checkText, checkInt, fail };
+import std.json as Json;
+
+test function parsesValues(): void throws Json.JsonError {
+    let v: Any = Json.parse(" {\"port\": 8080, \"names\": [\"a\", \"b\"], \"ok\": true, \"none\": null, \"r\": 2.5, \"neg\": -7, \"big\": 1e21 } ");
+    checkInt(8080, v.port as int32 ?? 0);
+    checkText("a b true null 2.5 -7 1e+21", "${v.names[0]} ${v.names[1]} ${v.ok} ${v.none} ${v.r} ${v.neg} ${v.big}");
+    checkText("{\"port\":8080,\"names\":[\"a\",\"b\"],\"ok\":true,\"none\":null,\"r\":2.5,\"neg\":-7,\"big\":1e+21}", Json.stringify(v));
+}
+
+test function escapes(): void throws Json.JsonError {
+    let u: Any = Json.parse("[\"hola \\\"mundo\\\" \\\\ \\u00f1 \\u20ac \\ud83d\\ude00\"]");
+    checkText("hola \"mundo\" \\ ñ € 😀", u[0] as String ?? "?");
+    let w: Any = { s: "line\nnext\ttab \"q\" \\ ${stringOf([1])}", list: { 1, 2, { x: {} } }, e: {} };
+    checkText("{\"s\":\"line\\nnext\\ttab \\\"q\\\" \\\\ \\u0001\",\"list\":[1,2,{\"x\":{}}],\"e\":{}}", Json.stringify(w));
+}
+
+test function errorsSayWhere(): void {
+    let bads: String[*] = ["{\"a\": 1 \"b\": 2}", "\"abc"];
+    let wanted: String[*] = ["8: expected ',' or '}'", "4: unterminated string"];
+    for (i, bad in bads) {
+        try {
+            let x: Any = Json.parse(bad);
+            fail("parsed ${bad}");
+        } catch (Json.JsonError e) {
+            switch (e) { case Invalid { at, why } -> checkText(wanted[i], "${at}: ${why}"); }
+        }
+    }
+}
+
+test function bigNumbers(): void throws Json.JsonError {
+    let n: Any = Json.parse("[9223372036854775807, 9223372036854775808]");
+    checkText("9223372036854775807 9.22337203685478e+18", "${n[0]} ${n[1]}");
+}

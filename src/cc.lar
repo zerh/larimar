@@ -1,0 +1,47 @@
+// cc: calling the C compiler and other programs (larimar build, larimar test).
+
+import std.os;
+import std.path as Paths;
+
+public function windows(): bool { return os.platform() == "windows"; }
+public function mac(): bool { return os.platform() == "macos"; }
+
+/** Quotes an argument for the shell. */
+public function quote(a: String): String {
+    return windows() ? "\"${a}\"" : "'${a.replace("'", "'\\''")}'";
+}
+
+/** The arguments joined, each quoted: a command for os.run. */
+public function commandLine(args: String[*]): String {
+    let quoted: String[*] = [];
+    for (a in args) { quoted.push(quote(a)); }
+    return quoted.join(" ");
+}
+
+/** What the generated C needs from the system when linking: threads, sockets, TLS. */
+public function systemLibraries(c: String): String[*] {
+    let out: String[*] = [];
+    if (c.contains("#define RT_THREADS") && !windows()) { out.push("-pthread"); }   // the program uses threads
+    if ((c.contains("#define LM_NET_SOCKETS") || c.contains("#include <ws2tcpip.h>")) && windows()) { out.push("-lws2_32"); }  // Winsock
+    if (c.contains("#define LM_NET_TLS")) {                  // std.net.http.tls: the system's TLS
+        if (windows()) {
+            out.push("-lsecur32");                           // SChannel
+        } else if (mac()) {
+            out.push("-framework");                          // Network.framework (and Security: sec_protocol_*)
+            out.push("Network");
+            out.push("-framework");
+            out.push("Security");
+        } else {
+            out.push("-ldl");                                // OpenSSL, loaded when first used
+        }
+    }
+    if (c.contains("#define LM_NET_TLS_SERVER") && !windows() && !mac()) { out.push("-ldl"); }    // std.net: OpenSSL, when first used
+    return out;
+}
+
+/** The compiler itself (bin/larimarc), to run it as another process. */
+public function selfPath(): String {
+    let path: String = os.programPath();
+    if (path != "") { return path; }
+    return Paths.join(os.programDir(), windows() ? "larimarc.exe" : "larimarc");
+}

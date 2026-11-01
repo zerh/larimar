@@ -5,6 +5,7 @@
 //   larimar run [folder] [-- args]  builds, then runs the program
 //   larimar build --debug           -g -O0 and #line to the .lar files (debuggers; also run, and file.lar -o)
 //   larimar check [file|folder]     the errors, without generating C (--json for tools)
+//   larimar test [file|folder]...   runs the tests (testing.lar)
 //   larimar lsp                     the language server for editors (LSP on stdin/stdout)
 //   larimar dap                     the debugger for editors (DAP on stdin/stdout, over lldb-dap)
 //   larimar c <file.lar>            prints the C of a file (imports are looked up next to it)
@@ -17,16 +18,19 @@ import std.io.files as Files;
 import std.io.files { IoError };
 import std.io.console as Console;
 import ast { Program };
-import linker { linkErrors, decode, readSource };
+import linker { linkErrors, decode, readSource, testsKept };
 import analyzer { analysisErrors };
-import session { analyzeFile, readErrors, stdDir, checkCommand };
+import session { analyzeFile, readErrors, stdDir, checkCommand, sourceRoot };
+import docstore { setDocument };
+import testing { TestSettings, TestFunction, runTests, testFunctions, hasMain, withMain };
 import lsp { serve, worker };
 import dap { serveDebugger };
 import gen { generate, generatorErrors, debugLines, spreadLines };
 import debugmap { debugMap };
+import cc { windows, quote, commandLine, systemLibraries };
 import toml { TomlK, TomlValue, TomlSection, parseToml, tomlError, sectionOf, valueOf };
 
-const VERSION: String = "0.2.1";
+const VERSION: String = "0.3.0";
 
 /** Set when a command fails; main prints it as "larimar: ...". */
 let toolError: String = "";
@@ -93,7 +97,13 @@ function command(args: String[]): int32 {
         if (exe == "") { return 1; }
         return cmd == "build" ? 0 : execute(exe, programArgs);
     }
+    if (cmd == "check" || cmd == "lsp" || cmd == "lsp-worker") { testsKept = "all"; }     // test functions are checked too
     if (cmd == "check") { return checkCommand(rest); }
+    if (cmd == "test") {
+        let s: TestSettings? = testSettings();
+        return s != null ? runTests(rest, s!.clone() in default) : 1;
+    }
+    if (cmd == "test-main") { return testMain(rest); }
     if (cmd == "lsp") { return serve(); }
     if (cmd == "dap") { return serveDebugger(rest); }
     if (cmd == "lsp-worker") { return rest.length == 2 ? worker(rest[0], rest[1]) : fail("usage: larimar lsp-worker <request.json> <response.json>"); }
@@ -123,6 +133,7 @@ function usage(): void {
     println("  larimar run [folder] [-- args] build, then run it with the arguments");
     println("  larimar build --debug         with -g -O0 and the .lar lines, for a debugger (lldb, gdb, VS Code)");
     println("  larimar check [file|folder]   find the errors without generating C (--json for tools)");
+    println("  larimar test [file|folder]... run the tests (tests/ by default; --only <text>, --no-sanitize)");
     println("  larimar lsp                   language server for editors (speaks LSP on stdin/stdout)");
     println("  larimar dap [--backend <lldb-dap>]  debugger for editors (DAP on stdin/stdout, over lldb-dap)");
     println("  larimar c <file.lar>          print the generated C of a file");
@@ -182,6 +193,87 @@ function compileFile(main: String, shownFrom: String): String {
 }
 
 // =========================================================================
+// larimar test (testing.lar runs them; test-main is what it calls for each file of test functions)
+// =========================================================================
+
+/** The project's [c] settings for the tests, or the defaults when there is no larimar.toml here. */
+function testSettings(): TestSettings? {
+    let here: String = Paths.absolute(".");
+    if (!Files.isFile("larimar.toml")) {
+        let cc: String = os.env("CC") ?? "";
+        if (cc.isBlank()) { cc = windows() ? "gcc" : "cc"; }
+        return TestSettings {
+            compiler: cc, libraries: [], libraryPaths: [], includePaths: [], sources: [], root: "",
+            outDir: Paths.join(here, "build/test")
+        };
+    }
+    let p: Project? = load(here);
+    if (p == null) { return null; }
+    let sources: String[*] = [];
+    for (x in p.sources) { sources.push(resolve(here, x).clone()); }
+    let includes: String[*] = [];
+    for (x in p.includePaths) { includes.push(resolve(here, x).clone()); }
+    let libPaths: String[*] = [];
+    for (x in p.libraryPaths) { libPaths.push(resolve(here, x).clone()); }
+    return TestSettings {
+        compiler: p.compiler, libraries: p.libraries, libraryPaths: libPaths, includePaths: includes, sources,
+        root: Paths.parent(resolve(here, p.main)), outDir: Paths.join(resolve(here, p.buildDir), "test")
+    };
+}
+
+/**
+ * larimarc test-main <file.lar> -o <out.c> [--root <folder>]: the C of a file of test functions with a
+ * main added (testing.lar). Next to out.c it writes the file with its main (.lar) and the tests' names
+ * (.tests, one per line).
+ */
+function testMain(rest: String[*]): int32 {
+    let file: String = "";
+    let output: String = "";
+    let root: String = "";
+    let i: int32 = 0;
+    while (i < rest.length) {
+        if (rest[i] == "-o" && i + 1 < rest.length) {
+            output = rest[i + 1];
+            i += 2;
+        } else if (rest[i] == "--root" && i + 1 < rest.length) {
+            root = rest[i + 1];
+            i += 2;
+        } else if (file == "") {
+            file = rest[i];
+            i += 1;
+        } else {
+            return fail("usage: larimarc test-main <file.lar> -o <out.c> [--root <folder>]");
+        }
+    }
+    if (file == "" || output == "") { return fail("usage: larimarc test-main <file.lar> -o <out.c> [--root <folder>]"); }
+    let source: String? = readSource(file);
+    if (source == null) { return fail("cannot read ${file}"); }
+    if (hasMain(source!)) { return fail("${file} has test functions and a main: larimar test writes the main, so remove it"); }
+    let tests: TestFunction[*] = testFunctions(source!);
+    let full: String = withMain(source!, tests);
+    setDocument(Paths.normalize(Paths.absolute(file)), full);
+    testsKept = "main";
+    if (root != "") { sourceRoot = Paths.normalize(Paths.absolute(root)).clone() in default; }
+    let base: String = output.endsWith(".c") ? output.substring(0, output.length - 2) : output;
+    let names: String[*] = [];
+    for (t in tests) { names.push(t.name); }
+    try {
+        Files.writeString("${base}.lar", full);
+        Files.writeString("${base}.tests", names.join("\n"));
+    } catch (IoError e) {
+        return fail("cannot write ${base}.lar");
+    }
+    let c: String = compileFile(file, ".");
+    if (compileErrors.length > 0) { return 1; }
+    try {
+        Files.writeString(output, c);
+    } catch (IoError e) {
+        return fail("cannot write ${output}");
+    }
+    return 0;
+}
+
+// =========================================================================
 // larimar.toml
 // =========================================================================
 
@@ -199,8 +291,6 @@ class Project {
     let sources: String[*];
 }
 
-function windows(): bool { return os.platform() == "windows"; }
-function mac(): bool { return os.platform() == "macos"; }
 
 function load(dir: String): Project? {
     let source: String? = readSource(Paths.join(dir, "larimar.toml"));
@@ -298,11 +388,6 @@ function validName(name: String): bool {
 // build
 // =========================================================================
 
-/** Quotes an argument for the shell. */
-function quote(a: String): String {
-    return windows() ? "\"${a}\"" : "'${a.replace("'", "'\\''")}'";
-}
-
 /** A path of the project: relative to its folder, or absolute. */
 function resolve(dir: String, p: String): String { return Paths.normalize(Paths.join(dir, p)); }
 
@@ -349,24 +434,8 @@ function build(p: Project, debug: bool): String {
     if (!windows()) {
         for (lp in p.libraryPaths) { cmd.push("-Wl,-rpath,${resolve(dir, lp)}"); }
     }
-    if (c.contains("#define RT_THREADS") && !windows()) { cmd.push("-pthread"); }   // the program uses threads
-    if ((c.contains("#define LM_NET_SOCKETS") || c.contains("#include <ws2tcpip.h>")) && windows()) { cmd.push("-lws2_32"); }  // Winsock
-    if (c.contains("#define LM_NET_TLS")) {                  // std.net.http.tls: the system's TLS
-        if (windows()) {
-            cmd.push("-lsecur32");                           // SChannel
-        } else if (mac()) {
-            cmd.push("-framework");                          // Network.framework (and Security: sec_protocol_*)
-            cmd.push("Network");
-            cmd.push("-framework");
-            cmd.push("Security");
-        } else {
-            cmd.push("-ldl");                                // OpenSSL, loaded when first used
-        }
-    }
-    if (c.contains("#define LM_NET_TLS_SERVER") && !windows() && !mac()) { cmd.push("-ldl"); }    // std.net: OpenSSL, when first used
-    let quoted: String[*] = [];
-    for (a in cmd) { quoted.push(quote(a)); }
-    let code: int32 = os.run(quoted.join(" "));
+    for (l in systemLibraries(c)) { cmd.push(l.clone()); }
+    let code: int32 = os.run(commandLine(cmd));
     if (code == 127) {
         toolError = "cannot run the C compiler '${p.compiler}'. Install gcc or clang, or set compiler = \"...\" in [c]." in default;
         return "";

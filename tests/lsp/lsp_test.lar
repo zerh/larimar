@@ -1,0 +1,257 @@
+// larimar check and larimar lsp, end to end: the compiler runs as another process, and the tests talk to
+// it like an editor (JSON-RPC over its input and output), on the project of tests/lsp/project.
+// The compiler: $LARIMARC (tests/run-tests.sh sets it), else larimarc from the PATH.
+import std.test { check, checkText, checkInt, fail, skip };
+import std.process { Process, ProcessError, message, findProgram };
+import std.json as Json;
+import std.json { JsonError };
+import std.io.files as Files;
+import std.io.files { IoError };
+import std.path as Paths;
+import std.os;
+
+function compiler(): String {
+    let fromEnvironment: String = os.env("LARIMARC") ?? "";
+    if (fromEnvironment != "") { return Paths.absolute(fromEnvironment); }
+    return findProgram("larimarc") ?? "larimarc";
+}
+
+function project(): String { return Paths.absolute("tests/lsp/project"); }
+function mainFile(): String { return Paths.join(project(), "src/main.lar"); }
+function shapesFile(): String { return Paths.join(project(), "src/geo/shapes.lar"); }
+function extraFile(): String { return Paths.join(project(), "src/extra.lar"); }
+
+/** file:// and the path, with what is not a letter, a digit or one of / _ . - ~ written as %XX (a space is %20). */
+function uri(path: String): String {
+    let hex: String = "0123456789ABCDEF";
+    let sb: StringBuilder = {};
+    sb.add("file://");
+    for (b in path) {
+        let plain: bool = (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '/' || b == '_' || b == '.' || b == '-' || b == '~';
+        if (plain) {
+            sb.add(stringOfRange([b], 0, 1));
+        } else {
+            sb.add("%${hex.substring((b >> 4) as int32, ((b >> 4) as int32) + 1)}${hex.substring((b & 15) as int32, ((b & 15) as int32) + 1)}");
+        }
+    }
+    return sb.toString();
+}
+
+function readFile(path: String): String {
+    try { return Files.readString(path); } catch (IoError e) { return ""; }
+}
+
+// =========================================================================================
+// larimar check
+// =========================================================================================
+
+test function checkJsonFindsTheError(): void throws ProcessError {
+    let checker: Process = { program: compiler(), args: ["check", project(), "--json"] };
+    checker.start();
+    let output: String = checker.readAll(60000);
+    checkInt(1, checker.wait(10000) ?? -1);
+    try {
+        let errors: Any = Json.parse(output == "" ? "[]" : output);
+        checkInt(1, errors.length);
+        checkInt(14, errors[0].line as int32 ?? 0);
+        check((errors[0].file as String ?? "").endsWith("main.lar"), "the error is in main.lar: ${output}");
+    } catch (JsonError e) {
+        fail("check --json did not print JSON: ${output}");
+    }
+}
+
+test function checkOfAFileWithoutErrors(): void throws ProcessError {
+    let checker: Process = { program: compiler(), args: ["check", shapesFile()], quiet: true };
+    checker.start();
+    checker.readAll(60000);
+    checkInt(0, checker.wait(10000) ?? -1);
+}
+
+// =========================================================================================
+// larimar lsp
+// =========================================================================================
+
+/** An editor's side of the conversation: requests, their answers, and the notifications that come between. */
+class Editor {
+    let server: Process;
+    let lastId: int32 = 0;
+    let notifications: Any = {};
+
+    function send(message: Any): void throws ProcessError {
+        let body: String = Json.stringify(message);
+        self.server.write("Content-Length: ${body.length}\r\n\r\n${body}");
+    }
+
+    function notify(method: String, params: Any): void throws ProcessError {
+        self.send({ jsonrpc: "2.0", method: method, params: params });
+    }
+
+    /** The next message, or null when none came in 30 s (or the server ended). */
+    function receive(): Any? {
+        let length: int32 = -1;
+        while (true) {
+            let line: String? = self.server.readLine(30000);
+            if (line == null) { return null; }
+            if (line == "") { break; }
+            if (line.toLowerCase().startsWith("content-length:")) { length = (line.substring(15).trim().toInt() ?? -1) as int32; }
+        }
+        if (length < 0) { return null; }
+        let body: String? = self.server.read(length, 30000);
+        if (body == null) { return null; }
+        try { return Json.parse(body!); } catch (JsonError e) { return null; }
+    }
+
+    /** Sends a request and gives its result (null when there is none, or no answer came). */
+    function request(method: String, params: Any): Any throws ProcessError {
+        self.lastId += 1;
+        self.send({ jsonrpc: "2.0", id: self.lastId, method: method, params: params });
+        while (true) {
+            let message: Any? = self.receive();
+            if (message == null) { return null; }
+            if ((message!.id as int32 ?? -1) == self.lastId) { return message!.result; }
+            self.notifications.push(message!.clone());
+        }
+        return null;
+    }
+
+    /** The diagnostics published for a file: the last ones already received, or the next ones (null if none come). */
+    function diagnosticsOf(fileUri: String): Any {
+        while (true) {
+            let found: Any = null;
+            for (i, n in self.notifications) {
+                if ((n.method as String ?? "") == "textDocument/publishDiagnostics" && (n.params.uri as String ?? "") == fileUri) {
+                    found = n.params.diagnostics;
+                }
+            }
+            if (found != null) { return found; }
+            let message: Any? = self.receive();
+            if (message == null) { return null; }
+            self.notifications.push(message!.clone());
+        }
+        return null;
+    }
+}
+
+function at(path: String, line: int32, character: int32): Any {
+    return { textDocument: { uri: uri(path) }, position: { line: line, character: character } };
+}
+
+function hoverText(result: Any): String { return result.contents.value as String ?? ""; }
+
+/** A whole session with the server, as an editor would have it; `environment` is added for the server. */
+function session(environment: String[*]): void throws ProcessError {
+    let server: Process = { program: compiler(), args: ["lsp"], env: environment };
+    server.start();
+    let editor: Editor = { server: server };
+
+    let capabilities: Any = editor.request("initialize", { capabilities: {} });
+    check(capabilities.capabilities.hoverProvider as bool ?? false, "initialize: hover is offered");
+    editor.notify("initialized", {});
+    let text: String = readFile(mainFile());
+    editor.notify("textDocument/didOpen", { textDocument: { uri: uri(mainFile()), languageId: "larimar", version: 1, text: text } });
+    // the analysis publishes the errors of every file of the program (none: an empty list) when it is ready
+
+    let mainErrors: Any = editor.diagnosticsOf(uri(mainFile()));
+    check(mainErrors.length == 1, "errors published: one in main.lar (got ${mainErrors})");
+    checkInt(13, mainErrors[0].range.start.line as int32 ?? -1);
+    check((mainErrors[0].message as String ?? "").contains("expected int32"), "the error says what was expected: ${mainErrors}");
+    let shapesErrors: Any = editor.diagnosticsOf(uri(shapesFile()));
+    check(shapesErrors != null && shapesErrors.length == 0, "other files cleared (got ${shapesErrors})");
+
+    let hover: String = hoverText(editor.request("textDocument/hover", at(mainFile(), 12, 14)));
+    check(hover.contains("function greet(name: String, times: int32): String") && hover.contains("Greets someone."), "hover of a function, with its comment: ${hover}");
+    hover = hoverText(editor.request("textDocument/hover", at(mainFile(), 11, 18)));
+    check(hover.contains("norm(): float64") && hover.contains("Distance to the origin."), "hover of a method of another module: ${hover}");
+    hover = hoverText(editor.request("textDocument/hover", at(mainFile(), 11, 35)));
+    check(hover.contains("area(side: float64)"), "hover of module.function: ${hover}");
+    hover = hoverText(editor.request("textDocument/hover", at(mainFile(), 10, 12)));
+    check(hover.contains("let x: float64;"), "hover of a struct: ${hover}");
+    hover = hoverText(editor.request("textDocument/hover", at(mainFile(), 6, 17)));
+    check(hover.contains("repeat(n: int32): String"), "hover of a String method: ${hover}");
+
+    let definition: Any = editor.request("textDocument/definition", at(mainFile(), 11, 18));
+    check((definition.uri as String ?? "") == uri(shapesFile()) && (definition.range.start.line as int32 ?? -1) == 5, "definition in another file: ${definition}");
+    definition = editor.request("textDocument/definition", at(mainFile(), 6, 12));
+    check((definition.range.start.line as int32 ?? -1) == 5 && (definition.range.start.character as int32 ?? -1) == 8, "definition of a local: ${definition}");
+    let references: Any = at(shapesFile(), 1, 15);
+    references.context = { includeDeclaration: true };
+    let found: Any = editor.request("textDocument/references", references);
+    checkInt(4, found.length);
+    let symbols: Any = editor.request("textDocument/documentSymbol", { textDocument: { uri: uri(shapesFile()) } });
+    check((symbols[0].name as String ?? "") == "Point" && names(symbols[0].children) == "x y norm", "symbols with their members: ${symbols}");
+
+    let lines: String[*] = text.split("\n");
+    let version: int32 = 10;
+    let completed: Any = complete(editor, lines, "    p.", version);
+    checkText("x y norm", names(completed.items));
+    version += 1;
+    completed = complete(editor, lines, "    shapes.", version);
+    checkText("Point area", sortedNames(completed.items));
+    version += 1;
+    completed = complete(editor, lines, "    gre", version);
+    checkText("greet", names(completed.items));
+    version += 1;
+    lines[13] = "    greet(\"a\", ";
+    change(editor, lines, version);
+    let signature: Any = editor.request("textDocument/signatureHelp", at(mainFile(), 13, lines[13].length));
+    check((signature.activeParameter as int32 ?? -1) == 1 && (signature.signatures[0].label as String ?? "").startsWith("greet("), "signature help: ${signature}");
+
+    editor.notify("textDocument/didOpen", { textDocument: { uri: uri(extraFile()), languageId: "larimar", version: 1, text: readFile(extraFile()) } });
+    let extra: Any = editor.request("textDocument/hover", at(extraFile(), 2, 31));
+    check(hoverText(extra).contains("let ñandú: int32") && (extra.range.start.character as int32 ?? -1) == 29, "a file the project does not import, with UTF-16 columns: ${extra}");
+
+    check(editor.request("shutdown", null) == null, "shutdown answers null");
+    editor.notify("exit", null);
+    checkInt(0, server.wait(10000) ?? -1);
+}
+
+function change(editor: Editor, lines: String[*], version: int32): void throws ProcessError {
+    editor.notify("textDocument/didChange", { textDocument: { uri: uri(mainFile()), version: version }, contentChanges: { { text: lines.join("\n") } } });
+}
+
+/** Line 14 becomes `line`; then the completions at its end. */
+function complete(editor: Editor, lines: String[*], line: String in lines, version: int32): Any throws ProcessError {
+    lines[13] = line;
+    change(editor, lines, version);
+    return editor.request("textDocument/completion", at(mainFile(), 13, line.length));
+}
+
+/** The `name`s (or `label`s) of a list, joined by spaces. */
+function names(items: Any): String {
+    let out: String[*] = [];
+    for (i, item in items) { out.push((item.name as String ?? item.label as String ?? "?").clone()); }
+    return out.join(" ");
+}
+
+function sortedNames(items: Any): String {
+    let out: String[*] = [];
+    for (i, item in items) { out.push((item.label as String ?? "?").clone()); }
+    let i: int32 = 1;
+    while (i < out.length) {
+        let j: int32 = i;
+        while (j > 0 && out[j].compareTo(out[j - 1]) < 0) {
+            let t: String = out[j];
+            out[j] = out[j - 1];
+            out[j - 1] = t;
+            j -= 1;
+        }
+        i += 1;
+    }
+    return out.join(" ");
+}
+
+test function languageServer(): void throws ProcessError {
+    session([]);
+}
+
+test function languageServerWithoutFork(): void throws ProcessError {
+    #when windows
+        skip("Windows always works without fork()");
+        return;
+    #end
+    if (Paths.fileName(compiler()) != "larimarc") {
+        skip("the worker is started as larimarc, and the compiler under test has another name");
+        return;
+    }
+    session(["LARIMAR_LSP_NO_FORK=1"]);
+}

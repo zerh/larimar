@@ -20,6 +20,9 @@ public let program: Program = Program { line: 1 } in default;
 /** Errors found before analyzing (a file that cannot be read). */
 public let readErrors: String[*] = [] in default;
 
+/** Where `import a.b` looks for a/b.lar: "" means next to the main file (larimar test sets the project's). */
+public let sourceRoot: String = "";
+
 /** Links and analyzes a main file. true: no errors. Messages name files relative to `shownFrom`. */
 public function analyzeFile(main: String, shownFrom: String): bool {
     let mainName: String = Paths.relative(shownFrom, main).clone() in default;
@@ -30,7 +33,8 @@ public function analyzeFile(main: String, shownFrom: String): bool {
     }
     showFrom = Paths.absolute(shownFrom).clone() in default;
     let mainPath: String = Paths.normalize(Paths.absolute(main)).clone() in default;
-    program = link(mainName, source, Paths.parent(Paths.absolute(main)).clone() in default, stdDir(), mainPath);
+    let root: String = sourceRoot != "" ? sourceRoot : Paths.parent(Paths.absolute(main));
+    program = link(mainName, source, root.clone() in default, stdDir(), mainPath);
     if (linkErrors.length > 0) { return false; }
     for (f in fileNames) { files.push(f); }
     analyze(program);

@@ -1,0 +1,230 @@
+// https:// with the system's TLS: tests/tls/client.lar, built and run against an HTTPS server and an HTTP
+// one (which redirects to it) that this test serves, with the certificate of tests/tls (self-signed).
+// The compiler: $LARIMARC (tests/run-tests.sh sets it), else larimarc from the PATH; the C compiler: $CC or cc.
+import std.test { check, checkText, fail, skip };
+import std.process { Process, ProcessError, message, findProgram };
+import std.net { TlsServer, TlsSocket, TcpServer, TcpSocket, OpenSslProvider, StopSignal, NetError };
+import std.net;
+import std.io.streams { Reader, buffer };
+import std.io.files as Files;
+import std.io.files { IoError };
+import std.path as Paths;
+import std.os;
+
+const HTTPS_PORT: int32 = 47841;
+const HTTP_PORT: int32 = 47842;
+
+function compiler(): String {
+    let fromEnvironment: String = os.env("LARIMARC") ?? "";
+    if (fromEnvironment != "") { return Paths.absolute(fromEnvironment); }
+    return findProgram("larimarc") ?? "larimarc";
+}
+
+function cCompiler(): String {
+    let fromEnvironment: String = os.env("CC") ?? "";
+    return fromEnvironment != "" ? fromEnvironment : "cc";
+}
+
+function outDir(): String { return Paths.absolute("build/test/tls"); }
+
+// =========================================================================================
+// The servers
+// =========================================================================================
+
+/** One request over TLS: GET /chunked, GET /big, GET anything else ("secreto <path>"), POST (the body back). */
+function serveHttps(client: TlsSocket): void {
+    try {
+        let lines: Reader = { from: client };
+        let request: String = lines.readLine() ?? "";
+        let length: int32 = 0;
+        while (true) {
+            let header: String = lines.readLine() ?? "";
+            if (header == "") { break; }
+            if (header.toLowerCase().startsWith("content-length:")) { length = (header.substring(15).trim().toInt() ?? 0) as int32; }
+        }
+        let parts: String[*] = request.split(" ");
+        let method: String = parts.length > 0 ? parts[0] : "";
+        let path: String = parts.length > 1 ? parts[1] : "/";
+        if (method == "POST") {
+            let body: byte[*] = buffer(length);
+            let got: int32 = 0;
+            while (got < length) {
+                let piece: byte[*] = buffer(length - got);
+                let n: int32 = lines.read(piece);
+                if (n <= 0) { break; }
+                for (i in 0..n) { body[got + i] = piece[i]; }
+                got += n;
+            }
+            respond(client, stringOfRange(body, 0, got));
+        } else if (path == "/chunked") {
+            client.writeText("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nhola \r\n7\r\nmundo!!\r\n0\r\n\r\n");
+        } else if (path == "/big") {
+            respond(client, "0123456789".repeat(20000));
+        } else {
+            respond(client, "secreto ${path}");
+        }
+    } catch (IoError e) { }
+}
+
+function respond(client: TlsSocket, body: String): void throws IoError {
+    client.writeText("HTTP/1.1 200 OK\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n${body}");
+}
+
+/** Plain HTTP: everything moves to https://127.0.0.1:<HTTPS_PORT>/b. */
+function serveRedirect(client: TcpSocket): void {
+    try {
+        let lines: Reader = { from: client };
+        while ((lines.readLine() ?? "") != "") { }
+        client.writeText("HTTP/1.1 302 Found\r\nLocation: https://127.0.0.1:${HTTPS_PORT}/b\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    } catch (IoError e) { }
+}
+
+synchronized class Output {
+    let text: String = "";
+    let problem: String = "";
+    function set(text: String, problem: String): void {
+        self.text = text.clone();
+        self.problem = problem.clone();
+    }
+    function getText(): String { return self.text; }
+    function getProblem(): String { return self.problem; }
+}
+
+// =========================================================================================
+// The client
+// =========================================================================================
+
+/** Runs a program to its end: its exit code (-1 if it could not start), its output into `output`. */
+function run(program: String, args: String[*], env: String[*], output: String[*]): int32 {
+    let p: Process = { program: program, args: args, env: env };
+    try { p.start(); } catch (ProcessError e) { return -1; }
+    output.push(p.readAll(120000));
+    return p.wait(10000) ?? -1;
+}
+
+/** The flags and libraries for a program that uses std.net's TLS, here. */
+function cArgs(cFile: String, program: String): String[*] {
+    let args: String[*] = ["-std=c99", "-g", "-O1", cFile, "-o", program];
+    if (os.platform() != "windows") {
+        let sanitizers: String[] = ["-fno-omit-frame-pointer", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined", "-pthread", "-lm"];
+        for (f in sanitizers) { args.push(f); }
+    }
+    if (os.platform() == "linux") { args.push("-ldl"); }
+    if (os.platform() == "macos") {
+        let frameworks: String[] = ["-framework", "Network", "-framework", "Security"];
+        for (f in frameworks) { args.push(f); }
+    }
+    if (os.platform() == "windows") {
+        let windowsLibraries: String[] = ["-lsecur32", "-lws2_32"];
+        for (f in windowsLibraries) { args.push(f); }
+    }
+    return args;
+}
+
+/**
+ * Builds the client (with its C changed by `replace` -> `with`, when given) and runs it against the servers:
+ * its output, or "" with `problem` saying what failed.
+ */
+function buildAndRun(name: String, replace: String, with: String, result: Output): void {
+    try { Files.createDirectories(outDir()); } catch (IoError e) { }
+    let cFile: String = Paths.join(outDir(), "${name}.c");
+    let program: String = Paths.join(outDir(), name);
+    let output: String[*] = [];
+    if (run(compiler(), [Paths.absolute("tests/tls/client.lar"), "-o", cFile], [], output) != 0) {
+        result.set("", "the client does not compile: ${output.join("")}");
+        return;
+    }
+    if (replace != "") {
+        try {
+            Files.writeString(cFile, Files.readString(cFile).replace(replace, with));
+        } catch (IoError e) {
+            result.set("", "cannot change ${cFile}");
+            return;
+        }
+    }
+    if (run(cCompiler(), cArgs(cFile, program), [], output) != 0) {
+        result.set("", "the C compiler failed on ${cFile}");
+        return;
+    }
+    let ran: String[*] = [];
+    let code: int32 = run(program, ["${HTTPS_PORT}", "${HTTP_PORT}"], ["ASAN_OPTIONS=detect_leaks=0"], ran);
+    result.set(ran.join(""), code == 0 ? "" : "the client ended with ${code}");
+}
+
+/** Serves HTTPS and HTTP while the client (built with that change to its C) runs; then its output. */
+function againstTheServers(name: String, replace: String, with: String): Output {
+    let result: Output = {};
+    let quit: StopSignal = {};
+    let redirect: Thread = {
+        run: () -> {
+            let plain: TcpServer = { port: HTTP_PORT, threads: 2, stop: quit, onConnect: (c: TcpSocket) -> { serveRedirect(c); } };
+            try { plain.run(); } catch (NetError e) { result.set("", "the HTTP server: ${net.message(e)}"); }
+        }
+    };
+    let client: Thread = {
+        run: () -> {
+            buildAndRun(name, replace, with, result);
+            quit.stop();
+        }
+    };
+    try {
+        let tls: OpenSslProvider = OpenSslProvider.load("tests/tls/cert.pem", "tests/tls/key.pem");
+        redirect.start();
+        client.start();
+        let secure: TlsServer = { port: HTTPS_PORT, threads: 4, stop: quit, tls: tls, onConnect: (c: TlsSocket) -> { serveHttps(c); } };
+        secure.run();
+    } catch (NetError e) {
+        result.set("", "the HTTPS server: ${net.message(e)}");
+        quit.stop();
+    }
+    client.join();
+    redirect.join();
+    return result;
+}
+
+function hasLine(text: String, line: String): bool {
+    for (l in text.split("\n")) {
+        if (l == line) { return true; }
+    }
+    return false;
+}
+
+function lineStartingWith(text: String, start: String): String {
+    for (l in text.split("\n")) {
+        if (l.startsWith(start)) { return l.clone(); }
+    }
+    return "";
+}
+
+// =========================================================================================
+// The tests
+// =========================================================================================
+
+test function httpsWithTheSystemsTls(): void {
+    if (os.platform() == "windows") {
+        skip("the TLS server is not on Windows yet");
+        return;
+    }
+    let result: Output = againstTheServers("client", "", "");
+    let output: String = result.getText();
+    checkText("", result.getProblem());
+    check(lineStartingWith(output, "default: ").startsWith("default: network: tls: "), "the certificate is rejected by default:\n${output}");
+    check(hasLine(output, "200 secreto /a"), "GET with verify: false");
+    check(hasLine(output, "chunked: hola mundo!!"), "a chunked body over TLS");
+    check(hasLine(output, "big: 200000"), "a big body, with copy()");
+    check(hasLine(output, "post: ñandú por tls"), "POST over TLS");
+    check(hasLine(output, "redirect: 200 secreto /b true"), "a redirect from http:// to https://");
+    check(hasLine(output, "custom: secreto /c (1 connection)"), "a TlsProvider of its own");
+}
+
+test function withoutOpenSslTheMessageSaysSo(): void {
+    if (os.platform() != "linux") {
+        skip("OpenSSL is loaded by name only on Linux");
+        return;
+    }
+    // the names it looks for do not exist: as if OpenSSL were not installed
+    let result: Output = againstTheServers("missing", "\"libssl.so.3\", \"libssl.so.1.1\", \"libssl.so\"", "\"libnossl.so.3\"");
+    checkText("", result.getProblem());
+    check(hasLine(result.getText(), "default: unsupported: https: OpenSSL not found (tried libssl.so.3, libssl.so.1.1, libssl.so)"),
+          "OpenSSL missing: Unsupported, in English:\n${result.getText()}");
+}

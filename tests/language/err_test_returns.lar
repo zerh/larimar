@@ -1,0 +1,3 @@
+// expect: error A test function returns nothing
+test function adds(): int32 { return 1; }
+function main(): int32 { return 0; }

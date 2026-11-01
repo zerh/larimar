@@ -1,4 +1,4 @@
-// The client of tests/tls/tls_test.py: https:// against its local server (a certificate of its own).
+// The client of tests/tls/tls_test.lar: https:// against its local servers (a certificate of its own).
 // args: the HTTPS port, the HTTP port.
 import std.net { Connection, NetError };
 import std.net.http { Client, Response, Header, HttpError, message, get };

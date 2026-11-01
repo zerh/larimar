@@ -1,0 +1,396 @@
+// larimar --debug with a real debugger. Builds values.lar with #line to the .lar file, stops on the line
+// marked "// break here" and checks that Larimar's formatters (debug/larimar_lldb.py, debug/larimar_gdb.py)
+// show the values as Larimar values, with lldb and gdb (whichever are installed). Then, with lldb-dap,
+// talks to larimar dap (the debugger written in Larimar) like an editor: Larimar names in the stack and
+// the variables, values, children, Larimar paths in evaluate, and a panic shown as an exception.
+// The compiler: $LARIMARC (tests/run-tests.sh sets it), else larimarc from the PATH; the C compiler: $CC or cc.
+import std.test { check, checkText, checkInt, fail, skip };
+import std.process { Process, ProcessError, message, findProgram };
+import std.json as Json;
+import std.json { JsonError };
+import std.io.files as Files;
+import std.io.files { IoError };
+import std.path as Paths;
+import std.os;
+
+function compiler(): String {
+    let fromEnvironment: String = os.env("LARIMARC") ?? "";
+    if (fromEnvironment != "") { return Paths.absolute(fromEnvironment); }
+    return findProgram("larimarc") ?? "larimarc";
+}
+
+function cCompiler(): String {
+    let fromEnvironment: String = os.env("CC") ?? "";
+    return fromEnvironment != "" ? fromEnvironment : "cc";
+}
+
+function repository(): String { return Paths.absolute("."); }
+function source(): String { return Paths.absolute("tests/debug/values.lar"); }
+function outDir(): String { return Paths.absolute("build/test/debug"); }
+
+/** What the debugged programs see: the repository's std, and UTF-8. */
+function environment(): String[*] {
+    return ["LARIMAR_HOME=${repository()}", "LANG=C.UTF-8", "LC_ALL=C.UTF-8"];
+}
+
+function readFile(path: String): String {
+    try { return Files.readString(path); } catch (IoError e) { return ""; }
+}
+
+/** The line of values.lar marked "// break here". */
+function breakLine(): int32 {
+    for (i, line in readFile(source()).split("\n")) {
+        if (line.contains("// break here")) { return i + 1; }
+    }
+    return 0;
+}
+
+/** A variable of values.lar, and what its value must contain. */
+class Expected {
+    let name: String;
+    let text: String;
+}
+
+function expected(): Expected[*] {
+    return [
+        Expected { name: "name", text: "\"Larimar " },
+        Expected { name: "maybe", text: "7" },
+        Expected { name: "nothing", text: "null" },
+        Expected { name: "a", text: "Dog {name=\"Rex\", age=3, breed=\"mutt\"}" },
+        Expected { name: "list", text: "[3] [\"a\", \"b\", \"c\"]" },
+        Expected { name: "nums", text: "[3] [1, 2, 3]" },
+        Expected { name: "shape", text: "Circle(r=1.5)" },
+        Expected { name: "data", text: "{ 2 items, 2 entries }" },
+        Expected { name: "pet", text: "Cat {n=\"tom\"}" },
+        Expected { name: "total", text: "3" },
+    ];
+}
+
+/** Runs a program to its end: its output (with its error output when `withErrors`), or "" if it could not start. */
+function run(program: String, args: String[*], ms: int32): String {
+    let p: Process = { program: program, args: args, env: environment() };
+    try { p.start(); } catch (ProcessError e) { return "(${message(e)})"; }
+    let output: String = p.readAll(ms);
+    p.wait(5000);
+    return output;
+}
+
+/** Runs a program to its end and gives its exit code (its output is thrown away). */
+function exitCode(program: String, args: String[*]): int32 {
+    let p: Process = { program: program, args: args, env: environment(), quiet: true };
+    try { p.start(); } catch (ProcessError e) { return -1; }
+    p.readAll(120000);
+    return p.wait(10000) ?? -1;
+}
+
+/** Compiles a .lar with --debug and then its C with -g: the executable, or "" (and a failed check). */
+function build(file: String, name: String): String {
+    try { Files.createDirectories(outDir()); } catch (IoError e) { }
+    let cFile: String = Paths.join(outDir(), "${name}.c");
+    let program: String = Paths.join(outDir(), name);
+    if (exitCode(compiler(), [file, "-o", cFile, "--debug"]) != 0) {
+        fail("larimar --debug failed on ${file}");
+        return "";
+    }
+    if (exitCode(cCompiler(), ["-std=c99", "-g", "-O0", "-w", cFile, "-o", program, "-lm"]) != 0) {
+        fail("the C compiler failed on ${cFile}");
+        return "";
+    }
+    return program;
+}
+
+// =========================================================================================
+// The build
+// =========================================================================================
+
+test function debugBuildHasLarimarLines(): void {
+    let program: String = build(source(), "values");
+    if (program == "") { return; }
+    let c: String = readFile(Paths.join(outDir(), "values.c"));
+    check(c.contains("#line ${breakLine()} \"") && c.contains("values.lar"), "#line to the .lar file in the C");
+    check(Files.isFile(Paths.join(outDir(), "values.debug.json")), "the debug map is written next to the C");
+}
+
+// =========================================================================================
+// lldb and gdb, with Larimar's formatters
+// =========================================================================================
+
+test function lldbShowsLarimarValues(): void {
+    let lldb: String? = findProgram("lldb");
+    if (lldb == null) {
+        skip("no lldb");
+        return;
+    }
+    let program: String = build(source(), "values");
+    if (program == "") { return; }
+    let line: int32 = breakLine();
+    let variables: String[*] = [];
+    for (e in expected()) { variables.push(e.name.clone()); }
+    let commands: String = Paths.join(outDir(), "lldb.txt");
+    try {
+        Files.writeString(commands, "command script import \"${Paths.join(repository(), "debug/larimar_lldb.py")}\"\nbreakpoint set --file values.lar --line ${line}\nrun\nframe variable ${variables.join(" ")}\nbt 1\nkill\nquit\n");
+    } catch (IoError e) {
+        fail("cannot write ${commands}");
+        return;
+    }
+    let output: String = run(lldb!, ["-b", "-s", commands, program], 120000);
+    check(output.contains("values.lar:${line}"), "lldb stops on values.lar:${line}:\n${output}");
+    for (e in expected()) {
+        let shown: String = lineWith(output, ") ${e.name} = ");
+        check(shown.contains(e.text), "lldb shows ${e.name} as ${e.text}: got '${shown}'");
+    }
+}
+
+test function gdbShowsLarimarValues(): void {
+    let gdb: String? = findProgram("gdb");
+    if (gdb == null) {
+        skip("no gdb");
+        return;
+    }
+    let program: String = build(source(), "values");
+    if (program == "") { return; }
+    let line: int32 = breakLine();
+    let args: String[*] = ["-batch", "-ex", "source ${Paths.join(repository(), "debug/larimar_gdb.py")}", "-ex", "break values.lar:${line}", "-ex", "run"];
+    for (e in expected()) {
+        args.push("-ex");
+        args.push("output ${e.name}");
+        args.push("-ex");
+        args.push("echo \\n");
+    }
+    args.push(program);
+    let output: String = run(gdb!, args, 120000);
+    check(output.contains("values.lar:${line}"), "gdb stops on values.lar:${line}:\n${output}");
+    let lines: String[*] = output.trim().split("\n");
+    let list: Expected[*] = expected();
+    let first: int32 = lines.length - list.length;
+    for (i, e in list) {
+        let shown: String = first + i >= 0 ? lines[first + i] : "";
+        check(shown.contains(e.text), "gdb shows ${e.name} as ${e.text}: got '${shown}'");
+    }
+}
+
+/** The first line of the text that contains `part`, or "". */
+function lineWith(text: String, part: String): String {
+    for (line in text.split("\n")) {
+        if (line.contains(part)) { return line.clone(); }
+    }
+    return "";
+}
+
+// =========================================================================================
+// larimar dap, over lldb-dap, talked to like an editor
+// =========================================================================================
+
+/** lldb-dap (or its older names), from the PATH or, on macOS, from Xcode; null when there is none. */
+function lldbDap(): String? {
+    let names: String[] = ["lldb-dap", "lldb-dap-20", "lldb-dap-19", "lldb-dap-18", "lldb-vscode"];
+    for (n in names) {
+        let found: String? = findProgram(n);
+        if (found != null) { return found; }
+    }
+    if (findProgram("xcrun") == null) { return null; }
+    let path: String = run("xcrun", ["--find", "lldb-dap"], 30000).trim();
+    return path != "" && Files.isFile(path) ? path.clone() : null;
+}
+
+/** An editor's side of a debugging session: requests, and the events that come between their answers. */
+class Session {
+    let adapter: Process;
+    let sequence: int32 = 0;
+
+    function send(command: String, arguments: Any): int32 throws ProcessError {
+        self.sequence += 1;
+        let body: String = Json.stringify({ seq: self.sequence, type: "request", command: command, arguments: arguments });
+        self.adapter.write("Content-Length: ${body.length}\r\n\r\n${body}");
+        return self.sequence;
+    }
+
+    /** The next message, or null when none came in 30 s (or larimar dap ended). */
+    function receive(): Any? {
+        let length: int32 = -1;
+        while (true) {
+            let line: String? = self.adapter.readLine(30000);
+            if (line == null) { return null; }
+            if (line == "") { break; }
+            if (line.toLowerCase().startsWith("content-length:")) { length = (line.substring(15).trim().toInt() ?? -1) as int32; }
+        }
+        if (length < 0) { return null; }
+        let body: String? = self.adapter.read(length, 30000);
+        if (body == null) { return null; }
+        try { return Json.parse(body!); } catch (JsonError e) { return null; }
+    }
+
+    /** The next message that `wanted` accepts; null (no hang) when none comes in time. */
+    function waitFor(wanted: (Any) -> bool): Any {
+        while (true) {
+            let message: Any? = self.receive();
+            if (message == null) { return null; }
+            if (wanted(message!)) { return message!; }
+        }
+        return null;
+    }
+
+    /** Sends a request and gives its response. */
+    function request(command: String, arguments: Any): Any throws ProcessError {
+        let sent: int32 = self.send(command, arguments);
+        return self.waitFor((m: Any) -> { return (m.type as String ?? "") == "response" && (m.request_seq as int32 ?? -1) == sent; });
+    }
+
+    /** Waits for the program to stop: the stopped event, or null if it ended (or nothing came). */
+    function stopped(): Any {
+        let event: Any = self.waitFor((m: Any) -> {
+            let name: String = m.event as String ?? "";
+            return name == "stopped" || name == "terminated" || name == "exited";
+        });
+        return (event.event as String ?? "") == "stopped" ? event : null;
+    }
+
+    function frames(thread: int64): Any throws ProcessError {
+        return self.request("stackTrace", { threadId: thread }).body.stackFrames.clone();
+    }
+
+    function locals(frame: int64): Any throws ProcessError {
+        let scopes: Any = self.request("scopes", { frameId: frame });
+        let reference: int64 = scopes.body.scopes[0].variablesReference as int64 ?? 0;
+        return self.request("variables", { variablesReference: reference }).body.variables.clone();
+    }
+
+    /** Ends the session: larimar dap's exit code (-1 if it had to be killed). */
+    function close(): int32 {
+        try { self.request("disconnect", { terminateDebuggee: true }); } catch (ProcessError e) { }
+        let code: int32? = self.adapter.wait(15000);
+        if (code == null) {
+            self.adapter.kill();
+            return -1;
+        }
+        return code!;
+    }
+}
+
+/** The value of a variable in a list of variables, or "". */
+function valueOf(variables: Any, name: String): String {
+    for (i, v in variables) {
+        if ((v.name as String ?? "") == name) { return (v.value as String ?? "").clone(); }
+    }
+    return "";
+}
+
+function startSession(backend: String): Session throws ProcessError {
+    let adapter: Process = { program: compiler(), args: ["dap", "--backend", backend], env: environment(), quiet: true };
+    adapter.start();
+    return Session { adapter: adapter };
+}
+
+test function dapStopsAndShowsLarimarValues(): void throws ProcessError {
+    let backend: String? = lldbDap();
+    if (backend == null) {
+        skip("no lldb-dap");
+        return;
+    }
+    let program: String = build(source(), "values");
+    if (program == "") { return; }
+    let line: int32 = breakLine();
+    let d: Session = startSession(backend!);
+    let capabilities: Any = d.request("initialize", { adapterID: "larimar", linesStartAt1: true, columnsStartAt1: true }).body.clone();
+    let hasPanicFilter: bool = false;
+    for (i, f in capabilities.exceptionBreakpointFilters) {
+        if ((f.filter as String ?? "") == "panic") { hasPanicFilter = true; }
+    }
+    check(hasPanicFilter, "the panic exception filter is offered");
+    d.send("launch", { program: program, debugMap: Paths.join(outDir(), "values.debug.json") });
+    d.waitFor((m: Any) -> { return (m.event as String ?? "") == "initialized"; });
+    let breakpoints: Any = d.request("setBreakpoints", { source: { path: source() }, breakpoints: { { line: line } } }).body.breakpoints.clone();
+    check(breakpoints[0].verified as bool ?? false, "a breakpoint in the .lar is verified");
+    let functionBreakpoints: Any = d.request("setFunctionBreakpoints", { breakpoints: { { name: "describe" } } }).body.breakpoints.clone();
+    check(functionBreakpoints[0].verified as bool ?? false, "a function breakpoint by its Larimar name is verified");
+    d.request("configurationDone", {});
+
+    let stop: Any = d.stopped();
+    if (stop == null) {
+        fail("the program ended without stopping at the breakpoint");
+        d.close();
+        return;
+    }
+    let thread: int64 = stop.body.threadId as int64 ?? 0;
+    let frames: Any = d.frames(thread);
+    check((frames[0].name as String ?? "") == "main" && (frames[0].line as int32 ?? -1) == line, "the stack has Larimar names: ${frames[0]}");
+    let frame: int64 = frames[0].id as int64 ?? 0;
+    let variables: Any = d.locals(frame);
+    for (e in expected()) {
+        let shown: String = valueOf(variables, e.name);
+        check(shown.contains(e.text), "dap shows ${e.name} as ${e.text}: got '${shown}'");
+    }
+    for (i, v in variables) {
+        let name: String = v.name as String ?? "";
+        check(!name.startsWith("t_") && !name.startsWith("tmp_"), "no temporaries among the variables: ${name}");
+    }
+    let dogReference: int64 = 0;
+    for (i, v in variables) {
+        if ((v.name as String ?? "") == "a") { dogReference = v.variablesReference as int64 ?? 0; }
+    }
+    let fields: Any = d.request("variables", { variablesReference: dogReference }).body.variables.clone();
+    check(fieldNames(fields) == "name age breed", "the fields of the real class: ${fieldNames(fields)}");
+    checkEvaluate(d, frame, "a.name", "\"Rex\"");
+    checkEvaluate(d, frame, "list[1]", "\"b\"");
+    checkEvaluate(d, frame, "pts[1].y", "4");
+    checkEvaluate(d, frame, "nums.length", "3");
+
+    d.request("continue", { threadId: thread });
+    if (d.stopped() == null) {
+        fail("it did not stop in describe");
+        d.close();
+        return;
+    }
+    frames = d.frames(thread);
+    checkText("describe", frames[0].name as String ?? "");
+    checkText("Circle(r=1.5)", valueOf(d.locals(frames[0].id as int64 ?? 0), "s"));
+    checkInt(0, d.close());
+}
+
+function fieldNames(fields: Any): String {
+    let names: String[*] = [];
+    for (i, f in fields) { names.push((f.name as String ?? "?").clone()); }
+    return names.join(" ");
+}
+
+function checkEvaluate(d: Session, frame: int64, expression: String, wanted: String): void throws ProcessError {
+    let answer: Any = d.request("evaluate", { expression: expression, frameId: frame, context: "watch" });
+    check((answer.body.result as String ?? "") == wanted, "evaluate ${expression} gives ${wanted}: ${answer}");
+}
+
+test function dapShowsAPanicAsAnException(): void throws ProcessError {
+    let backend: String? = lldbDap();
+    if (backend == null) {
+        skip("no lldb-dap");
+        return;
+    }
+    let program: String = build(Paths.absolute("tests/debug/panic.lar"), "panic");
+    if (program == "") { return; }
+    let d: Session = startSession(backend!);
+    d.request("initialize", { adapterID: "larimar", linesStartAt1: true });
+    d.send("launch", { program: program });
+    d.waitFor((m: Any) -> { return (m.event as String ?? "") == "initialized"; });
+    d.request("setExceptionBreakpoints", { filters: { "panic" } });
+    d.request("configurationDone", {});
+    let stop: Any = d.stopped();
+    if (stop == null) {
+        fail("the program ended without stopping at the panic");
+        d.close();
+        return;
+    }
+    checkText("exception", stop.body.reason as String ?? "");
+    let thread: int64 = stop.body.threadId as int64 ?? 0;
+    let info: Any = d.request("exceptionInfo", { threadId: thread }).body.clone();
+    check((info.description as String ?? "").contains("index 3 out of range"), "the panic's message: ${info}");
+    let frames: Any = d.frames(thread);
+    let pick: int64 = -1;
+    for (i, f in frames) {
+        if (pick < 0 && (f.name as String ?? "") == "pick") { pick = f.id as int64 ?? -1; }
+    }
+    check(pick >= 0 && (frames[0].presentationHint as String ?? "") == "subtle", "the Larimar frame is under the runtime's: ${frames}");
+    if (pick >= 0) {
+        let variables: Any = d.locals(pick);
+        check(valueOf(variables, "i") == "3" && valueOf(variables, "xs").startsWith("[3]"), "the values where it panicked: ${variables}");
+    }
+    d.close();
+}

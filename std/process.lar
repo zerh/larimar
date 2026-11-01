@@ -1,0 +1,570 @@
+// std.process: other programs, started and talked to through their input and output.
+//
+//   import std.process { Process, ProcessError };
+//
+//   let lsp: Process = { program: "larimarc", args: ["lsp"] };
+//   lsp.start();                              // throws ProcessError when it cannot start
+//   lsp.write("Content-Length: 2\r\n\r\n{}");
+//   let line: String? = lsp.readLine(5000);   // waits up to 5 s; null when nothing came (or it ended)
+//   lsp.kill();
+//
+// The literal says what to run (it cannot fail); start() runs it. Its output is read through a pipe,
+// and every read says how long it may wait, so a program that does not answer never hangs the caller.
+// Its error output goes where this program's goes, or nowhere with `quiet: true`. A Process that is
+// still running when its memory is freed is killed.
+
+#when unix
+    c_include "<unistd.h>";
+    c_include "<signal.h>";
+    c_include "<sys/wait.h>";
+#when windows
+    c_include "<windows.h>";
+    c_include "<io.h>";
+#end
+
+c_code {
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <time.h>
+#include <errno.h>
+#if !defined(_WIN32)
+#include <poll.h>
+#include <fcntl.h>
+#endif
+
+typedef struct LmProcess {
+    char** args;            /* program and arguments, NULL at the end */
+    int argCount;
+    char** env;             /* "NAME=value" added to this program's environment */
+    int envCount;
+    int quiet;
+    int started, exited, code;
+#if defined(_WIN32)
+    HANDLE process, input, output;
+#else
+    pid_t pid;
+    int input, output;
+#endif
+} LmProcess;
+
+static char* lm_proc_copy(const char* s) {
+    size_t n = strlen(s);
+    char* c = (char*)malloc(n + 1);
+    if (!c) rt_panic("out of memory starting a process", 0);
+    memcpy(c, s, n + 1);
+    return c;
+}
+
+static void lm_proc_push(char*** list, int* count, const char* s) {
+    char** grown = (char**)realloc(*list, sizeof(char*) * (size_t)(*count + 2));
+    if (!grown) rt_panic("out of memory starting a process", 0);
+    grown[*count] = lm_proc_copy(s);
+    grown[*count + 1] = NULL;
+    *list = grown;
+    *count += 1;
+}
+
+static LmProcess* lm_proc_new(const char* program, int quiet) {
+    LmProcess* p = (LmProcess*)calloc(1, sizeof(LmProcess));
+    if (!p) rt_panic("out of memory starting a process", 0);
+    p->quiet = quiet;
+#if defined(_WIN32)
+    p->process = p->input = p->output = NULL;
+#else
+    p->input = p->output = -1;
+#endif
+    lm_proc_push(&p->args, &p->argCount, program);
+    return p;
+}
+static void lm_proc_arg(LmProcess* p, const char* a) { lm_proc_push(&p->args, &p->argCount, a); }
+static void lm_proc_env(LmProcess* p, const char* e) { lm_proc_push(&p->env, &p->envCount, e); }
+
+/* Milliseconds from some fixed moment: for the time a read may still wait. */
+static long long lm_proc_now(void) {
+#if defined(_WIN32)
+    return (long long)GetTickCount64();
+#else
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (long long)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+#endif
+}
+
+static void lm_proc_close_input(LmProcess* p) {
+#if defined(_WIN32)
+    if (p->input) { CloseHandle(p->input); p->input = NULL; }
+#else
+    if (p->input >= 0) { close(p->input); p->input = -1; }
+#endif
+}
+
+#if defined(_WIN32)
+/* One argument for CreateProcess's command line, quoted the way the C runtime reads it back. */
+static void lm_proc_quote(char** line, size_t* len, size_t* cap, const char* a) {
+    size_t need = *len + strlen(a) * 2 + 4;
+    if (need > *cap) {
+        *cap = need * 2;
+        *line = (char*)realloc(*line, *cap);
+        if (!*line) rt_panic("out of memory starting a process", 0);
+    }
+    char* o = *line + *len;
+    if (*len > 0) *o++ = ' ';
+    *o++ = '"';
+    for (const char* c = a; *c; c++) {
+        size_t slashes = 0;
+        while (c[slashes] == '\\') slashes++;
+        if (c[slashes] == '"' || c[slashes] == 0) {
+            for (size_t i = 0; i < slashes * 2; i++) *o++ = '\\';    /* before a quote, or the end: doubled */
+            c += slashes;
+            if (*c == 0) break;
+            *o++ = '\\';
+            *o++ = '"';
+        } else {
+            for (size_t i = 0; i < slashes; i++) *o++ = '\\';
+            c += slashes;
+            *o++ = *c;
+        }
+    }
+    *o++ = '"';
+    *o = 0;
+    *len = (size_t)(o - *line);
+}
+#endif
+
+/* Starts it: 0, or the error code of the system (the program was not found, cannot run...). */
+static int lm_proc_start(LmProcess* p) {
+#if defined(_WIN32)
+    SECURITY_ATTRIBUTES sa;
+    HANDLE inRead, inWrite, outRead, outWrite, errTarget = NULL;
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    char* line = NULL;
+    size_t len = 0, cap = 0;
+    char* block = NULL;
+    BOOL ok;
+    sa.nLength = sizeof sa;
+    sa.lpSecurityDescriptor = NULL;
+    sa.bInheritHandle = TRUE;
+    if (!CreatePipe(&inRead, &inWrite, &sa, 0)) return (int)GetLastError();
+    if (!CreatePipe(&outRead, &outWrite, &sa, 0)) { CloseHandle(inRead); CloseHandle(inWrite); return (int)GetLastError(); }
+    SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0);          /* this side stays here */
+    SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
+    if (p->quiet) errTarget = CreateFileA("NUL", GENERIC_WRITE, FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);
+    for (int i = 0; i < p->argCount; i++) lm_proc_quote(&line, &len, &cap, p->args[i]);
+    if (p->envCount > 0) {                                          /* this program's environment, and the additions */
+        char* current = GetEnvironmentStringsA();
+        size_t used = 0, size = 0;
+        const char* e = current;
+        while (*e) { size_t n = strlen(e) + 1; used += n; e += n; }
+        size = used + 1;
+        for (int i = 0; i < p->envCount; i++) size += strlen(p->env[i]) + 1;
+        block = (char*)malloc(size);
+        if (!block) rt_panic("out of memory starting a process", 0);
+        memcpy(block, current, used);
+        for (int i = 0; i < p->envCount; i++) {
+            size_t n = strlen(p->env[i]) + 1;
+            memcpy(block + used, p->env[i], n);
+            used += n;
+        }
+        block[used] = 0;
+        FreeEnvironmentStringsA(current);
+    }
+    memset(&si, 0, sizeof si);
+    si.cb = sizeof si;
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = inRead;
+    si.hStdOutput = outWrite;
+    si.hStdError = p->quiet && errTarget != INVALID_HANDLE_VALUE ? errTarget : GetStdHandle(STD_ERROR_HANDLE);
+    ok = CreateProcessA(NULL, line, NULL, NULL, TRUE, 0, block, NULL, &si, &pi);
+    int error = ok ? 0 : (int)GetLastError();
+    free(line);
+    free(block);
+    CloseHandle(inRead);
+    CloseHandle(outWrite);
+    if (errTarget && errTarget != INVALID_HANDLE_VALUE) CloseHandle(errTarget);
+    if (!ok) { CloseHandle(inWrite); CloseHandle(outRead); return error; }
+    CloseHandle(pi.hThread);
+    p->process = pi.hProcess;
+    p->input = inWrite;
+    p->output = outRead;
+    p->started = 1;
+    return 0;
+#else
+    int in[2], out[2], report[2];
+    if (pipe(in) != 0) return errno;
+    if (pipe(out) != 0) { close(in[0]); close(in[1]); return errno; }
+    if (pipe(report) != 0) { close(in[0]); close(in[1]); close(out[0]); close(out[1]); return errno; }
+    fcntl(report[1], F_SETFD, FD_CLOEXEC);          /* closed by exec: an empty report means it started */
+    signal(SIGPIPE, SIG_IGN);                       /* writing to one that ended is an error, not the end of this one */
+    fflush(stdout);
+    fflush(stderr);
+    pid_t pid = fork();
+    if (pid < 0) {
+        int e = errno;
+        close(in[0]); close(in[1]); close(out[0]); close(out[1]); close(report[0]); close(report[1]);
+        return e;
+    }
+    if (pid == 0) {                                 /* the new process */
+        dup2(in[0], 0);
+        dup2(out[1], 1);
+        if (p->quiet) {
+            int null = open("/dev/null", O_WRONLY);
+            if (null >= 0) { dup2(null, 2); close(null); }
+        }
+        close(in[0]); close(in[1]); close(out[0]); close(out[1]); close(report[0]);
+        for (int i = 0; i < p->envCount; i++) putenv(p->env[i]);
+        execvp(p->args[0], p->args);
+        int e = errno;
+        if (write(report[1], &e, sizeof e) < 0) { }
+        _exit(127);
+    }
+    close(in[0]);
+    close(out[1]);
+    close(report[1]);
+    int e = 0;
+    ssize_t n;
+    do { n = read(report[0], &e, sizeof e); } while (n < 0 && errno == EINTR);
+    close(report[0]);
+    if (n > 0) {                                    /* exec failed: the child already ended */
+        int status;
+        waitpid(pid, &status, 0);
+        close(in[1]);
+        close(out[0]);
+        return e != 0 ? e : ENOENT;
+    }
+    p->pid = pid;
+    p->input = in[1];
+    p->output = out[0];
+    p->started = 1;
+    return 0;
+#endif
+}
+
+/* What a start error means, in English. */
+static const char* lm_proc_error_text(int code) {
+#if defined(_WIN32)
+    if (code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND) return "not found";
+    if (code == ERROR_ACCESS_DENIED) return "permission denied";
+    return "cannot start it";
+#else
+    if (code == ENOENT) return "not found";
+    if (code == EACCES) return "permission denied";
+    return strerror(code);
+#endif
+}
+
+/* Writes all the bytes: 1, or 0 when it stopped reading (it ended, or closed its input). */
+static int lm_proc_write(LmProcess* p, const char* bytes, long long count) {
+#if defined(_WIN32)
+    while (count > 0) {
+        DWORD wrote = 0;
+        if (!p->input || !WriteFile(p->input, bytes, (DWORD)count, &wrote, NULL)) return 0;
+        bytes += wrote;
+        count -= wrote;
+    }
+    return 1;
+#else
+    while (count > 0) {
+        if (p->input < 0) return 0;
+        ssize_t n = write(p->input, bytes, (size_t)count);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) return 0;
+        bytes += n;
+        count -= n;
+    }
+    return 1;
+#endif
+}
+
+/* Reads what is there, waiting up to `ms`: the count, 0 when nothing came in time, -1 at its end. */
+static int lm_proc_read(LmProcess* p, char* into, int size, int ms) {
+#if defined(_WIN32)
+    long long until = lm_proc_now() + ms;
+    for (;;) {
+        DWORD ready = 0, got = 0;
+        if (!PeekNamedPipe(p->output, NULL, 0, NULL, &ready, NULL)) return -1;     /* it ended */
+        if (ready > 0) {
+            if (!ReadFile(p->output, into, ready < (DWORD)size ? ready : (DWORD)size, &got, NULL)) return -1;
+            return (int)got;
+        }
+        if (lm_proc_now() >= until) return 0;
+        Sleep(5);
+    }
+#else
+    struct pollfd w;
+    w.fd = p->output;
+    w.events = POLLIN;
+    w.revents = 0;
+    int r;
+    do { r = poll(&w, 1, ms); } while (r < 0 && errno == EINTR);
+    if (r == 0) return 0;
+    if (r < 0) return -1;
+    ssize_t n;
+    do { n = read(p->output, into, (size_t)size); } while (n < 0 && errno == EINTR);
+    return n > 0 ? (int)n : -1;
+#endif
+}
+
+/* Waits up to `ms` (a negative ms: as long as it takes) for it to end: 1 when it ended, 0 if not yet. */
+static int lm_proc_wait(LmProcess* p, int ms) {
+    if (p->exited) return 1;
+#if defined(_WIN32)
+    if (WaitForSingleObject(p->process, ms < 0 ? INFINITE : (DWORD)ms) != WAIT_OBJECT_0) return 0;
+    DWORD code = 0;
+    GetExitCodeProcess(p->process, &code);
+    p->code = (int)code;
+    p->exited = 1;
+    return 1;
+#else
+    long long until = lm_proc_now() + ms;
+    for (;;) {
+        int status = 0;
+        pid_t r = waitpid(p->pid, &status, ms < 0 ? 0 : WNOHANG);
+        if (r == p->pid) {
+            p->code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+            p->exited = 1;
+            return 1;
+        }
+        if (r < 0 && errno != EINTR) { p->exited = 1; p->code = -1; return 1; }
+        if (ms >= 0 && lm_proc_now() >= until) return 0;
+        if (ms >= 0) {
+            struct timespec t = { 0, 5000000 };
+            nanosleep(&t, NULL);
+        }
+    }
+#endif
+}
+
+static int lm_proc_code(LmProcess* p) { return p->code; }
+
+static void lm_proc_kill(LmProcess* p) {
+    if (!p->started || p->exited) return;
+#if defined(_WIN32)
+    TerminateProcess(p->process, 137);
+#else
+    kill(p->pid, SIGKILL);
+#endif
+    lm_proc_wait(p, -1);
+}
+
+/* When its memory is freed: killed if it still runs, and everything closed. */
+static void lm_proc_free(LmProcess* p) {
+    if (!p) return;
+    lm_proc_kill(p);
+    lm_proc_close_input(p);
+#if defined(_WIN32)
+    if (p->output) CloseHandle(p->output);
+    if (p->process) CloseHandle(p->process);
+#else
+    if (p->output >= 0) close(p->output);
+#endif
+    for (int i = 0; i < p->argCount; i++) free(p->args[i]);
+    for (int i = 0; i < p->envCount; i++) free(p->env[i]);
+    free(p->args);
+    free(p->env);
+    free(p);
+}
+}
+
+extern type ProcessHandle = c "LmProcess*" released by lm_proc_free;
+extern function lm_proc_free(p: ProcessHandle): void;
+extern function lm_proc_new(program: String, quiet: int32): ProcessHandle?;
+extern function lm_proc_arg(p: ProcessHandle, arg: String): void;
+extern function lm_proc_env(p: ProcessHandle, entry: String): void;
+extern function lm_proc_start(p: ProcessHandle): int32;
+extern function lm_proc_error_text(code: int32): String;
+extern function lm_proc_write(p: ProcessHandle, bytes: byte*, count: int64): int32;
+extern function lm_proc_read(p: ProcessHandle, into: byte*, size: int32, ms: int32): int32;
+extern function lm_proc_wait(p: ProcessHandle, ms: int32): int32;
+extern function lm_proc_code(p: ProcessHandle): int32;
+extern function lm_proc_kill(p: ProcessHandle): void;
+extern function lm_proc_close_input(p: ProcessHandle): void;
+extern function lm_proc_now(): int64;
+
+/** Why a process could not be used. */
+public enum ProcessError {
+    /** It could not start: not found, not allowed to run... */
+    CannotStart(program: String, why: String),
+    /** It is not running: never started, or it ended (or closed its input). */
+    NotRunning
+}
+
+/** A message for the error, in English. */
+public function message(e: ProcessError): String {
+    return switch (e) {
+        case CannotStart { program, why } -> "cannot start ${program}: ${why}";
+        case NotRunning -> "the process is not running";
+    };
+}
+
+/** A program to run (the literal), and once started, the running process. */
+public class Process {
+    /** The program: a path, or a name looked for in the PATH. */
+    let program: String;
+    let args: String[*] = [];
+    /** "NAME=value": added to this program's environment for it. */
+    let env: String[*] = [];
+    /** true: its error output is thrown away (else it goes where this program's goes). */
+    let quiet: bool = false;
+
+    let handle: ProcessHandle? = null;
+    /** What was read and not given yet: from `taken` on. */
+    let pending: byte[*] = [];
+    let taken: int32 = 0;
+    let chunk: byte[*] = [];
+    let ended: bool = false;
+
+    /** Starts it. Throws ProcessError.CannotStart when it cannot (not found, not allowed). */
+    function start(): void throws ProcessError {
+        self.handle = lm_proc_new(self.program, self.quiet ? 1 : 0);
+        if (self.handle == null) { throw ProcessError.CannotStart { program: self.program.clone(), why: "out of memory" }; }
+        for (a in self.args) { lm_proc_arg(self.handle!, a); }
+        for (e in self.env) { lm_proc_env(self.handle!, e); }
+        let code: int32 = lm_proc_start(self.handle!);
+        if (code != 0) {
+            self.handle = null;
+            throw ProcessError.CannotStart { program: self.program.clone(), why: lm_proc_error_text(code).clone() };
+        }
+        for (i in 0..4096) { self.chunk.push(0); }
+    }
+
+    /** Writes text to its input. Throws ProcessError.NotRunning when it does not read it any more. */
+    function write(text: String): void throws ProcessError {
+        if (self.handle == null) { throw ProcessError.NotRunning; }
+        let bytes: byte[*] = [];
+        for (b in text) { bytes.push(b); }
+        if (lm_proc_write(self.handle!, bytes, bytes.length as int64) == 0) { throw ProcessError.NotRunning; }
+    }
+
+    /** Closes its input: it reads the end (a program that reads until the end, like `cat`, then finishes). */
+    function closeInput(): void {
+        if (self.handle != null) { lm_proc_close_input(self.handle!); }
+    }
+
+    /**
+     * The next line of its output, without the line end (\n or \r\n). Waits up to `ms` milliseconds for
+     * it; null when it did not come in time, or the output ended (what is left without a line end is the
+     * last line).
+     */
+    function readLine(ms: int32): String? {
+        let until: int64 = lm_proc_now() + (ms as int64);
+        while (true) {
+            let i: int32 = self.taken;
+            while (i < self.pending.length) {
+                if (self.pending[i] == '\n') {
+                    let end: int32 = i > self.taken && self.pending[i - 1] == '\r' ? i - 1 : i;
+                    let line: String = stringOfRange(self.pending, self.taken, end).clone();
+                    self.taken = i + 1;
+                    return line;
+                }
+                i += 1;
+            }
+            if (self.ended) {
+                if (self.taken >= self.pending.length) { return null; }
+                let rest: String = stringOfRange(self.pending, self.taken, self.pending.length).clone();
+                self.taken = self.pending.length;
+                return rest;
+            }
+            if (!self.fill(until)) { return null; }
+        }
+        return null;
+    }
+
+    /** Exactly `count` bytes of its output, as text; waits up to `ms` for them (null if they did not all come). */
+    function read(count: int32, ms: int32): String? {
+        let until: int64 = lm_proc_now() + (ms as int64);
+        while (self.pending.length - self.taken < count) {
+            if (self.ended || !self.fill(until)) { return null; }
+        }
+        let text: String = stringOfRange(self.pending, self.taken, self.taken + count).clone();
+        self.taken += count;
+        return text;
+    }
+
+    /** All of its output until it ends, waiting up to `ms` in total (what came, if it did not end in time). */
+    function readAll(ms: int32): String {
+        let until: int64 = lm_proc_now() + (ms as int64);
+        while (!self.ended && self.fill(until)) { }
+        let text: String = stringOfRange(self.pending, self.taken, self.pending.length).clone();
+        self.taken = self.pending.length;
+        return text;
+    }
+
+    /** Reads more of its output into `pending`, waiting until `until`: false when nothing came in time. */
+    function fill(until: int64): bool {
+        if (self.handle == null || self.ended) { return false; }
+        if (self.taken > 65536 && self.taken * 2 > self.pending.length) { self.compact(); }
+        let left: int64 = until - lm_proc_now();
+        let n: int32 = lm_proc_read(self.handle!, self.chunk, 4096, left > 0 ? left as int32 : 0);
+        if (n < 0) {
+            self.ended = true;
+            return true;
+        }
+        let i: int32 = 0;
+        while (i < n) {
+            self.pending.push(self.chunk[i]);
+            i += 1;
+        }
+        return n > 0;
+    }
+
+    /** Drops what was already given. */
+    function compact(): void {
+        let kept: byte[*] = [];
+        let i: int32 = self.taken;
+        while (i < self.pending.length) {
+            kept.push(self.pending[i]);
+            i += 1;
+        }
+        self.pending.clear();
+        for (b in kept) { self.pending.push(b); }
+        self.taken = 0;
+    }
+
+    /** Waits up to `ms` (-1: as long as it takes) for it to end: its exit code, or null if it did not end yet. */
+    function wait(ms: int32): int32? {
+        if (self.handle == null) { return null; }
+        if (lm_proc_wait(self.handle!, ms) == 0) { return null; }
+        return lm_proc_code(self.handle!);
+    }
+
+    /** Ends it now (if it still runs). */
+    function kill(): void {
+        if (self.handle != null) { lm_proc_kill(self.handle!); }
+    }
+}
+
+/** Where a program is found in the PATH (with .exe on Windows), or null. A path with a folder is checked as it is. */
+public function findProgram(name: String): String? {
+    let windows: bool = false;
+    #when windows
+        windows = true;
+    #end
+    if (name.contains("/") || name.contains("\\")) { return isRunnable(name) ? name : null; }
+    let path: String = getenv("PATH") ?? "";
+    let separator: String = windows ? ";" : ":";
+    for (dir in path.split(separator)) {
+        if (dir == "") { continue; }
+        let candidate: String = "${dir}/${name}";
+        if (isRunnable(candidate)) { return candidate.clone(); }
+        if (windows && isRunnable("${candidate}.exe")) { return "${candidate}.exe".clone(); }
+    }
+    return null;
+}
+
+extern function getenv(name: String): String?;
+#when unix
+    extern function access(path: String, mode: int32): int32;
+    extern const X_OK: int32;
+#when windows
+    extern function _access(path: String, mode: int32): int32;
+#end
+
+function isRunnable(path: String): bool {
+    #when windows
+        return _access(path, 0) == 0;
+    #else
+        return access(path, X_OK) == 0;
+    #end
+}

@@ -1,7 +1,14 @@
-// parser: tokens -> syntax tree (Parser.java).
+// parser: tokens -> syntax tree.
 //
-// The first syntax error is kept in parseError; after it every token reads as the end of
-// the file, so the parser unwinds quickly and its result is thrown away.
+// A recursive descent parser: each function reads one construction of the language, and the comment above
+// it shows that construction's form, in this notation:
+//
+//   word        that word (a keyword or a symbol)          [ x ]     x, optionally
+//   NAME        an identifier                              x*        x, any number of times
+//   x | y       x or y                                     ( ... )   grouping
+//
+// The first syntax error is kept; after it every token reads as the end of the file, so the parser
+// unwinds quickly and its result is thrown away.
 
 import ast {
     Node, Expr, Stmt, TK, TypeRef, typeNamed, Program, ImportDecl, CIncludeDecl, CCodeDecl, ExternTypeDecl,
@@ -14,704 +21,788 @@ import ast {
 };
 import lexer { TT, Token, tokenize, lexError };
 
-let toks: Token[*] = [] in default;
-let cur: int32 = 0;
-let eof: Token = Token { kind: TT.Eof, text: "", line: 0 } in default;
-
 /** The first error: a lexical or a syntax error ("" when there is none). */
 public let parseError: String = "";
 
-/** Parsing the methods of a synchronized class: they may say `wait until (condition)`. */
-let waitAllowed: bool = false;
-
-/** Static functions written inside a type: they become top-level `function Type.name` declarations. */
-let statics: FunctionDecl[*] = [] in default;
-
+/** The tree of one source file. `startLine` is the number of its first line (it also says the file). */
 public function parseProgram(source: String in default, startLine: int32): Program {
     parseError = "";
-    toks = tokenize(source, startLine);
-    cur = 0;
+    tokens = tokenize(source, startLine);
+    position = 0;
     if (lexError != "") { parseError = lexError; }
-    let prog: Program = Program { line: startLine } in default;
-    while (!isAtEnd()) {
-        if (check(TT.Import)) {
-            if (prog.decls.length > 0) { error(peek().line, "Imports go at the beginning of the file, before any declaration"); }
-            prog.imports.push(parseImport());
-            continue;
-        }
-        if (check(TT.HashWhen)) {
-            parseWhenBlock(prog);
-            continue;
-        }
-        if (check(TT.HashElse) || check(TT.HashEnd)) {
-            error(peek().line, "'#${peek().kind == TT.HashElse ? "else" : "end"}' without a '#when' above it");
-            advance();
-            continue;
-        }
-        let isPublic: bool = match(TT.Public);
-        if (!isPublic) { match(TT.Private); }
-        let at: Token = peek();
-        let d: Node = parseTopLevel();
-        if (isPublic && d is FunctionDecl tf && tf.typeName != "") {
-            error(at.line, "A static function is visible where its type is: mark the type 'public', not the function");
-        } else if (isPublic) {
-            let name: String = declName(d);
-            if (name == "") { error(at.line, "Only declarations with a name can be 'public'"); } else { prog.publics.push(name); }
-        }
-        prog.decls.push(d);
-        for (f in statics) { prog.decls.push(f); }
-        statics.clear();
-    }
-    return prog;
+    return program(startLine);
 }
 
-/**
- * #when windows ... #when unix ... #end: declarations for one platform (each gets that platform).
- * Only c_include and extern declarations: what changes between platforms is how C is reached. Here
- * #else follows only #when windows or #when unix (the rest is then the other one).
- */
-function parseWhenBlock(prog: Program in default): void {
-    let open: int32 = peek().line;
-    let seen: String[*] = [] in default;
-    let seenLines: int32[*] = [] in default;
-    while (check(TT.HashWhen) || check(TT.HashElse)) {
-        let t: Token = advance();
-        let platform: String = "";
-        if (t.kind == TT.HashWhen) {
-            platform = directivePlatform(t, seen, seenLines);
-        } else {
-            platform = seen.length == 1 && seen[0] == "windows" ? "unix" : seen.length == 1 && seen[0] == "unix" ? "windows" : "";
-            if (platform == "") { error(t.line, "Outside a function '#else' only follows '#when windows' or '#when unix': name each platform with its own '#when'"); }
-        }
-        seen.push(platform);
-        seenLines.push(t.line);
-        while (!atDirective() && !isAtEnd() && !failed()) {
-            let isPublic: bool = match(TT.Public);
-            let at: Token = peek();
-            let d: Node = parseTopLevel();
-            let ok: bool = true;
-            switch (d) {
-                case CIncludeDecl c -> { c.platform = platform; }
-                case ExternTypeDecl et -> { et.platform = platform; }
-                case ExternFunctionDecl f -> { f.platform = platform; }
-                case ExternValueDecl v -> { v.platform = platform; }
-                default -> { ok = false; }
-            }
-            if (!ok) { error(at.line, "Outside a function, inside '#when' go only c_include and extern declarations"); }
-            if (isPublic) { prog.publics.push(declName(d)); }
-            prog.decls.push(d);
-        }
-        if (t.kind == TT.HashElse) { break; }
-    }
-    consume(TT.HashEnd, "Expected '#end' to close the '#when' of line ${open % 1000000}");
+/** What the parser reads past the last token. */
+let endOfFile: Token = Token { kind: TT.Eof, text: "", line: 0 } in default;
+
+/** The tokens being read, and the position of the next one. */
+let tokens: Token[*] = [] in default;
+let position: int32 = 0;
+/** Reading the methods of a synchronized class: they may say `wait until (condition)`. */
+let waitUntilAllowed: bool = false;
+/** Reading the type after `as`: there a '?' may be the ternary's (n > MAX as int64 ? a : b). */
+let readingCastType: bool = false;
+/** Static functions written inside a type: they become top-level `function Type.name` declarations. */
+let staticFunctions: FunctionDecl[*] = [] in default;
+
+// =========================================================================================
+// Reading tokens
+// =========================================================================================
+
+function error(line: int32, message: String): void {
+    if (parseError == "") { parseError = "Syntax Error [Line ${line}]: ${message}" in default; }
 }
 
-/** #when, #else or #end next? */
-function atDirective(): bool { return check(TT.HashWhen) || check(TT.HashElse) || check(TT.HashEnd); }
+function hasFailed(): bool { return parseError != ""; }
 
-/**
- * The platform of a #when: windows, macos, linux or unix (every one but Windows). A branch that an
- * earlier one already covers would never be chosen: an error.
- */
-function directivePlatform(t: Token, seen: String[*], seenLines: int32[*]): String {
-    let p: String = t.text;
-    if (p != "windows" && p != "macos" && p != "linux" && p != "unix") {
-        error(t.line, "Unknown platform '${p}': the platforms are windows, macos, linux and unix (every one but Windows)");
-        return p;
-    }
-    for (i, e in seen) {
-        if (p == e || (e == "unix" && (p == "macos" || p == "linux"))) {
-            error(t.line, "'#when ${p}' is never chosen: '#when ${e}' (line ${seenLines[i] % 1000000}) already covers it");
-        }
-    }
-    return p;
+/** The token to read next. */
+function current(): Token {
+    return hasFailed() || position >= tokens.length ? endOfFile : tokens[position];
 }
 
-/** `when` after a declaration was the old way: say the new one. */
-function noWhenSuffix(): void {
-    if (check(TT.When)) {
-        error(peek().line, "For one platform, put the declaration inside '#when <platform>' ... '#end' (each on its own line)");
-    }
+/** The token after the current one. */
+function next(): Token {
+    if (hasFailed()) { return endOfFile; }
+    return position + 1 < tokens.length ? tokens[position + 1] : tokens[tokens.length - 1];
 }
 
-// ---- helpers --------------------------------------------------------------------------
+/** The token just read. */
+function previous(): Token { return position == 0 ? endOfFile : tokens[position - 1]; }
 
-function error(line: int32, msg: String): void {
-    if (parseError == "") { parseError = "Syntax Error [Line ${line}]: ${msg}" in default; }
+function atEnd(): bool { return current().kind == TT.Eof; }
+
+/** Is the current token of this kind? */
+function at(kind: TT): bool { return !atEnd() && current().kind == kind; }
+
+/** Is the current token the identifier `word` (a word with a meaning only there: test, export, type...)? */
+function atWord(word: String): bool { return at(TT.Ident) && current().text == word; }
+
+/** Are the next two tokens the identifiers `first` and `second` (wait until, thread safe)? */
+function atWords(first: String, second: String): bool {
+    return atWord(first) && next().kind == TT.Ident && next().text == second;
 }
 
-function failed(): bool { return parseError != ""; }
-function peek(): Token { return failed() || cur >= toks.length ? eof : toks[cur]; }
-
-function peekNext(): Token {
-    if (failed()) { return eof; }
-    return cur + 1 < toks.length ? toks[cur + 1] : toks[toks.length - 1];
+/** Reads the current token and gives it. */
+function advance(): Token {
+    if (!atEnd()) { position += 1; }
+    return previous();
 }
 
-function isAtEnd(): bool { return peek().kind == TT.Eof; }
-function check(k: TT): bool { return !isAtEnd() && peek().kind == k; }
-
-function match(k: TT): bool {
-    if (!check(k)) { return false; }
+/** [ kind ]: reads the token when it is of this kind, and says whether it was. */
+function optional(kind: TT): bool {
+    if (!at(kind)) { return false; }
     advance();
     return true;
 }
 
-function advance(): Token {
-    if (!isAtEnd()) { cur += 1; }
-    return previous();
+/** [ first second ]: reads the two words when they come, and says whether they did. */
+function optionalWords(first: String, second: String): bool {
+    if (!atWords(first, second)) { return false; }
+    advance();
+    advance();
+    return true;
 }
 
-function previous(): Token { return cur == 0 ? eof : toks[cur - 1]; }
-
-function consume(k: TT, msg: String): Token {
-    if (check(k)) { return advance(); }
-    error(peek().line, "${msg} (got '${peek().text}')");
-    return eof;
+/** kind: reads the token, which must be of this kind (else the error says what came instead). */
+function expect(kind: TT, message: String): Token {
+    if (at(kind)) { return advance(); }
+    error(current().line, "${message} (got '${current().text}')");
+    return endOfFile;
 }
 
 /** The node, after its ';'. */
-function ended(n: Node, what: String): Node {
-    consume(TT.Semi, "Expected ';' after ${what}");
-    return n;
+function endedBySemicolon(node: Node, what: String): Node {
+    expect(TT.Semi, "Expected ';' after ${what}");
+    return node;
 }
 
-/** Name or module.Name. */
-function qualifiedName(msg: String): String {
-    let name: String = consume(TT.Ident, msg).text;
-    while (check(TT.Dot) && peekNext().kind == TT.Ident) {
+/** NAME ( . NAME )* */
+function qualifiedName(message: String): String {
+    let name: String = expect(TT.Ident, message).text;
+    while (at(TT.Dot) && next().kind == TT.Ident) {
         advance();
         name = "${name}.${advance().text}" in default;
     }
     return name;
 }
 
-/** item (, item)* unless the list is empty: `close` follows (it is not consumed). */
-function strictList(close: TT, each: () -> void): void {
-    if (check(close)) { return; }
+/** [ item ( , item )* ] before `close` (which is not read). */
+function strictList(close: TT, readItem: () -> void): void {
+    if (at(close)) { return; }
     while (true) {
-        each();
-        if (!match(TT.Comma)) { break; }
+        readItem();
+        if (!optional(TT.Comma)) { break; }
     }
 }
 
-/** Like strictList, but a comma may end the list. */
-function looseList(close: TT, each: () -> void): void {
-    while (!check(close) && !isAtEnd()) {
-        each();
-        if (!match(TT.Comma)) { break; }
+/** Like strictList, but a comma may also end the list. */
+function looseList(close: TT, readItem: () -> void): void {
+    while (!at(close) && !atEnd()) {
+        readItem();
+        if (!optional(TT.Comma)) { break; }
     }
 }
 
-// ---- declarations --------------------------------------------------------------------------
+/** in ( default | self | NAME ): where a parameter or a result lives. */
+function lives(): String {
+    if (optional(TT.Default)) { return "default"; }
+    if (optional(TT.Self)) { return "self"; }
+    return expect(TT.Ident, "Expected 'default', 'self' or a parameter name after 'in'").text;
+}
 
-function parseImport(): ImportDecl {
-    let line: int32 = consume(TT.Import, "Expected 'import'").line;
-    let last: String = consume(TT.Ident, "Expected a module name after 'import'").text;
+// =========================================================================================
+// The file
+// =========================================================================================
+
+/** import* ( [public] declaration | #when block )* */
+function program(startLine: int32): Program {
+    let program: Program = Program { line: startLine } in default;
+    while (!atEnd()) {
+        if (at(TT.Import)) {
+            if (program.decls.length > 0) { error(current().line, "Imports go at the beginning of the file, before any declaration"); }
+            program.imports.push(importDeclaration());
+            continue;
+        }
+        if (at(TT.HashWhen)) {
+            platformDeclarations(program);
+            continue;
+        }
+        if (at(TT.HashElse) || at(TT.HashEnd)) {
+            error(current().line, "'#${current().kind == TT.HashElse ? "else" : "end"}' without a '#when' above it");
+            advance();
+            continue;
+        }
+        if (at(TT.Private)) {
+            error(current().line, "'private' is not needed: what a module declares is private unless it is marked 'public'");
+            advance();
+        }
+        let isPublic: bool = optional(TT.Public);
+        let start: Token = current();
+        let declaration: Node = topLevelDeclaration();
+        if (isPublic && declaration is FunctionDecl testFunction && testFunction.isTest) {
+            error(start.line, "A test function cannot be 'public': only larimar test calls it");
+        } else if (isPublic && declaration is FunctionDecl staticFunction && staticFunction.typeName != "") {
+            error(start.line, "A static function is visible where its type is: mark the type 'public', not the function");
+        } else if (isPublic) {
+            let name: String = declName(declaration);
+            if (name == "") { error(start.line, "Only declarations with a name can be 'public'"); } else { program.publics.push(name); }
+        }
+        program.decls.push(declaration);
+        for (staticFunction in staticFunctions) { program.decls.push(staticFunction); }
+        staticFunctions.clear();
+    }
+    return program;
+}
+
+/**
+ * #when PLATFORM declaration* ( #when PLATFORM declaration* )* [ #else declaration* ] #end
+ *
+ * Declarations for one platform (each gets that platform). Only c_include and extern declarations:
+ * what changes between platforms is how C is reached. Here #else follows only #when windows or
+ * #when unix (the rest is then the other one).
+ */
+function platformDeclarations(program: Program in default): void {
+    let opening: int32 = current().line;
+    let platforms: String[*] = [] in default;
+    let platformLines: int32[*] = [] in default;
+    while (at(TT.HashWhen) || at(TT.HashElse)) {
+        let directive: Token = advance();
+        let platform: String = "";
+        if (directive.kind == TT.HashWhen) {
+            platform = directivePlatform(directive, platforms, platformLines);
+        } else {
+            let onlyWindows: bool = platforms.length == 1 && platforms[0] == "windows";
+            let onlyUnix: bool = platforms.length == 1 && platforms[0] == "unix";
+            platform = onlyWindows ? "unix" : onlyUnix ? "windows" : "";
+            if (platform == "") { error(directive.line, "Outside a function '#else' only follows '#when windows' or '#when unix': name each platform with its own '#when'"); }
+        }
+        platforms.push(platform);
+        platformLines.push(directive.line);
+        while (!atDirective() && !atEnd() && !hasFailed()) {
+            let isPublic: bool = optional(TT.Public);
+            let start: Token = current();
+            let declaration: Node = topLevelDeclaration();
+            let allowed: bool = true;
+            switch (declaration) {
+                case CIncludeDecl include -> { include.platform = platform; }
+                case ExternTypeDecl type -> { type.platform = platform; }
+                case ExternFunctionDecl externFunction -> { externFunction.platform = platform; }
+                case ExternValueDecl value -> { value.platform = platform; }
+                default -> { allowed = false; }
+            }
+            if (!allowed) { error(start.line, "Outside a function, inside '#when' go only c_include and extern declarations"); }
+            if (isPublic) { program.publics.push(declName(declaration)); }
+            program.decls.push(declaration);
+        }
+        if (directive.kind == TT.HashElse) { break; }
+    }
+    expect(TT.HashEnd, "Expected '#end' to close the '#when' of line ${opening % 1000000}");
+}
+
+/** #when, #else or #end next? */
+function atDirective(): bool { return at(TT.HashWhen) || at(TT.HashElse) || at(TT.HashEnd); }
+
+/**
+ * The platform of a #when: windows, macos, linux or unix (every one but Windows). A branch that an
+ * earlier one already covers would never be chosen: an error.
+ */
+function directivePlatform(directive: Token, earlier: String[*], earlierLines: int32[*]): String {
+    let platform: String = directive.text;
+    if (platform != "windows" && platform != "macos" && platform != "linux" && platform != "unix") {
+        error(directive.line, "Unknown platform '${platform}': the platforms are windows, macos, linux and unix (every one but Windows)");
+        return platform;
+    }
+    for (i, before in earlier) {
+        if (platform == before || (before == "unix" && (platform == "macos" || platform == "linux"))) {
+            error(directive.line, "'#when ${platform}' is never chosen: '#when ${before}' (line ${earlierLines[i] % 1000000}) already covers it");
+        }
+    }
+    return platform;
+}
+
+/** `when` after a declaration was the old way: say the new one. */
+function noWhenSuffix(): void {
+    if (at(TT.When)) {
+        error(current().line, "For one platform, put the declaration inside '#when <platform>' ... '#end' (each on its own line)");
+    }
+}
+
+// =========================================================================================
+// Declarations
+// =========================================================================================
+
+/** import NAME ( . NAME )* [ as NAME | { NAME ( , NAME )* } ] ; */
+function importDeclaration(): ImportDecl {
+    let line: int32 = expect(TT.Import, "Expected 'import'").line;
+    let last: String = expect(TT.Ident, "Expected a module name after 'import'").text;
     let path: String = last;
-    while (match(TT.Dot)) {
-        last = consume(TT.Ident, "Expected a name after '.' in the module path").text;
+    while (optional(TT.Dot)) {
+        last = expect(TT.Ident, "Expected a name after '.' in the module path").text;
         path = "${path}.${last}" in default;
     }
-    let n: ImportDecl = ImportDecl { line, path, alias: last } in default;
-    if (match(TT.As)) {
-        n.alias = consume(TT.Ident, "Expected a name after 'as'").text;
-    } else if (match(TT.LBrace)) {
-        n.hasNames = true;
-        n.alias = "";
-        looseList(TT.RBrace, () -> { n.names.push(consume(TT.Ident, "Expected a name to import").text); });
-        consume(TT.RBrace, "Expected '}' after the imported names");
+    let declaration: ImportDecl = ImportDecl { line, path, alias: last } in default;
+    if (optional(TT.As)) {
+        declaration.alias = expect(TT.Ident, "Expected a name after 'as'").text;
+    } else if (optional(TT.LBrace)) {
+        declaration.hasNames = true;
+        declaration.alias = "";
+        looseList(TT.RBrace, () -> { declaration.names.push(expect(TT.Ident, "Expected a name to import").text); });
+        expect(TT.RBrace, "Expected '}' after the imported names");
     }
-    consume(TT.Semi, "Expected ';' after import");
-    return n;
-}
-
-function parseTopLevel(): Node {
-    let t: Token = peek();
-    if (match(TT.CCode)) { return CCodeDecl { line: t.line, code: previous().text } in default; }
-    if (match(TT.CInclude)) {
-        let n: CIncludeDecl = CIncludeDecl { line: t.line, header: consume(TT.Str, "Expected header string after 'c_include'").text } in default;
-        noWhenSuffix();
-        return ended(n, "'c_include'");
-    }
-    if (match(TT.Extern)) {
-        if (check(TT.Const) || check(TT.Let)) { return parseExternValue(); }
-        if (!(check(TT.Ident) && peek().text == "type")) { return parseExternFunction(); }
-        advance();
-        return parseExternType();
-    }
-    if (check(TT.Ident) && peek().text == "export" && peekNext().kind == TT.Function) {
-        advance();
-        let f: FunctionDecl = parseFunction(false, true);
-        if (f.typeName != "") { error(f.line, "Only plain functions can be exported, not '${f.typeName}.${f.name}'"); }
-        f.exportName = f.name;
-        return f;
-    }
-    if (match(TT.Const)) {
-        let name: Token = consume(TT.Ident, "Expected constant name");
-        consume(TT.Colon, "Expected ':' and a type after constant '${name.text}'");
-        let type: TypeRef = parseType();
-        consume(TT.Assign, "Constants need a value");
-        return ended(ConstDecl { line: name.line, name: name.text, type, value: parseExpression() } in default, "constant");
-    }
-    if (check(TT.Let)) { return parseLet(); }
-    if (check(TT.Function)) { return parseFunction(false, true); }
-    if (match(TT.Struct)) { return parseStruct(); }
-    if (match(TT.Class)) { return parseClass(false); }
-    if (match(TT.Synchronized)) {
-        consume(TT.Class, "Expected 'class' after 'synchronized'");
-        return parseClass(true);
-    }
-    if (match(TT.Interface)) { return parseInterface(); }
-    if (match(TT.Enum)) { return parseEnum(); }
-    if (match(TT.Native)) { return parseNativeType(t.line); }
-    if (check(TT.Override)) {
-        error(t.line, "'override' is only valid inside a class");
-        return BlockStmt { line: t.line } in default;
-    }
-    error(t.line, "Only declarations (let, const, function, struct, class, interface, enum, extern, c_include, #when) are allowed at top level (got '${t.text}')");
-    return BlockStmt { line: t.line } in default;
+    expect(TT.Semi, "Expected ';' after import");
+    return declaration;
 }
 
 /**
- * extern type X;                        opaque: void*
- * extern type X = c "FILE*";            a C type
- * extern type X = (int32) -> int32;     a pointer to a C function
- * extern type X = struct "C" { ... };   a C struct, by value (the C name is optional)
- * ... released by f                     a resource: f releases it when the memory it lives in is freed
- * (inside #when windows ... #end)        only for that platform
+ * c_code | c_include "HEADER" ; | extern ... | test function ... | export function ... | const ... |
+ * let ... | function ... | struct ... | [synchronized] class ... | interface ... | enum ... | native type ...
  */
-function parseExternType(): Node {
-    let name: Token = consume(TT.Ident, "Expected type name after 'extern type'");
-    let n: ExternTypeDecl = ExternTypeDecl { line: name.line, name: name.text } in default;
-    if (!match(TT.Assign)) { return externTypeEnd(n); }
-    if (check(TT.Ident) && peek().text == "c" && peekNext().kind == TT.Str) {
-        advance();
-        n.cType = advance().text;
-        if (n.cType.trim() == "") { error(name.line, "The C type of '${name.text}' is empty"); }
-        return externTypeEnd(n);
+function topLevelDeclaration(): Node {
+    let start: Token = current();
+    if (optional(TT.CCode)) { return CCodeDecl { line: start.line, code: previous().text } in default; }
+    if (optional(TT.CInclude)) {
+        let include: CIncludeDecl = CIncludeDecl { line: start.line, header: expect(TT.Str, "Expected header string after 'c_include'").text } in default;
+        noWhenSuffix();
+        return endedBySemicolon(include, "'c_include'");
     }
-    if (match(TT.Struct)) {
-        let s: StructDecl = StructDecl { line: name.line, name: name.text, cName: name.text } in default;
-        if (check(TT.Str)) { s.cName = advance().text; }
-        consume(TT.LBrace, "Expected '{' with the fields of the C struct");
-        while (!check(TT.RBrace) && !isAtEnd() && !failed()) {
-            if (check(TT.Let)) {
-                s.fields.push(parseField());
+    if (optional(TT.Extern)) {
+        if (at(TT.Const) || at(TT.Let)) { return externValue(); }
+        if (!atWord("type")) { return externFunction(); }
+        advance();
+        return externType();
+    }
+    if (atWord("test") && next().kind == TT.Function) {
+        advance();
+        return testFunction();
+    }
+    if (atWord("export") && next().kind == TT.Function) {
+        advance();
+        let exported: FunctionDecl = functionDeclaration(false, true);
+        if (exported.typeName != "") { error(exported.line, "Only plain functions can be exported, not '${exported.typeName}.${exported.name}'"); }
+        exported.exportName = exported.name;
+        return exported;
+    }
+    if (optional(TT.Const)) { return constant(); }
+    if (at(TT.Let)) { return variable(); }
+    if (at(TT.Function)) { return functionDeclaration(false, true); }
+    if (optional(TT.Struct)) { return structDeclaration(); }
+    if (optional(TT.Class)) { return classDeclaration(false); }
+    if (optional(TT.Synchronized)) {
+        expect(TT.Class, "Expected 'class' after 'synchronized'");
+        return classDeclaration(true);
+    }
+    if (optional(TT.Interface)) { return interfaceDeclaration(); }
+    if (optional(TT.Enum)) { return enumDeclaration(); }
+    if (optional(TT.Native)) { return nativeType(start.line); }
+    if (at(TT.Override)) {
+        error(start.line, "'override' is only valid inside a class");
+        return BlockStmt { line: start.line } in default;
+    }
+    error(start.line, "Only declarations (let, const, function, struct, class, interface, enum, extern, c_include, #when) are allowed at top level (got '${start.text}')");
+    return BlockStmt { line: start.line } in default;
+}
+
+/** (after `test`) function NAME ( [ NAME : Type ] ) : void block */
+function testFunction(): FunctionDecl {
+    let test: FunctionDecl = functionDeclaration(false, true);
+    if (test.typeName != "") {
+        error(test.line, "A test function is a plain function, not '${test.typeName}.${test.name}'");
+    } else if (test.params.length > 1) {
+        error(test.line, "A test function takes nothing, or one setup: test function ${test.name}(s: MySetup)");
+    } else if (test.ret.kind != TK.Named || test.ret.name != "void") {
+        error(test.line, "A test function returns nothing: test function ${test.name}(): void");
+    } else if (test.returnLives != "") {
+        error(test.line, "A test function returns nothing, so it has no 'in ${test.returnLives}'");
+    }
+    test.isTest = true;
+    return test;
+}
+
+/** (after `const`) NAME : Type = expression ; */
+function constant(): Node {
+    let name: Token = expect(TT.Ident, "Expected constant name");
+    expect(TT.Colon, "Expected ':' and a type after constant '${name.text}'");
+    let constantType: TypeRef = type();
+    expect(TT.Assign, "Constants need a value");
+    return endedBySemicolon(ConstDecl { line: name.line, name: name.text, type: constantType, value: expression() } in default, "constant");
+}
+
+/**
+ * (after `extern type`)
+ *   NAME [ released by NAME ] ;                       opaque: void*
+ *   NAME = c "C TYPE" [ released by NAME ] ;          a C type ("FILE*")
+ *   NAME = ( Type, ... ) -> Type ;                    a pointer to a C function
+ *   NAME = struct [ "C NAME" ] { field* }             a C struct, by value
+ * `released by f`: a resource, which f releases when the memory it lives in is freed.
+ */
+function externType(): Node {
+    let name: Token = expect(TT.Ident, "Expected type name after 'extern type'");
+    let declaration: ExternTypeDecl = ExternTypeDecl { line: name.line, name: name.text } in default;
+    if (!optional(TT.Assign)) { return externTypeEnd(declaration); }
+    if (atWord("c") && next().kind == TT.Str) {
+        advance();
+        declaration.cType = advance().text;
+        if (declaration.cType.trim() == "") { error(name.line, "The C type of '${name.text}' is empty"); }
+        return externTypeEnd(declaration);
+    }
+    if (optional(TT.Struct)) {
+        let cStruct: StructDecl = StructDecl { line: name.line, name: name.text, cName: name.text } in default;
+        if (at(TT.Str)) { cStruct.cName = advance().text; }
+        expect(TT.LBrace, "Expected '{' with the fields of the C struct");
+        while (!at(TT.RBrace) && !atEnd() && !hasFailed()) {
+            if (at(TT.Let)) {
+                cStruct.fields.push(field());
             } else {
-                error(peek().line, "A C struct only lists its fields: let name: Type; (got '${peek().text}')");
+                error(current().line, "A C struct only lists its fields: let name: Type; (got '${current().text}')");
             }
         }
-        consume(TT.RBrace, "Expected '}' to close the C struct");
-        match(TT.Semi);
-        return s;
+        expect(TT.RBrace, "Expected '}' to close the C struct");
+        optional(TT.Semi);
+        return cStruct;
     }
-    if (check(TT.LParen)) {
-        n.func = parseType();
-        if (n.func!.kind != TK.Func) { error(name.line, "Expected a function type after '=': (int32, int32) -> int32"); }
-        return externTypeEnd(n);
+    if (at(TT.LParen)) {
+        declaration.func = type();
+        if (declaration.func!.kind != TK.Func) { error(name.line, "Expected a function type after '=': (int32, int32) -> int32"); }
+        return externTypeEnd(declaration);
     }
     error(name.line, "Expected c \"C type\", struct { ... } or a function type after 'extern type ${name.text} ='");
-    return n;
+    return declaration;
 }
 
-/** [released by f] ; */
-function externTypeEnd(n: ExternTypeDecl in default): Node {
-    if (check(TT.Ident) && peek().text == "released") {
+/** [ released by NAME ] ; */
+function externTypeEnd(declaration: ExternTypeDecl in default): Node {
+    if (atWord("released")) {
         advance();
-        let by: Token = consume(TT.Ident, "Expected 'by' and the function that releases it: released by close");
+        let by: Token = expect(TT.Ident, "Expected 'by' and the function that releases it: released by close");
         if (by.text != "by") { error(by.line, "Expected 'by' after 'released': released by close"); }
-        n.releasedBy = consume(TT.Ident, "Expected the function that releases '${n.name}' after 'released by'").text;
-    } else if (check(TT.Ident) && peek().text == "released_by") {
-        error(peek().line, "Write 'released by' (two words): released by close");
+        declaration.releasedBy = expect(TT.Ident, "Expected the function that releases '${declaration.name}' after 'released by'").text;
+    } else if (atWord("released_by")) {
+        error(current().line, "Write 'released by' (two words): released by close");
     }
     noWhenSuffix();
-    return ended(n, "extern type");
+    return endedBySemicolon(declaration, "extern type");
 }
 
-/** extern const NAME: T;  extern let NAME: T; */
-function parseExternValue(): Node {
+/** (after `extern`) ( const NAME : Type [ = c "C EXPRESSION" ] | let NAME : Type ) ; */
+function externValue(): Node {
     let isConst: bool = advance().kind == TT.Const;
-    let name: Token = consume(TT.Ident, "Expected the C name after 'extern ${isConst ? "const" : "let"}'");
-    consume(TT.Colon, "Expected ':' and a type after '${name.text}'");
-    let n: ExternValueDecl = ExternValueDecl { line: name.line, name: name.text, type: parseType(), isConst, cName: name.text } in default;
-    if (isConst && match(TT.Assign)) {       // = c "C expression": what C writes for it (sizeof, a cast, a macro with arguments)
-        let c: Token = consume(TT.Ident, "Expected c \"C expression\" after '='");
+    let name: Token = expect(TT.Ident, "Expected the C name after 'extern ${isConst ? "const" : "let"}'");
+    expect(TT.Colon, "Expected ':' and a type after '${name.text}'");
+    let declaration: ExternValueDecl = ExternValueDecl { line: name.line, name: name.text, type: type(), isConst, cName: name.text } in default;
+    if (isConst && optional(TT.Assign)) {      // = c "C expression": what C writes for it (sizeof, a cast, a macro with arguments)
+        let c: Token = expect(TT.Ident, "Expected c \"C expression\" after '='");
         if (c.text != "c") { error(c.line, "Expected c \"C expression\" after '=': extern const SIZE: int32 = c \"sizeof(struct stat)\";"); }
-        n.cExpr = consume(TT.Str, "Expected the C expression, in quotes").text;
+        declaration.cExpr = expect(TT.Str, "Expected the C expression, in quotes").text;
     }
     noWhenSuffix();
-    return ended(n, isConst ? "extern const" : "extern let");
+    return endedBySemicolon(declaration, isConst ? "extern const" : "extern let");
 }
 
-function parseExternFunction(): ExternFunctionDecl {
-    consume(TT.Function, "Expected 'function' or 'type' after 'extern'");
-    let name: Token = consume(TT.Ident, "Expected function name");
-    let n: ExternFunctionDecl = ExternFunctionDecl { line: name.line, name: name.text, cName: name.text, ret: typeNamed("void", name.line) } in default;
-    consume(TT.LParen, "Expected '(' after function name");
-    if (!check(TT.RParen)) {
+/** (after `extern`) function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = c "C NAME" ] ; */
+function externFunction(): ExternFunctionDecl {
+    expect(TT.Function, "Expected 'function' or 'type' after 'extern'");
+    let name: Token = expect(TT.Ident, "Expected function name");
+    let declaration: ExternFunctionDecl = ExternFunctionDecl { line: name.line, name: name.text, cName: name.text, ret: typeNamed("void", name.line) } in default;
+    expect(TT.LParen, "Expected '(' after function name");
+    if (!at(TT.RParen)) {
         while (true) {
-            if (match(TT.Ellipsis)) {
-                n.varargs = true;
+            if (optional(TT.Ellipsis)) {
+                declaration.varargs = true;
                 break;
             }
-            n.params.push(parseParam(true));
-            if (!match(TT.Comma)) { break; }
+            declaration.params.push(parameter(true));
+            if (!optional(TT.Comma)) { break; }
         }
     }
-    consume(TT.RParen, n.varargs ? "'...' must be the last parameter" : "Expected ')' after parameters");
-    if (match(TT.Colon)) { n.ret = parseType(); }
-    if (match(TT.Assign)) {                  // = c "name": the C function has another name (exit, for os.exit)
-        let c: Token = consume(TT.Ident, "Expected c \"C name\" after '='");
+    expect(TT.RParen, declaration.varargs ? "'...' must be the last parameter" : "Expected ')' after parameters");
+    if (optional(TT.Colon)) { declaration.ret = type(); }
+    if (optional(TT.Assign)) {             // = c "name": the C function has another name (exit, for os.exit)
+        let c: Token = expect(TT.Ident, "Expected c \"C name\" after '='");
         if (c.text != "c") { error(c.line, "Expected c \"C name\" after '=': extern function cExit(code: int32): void = c \"exit\";"); }
-        n.cName = consume(TT.Str, "Expected the C function's name, in quotes").text;
+        declaration.cName = expect(TT.Str, "Expected the C function's name, in quotes").text;
     }
     noWhenSuffix();
-    consume(TT.Semi, "Expected ';' after extern function");
-    return n;
+    expect(TT.Semi, "Expected ';' after extern function");
+    return declaration;
 }
 
-function parseParam(typeRequired: bool): Param {
-    let p: Token = consume(TT.Ident, "Expected parameter name");
-    let n: Param = Param { line: p.line, name: p.text } in default;
+/** NAME : Type [ in lives ]      (in a lambda: NAME [ : Type ]) */
+function parameter(typeRequired: bool): Param {
+    let name: Token = expect(TT.Ident, "Expected parameter name");
+    let parameter: Param = Param { line: name.line, name: name.text } in default;
     if (!typeRequired) {
-        if (match(TT.Colon)) { n.type = parseType(); }
-        return n;
+        if (optional(TT.Colon)) { parameter.type = type(); }
+        return parameter;
     }
-    consume(TT.Colon, "Expected ':' and a type after parameter '${p.text}'");
-    n.type = parseType();
-    if (match(TT.In)) {
-        if (match(TT.Default)) {
-            n.lives = "default";
-        } else if (match(TT.Self)) {
-            n.lives = "self";
-        } else {
-            n.lives = consume(TT.Ident, "Expected 'default', 'self' or a parameter name after 'in'").text;
-        }
-    }
-    return n;
+    expect(TT.Colon, "Expected ':' and a type after parameter '${name.text}'");
+    parameter.type = type();
+    if (optional(TT.In)) { parameter.lives = lives(); }
+    return parameter;
 }
 
-function parseParamList(): Param[*] {
-    consume(TT.LParen, "Expected '('");
-    let ps: Param[*] = [] in default;
-    strictList(TT.RParen, () -> { ps.push(parseParam(true)); });
-    consume(TT.RParen, "Expected ')' after parameters");
-    return ps;
-}
-
-/** function name(params): Ret throws E { ... }   (no body when !withBody) */
-function parseFunction(isOverride: bool, withBody: bool): FunctionDecl {
-    consume(TT.Function, "Expected 'function'");
-    let name: Token = consume(TT.Ident, "Expected function name");
-
-    // Check for Type.method syntax
-    let typeName: String = "";
-    if (match(TT.Dot)) {
-        typeName = name.text;
-        name = consume(TT.Ident, "Expected method name after '${typeName}.'");
-    }
-
-    let params: Param[*] = parseParamList();
-    let n: FunctionDecl = FunctionDecl { line: name.line, name: name.text, isOverride, params, ret: typeNamed("void", name.line) } in default;
-    if (typeName != "") {
-        n.typeName = typeName;
-        n.isStatic = true;
-    }
-    if (match(TT.Colon)) { n.ret = parseType(); }
-    if (match(TT.In)) {
-        if (match(TT.Default)) { n.returnLives = "default"; }
-        else if (match(TT.Self)) { n.returnLives = "self"; }
-        else { n.returnLives = consume(TT.Ident, "Expected 'default', 'self' or a parameter name after 'in'").text; }
-    }
-    if (match(TT.Throws)) { n.throwsType = parseType(); }
-    let wait: Token = peek();
-    if (check(TT.Ident) && wait.text == "wait_until") {
-        error(wait.line, "Write 'wait until' (two words): wait until (condition)");
-    }
-    if (check(TT.Ident) && wait.text == "wait" && peekNext().kind == TT.Ident && peekNext().text == "until") {
-        advance();
-        advance();
-        if (!waitAllowed) { error(wait.line, "'wait until' goes on a method of a synchronized class (whoever calls it waits there until the condition holds)"); }
-        consume(TT.LParen, "Expected '(' and a condition after 'wait until'");
-        n.waitUntil = parseExpression();
-        consume(TT.RParen, "Expected ')' after the condition of 'wait until'");
-    }
-    if (withBody) {
-        n.body = parseBlock("body of '${name.text}'");
-        n.hasBody = true;
-        if (n.waitUntil != null) { n.body = waitFirst(wait.line, n.waitUntil!, n.body); }
-    } else {
-        consume(TT.Semi, "Expected ';' after the method signature");
-    }
-    return n;
+/** ( [ parameter ( , parameter )* ] ) */
+function parameters(): Param[*] {
+    expect(TT.LParen, "Expected '('");
+    let list: Param[*] = [] in default;
+    strictList(TT.RParen, () -> { list.push(parameter(true)); });
+    expect(TT.RParen, "Expected ')' after parameters");
+    return list;
 }
 
 /**
- * wait until (cond): the body starts with `while (!(cond)) { self.__wait(); }`. The lock is held when
- * the body starts; __wait (a name no program can write) lets it go while waiting, and every method of
- * the object that ends wakes the waiters to look at their condition again.
+ * function [ TYPE . ] NAME parameters [ : Type ] [ in lives ] [ throws Type ] [ wait until ( expression ) ]
+ *     ( block | ; )
+ *
+ * `wait until` only on a method of a synchronized class; no body (`;`) in an interface.
  */
-function waitFirst(line: int32, cond: Expr in default, body: Stmt[*] in default): Stmt[*] {
-    let wait: Expr = Call { line, callee: Member { line, object: SelfExpr { line } in default, name: "__wait" } in default } in default;
-    let loop: Stmt = WhileStmt { line, cond: Unary { line, op: "!", operand: cond, waitUntil: true } in default, body: [ExprStmt { line, expr: wait } in default] } in default;
-    let all: Stmt[*] = [loop] in default;
-    for (s in body) { all.push(s); }
-    return all;
-}
-
-function parseOperator(): FunctionDecl {
-    let kw: Token = consume(TT.Operator, "Expected 'operator'");
-    let op: Token = advance();
-    let k: TT = op.kind;
-    if (!(k == TT.Plus || k == TT.Minus || k == TT.Star || k == TT.Slash || k == TT.Percent || k == TT.Eq || k == TT.Lt)) {
-        error(op.line, "Operator '${op.text}' cannot be overloaded (allowed: + - * / % == <)");
+function functionDeclaration(isOverride: bool, withBody: bool): FunctionDecl {
+    expect(TT.Function, "Expected 'function'");
+    let name: Token = expect(TT.Ident, "Expected function name");
+    let typeName: String = "";
+    if (optional(TT.Dot)) {                    // function Type.method(): a static function of Type
+        typeName = name.text;
+        name = expect(TT.Ident, "Expected method name after '${typeName}.'");
     }
-    let params: Param[*] = parseParamList();
-    consume(TT.Colon, "Operators must declare their return type");
-    let ret: TypeRef = parseType();
-    return FunctionDecl { line: kw.line, name: op.text, isOperator: true, params, ret, body: parseBlock("operator body"), hasBody: true } in default;
-}
-
-function parseStruct(): StructDecl {
-    let name: Token = consume(TT.Ident, "Expected struct name");
-    let n: StructDecl = StructDecl { line: name.line, name: name.text } in default;
-    consume(TT.LBrace, "Expected '{' to open struct body");
-    while (!check(TT.RBrace) && !isAtEnd()) {
-        if (check(TT.Let)) {
-            n.fields.push(parseField());
-        } else if (match(TT.Static)) {
-            parseStatic(n.name);
-        } else if (check(TT.Function)) {
-            n.methods.push(parseFunction(false, true));
-        } else if (check(TT.Operator)) {
-            n.methods.push(parseOperator());
-        } else if (check(TT.Override)) {
-            error(peek().line, "Structs have no inheritance, so 'override' is not allowed");
-        } else {
-            error(peek().line, "Expected 'let', 'function' or 'operator' inside struct (got '${peek().text}')");
-        }
+    let parameterList: Param[*] = parameters();
+    let declaration: FunctionDecl = FunctionDecl { line: name.line, name: name.text, isOverride, params: parameterList, ret: typeNamed("void", name.line) } in default;
+    if (typeName != "") {
+        declaration.typeName = typeName;
+        declaration.isStatic = true;
     }
-    consume(TT.RBrace, "Expected '}' to close struct body");
-    match(TT.Semi);
-    return n;
-}
-
-function parseClass(sync: bool): ClassDecl {
-    let name: Token = consume(TT.Ident, "Expected class name");
-    let n: ClassDecl = ClassDecl { line: name.line, name: name.text, isSynchronized: sync } in default;
-    if (match(TT.Extends)) { n.superName = qualifiedName("Expected superclass name"); }
-    if (match(TT.Implements)) {
-        while (true) {
-            n.interfaces.push(qualifiedName("Expected interface name"));
-            if (!match(TT.Comma)) { break; }
-        }
+    if (optional(TT.Colon)) { declaration.ret = type(); }
+    if (optional(TT.In)) { declaration.returnLives = lives(); }
+    if (optional(TT.Throws)) { declaration.throwsType = type(); }
+    let waitToken: Token = current();
+    if (atWord("wait_until")) {
+        error(waitToken.line, "Write 'wait until' (two words): wait until (condition)");
     }
-    consume(TT.LBrace, "Expected '{' to open class body");
-    while (!check(TT.RBrace) && !isAtEnd()) {
-        if (check(TT.Let)) {
-            n.fields.push(parseField());
-        } else if (match(TT.Static)) {
-            parseStatic(n.name);
-        } else if (match(TT.Override)) {
-            if (!check(TT.Function)) {
-                error(peek().line, "Expected 'function' after 'override'");
-            } else {
-                waitAllowed = sync;
-                n.methods.push(parseFunction(true, true));
-                waitAllowed = false;
-            }
-        } else if (match(TT.Native)) {
-            consume(TT.Function, "Expected 'function' after 'native' in class");
-            n.methods.push(parseNativeFunction(previous().line));
-        } else if (check(TT.Function)) {
-            waitAllowed = sync;
-            n.methods.push(parseFunction(false, true));
-            waitAllowed = false;
-        } else if (check(TT.Operator)) {
-            n.methods.push(parseOperator());
-        } else {
-            error(peek().line, "Expected 'let', 'function' or 'operator' inside class body (got '${peek().text}')");
-        }
+    if (optionalWords("wait", "until")) {
+        if (!waitUntilAllowed) { error(waitToken.line, "'wait until' goes on a method of a synchronized class (whoever calls it waits there until the condition holds)"); }
+        expect(TT.LParen, "Expected '(' and a condition after 'wait until'");
+        declaration.waitUntil = expression();
+        expect(TT.RParen, "Expected ')' after the condition of 'wait until'");
     }
-    consume(TT.RBrace, "Expected '}' to close class body");
-    match(TT.Semi);
-    return n;
-}
-
-function parseInterface(): InterfaceDecl {
-    let name: Token = consume(TT.Ident, "Expected interface name");
-    let n: InterfaceDecl = InterfaceDecl { line: name.line, name: name.text } in default;
-    consume(TT.LBrace, "Expected '{' to open interface body");
-    while (!check(TT.RBrace) && !isAtEnd()) {
-        if (check(TT.Static)) {
-            error(peek().line, "Interfaces cannot have static functions; declare them in a type or as plain functions");
-            advance();
-        } else if (check(TT.Let)) {
-            error(peek().line, "Interfaces only declare methods; fields belong in classes or structs");
-        } else {
-            n.methods.push(parseFunction(false, false));
-        }
-    }
-    consume(TT.RBrace, "Expected '}' to close interface body");
-    match(TT.Semi);
-    return n;
-}
-
-/** static function name(...) or static native function name(...) = c(...); inside the type `owner`. */
-function parseStatic(owner: String in default): void {
-    let f: FunctionDecl? = null;
-    if (match(TT.Native)) {
-        consume(TT.Function, "Expected 'function' after 'static native'");
-        f = parseNativeFunction(previous().line);
-        if (!f!.hasBody) { error(f!.line, "A static native function needs its C: static native function ${f!.name}(...) = c_function(...);"); }
-    } else if (check(TT.Function)) {
-        f = parseFunction(false, true);
+    if (withBody) {
+        declaration.body = block("body of '${name.text}'");
+        declaration.hasBody = true;
+        if (declaration.waitUntil != null) { declaration.body = waitFirst(waitToken.line, declaration.waitUntil!, declaration.body); }
     } else {
-        error(peek().line, "Expected 'function' after 'static'");
+        expect(TT.Semi, "Expected ';' after the method signature");
+    }
+    return declaration;
+}
+
+/** operator ( + | - | * | / | % | == | < ) parameters : Type block */
+function operatorDeclaration(): FunctionDecl {
+    let keyword: Token = expect(TT.Operator, "Expected 'operator'");
+    let symbol: Token = advance();
+    let kind: TT = symbol.kind;
+    if (!(kind == TT.Plus || kind == TT.Minus || kind == TT.Star || kind == TT.Slash || kind == TT.Percent || kind == TT.Eq || kind == TT.Lt)) {
+        error(symbol.line, "Operator '${symbol.text}' cannot be overloaded (allowed: + - * / % == <)");
+    }
+    let parameterList: Param[*] = parameters();
+    expect(TT.Colon, "Operators must declare their return type");
+    let returnType: TypeRef = type();
+    return FunctionDecl { line: keyword.line, name: symbol.text, isOperator: true, params: parameterList, ret: returnType, body: block("operator body"), hasBody: true } in default;
+}
+
+/** (after `struct`) NAME { ( field | static ... | function ... | operator ... )* } */
+function structDeclaration(): StructDecl {
+    let name: Token = expect(TT.Ident, "Expected struct name");
+    let declaration: StructDecl = StructDecl { line: name.line, name: name.text } in default;
+    expect(TT.LBrace, "Expected '{' to open struct body");
+    while (!at(TT.RBrace) && !atEnd()) {
+        if (at(TT.Let)) {
+            declaration.fields.push(field());
+        } else if (optional(TT.Static)) {
+            staticFunction(declaration.name);
+        } else if (at(TT.Function)) {
+            declaration.methods.push(functionDeclaration(false, true));
+        } else if (at(TT.Operator)) {
+            declaration.methods.push(operatorDeclaration());
+        } else if (at(TT.Override)) {
+            error(current().line, "Structs have no inheritance, so 'override' is not allowed");
+        } else {
+            error(current().line, "Expected 'let', 'function' or 'operator' inside struct (got '${current().text}')");
+        }
+    }
+    expect(TT.RBrace, "Expected '}' to close struct body");
+    optional(TT.Semi);
+    return declaration;
+}
+
+/**
+ * (after `class`) NAME [ extends NAME ] [ implements NAME ( , NAME )* ]
+ *     { ( field | static ... | [override] function ... | native function ... | operator ... )* }
+ */
+function classDeclaration(isSynchronized: bool): ClassDecl {
+    let name: Token = expect(TT.Ident, "Expected class name");
+    let declaration: ClassDecl = ClassDecl { line: name.line, name: name.text, isSynchronized } in default;
+    if (optional(TT.Extends)) { declaration.superName = qualifiedName("Expected superclass name"); }
+    if (optional(TT.Implements)) {
+        while (true) {
+            declaration.interfaces.push(qualifiedName("Expected interface name"));
+            if (!optional(TT.Comma)) { break; }
+        }
+    }
+    expect(TT.LBrace, "Expected '{' to open class body");
+    while (!at(TT.RBrace) && !atEnd()) {
+        if (at(TT.Let)) {
+            declaration.fields.push(field());
+        } else if (optional(TT.Static)) {
+            staticFunction(declaration.name);
+        } else if (optional(TT.Override)) {
+            if (!at(TT.Function)) {
+                error(current().line, "Expected 'function' after 'override'");
+            } else {
+                declaration.methods.push(method(isSynchronized, true));
+            }
+        } else if (optional(TT.Native)) {
+            expect(TT.Function, "Expected 'function' after 'native' in class");
+            declaration.methods.push(nativeFunction(previous().line));
+        } else if (at(TT.Function)) {
+            declaration.methods.push(method(isSynchronized, false));
+        } else if (at(TT.Operator)) {
+            declaration.methods.push(operatorDeclaration());
+        } else {
+            error(current().line, "Expected 'let', 'function' or 'operator' inside class body (got '${current().text}')");
+        }
+    }
+    expect(TT.RBrace, "Expected '}' to close class body");
+    optional(TT.Semi);
+    return declaration;
+}
+
+/** A method of a class: in a synchronized class it may say `wait until`. */
+function method(ofSynchronizedClass: bool, isOverride: bool): FunctionDecl {
+    waitUntilAllowed = ofSynchronizedClass;
+    let method: FunctionDecl = functionDeclaration(isOverride, true);
+    waitUntilAllowed = false;
+    return method;
+}
+
+/** (after `interface`) NAME { ( function NAME parameters [ : Type ] ... ; )* } */
+function interfaceDeclaration(): InterfaceDecl {
+    let name: Token = expect(TT.Ident, "Expected interface name");
+    let declaration: InterfaceDecl = InterfaceDecl { line: name.line, name: name.text } in default;
+    expect(TT.LBrace, "Expected '{' to open interface body");
+    while (!at(TT.RBrace) && !atEnd()) {
+        if (at(TT.Static)) {
+            error(current().line, "Interfaces cannot have static functions; declare them in a type or as plain functions");
+            advance();
+        } else if (at(TT.Let)) {
+            error(current().line, "Interfaces only declare methods; fields belong in classes or structs");
+        } else {
+            declaration.methods.push(functionDeclaration(false, false));
+        }
+    }
+    expect(TT.RBrace, "Expected '}' to close interface body");
+    optional(TT.Semi);
+    return declaration;
+}
+
+/** (after `static`, inside the type `owner`) function ... | native function ... = C ; */
+function staticFunction(owner: String in default): void {
+    let found: FunctionDecl? = null;
+    if (optional(TT.Native)) {
+        expect(TT.Function, "Expected 'function' after 'static native'");
+        found = nativeFunction(previous().line);
+        if (!found!.hasBody) { error(found!.line, "A static native function needs its C: static native function ${found!.name}(...) = c_function(...);"); }
+    } else if (at(TT.Function)) {
+        found = functionDeclaration(false, true);
+    } else {
+        error(current().line, "Expected 'function' after 'static'");
         return;
     }
-    let g: FunctionDecl = f!;
-    if (g.typeName != "") { error(g.line, "Inside '${owner}' a static function is written without the type: static function ${g.name}(...)"); }
-    g.typeName = owner;
-    g.isStatic = true;
-    statics.push(g);
+    let staticFunction: FunctionDecl = found!;
+    if (staticFunction.typeName != "") { error(staticFunction.line, "Inside '${owner}' a static function is written without the type: static function ${staticFunction.name}(...)"); }
+    staticFunction.typeName = owner;
+    staticFunction.isStatic = true;
+    staticFunctions.push(staticFunction);
 }
 
-function parseNativeType(line: int32): NativeTypeDecl {
-    let type: Token = consume(TT.Ident, "Expected 'type' after 'native'");
-    if (type.text != "type") { error(type.line, "Expected 'type' after 'native'"); }
-    let name: Token = consume(TT.Ident, "Expected native type name");
-    let n: NativeTypeDecl = NativeTypeDecl { line, name: name.text } in default;
-    consume(TT.LBrace, "Expected '{' to open native type body");
-    while (!check(TT.RBrace) && !isAtEnd()) {
-        if (match(TT.Static)) {
-            parseStatic(n.name);
-        } else if (match(TT.Native)) {
-            if (match(TT.Function)) {
-                n.methods.push(parseNativeFunction(previous().line));
-            } else if (match(TT.Operator)) {
-                n.methods.push(parseNativeOperator(previous().line));
+/** (after `native`) type NAME { ( static ... | native function ... | native operator ... | function ... )* } */
+function nativeType(line: int32): NativeTypeDecl {
+    let typeWord: Token = expect(TT.Ident, "Expected 'type' after 'native'");
+    if (typeWord.text != "type") { error(typeWord.line, "Expected 'type' after 'native'"); }
+    let name: Token = expect(TT.Ident, "Expected native type name");
+    let declaration: NativeTypeDecl = NativeTypeDecl { line, name: name.text } in default;
+    expect(TT.LBrace, "Expected '{' to open native type body");
+    while (!at(TT.RBrace) && !atEnd()) {
+        if (optional(TT.Static)) {
+            staticFunction(declaration.name);
+        } else if (optional(TT.Native)) {
+            if (optional(TT.Function)) {
+                declaration.methods.push(nativeFunction(previous().line));
+            } else if (optional(TT.Operator)) {
+                declaration.methods.push(nativeOperator(previous().line));
             } else {
-                error(peek().line, "Expected 'function' or 'operator' after 'native'");
+                error(current().line, "Expected 'function' or 'operator' after 'native'");
             }
-        } else if (check(TT.Function)) {
-            n.methods.push(parseFunction(false, true));
+        } else if (at(TT.Function)) {
+            declaration.methods.push(functionDeclaration(false, true));
         } else {
-            error(peek().line, "Expected 'native function', 'native operator' or 'function' inside native type");
+            error(current().line, "Expected 'native function', 'native operator' or 'function' inside native type");
         }
     }
-    consume(TT.RBrace, "Expected '}' to close native type body");
-    match(TT.Semi);
-    return n;
+    expect(TT.RBrace, "Expected '}' to close native type body");
+    optional(TT.Semi);
+    return declaration;
 }
 
-function parseNativeFunction(line: int32): FunctionDecl {
-    let name: Token = consume(TT.Ident, "Expected function name");
-    let n: FunctionDecl = FunctionDecl { line, name: name.text, ret: typeNamed("void", name.line) } in default;
-    n.params = parseParamList();
-    if (match(TT.Colon)) { n.ret = parseType(); }
-    if (match(TT.In)) {
-        if (match(TT.Default)) { n.returnLives = "default"; }
-        else if (match(TT.Self)) { n.returnLives = "self"; }
-        else { n.returnLives = consume(TT.Ident, "Expected 'default', 'self' or a parameter name after 'in'").text; }
-    }
-    if (match(TT.Throws)) { n.throwsType = parseType(); }
-    if (match(TT.Assign)) {
-        let value: Expr = parseExpression();
-        if (n.ret.kind == TK.Named && n.ret.name == "void") {
-            n.body.push(ExprStmt { line, expr: value } in default);
+/** (after `native function`) NAME parameters [ : Type ] [ in lives ] [ throws Type ] [ = expression ] ; */
+function nativeFunction(line: int32): FunctionDecl {
+    let name: Token = expect(TT.Ident, "Expected function name");
+    let declaration: FunctionDecl = FunctionDecl { line, name: name.text, ret: typeNamed("void", name.line) } in default;
+    declaration.params = parameters();
+    if (optional(TT.Colon)) { declaration.ret = type(); }
+    if (optional(TT.In)) { declaration.returnLives = lives(); }
+    if (optional(TT.Throws)) { declaration.throwsType = type(); }
+    if (optional(TT.Assign)) {
+        let value: Expr = expression();
+        if (declaration.ret.kind == TK.Named && declaration.ret.name == "void") {
+            declaration.body.push(ExprStmt { line, expr: value } in default);
         } else {
-            n.body.push(ReturnStmt { line, value } in default);
+            declaration.body.push(ReturnStmt { line, value } in default);
         }
-        n.hasBody = true;
+        declaration.hasBody = true;
     }
-    consume(TT.Semi, "Expected ';' after native function");
-    return n;
+    expect(TT.Semi, "Expected ';' after native function");
+    return declaration;
 }
 
-function parseNativeOperator(line: int32): FunctionDecl {
+/** (after `native operator`) ( [ ] | SYMBOL ) parameters : Type ; */
+function nativeOperator(line: int32): FunctionDecl {
     let name: String = "";
-    if (match(TT.LBracket)) {
-        consume(TT.RBracket, "Expected ']' after '[' in native operator");
+    if (optional(TT.LBracket)) {
+        expect(TT.RBracket, "Expected ']' after '[' in native operator");
         name = "[]";
     } else {
         name = advance().text;
     }
-    let n: FunctionDecl = FunctionDecl { line, name, isOperator: true, params: parseParamList(), ret: typeNamed("void", line) } in default;
-    consume(TT.Colon, "Native operators must declare their return type");
-    n.ret = parseType();
-    consume(TT.Semi, "Expected ';' after native operator");
-    return n;
+    let declaration: FunctionDecl = FunctionDecl { line, name, isOperator: true, params: parameters(), ret: typeNamed("void", line) } in default;
+    expect(TT.Colon, "Native operators must declare their return type");
+    declaration.ret = type();
+    expect(TT.Semi, "Expected ';' after native operator");
+    return declaration;
 }
 
-function parseEnum(): EnumDecl {
-    let name: Token = consume(TT.Ident, "Expected enum name");
-    let n: EnumDecl = EnumDecl { line: name.line, name: name.text } in default;
-    consume(TT.LBrace, "Expected '{' to open enum body");
+/** (after `enum`) NAME { [ variant ( , variant )* [ , ] ] }      variant: NAME [ parameters ] */
+function enumDeclaration(): EnumDecl {
+    let name: Token = expect(TT.Ident, "Expected enum name");
+    let declaration: EnumDecl = EnumDecl { line: name.line, name: name.text } in default;
+    expect(TT.LBrace, "Expected '{' to open enum body");
     looseList(TT.RBrace, () -> {
-        let v: Token = consume(TT.Ident, "Expected variant name");
-        let vn: EnumVariant = EnumVariant { line: v.line, name: v.text } in default;
-        if (check(TT.LParen)) {
-            vn.hasPayload = true;
-            vn.fields = parseParamList();
+        let variantName: Token = expect(TT.Ident, "Expected variant name");
+        let variant: EnumVariant = EnumVariant { line: variantName.line, name: variantName.text } in default;
+        if (at(TT.LParen)) {
+            variant.hasPayload = true;
+            variant.fields = parameters();
         }
-        n.variants.push(vn);
+        declaration.variants.push(variant);
     });
-    consume(TT.RBrace, "Expected '}' to close enum body (variants are separated by commas)");
-    match(TT.Semi);
-    return n;
+    expect(TT.RBrace, "Expected '}' to close enum body (variants are separated by commas)");
+    optional(TT.Semi);
+    return declaration;
 }
 
-function parseField(): FieldDecl {
-    consume(TT.Let, "Expected 'let'");
-    let name: Token = consume(TT.Ident, "Expected field name");
-    consume(TT.Colon, "Expected ':' and a type after field '${name.text}'");
-    let n: FieldDecl = FieldDecl { line: name.line, name: name.text, type: parseType() } in default;
-    if (match(TT.Assign)) { n.defaultValue = parseExpression(); }
-    consume(TT.Semi, "Expected ';' after field declaration");
-    return n;
+/** let NAME : Type [ = expression ] ; */
+function field(): FieldDecl {
+    expect(TT.Let, "Expected 'let'");
+    let name: Token = expect(TT.Ident, "Expected field name");
+    expect(TT.Colon, "Expected ':' and a type after field '${name.text}'");
+    let declaration: FieldDecl = FieldDecl { line: name.line, name: name.text, type: type() } in default;
+    if (optional(TT.Assign)) { declaration.defaultValue = expression(); }
+    expect(TT.Semi, "Expected ';' after field declaration");
+    return declaration;
 }
 
-// ---- types -------------------------------------------------------------------------------------
+// =========================================================================================
+// Types
+// =========================================================================================
 
-function parseType(): TypeRef {
-    let t: Token = peek();
-    let base: TypeRef = TypeRef { line: t.line, kind: TK.Named } in default;
-    if (match(TT.LParen)) {
-        let ps: TypeRef[*] = [] in default;
-        strictList(TT.RParen, () -> { ps.push(parseType()); });
-        consume(TT.RParen, "Expected ')' in type");
-        if (match(TT.Arrow)) {           // suffixes after a function type belong to its return type
-            return threadSafe(TypeRef { line: t.line, kind: TK.Func, params: ps, inner: parseType() } in default);
+/**
+ * ( qualified NAME | ( Type ) | ( [ Type ( , Type )* ] ) -> Type ) suffix*
+ *     suffix: [ ] | [ * ] | [ expression ] | ? | *          and after a function type: [ thread safe ]
+ */
+function type(): TypeRef {
+    let start: Token = current();
+    let base: TypeRef = TypeRef { line: start.line, kind: TK.Named } in default;
+    if (optional(TT.LParen)) {
+        let parameterTypes: TypeRef[*] = [] in default;
+        strictList(TT.RParen, () -> { parameterTypes.push(type()); });
+        expect(TT.RParen, "Expected ')' in type");
+        if (optional(TT.Arrow)) {              // suffixes after a function type belong to its return type
+            return threadSafe(TypeRef { line: start.line, kind: TK.Func, params: parameterTypes, inner: type() } in default);
         }
-        if (ps.length != 1) {
-            error(t.line, "Expected '->' after the parameters of a function type");
+        if (parameterTypes.length != 1) {
+            error(start.line, "Expected '->' after the parameters of a function type");
             return base;
         }
-        base = ps[0];
+        base = parameterTypes[0];
     } else {
-        let line: int32 = peek().line;
+        let line: int32 = current().line;
         base = typeNamed(qualifiedName("Expected a type"), line);
     }
-    while (!failed()) {
-        if (match(TT.LBracket)) {
+    while (!hasFailed()) {
+        if (optional(TT.LBracket)) {
             let line: int32 = previous().line;
-            if (match(TT.RBracket)) {
+            if (optional(TT.RBracket)) {
                 base = TypeRef { line, kind: TK.Infer, inner: base } in default;
-            } else if (check(TT.Star) && peekNext().kind == TT.RBracket) {
+            } else if (at(TT.Star) && next().kind == TT.RBracket) {
                 advance();
                 advance();
                 base = TypeRef { line, kind: TK.Growable, inner: base } in default;
             } else {
-                base = TypeRef { line, kind: TK.Fixed, inner: base, size: parseCoalesce() } in default;
-                consume(TT.RBracket, "Expected ']' after array capacity");
+                base = TypeRef { line, kind: TK.Fixed, inner: base, size: coalesce() } in default;
+                expect(TT.RBracket, "Expected ']' after array capacity");
             }
-        } else if (check(TT.Question) && (!inCast || optionalFollows(peekNext().kind))) {
+        } else if (at(TT.Question) && (!readingCastType || optionalFollows(next().kind))) {
             advance();
             base = TypeRef { line: previous().line, kind: TK.Opt, inner: base } in default;
-        } else if (check(TT.Star) && (!inCast || optionalFollows(peekNext().kind) || peekNext().kind == TT.Star)) {
-            advance();                   // T*: a C pointer (after `as`, only where a type can end: x as T* ; not x as T * 2)
+        } else if (at(TT.Star) && (!readingCastType || optionalFollows(next().kind) || next().kind == TT.Star)) {
+            advance();                     // T*: a C pointer (after `as`, only where a type can end: x as T* ; not x as T * 2)
             base = TypeRef { line: previous().line, kind: TK.Ptr, inner: base } in default;
         } else {
             return base.kind == TK.Func ? threadSafe(base) : base;      // ((A) -> B) thread safe
@@ -721,370 +812,665 @@ function parseType(): TypeRef {
 }
 
 /**
- * `thread safe` after a function type: other threads may call it at the same time. Two words, like
+ * [ thread safe ] after a function type: other threads may call it at the same time. Two words, like
  * `wait until`; neither is reserved. With function types inside function types it goes to the nearest
  * one on its left; parentheses choose another: ((A) -> (B) -> C) thread safe.
  */
-function threadSafe(t: TypeRef in default): TypeRef {
-    if (check(TT.Ident) && peek().text == "thread" && peekNext().kind == TT.Ident && peekNext().text == "safe") {
-        advance();
-        advance();
-        if (t.threadSafe) {
+function threadSafe(functionType: TypeRef in default): TypeRef {
+    if (optionalWords("thread", "safe")) {
+        if (functionType.threadSafe) {
             error(previous().line, "'thread safe' is written once.");
         } else {
-            t.threadSafe = true;
+            functionType.threadSafe = true;
         }
     }
-    return t;
+    return functionType;
 }
 
-// ---- statements ----------------------------------------------------------------------------------
+// =========================================================================================
+// Statements
+// =========================================================================================
 
-function parseLet(): VarDecl {
-    let l: Token = consume(TT.Let, "Expected 'let'");
-    let name: Token = consume(TT.Ident, "Expected variable name");
-    consume(TT.Colon, "Expected ':' and a type after variable '${name.text}'");
-    let n: VarDecl = VarDecl { line: l.line, name: name.text, type: parseType() } in default;
-    if (match(TT.Assign)) { n.init = parseExpression(); }
-    consume(TT.Semi, "Expected ';' after variable declaration");
-    return n;
+/** let NAME : Type [ = expression ] ; */
+function variable(): VarDecl {
+    let keyword: Token = expect(TT.Let, "Expected 'let'");
+    let name: Token = expect(TT.Ident, "Expected variable name");
+    expect(TT.Colon, "Expected ':' and a type after variable '${name.text}'");
+    let declaration: VarDecl = VarDecl { line: keyword.line, name: name.text, type: type() } in default;
+    if (optional(TT.Assign)) { declaration.init = expression(); }
+    expect(TT.Semi, "Expected ';' after variable declaration");
+    return declaration;
 }
 
-function parseBlock(what: String): Stmt[*] {
-    consume(TT.LBrace, "Expected '{' to open ${what}");
-    let body: Stmt[*] = [] in default;
-    while (!check(TT.RBrace) && !isAtEnd()) { body.push(parseStatement()); }
-    consume(TT.RBrace, "Expected '}' to close ${what}");
-    return body;
+/** { statement* } */
+function block(what: String): Stmt[*] {
+    expect(TT.LBrace, "Expected '{' to open ${what}");
+    let statements: Stmt[*] = [] in default;
+    while (!at(TT.RBrace) && !atEnd()) { statements.push(statement()); }
+    expect(TT.RBrace, "Expected '}' to close ${what}");
+    return statements;
 }
 
-function parseStatement(): Stmt {
-    let t: Token = peek();
-    let line: int32 = t.line;
-    return switch (t.kind) {
-        case Let -> parseLet();
-        case Const -> misplaced(t, "Constants are declared at top level");
-        case Function -> misplaced(t, "Functions are declared at top level or in a class; use a lambda inside a body");
+/**
+ * let ... | return [ expression ] ; | if ... | while ( expression ) block | for ... | break ; | continue ; |
+ * throw expression ; | yield expression ; | try ... | #when ... | block | switch ... | assignment or call
+ */
+function statement(): Stmt {
+    let start: Token = current();
+    let line: int32 = start.line;
+    return switch (start.kind) {
+        case Let -> variable();
+        case Const -> misplaced(start, "Constants are declared at top level");
+        case Function -> misplaced(start, "Functions are declared at top level or in a class; use a lambda inside a body");
         case Return -> {
             advance();
-            let n: ReturnStmt = ReturnStmt { line } in default;
-            if (!check(TT.Semi)) { n.value = parseExpression(); }
-            consume(TT.Semi, "Expected ';' after return");
-            yield n;
+            let statement: ReturnStmt = ReturnStmt { line } in default;
+            if (!at(TT.Semi)) { statement.value = expression(); }
+            expect(TT.Semi, "Expected ';' after return");
+            yield statement;
         }
         case If -> {
             advance();
-            yield parseIf(line);
+            yield ifStatement(line);
         }
         case While -> {
             advance();
-            consume(TT.LParen, "Expected '(' after 'while'");
-            let cond: Expr = parseExpression();
-            consume(TT.RParen, "Expected ')' after while condition");
-            yield WhileStmt { line, cond, body: parseBlock("while body") } in default;
+            expect(TT.LParen, "Expected '(' after 'while'");
+            let condition: Expr = expression();
+            expect(TT.RParen, "Expected ')' after while condition");
+            yield WhileStmt { line, cond: condition, body: block("while body") } in default;
         }
         case For -> {
             advance();
-            yield parseFor(line);
+            yield forStatement(line);
         }
         case Break, Continue -> {
             advance();
-            consume(TT.Semi, "Expected ';' after ${t.text}");
-            yield t.kind == TT.Break ? (BreakStmt { line } in default) : (ContinueStmt { line } in default);
+            expect(TT.Semi, "Expected ';' after ${start.text}");
+            yield start.kind == TT.Break ? (BreakStmt { line } in default) : (ContinueStmt { line } in default);
         }
         case Throw -> {
             advance();
-            let value: Expr = parseExpression();
-            consume(TT.Semi, "Expected ';' after throw");
+            let value: Expr = expression();
+            expect(TT.Semi, "Expected ';' after throw");
             yield ThrowStmt { line, value } in default;
         }
         case Yield -> {
             advance();
-            let value: Expr = parseExpression();
-            consume(TT.Semi, "Expected ';' after yield");
+            let value: Expr = expression();
+            expect(TT.Semi, "Expected ';' after yield");
             yield YieldStmt { line, value } in default;
         }
         case Try -> {
             advance();
-            yield parseTry(line);
+            yield tryStatement(line);
         }
-        case HashWhen -> parseWhen();
+        case HashWhen -> platformStatements();
         case HashElse -> misplaced(advance(), "'#else' does not line up with an open '#when' above it (the same column), or there is none");
         case HashEnd -> misplaced(advance(), "'#end' does not line up with an open '#when' above it (the same column), or there is none");
-        case LBrace -> BlockStmt { line, body: parseBlock("block") } in default;
+        case LBrace -> BlockStmt { line, body: block("block") } in default;
         case Switch -> {
             advance();
-            let sw: SwitchExpr = parseSwitch(line);
-            match(TT.Semi);
-            yield SwitchStmt { line, switchExpr: sw } in default;
+            let switchExpression: SwitchExpr = switchExpression(line);
+            optional(TT.Semi);
+            yield SwitchStmt { line, switchExpr: switchExpression } in default;
         }
-        default -> simpleStatement(line);
+        default -> assignmentOrCall(line);
     };
 }
 
-/** An assignment (also +=, -=...) or a call. */
-function simpleStatement(line: int32): Stmt {
-    let e: Expr = parseExpression();
-    let n: Stmt = ExprStmt { line, expr: e } in default;
+/** expression [ ( = | += | -= | ... ) expression ] ;      (a += b is a = a + b) */
+function assignmentOrCall(line: int32): Stmt {
+    let target: Expr = expression();
+    let statement: Stmt = ExprStmt { line, expr: target } in default;
     let what: String = "expression";
-    if (match(TT.Assign)) {
-        n = AssignStmt { line, target: e, value: parseExpression() } in default;
+    if (optional(TT.Assign)) {
+        statement = AssignStmt { line, target, value: expression() } in default;
         what = "assignment";
-    } else if (match(TT.OpAssign)) {         // a += b is a = a + b
-        let op: Token = previous();
-        let value: Expr = Binary { line: op.line, op: op.text, left: e, right: parseExpression() } in default;
-        n = AssignStmt { line, target: e, value } in default;
+    } else if (optional(TT.OpAssign)) {
+        let operatorToken: Token = previous();
+        let value: Expr = Binary { line: operatorToken.line, op: operatorToken.text, left: target, right: expression() } in default;
+        statement = AssignStmt { line, target, value } in default;
         what = "assignment";
     }
-    consume(TT.Semi, "Expected ';' after ${what}");
-    return n;
+    expect(TT.Semi, "Expected ';' after ${what}");
+    return statement;
 }
 
-function misplaced(t: Token, msg: String): Stmt {
-    error(t.line, msg);
-    return BlockStmt { line: t.line } in default;
+/** Something that does not go here: the error, and an empty statement. */
+function misplaced(token: Token, message: String): Stmt {
+    error(token.line, message);
+    return BlockStmt { line: token.line } in default;
 }
 
-function parseIf(line: int32): IfStmt {
-    consume(TT.LParen, "Expected '(' after 'if'");
-    let cond: Expr = parseExpression();
-    consume(TT.RParen, "Expected ')' after if condition");
-    let n: IfStmt = IfStmt { line, cond, thenBody: parseBlock("if body") } in default;
-    if (match(TT.Else)) {
-        n.hasElse = true;
-        if (check(TT.If)) {
-            n.elseBody.push(parseIf(advance().line));
+/** (after `if`) ( expression ) block [ else ( if ... | block ) ] */
+function ifStatement(line: int32): IfStmt {
+    expect(TT.LParen, "Expected '(' after 'if'");
+    let condition: Expr = expression();
+    expect(TT.RParen, "Expected ')' after if condition");
+    let statement: IfStmt = IfStmt { line, cond: condition, thenBody: block("if body") } in default;
+    if (optional(TT.Else)) {
+        statement.hasElse = true;
+        if (at(TT.If)) {
+            statement.elseBody.push(ifStatement(advance().line));
         } else {
-            n.elseBody = parseBlock("else body");
+            statement.elseBody = block("else body");
         }
     }
-    return n;
+    return statement;
 }
 
 /**
- * #when windows ... #when macos ... #else ... #end: the platform is chosen when the C is compiled.
- * No braces and no block: the statements belong to the block around, like the lines of C's #if.
+ * #when PLATFORM statement* ( #when PLATFORM statement* )* [ #else statement* ] #end
+ *
+ * The platform is chosen when the C is compiled. No braces and no block: the statements belong to the
+ * block around, like the lines of C's #if. The directives of one choice start at the same column.
  */
-function parseWhen(): IfStmt {
-    let open: Token = peek();
-    let col: int64 = open.num;
-    let seen: String[*] = [] in default;
-    let seenLines: int32[*] = [] in default;
+function platformStatements(): IfStmt {
+    let opening: Token = current();
+    let column: int64 = opening.num;
+    let platforms: String[*] = [] in default;
+    let platformLines: int32[*] = [] in default;
     let first: IfStmt? = null;
     let last: IfStmt? = null;
-    while (check(TT.HashWhen) && peek().num == col) {
-        let t: Token = advance();
-        let platform: String = directivePlatform(t, seen, seenLines);
-        seen.push(platform);
-        seenLines.push(t.line);
-        let n: IfStmt = IfStmt { line: t.line, cond: BoolLit { line: t.line, value: true } in default, platform, chained: first != null } in default;
-        n.thenBody = directiveBody(col);
+    while (at(TT.HashWhen) && current().num == column) {
+        let directive: Token = advance();
+        let platform: String = directivePlatform(directive, platforms, platformLines);
+        platforms.push(platform);
+        platformLines.push(directive.line);
+        let branch: IfStmt = IfStmt { line: directive.line, cond: BoolLit { line: directive.line, value: true } in default, platform, chained: first != null } in default;
+        branch.thenBody = directiveBody(column);
         if (last == null) {
-            first = n;
+            first = branch;
         } else {
             last.hasElse = true;
-            last.elseBody.push(n);
+            last.elseBody.push(branch);
         }
-        last = n;
+        last = branch;
     }
-    if (check(TT.HashElse) && peek().num == col) {
+    if (at(TT.HashElse) && current().num == column) {
         advance();
         last!.hasElse = true;
-        last!.elseBody = directiveBody(col);
+        last!.elseBody = directiveBody(column);
     }
-    if (atDirective() && peek().num != col) {
-        error(peek().line, "'${directiveText(peek())}' does not line up with its '#when' (line ${open.line % 1000000}): #when, #else and #end of one choice start at the same column");
+    if (atDirective() && current().num != column) {
+        error(current().line, "'${directiveText(current())}' does not line up with its '#when' (line ${opening.line % 1000000}): #when, #else and #end of one choice start at the same column");
     }
-    consume(TT.HashEnd, "Expected '#end' to close the '#when' of line ${open.line % 1000000}");
+    expect(TT.HashEnd, "Expected '#end' to close the '#when' of line ${opening.line % 1000000}");
     return first!;
 }
 
-/** The statements up to the next #when, #else or #end at column `col` or before (a deeper #when is nested). */
-function directiveBody(col: int64): Stmt[*] {
-    let body: Stmt[*] = [] in default;
-    while (!(atDirective() && peek().num <= col) && !check(TT.RBrace) && !isAtEnd() && !failed()) { body.push(parseStatement()); }
-    return body;
+/** The statements up to the next #when, #else or #end at `column` or before (a deeper #when is nested). */
+function directiveBody(column: int64): Stmt[*] {
+    let statements: Stmt[*] = [] in default;
+    while (!(atDirective() && current().num <= column) && !at(TT.RBrace) && !atEnd() && !hasFailed()) {
+        statements.push(statement());
+    }
+    return statements;
 }
 
-function directiveText(t: Token): String {
-    return switch (t.kind) {
-        case HashWhen -> "#when ${t.text}";
-        case HashElse -> "#else";
-        default -> "#end";
-    };
-}
-
-function parseFor(line: int32): ForStmt {
-    consume(TT.LParen, "Expected '(' after 'for'");
-    let first: String = consume(TT.Ident, "Expected loop variable").text;
+/** (after `for`) ( [ NAME , ] NAME in expression [ .. expression ] ) block */
+function forStatement(line: int32): ForStmt {
+    expect(TT.LParen, "Expected '(' after 'for'");
+    let firstName: String = expect(TT.Ident, "Expected loop variable").text;
     let indexName: String = "";
-    let varName: String = first;
-    if (match(TT.Comma)) {
-        indexName = first;
-        varName = consume(TT.Ident, "Expected value variable after ','").text;
+    let valueName: String = firstName;
+    if (optional(TT.Comma)) {
+        indexName = firstName;
+        valueName = expect(TT.Ident, "Expected value variable after ','").text;
     }
-    consume(TT.In, "Expected 'in' in for loop");
-    let n: ForStmt = ForStmt { line, indexName, varName, iterable: parseExpression() } in default;
-    if (match(TT.DotDot)) { n.rangeEnd = parseCoalesce(); }
-    consume(TT.RParen, "Expected ')' after for header");
-    n.body = parseBlock("for body");
-    if (n.indexName != "" && n.rangeEnd != null) { error(line, "A range loop has a single variable: for (i in a..b)"); }
-    return n;
+    expect(TT.In, "Expected 'in' in for loop");
+    let loop: ForStmt = ForStmt { line, indexName, varName: valueName, iterable: expression() } in default;
+    if (optional(TT.DotDot)) { loop.rangeEnd = coalesce(); }
+    expect(TT.RParen, "Expected ')' after for header");
+    loop.body = block("for body");
+    if (loop.indexName != "" && loop.rangeEnd != null) { error(line, "A range loop has a single variable: for (i in a..b)"); }
+    return loop;
 }
 
-function parseTry(line: int32): TryStmt {
-    let n: TryStmt = TryStmt { line, body: parseBlock("try body") } in default;
-    while (check(TT.Catch)) {
-        let c: Token = advance();
-        consume(TT.LParen, "Expected '(' after 'catch'");
+/** (after `try`) block ( catch ( qualified NAME NAME ) block )+ */
+function tryStatement(line: int32): TryStmt {
+    let statement: TryStmt = TryStmt { line, body: block("try body") } in default;
+    while (at(TT.Catch)) {
+        let catchToken: Token = advance();
+        expect(TT.LParen, "Expected '(' after 'catch'");
         let typeName: String = qualifiedName("Expected the error type in catch");
-        let varName: String = consume(TT.Ident, "Expected a variable name after the error type").text;
-        consume(TT.RParen, "Expected ')' after catch");
-        n.catches.push(CatchClause { line: c.line, typeName, varName, body: parseBlock("catch body") } in default);
+        let variableName: String = expect(TT.Ident, "Expected a variable name after the error type").text;
+        expect(TT.RParen, "Expected ')' after catch");
+        statement.catches.push(CatchClause { line: catchToken.line, typeName, varName: variableName, body: block("catch body") } in default);
     }
-    if (n.catches.length == 0) { error(line, "A 'try' needs at least one 'catch'"); }
-    return n;
+    if (statement.catches.length == 0) { error(line, "A 'try' needs at least one 'catch'"); }
+    return statement;
 }
 
-// ---- expressions (lowest to highest precedence) -------------------------------------------------
+// =========================================================================================
+// Expressions, from the lowest precedence to the highest
+// =========================================================================================
 
-public function parseExpression(): Expr {
-    let e: Expr = parseTernary();
-    if (!match(TT.In)) { return e; }
+/** ternary [ in ( heap | default | byte[N] | expression ) ]: where a created value lives */
+function expression(): Expr {
+    let value: Expr = ternary();
+    if (!optional(TT.In)) { return value; }
     let line: int32 = previous().line;
-    if (match(TT.Heap)) { return Placed { line, expr: e, mode: PL_HEAP } in default; }
-    if (match(TT.Default)) { return Placed { line, expr: e, mode: PL_DEFAULT } in default; }
-    if (check(TT.Ident) && peek().text == "byte" && peekNext().kind == TT.LBracket) {
-        return Placed { line, expr: e, mode: PL_STACK, buffer: parseType() } in default;
+    if (optional(TT.Heap)) { return Placed { line, expr: value, mode: PL_HEAP } in default; }
+    if (optional(TT.Default)) { return Placed { line, expr: value, mode: PL_DEFAULT } in default; }
+    if (atWord("byte") && next().kind == TT.LBracket) {
+        return Placed { line, expr: value, mode: PL_STACK, buffer: type() } in default;
     }
-    return Placed { line, expr: e, mode: PL_MEMORY, memory: parseCoalesce() } in default;
+    return Placed { line, expr: value, mode: PL_MEMORY, memory: coalesce() } in default;
 }
 
-function binary(op: String in default, left: Expr in default, right: Expr in default, line: int32): Expr {
-    return Binary { line, op, left, right } in default;
-}
-
-/** c ? a : b (right to left). */
-function parseTernary(): Expr {
-    let cond: Expr = parseCoalesce();
-    if (!match(TT.Question)) { return cond; }
+/** coalesce [ ? ternary : ternary ]      (right to left) */
+function ternary(): Expr {
+    let condition: Expr = coalesce();
+    if (!optional(TT.Question)) { return condition; }
     let line: int32 = previous().line;
-    let then: Expr = parseTernary();
-    consume(TT.Colon, "Expected ':' in the conditional expression (condition ? a : b)");
-    return Ternary { line, cond, then, otherwise: parseTernary() } in default;
+    let then: Expr = ternary();
+    expect(TT.Colon, "Expected ':' in the conditional expression (condition ? a : b)");
+    return Ternary { line, cond: condition, then, otherwise: ternary() } in default;
 }
 
-function parseCoalesce(): Expr {
-    let left: Expr = parseOr();
-    if (!match(TT.QQ)) { return left; }
+/** or [ ?? coalesce ] */
+function coalesce(): Expr {
+    let left: Expr = or();
+    if (!optional(TT.QQ)) { return left; }
     let line: int32 = previous().line;
-    return binary("??", left, parseCoalesce(), line);
+    return binary("??", left, coalesce(), line);
 }
 
-function parseOr(): Expr {
-    let left: Expr = parseAnd();
-    while (match(TT.Or)) {
+/** and ( || and )* */
+function or(): Expr {
+    let left: Expr = and();
+    while (optional(TT.Or)) {
         let line: int32 = previous().line;
-        left = binary("||", left, parseAnd(), line);
+        left = binary("||", left, and(), line);
     }
     return left;
 }
 
-function parseAnd(): Expr {
-    let left: Expr = parseComparison();
-    while (match(TT.And)) {
+/** comparison ( && comparison )* */
+function and(): Expr {
+    let left: Expr = comparison();
+    while (optional(TT.And)) {
         let line: int32 = previous().line;
-        left = binary("&&", left, parseComparison(), line);
+        left = binary("&&", left, comparison(), line);
     }
     return left;
 }
 
-function parseComparison(): Expr {
-    let left: Expr = parseBitOr();
+/** bitOr ( ( == | != | < | <= | > | >= ) bitOr | is qualified NAME [ NAME ] )* */
+function comparison(): Expr {
+    let left: Expr = bitOr();
     while (true) {
-        if (match(TT.Is)) {          // x is Dog, x is Dog d
+        if (optional(TT.Is)) {                 // x is Dog, x is Dog d
             let line: int32 = previous().line;
-            let typeName: String = consume(TT.Ident, "Expected a class name after 'is'").text;
-            while (match(TT.Dot)) { typeName = "${typeName}.${consume(TT.Ident, "Expected a name after '.'").text}" in default; }
-            left = IsExpr { line, expr: left, typeName, binding: check(TT.Ident) ? advance().text : "" } in default;
+            let typeName: String = expect(TT.Ident, "Expected a class name after 'is'").text;
+            while (optional(TT.Dot)) { typeName = "${typeName}.${expect(TT.Ident, "Expected a name after '.'").text}" in default; }
+            left = IsExpr { line, expr: left, typeName, binding: at(TT.Ident) ? advance().text : "" } in default;
             continue;
         }
-        if (!(check(TT.Eq) || check(TT.Ne) || check(TT.Lt) || check(TT.Le) || check(TT.Gt) || check(TT.Ge))) { break; }
-        let op: Token = advance();
-        left = binary(op.text, left, parseBitOr(), op.line);
+        if (!(at(TT.Eq) || at(TT.Ne) || at(TT.Lt) || at(TT.Le) || at(TT.Gt) || at(TT.Ge))) { break; }
+        let operatorToken: Token = advance();
+        left = binary(operatorToken.text, left, bitOr(), operatorToken.line);
     }
     return left;
 }
 
-function parseBitOr(): Expr {
-    let left: Expr = parseBitXor();
-    while (match(TT.Pipe)) {
+/** bitXor ( | bitXor )* */
+function bitOr(): Expr {
+    let left: Expr = bitXor();
+    while (optional(TT.Pipe)) {
         let line: int32 = previous().line;
-        left = binary("|", left, parseBitXor(), line);
+        left = binary("|", left, bitXor(), line);
     }
     return left;
 }
 
-function parseBitXor(): Expr {
-    let left: Expr = parseBitAnd();
-    while (match(TT.Caret)) {
+/** bitAnd ( ^ bitAnd )* */
+function bitXor(): Expr {
+    let left: Expr = bitAnd();
+    while (optional(TT.Caret)) {
         let line: int32 = previous().line;
-        left = binary("^", left, parseBitAnd(), line);
+        left = binary("^", left, bitAnd(), line);
     }
     return left;
 }
 
-function parseBitAnd(): Expr {
-    let left: Expr = parseShift();
-    while (match(TT.Amp)) {
+/** shift ( & shift )* */
+function bitAnd(): Expr {
+    let left: Expr = shift();
+    while (optional(TT.Amp)) {
         let line: int32 = previous().line;
-        left = binary("&", left, parseShift(), line);
+        left = binary("&", left, shift(), line);
     }
     return left;
 }
 
-function parseShift(): Expr {
-    let left: Expr = parseAdditive();
-    while (check(TT.Shl) || check(TT.Shr)) {
-        let op: Token = advance();
-        left = binary(op.text, left, parseAdditive(), op.line);
+/** additive ( ( << | >> ) additive )* */
+function shift(): Expr {
+    let left: Expr = additive();
+    while (at(TT.Shl) || at(TT.Shr)) {
+        let operatorToken: Token = advance();
+        left = binary(operatorToken.text, left, additive(), operatorToken.line);
     }
     return left;
 }
 
-function parseAdditive(): Expr {
-    let left: Expr = parseMultiplicative();
-    while (check(TT.Plus) || check(TT.Minus)) {
-        let op: Token = advance();
-        left = binary(op.text, left, parseMultiplicative(), op.line);
+/** multiplicative ( ( + | - ) multiplicative )* */
+function additive(): Expr {
+    let left: Expr = multiplicative();
+    while (at(TT.Plus) || at(TT.Minus)) {
+        let operatorToken: Token = advance();
+        left = binary(operatorToken.text, left, multiplicative(), operatorToken.line);
     }
     return left;
 }
 
-function parseMultiplicative(): Expr {
-    let left: Expr = parseCast();
-    while (check(TT.Star) || check(TT.Slash) || check(TT.Percent)) {
-        let op: Token = advance();
-        left = binary(op.text, left, parseCast(), op.line);
+/** cast ( ( * | / | % ) cast )* */
+function multiplicative(): Expr {
+    let left: Expr = cast();
+    while (at(TT.Star) || at(TT.Slash) || at(TT.Percent)) {
+        let operatorToken: Token = advance();
+        left = binary(operatorToken.text, left, cast(), operatorToken.line);
     }
     return left;
 }
 
-function parseCast(): Expr {
-    let e: Expr = parseUnary();
-    while (match(TT.As)) {
+/** unary ( as Type )* */
+function cast(): Expr {
+    let value: Expr = unary();
+    while (optional(TT.As)) {
         let line: int32 = previous().line;
-        let saved: bool = inCast;
-        inCast = true;
-        let type: TypeRef = parseType();
-        inCast = saved;
-        e = Cast { line, expr: e, type } in default;
+        let wasReadingCastType: bool = readingCastType;
+        readingCastType = true;
+        let castType: TypeRef = type();
+        readingCastType = wasReadingCastType;
+        value = Cast { line, expr: value, type: castType } in default;
     }
-    return e;
+    return value;
 }
 
-/** Parsing the type after `as`: there a '?' may be the ternary's (n > MAX as int64 ? a : b). */
-let inCast: bool = false;
+/** ( - | ! | ~ | & ) unary | postfix */
+function unary(): Expr {
+    if (!(at(TT.Minus) || at(TT.Not) || at(TT.Tilde) || at(TT.Amp))) { return postfix(); }
+    let operatorToken: Token = advance();
+    return Unary { line: operatorToken.line, op: operatorToken.text, operand: unary() } in default;
+}
+
+/** primary ( ( arguments ) | . NAME | . NAME { fields } | [ expression ] | ! )* */
+function postfix(): Expr {
+    let value: Expr = primary();
+    while (!hasFailed()) {
+        if (optional(TT.LParen)) {
+            let call: Call = Call { line: previous().line, callee: value } in default;
+            strictList(TT.RParen, () -> { call.args.push(expression()); });
+            expect(TT.RParen, "Expected ')' after arguments");
+            value = call;
+        } else if (optional(TT.Dot)) {
+            let name: Token = expect(TT.Ident, "Expected a name after '.'");
+            let path: String = dottedPath(value);
+            if (path != "" && at(TT.LBrace)) {        // Enum.Variant { field: value }, module.Type { ... }
+                value = objectLiteral("${path}.${name.text}" in default, name.line);
+            } else {
+                value = Member { line: name.line, object: value, name: name.text } in default;
+            }
+        } else if (optional(TT.LBracket)) {
+            let line: int32 = previous().line;
+            value = Index { line, object: value, index: expression() } in default;
+            expect(TT.RBracket, "Expected ']' after index");
+        } else if (at(TT.Not)) {
+            value = Unwrap { line: advance().line, expr: value } in default;
+        } else {
+            return value;
+        }
+    }
+    return value;
+}
+
+/**
+ * NUMBER | "TEXT" | true | false | null | self | super . NAME | { fields } | [ expressions ] | switch ... |
+ * NAME [ { fields } ] | lambda | ( expression )
+ */
+function primary(): Expr {
+    let start: Token = current();
+    let line: int32 = start.line;
+    if (optional(TT.Int)) { return IntLit { line, num: start.num, big: start.big, huge: start.huge, text: start.text } in default; }
+    if (optional(TT.Float)) { return FloatLit { line, text: start.text } in default; }
+    if (optional(TT.Str)) { return string(start); }
+    if (optional(TT.True) || optional(TT.False)) { return BoolLit { line, value: start.kind == TT.True } in default; }
+    if (optional(TT.Null)) { return NullLit { line } in default; }
+    if (optional(TT.Self)) { return SelfExpr { line } in default; }
+    if (optional(TT.Super)) {
+        expect(TT.Dot, "Expected '.' after 'super'");
+        let name: Token = expect(TT.Ident, "Expected method name after 'super.'");
+        return SuperMember { line: name.line, name: name.text } in default;
+    }
+    if (optional(TT.New)) {
+        let className: String = at(TT.Ident) ? qualifiedName("") : "Type";
+        error(line, "Larimar creates objects without 'new': write ${className} { field: value } in memory");
+        return NullLit { line } in default;
+    }
+    if (at(TT.LBrace)) { return objectLiteral("", line); }
+    if (optional(TT.LBracket)) {
+        let array: ArrayLit = ArrayLit { line } in default;
+        while (!at(TT.RBracket)) {                   // a trailing comma is fine
+            array.elems.push(expression());
+            if (!optional(TT.Comma)) { break; }
+        }
+        expect(TT.RBracket, "Expected ']' to close array literal");
+        return array;
+    }
+    if (optional(TT.Switch)) { return switchExpression(line); }
+    if (optional(TT.Ident)) { return at(TT.LBrace) ? objectLiteral(start.text, line) : (Ident { line, name: start.text } in default); }
+    if (at(TT.LParen)) {
+        if (lambdaAhead()) { return lambda(); }
+        advance();
+        let inner: Expr = expression();
+        expect(TT.RParen, "Expected ')'");
+        return inner;
+    }
+    error(line, "Unexpected '${start.text}' in expression");
+    return NullLit { line } in default;
+}
+
+/** { [ field ( , field )* [ , ] ] }      field: NAME : expression | NAME | expression */
+function objectLiteral(typeName: String in default, line: int32): ObjectLit {
+    let literal: ObjectLit = ObjectLit { line, typeName } in default;
+    expect(TT.LBrace, "Expected '{' to open object literal");
+    looseList(TT.RBrace, () -> {
+        let start: Token = current();
+        if (at(TT.Ident) && next().kind == TT.Colon) {                  // name: value
+            advance();
+            advance();
+            literal.fields.push(FieldInit { line: start.line, name: start.text, value: expression() } in default);
+        } else if (at(TT.Ident) && (next().kind == TT.Comma || next().kind == TT.RBrace)) {
+            advance();                                                         // { x } = { x: x }
+            literal.fields.push(FieldInit { line: start.line, name: start.text, shorthand: true, value: Ident { line: start.line, name: start.text } in default } in default);
+        } else {
+            literal.fields.push(FieldInit { line: start.line, value: expression() } in default);    // positional (Any)
+        }
+    });
+    expect(TT.RBrace, "Expected '}' to close object literal");
+    return literal;
+}
+
+/** Is a lambda next: ( ... ) followed by -> ? */
+function lambdaAhead(): bool {
+    let depth: int32 = 0;
+    let i: int32 = position;
+    while (i < tokens.length) {
+        let kind: TT = tokens[i].kind;
+        if (kind == TT.LParen) {
+            depth += 1;
+        } else if (kind == TT.RParen) {
+            depth -= 1;
+            if (depth == 0) { return i + 1 < tokens.length && tokens[i + 1].kind == TT.Arrow; }
+        } else if (kind == TT.Eof) {
+            return false;
+        }
+        i += 1;
+    }
+    return false;
+}
+
+/** ( [ parameter ( , parameter )* ] ) -> block */
+function lambda(): Lambda {
+    let lambda: Lambda = Lambda { line: expect(TT.LParen, "Expected '('").line } in default;
+    strictList(TT.RParen, () -> { lambda.params.push(parameter(false)); });
+    expect(TT.RParen, "Expected ')' after lambda parameters");
+    expect(TT.Arrow, "Expected '->' after lambda parameters");
+    lambda.body = block("lambda body");
+    return lambda;
+}
+
+/**
+ * (after `switch`) ( expression ) { case* }
+ *     case: ( case pattern ( , pattern )* | default ) [ when expression ] -> ( block | throw expression ; | expression ; )
+ */
+function switchExpression(line: int32): SwitchExpr {
+    expect(TT.LParen, "Expected '(' after 'switch'");
+    let switchNode: SwitchExpr = SwitchExpr { line, subject: expression() } in default;
+    expect(TT.RParen, "Expected ')' after switch subject");
+    expect(TT.LBrace, "Expected '{' to open switch");
+    while (!at(TT.RBrace) && !atEnd()) {
+        let caseToken: Token = current();
+        let switchCase: SwitchCase = SwitchCase { line: caseToken.line } in default;
+        if (optional(TT.Default)) {
+            switchCase.isDefault = true;
+        } else {
+            expect(TT.Case, "Expected 'case' or 'default' in switch");
+            while (true) {
+                switchCase.patterns.push(pattern());
+                if (!optional(TT.Comma)) { break; }
+            }
+        }
+        if (optional(TT.When)) {
+            if (switchCase.isDefault) { error(caseToken.line, "'default' cannot have a 'when' condition"); }
+            switchCase.guard = expression();
+        }
+        expect(TT.Arrow, "Expected '->' after the case (this switch uses arrows, like Java)");
+        if (at(TT.LBrace)) {
+            switchCase.hasBlock = true;
+            switchCase.block = block("case body");
+        } else if (at(TT.Throw)) {
+            let throwToken: Token = advance();
+            switchCase.throwStmt = ThrowStmt { line: throwToken.line, value: expression() } in default;
+            expect(TT.Semi, "Expected ';' after throw");
+        } else {
+            switchCase.expr = expression();
+            expect(TT.Semi, "Expected ';' after the case value");
+        }
+        switchNode.cases.push(switchCase);
+    }
+    expect(TT.RBrace, "Expected '}' to close switch");
+    return switchNode;
+}
+
+/**
+ * null | constant | qualified NAME [ NAME ] | qualified NAME { [ NAME [ : NAME ] ( , ... )* ] } [ NAME ]
+ *     (a value, a type with its binding, or an enum variant with its fields)
+ */
+function pattern(): Pattern {
+    let start: Token = current();
+    if (optional(TT.Null)) { return Pattern { line: start.line, kind: PT_NULL } in default; }
+    if (at(TT.Int) || at(TT.Float) || at(TT.Str) || at(TT.True) || at(TT.False) || at(TT.Minus)) {
+        return Pattern { line: start.line, kind: PT_CONSTANT, constant: unary() } in default;
+    }
+    let pattern: Pattern = Pattern { line: start.line, kind: PT_NAME, name: qualifiedName("Expected a pattern (a value, an enum variant or a type)") } in default;
+    if (at(TT.LParen)) {
+        error(pattern.line, "Patterns take their fields by name with braces: case ${pattern.name} { campo } or case ${pattern.name} { campo: nombre }");
+        return pattern;
+    }
+    if (optional(TT.LBrace)) {
+        pattern.kind = PT_DESTRUCTURE;
+        looseList(TT.RBrace, () -> {
+            let fieldName: String = expect(TT.Ident, "Expected a field name").text;
+            pattern.fields.push(fieldName);
+            pattern.bindings.push(optional(TT.Colon) ? expect(TT.Ident, "Expected a name after ':'").text : fieldName);
+        });
+        expect(TT.RBrace, "Expected '}' after the fields of the pattern");
+        if (at(TT.Ident)) { pattern.binding = advance().text; }
+    } else if (at(TT.Ident)) {
+        pattern.kind = PT_TYPE;
+        pattern.binding = advance().text;
+    }
+    return pattern;
+}
+
+/** "Hello ${name}": the texts, and the parsed expressions between them. */
+function string(token: Token in default): StringLit {
+    let literal: StringLit = StringLit { line: token.line } in default;
+    let raw: String = token.text;
+    let textStart: int32 = 0;
+    let line: int32 = token.line;
+    let i: int32 = 0;
+    while (i < raw.length && !hasFailed()) {
+        let character: byte = raw[i];
+        if (character == '\\' && i + 1 < raw.length) {
+            i += 2;
+        } else if (character == '$' && i + 1 < raw.length && raw[i + 1] == '{') {
+            let closing: int32 = interpolationEnd(raw, i + 1);
+            let inner: String = raw.substring(i + 2, closing);
+            if (inner.isBlank()) {
+                error(line, "Empty '\${}' in string");
+                return literal;
+            }
+            literal.texts.push(raw.substring(textStart, i));
+            literal.exprs.push(interpolation(inner, line));
+            let k: int32 = i;
+            while (k <= closing && k < raw.length) {
+                if (raw[k] == '\n') { line += 1; }
+                k += 1;
+            }
+            i = closing + 1;
+            textStart = i;
+        } else {
+            if (character == '\n') { line += 1; }
+            i += 1;
+        }
+    }
+    literal.texts.push(raw.substring(textStart));
+    return literal;
+}
+
+/** The expression inside ${...}: its own tokens, read with this parser, then back to the string's. */
+function interpolation(inner: String in default, line: int32): Expr {
+    let savedTokens: Token[*] = tokens;
+    let savedPosition: int32 = position;
+    tokens = tokenize(inner, line);
+    position = 0;
+    let value: Expr = NullLit { line } in default;
+    if (lexError != "") {
+        if (parseError == "") { parseError = lexError; }
+    } else {
+        value = expression();
+        if (!atEnd()) { error(line, "Unexpected '${current().text}' inside '\${...}'"); }
+    }
+    tokens = savedTokens;
+    position = savedPosition;
+    return value;
+}
+
+// =========================================================================================
+// Helpers that need no parser
+// =========================================================================================
+
+function binary(operatorText: String in default, left: Expr in default, right: Expr in default, line: int32): Expr {
+    return Binary { line, op: operatorText, left, right } in default;
+}
+
+/**
+ * wait until (cond): the body starts with `while (!(cond)) { self.__wait(); }`. The lock is held when
+ * the body starts; __wait (a name no program can write) lets it go while waiting, and every method of
+ * the object that ends wakes the waiters to look at their condition again.
+ */
+function waitFirst(line: int32, condition: Expr in default, body: Stmt[*] in default): Stmt[*] {
+    let wait: Expr = Call { line, callee: Member { line, object: SelfExpr { line } in default, name: "__wait" } in default } in default;
+    let loop: Stmt = WhileStmt { line, cond: Unary { line, op: "!", operand: condition, waitUntil: true } in default, body: [ExprStmt { line, expr: wait } in default] } in default;
+    let statements: Stmt[*] = [loop] in default;
+    for (statement in body) { statements.push(statement); }
+    return statements;
+}
 
 /**
  * After `as T`, a '?' makes T optional only when what follows can come after a type (x as int64? ?? 0,
@@ -1097,273 +1483,43 @@ function optionalFollows(next: TT): bool {
     }
 }
 
-function parseUnary(): Expr {
-    if (!(check(TT.Minus) || check(TT.Not) || check(TT.Tilde) || check(TT.Amp))) { return parsePostfix(); }
-    let op: Token = advance();
-    return Unary { line: op.line, op: op.text, operand: parseUnary() } in default;
-}
-
-function parsePostfix(): Expr {
-    let e: Expr = parsePrimary();
-    while (!failed()) {
-        if (match(TT.LParen)) {
-            let c: Call = Call { line: previous().line, callee: e } in default;
-            strictList(TT.RParen, () -> { c.args.push(parseExpression()); });
-            consume(TT.RParen, "Expected ')' after arguments");
-            e = c;
-        } else if (match(TT.Dot)) {
-            let name: Token = consume(TT.Ident, "Expected a name after '.'");
-            let path: String = dottedPath(e);
-            if (path != "" && check(TT.LBrace)) {          // Enum.Variant { field: value }, module.Type { ... }
-                e = parseObjectLiteral("${path}.${name.text}" in default, name.line);
-            } else {
-                e = Member { line: name.line, object: e, name: name.text } in default;
-            }
-        } else if (match(TT.LBracket)) {
-            let line: int32 = previous().line;
-            e = Index { line, object: e, index: parseExpression() } in default;
-            consume(TT.RBracket, "Expected ']' after index");
-        } else if (check(TT.Not)) {
-            e = Unwrap { line: advance().line, expr: e } in default;
-        } else {
-            return e;
-        }
-    }
-    return e;
-}
-
 /** a, a.b, a.b.c (only names), or "". */
-function dottedPath(e: Expr): String {
-    if (e is Ident id) { return id.name; }
-    if (e is Member m) {
-        let p: String = dottedPath(m.object);
-        if (p != "") { return "${p}.${m.name}"; }
+function dottedPath(value: Expr): String {
+    if (value is Ident identifier) { return identifier.name; }
+    if (value is Member member) {
+        let path: String = dottedPath(member.object);
+        if (path != "") { return "${path}.${member.name}"; }
     }
     return "";
 }
 
-function parsePrimary(): Expr {
-    let t: Token = peek();
-    let line: int32 = t.line;
-    if (match(TT.Int)) { return IntLit { line, num: t.num, big: t.big, huge: t.huge, text: t.text } in default; }
-    if (match(TT.Float)) { return FloatLit { line, text: t.text } in default; }
-    if (match(TT.Str)) { return parseString(t); }
-    if (match(TT.True) || match(TT.False)) { return BoolLit { line, value: t.kind == TT.True } in default; }
-    if (match(TT.Null)) { return NullLit { line } in default; }
-    if (match(TT.Self)) { return SelfExpr { line } in default; }
-    if (match(TT.Super)) {
-        consume(TT.Dot, "Expected '.' after 'super'");
-        let name: Token = consume(TT.Ident, "Expected method name after 'super.'");
-        return SuperMember { line: name.line, name: name.text } in default;
-    }
-    if (match(TT.New)) {
-        let cls: String = check(TT.Ident) ? qualifiedName("") : "Type";
-        error(line, "Larimar creates objects without 'new': write ${cls} { field: value } in memory");
-        return NullLit { line } in default;
-    }
-    if (check(TT.LBrace)) { return parseObjectLiteral("", line); }
-    if (match(TT.LBracket)) {
-        let a: ArrayLit = ArrayLit { line } in default;
-        while (!check(TT.RBracket)) {                  // a trailing comma is fine
-            a.elems.push(parseExpression());
-            if (!match(TT.Comma)) { break; }
-        }
-        consume(TT.RBracket, "Expected ']' to close array literal");
-        return a;
-    }
-    if (match(TT.Switch)) { return parseSwitch(line); }
-    if (match(TT.Ident)) { return check(TT.LBrace) ? parseObjectLiteral(t.text, line) : (Ident { line, name: t.text } in default); }
-    if (check(TT.LParen)) {
-        if (lambdaAhead()) { return parseLambda(); }
-        advance();
-        let e: Expr = parseExpression();
-        consume(TT.RParen, "Expected ')'");
-        return e;
-    }
-    error(line, "Unexpected '${t.text}' in expression");
-    return NullLit { line } in default;
+function directiveText(token: Token): String {
+    return switch (token.kind) {
+        case HashWhen -> "#when ${token.text}";
+        case HashElse -> "#else";
+        default -> "#end";
+    };
 }
 
-function parseObjectLiteral(typeName: String in default, line: int32): ObjectLit {
-    let n: ObjectLit = ObjectLit { line, typeName } in default;
-    consume(TT.LBrace, "Expected '{' to open object literal");
-    looseList(TT.RBrace, () -> {
-        let at: Token = peek();
-        if (check(TT.Ident) && peekNext().kind == TT.Colon) {                  // name: value
-            advance();
-            advance();
-            n.fields.push(FieldInit { line: at.line, name: at.text, value: parseExpression() } in default);
-        } else if (check(TT.Ident) && (peekNext().kind == TT.Comma || peekNext().kind == TT.RBrace)) {
-            advance();                                                          // { x } = { x: x }
-            n.fields.push(FieldInit { line: at.line, name: at.text, shorthand: true, value: Ident { line: at.line, name: at.text } in default } in default);
-        } else {
-            n.fields.push(FieldInit { line: at.line, value: parseExpression() } in default);    // positional (Any)
-        }
-    });
-    consume(TT.RBrace, "Expected '}' to close object literal");
-    return n;
-}
-
-function lambdaAhead(): bool {
+/** Where the ${ that starts at `open` (the '{') closes: its '}' (strings inside are skipped). */
+function interpolationEnd(raw: String, open: int32): int32 {
     let depth: int32 = 0;
-    let i: int32 = cur;
-    while (i < toks.length) {
-        let k: TT = toks[i].kind;
-        if (k == TT.LParen) {
+    let j: int32 = open;
+    while (j < raw.length) {
+        let character: byte = raw[j];
+        if (character == '"') {
+            j += 1;
+            while (j < raw.length && raw[j] != '"') {
+                if (raw[j] == '\\') { j += 1; }
+                j += 1;
+            }
+        } else if (character == '{') {
             depth += 1;
-        } else if (k == TT.RParen) {
+        } else if (character == '}') {
             depth -= 1;
-            if (depth == 0) { return i + 1 < toks.length && toks[i + 1].kind == TT.Arrow; }
-        } else if (k == TT.Eof) {
-            return false;
+            if (depth == 0) { return j; }
         }
-        i += 1;
+        j += 1;
     }
-    return false;
-}
-
-function parseLambda(): Lambda {
-    let n: Lambda = Lambda { line: consume(TT.LParen, "Expected '('").line } in default;
-    strictList(TT.RParen, () -> { n.params.push(parseParam(false)); });
-    consume(TT.RParen, "Expected ')' after lambda parameters");
-    consume(TT.Arrow, "Expected '->' after lambda parameters");
-    n.body = parseBlock("lambda body");
-    return n;
-}
-
-function parseSwitch(line: int32): SwitchExpr {
-    consume(TT.LParen, "Expected '(' after 'switch'");
-    let n: SwitchExpr = SwitchExpr { line, subject: parseExpression() } in default;
-    consume(TT.RParen, "Expected ')' after switch subject");
-    consume(TT.LBrace, "Expected '{' to open switch");
-    while (!check(TT.RBrace) && !isAtEnd()) {
-        let c: Token = peek();
-        let cn: SwitchCase = SwitchCase { line: c.line } in default;
-        if (match(TT.Default)) {
-            cn.isDefault = true;
-        } else {
-            consume(TT.Case, "Expected 'case' or 'default' in switch");
-            while (true) {
-                cn.patterns.push(parsePattern());
-                if (!match(TT.Comma)) { break; }
-            }
-        }
-        if (match(TT.When)) {
-            if (cn.isDefault) { error(c.line, "'default' cannot have a 'when' condition"); }
-            cn.guard = parseExpression();
-        }
-        consume(TT.Arrow, "Expected '->' after the case (this switch uses arrows, like Java)");
-        if (check(TT.LBrace)) {
-            cn.hasBlock = true;
-            cn.block = parseBlock("case body");
-        } else if (check(TT.Throw)) {
-            let th: Token = advance();
-            cn.throwStmt = ThrowStmt { line: th.line, value: parseExpression() } in default;
-            consume(TT.Semi, "Expected ';' after throw");
-        } else {
-            cn.expr = parseExpression();
-            consume(TT.Semi, "Expected ';' after the case value");
-        }
-        n.cases.push(cn);
-    }
-    consume(TT.RBrace, "Expected '}' to close switch");
-    return n;
-}
-
-function parsePattern(): Pattern {
-    let t: Token = peek();
-    if (match(TT.Null)) { return Pattern { line: t.line, kind: PT_NULL } in default; }
-    if (check(TT.Int) || check(TT.Float) || check(TT.Str) || check(TT.True) || check(TT.False) || check(TT.Minus)) {
-        return Pattern { line: t.line, kind: PT_CONSTANT, constant: parseUnary() } in default;
-    }
-    let p: Pattern = Pattern { line: t.line, kind: PT_NAME, name: qualifiedName("Expected a pattern (a value, an enum variant or a type)") } in default;
-    if (check(TT.LParen)) {
-        error(p.line, "Patterns take their fields by name with braces: case ${p.name} { campo } or case ${p.name} { campo: nombre }");
-        return p;
-    }
-    if (match(TT.LBrace)) {
-        p.kind = PT_DESTRUCTURE;
-        looseList(TT.RBrace, () -> {
-            let f: String = consume(TT.Ident, "Expected a field name").text;
-            p.fields.push(f);
-            p.bindings.push(match(TT.Colon) ? consume(TT.Ident, "Expected a name after ':'").text : f);
-        });
-        consume(TT.RBrace, "Expected '}' after the fields of the pattern");
-        if (check(TT.Ident)) { p.binding = advance().text; }
-    } else if (check(TT.Ident)) {
-        p.kind = PT_TYPE;
-        p.binding = advance().text;
-    }
-    return p;
-}
-
-/** Splits "Hello ${name}" into texts and parsed expressions. */
-function parseString(t: Token in default): StringLit {
-    let n: StringLit = StringLit { line: t.line } in default;
-    let raw: String = t.text;
-    let cutStart: int32 = 0;
-    let line: int32 = t.line;
-    let i: int32 = 0;
-    while (i < raw.length && !failed()) {
-        let c: byte = raw[i];
-        if (c == '\\' && i + 1 < raw.length) {
-            i += 2;
-        } else if (c == '$' && i + 1 < raw.length && raw[i + 1] == '{') {
-            let depth: int32 = 0;
-            let j: int32 = i + 1;
-            let done: bool = false;
-            while (j < raw.length && !done) {
-                let d: byte = raw[j];
-                if (d == '"') {
-                    j += 1;
-                    while (j < raw.length && raw[j] != '"') {
-                        if (raw[j] == '\\') { j += 1; }
-                        j += 1;
-                    }
-                } else if (d == '{') {
-                    depth += 1;
-                } else if (d == '}') {
-                    depth -= 1;
-                    done = depth == 0;
-                }
-                if (!done) { j += 1; }
-            }
-            let inner: String = raw.substring(i + 2, j);
-            if (inner.isBlank()) {
-                error(line, "Empty '\${}' in string");
-                return n;
-            }
-            n.texts.push(raw.substring(cutStart, i));
-            n.exprs.push(parseInterpolation(inner, line));
-            let k: int32 = i;
-            while (k <= j && k < raw.length) {
-                if (raw[k] == '\n') { line += 1; }
-                k += 1;
-            }
-            i = j + 1;
-            cutStart = i;
-        } else {
-            if (c == '\n') { line += 1; }
-            i += 1;
-        }
-    }
-    n.texts.push(raw.substring(cutStart));
-    return n;
-}
-
-function parseInterpolation(inner: String in default, line: int32): Expr {
-    let savedToks: Token[*] = toks;
-    let savedCur: int32 = cur;
-    toks = tokenize(inner, line);
-    cur = 0;
-    let e: Expr = NullLit { line } in default;
-    if (lexError != "") {
-        if (parseError == "") { parseError = lexError; }
-    } else {
-        e = parseExpression();
-        if (!isAtEnd()) { error(line, "Unexpected '${peek().text}' inside '\${...}'"); }
-    }
-    toks = savedToks;
-    cur = savedCur;
-    return e;
+    return j;
 }

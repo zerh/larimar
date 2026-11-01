@@ -1,0 +1,80 @@
+// std.test: the checks that test functions use (larimar test runs them).
+//
+//   import std.test { check, checkText, checkInt };
+//
+//   test function addsUp(): void {
+//       checkInt(4, 2 + 2);
+//       checkText("hola 3", "hola ${1 + 2}");
+//   }
+//
+// A check that fails prints why, and the test goes on (to stop there, `return`). The test fails when
+// any of its checks failed. Each test runs alone, in its own process, so nothing is shared between tests.
+
+/** How many checks of the running test failed. */
+let failed: int32 = 0;
+
+/** Fails when the condition is false, with this message. */
+public function check(condition: bool, message: String): void {
+    if (!condition) { fail(message); }
+}
+
+/** Fails when the two texts differ. */
+public function checkText(expected: String, actual: String): void {
+    if (expected != actual) { fail("expected \"${expected}\" but got \"${actual}\""); }
+}
+
+/** Fails when the two numbers differ. */
+public function checkInt(expected: int32, actual: int32): void {
+    if (expected != actual) { fail("expected ${expected} but got ${actual}"); }
+}
+
+/** Fails when the two numbers differ (int64). */
+public function checkInt64(expected: int64, actual: int64): void {
+    if (expected != actual) { fail("expected ${expected} but got ${actual}"); }
+}
+
+/** Fails when the two numbers are further apart than `tolerance`. */
+public function checkFloat(expected: float64, actual: float64, tolerance: float64): void {
+    let distance: float64 = expected - actual;
+    if (distance < 0.0) { distance = -distance; }
+    if (distance > tolerance) { fail("expected ${expected} but got ${actual} (tolerance ${tolerance})"); }
+}
+
+/** Fails, with this message. */
+public function fail(message: String): void {
+    failed += 1;
+    println("check failed: ${message}");
+}
+
+/** Why the running test was skipped ("" when it was not). */
+let skipped: String = "";
+
+/**
+ * Skips the test: it cannot run here (a program it needs is not installed, another platform). Say why;
+ * larimar test shows it as skipped, not passed. Then `return`.
+ */
+public function skip(reason: String): void {
+    if (skipped == "") { skipped = reason.clone() in default; }
+    println("skipped: ${reason}");
+}
+
+/** Why the running test was skipped, or "" (larimar test asks it when the test ends). */
+public function skipReason(): String {
+    return skipped;
+}
+
+/** How many checks of the running test failed (larimar test asks it when the test ends). */
+public function failedChecks(): int32 {
+    return failed;
+}
+
+/**
+ * What a test needs ready before it runs, and cleaned after: `test function name(s: MySetup)`. For each
+ * test, larimar test makes a new MySetup {} (so its fields need default values), calls beforeEach(), the
+ * test, and afterEach() (always, also when a check failed). When a check fails in beforeEach(), the test
+ * does not run.
+ */
+public interface TestSetup {
+    function beforeEach(): void;
+    function afterEach(): void;
+}
