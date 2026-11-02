@@ -73,6 +73,14 @@ END
     done
     printf "%s\n" "$out" | grep -qF "should not run" && missing="$missing\n  a test ran after its setup failed"
     [ $code -eq 1 ] || missing="$missing\n  exit $code (expected 1)"
+    # for editors: --list and --json, and --test to run one by its name
+    listed="$(cd "$T" && "$LARIMARC" test --list --json 2>&1)"
+    printf "%s\n" "$listed" | grep -qF '"event":"found","file":"tests/fixture_test.lar"' || missing="$missing\n  --list --json: no found event"
+    printf "%s\n" "$listed" | grep -qF '"name":"skips","line":13' || missing="$missing\n  --list --json: skips is not at line 13"
+    one="$(cd "$T" && CC="$CC" "$LARIMARC" test --json --test fails 2>&1)"
+    printf "%s\n" "$one" | grep -qF '"name":"fails","line":9,"result":"failed","message":"check failed: expected 5 but got 4"' \
+        || missing="$missing\n  --json --test fails: not reported as failed"
+    printf "%s\n" "$one" | grep -qF '{"event":"summary","passed":0,"failed":1,"skipped":0}' || missing="$missing\n  --json --test fails: wrong summary"
     rm -rf "$T"
     if [ -z "$missing" ]; then
         pass=$((pass + 1))

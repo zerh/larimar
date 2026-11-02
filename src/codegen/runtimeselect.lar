@@ -89,7 +89,7 @@ public function selectRuntime(program: String, threads: bool, files: bool, allHe
             }
         }
         if (!emit) { continue; }
-        if (out.length() > 0 && !(lastInclude && u.include)) { out.add("\n"); }
+        if (out.length > 0 && !(lastInclude && u.include)) { out.add("\n"); }
         for (l in u.lines) {
             out.add(l);
             out.add("\n");

@@ -13,7 +13,7 @@ public class Thread {
 }
 
 public native type Any {
-    native function length(): int32;
+    native let length: int32;
     native function push(x: Any in self): void;
     native function containsKey(name: String): bool;
     native function contains(x: Any): bool;
@@ -37,7 +37,7 @@ public native type Any {
 
 public native type String {
     // The core: the compiler knows these. Cuts are views (they share the bytes of the text).
-    native function length(): int32;
+    native let length: int32;
     native operator [](i: int32): byte;
     native function substring(from: int32, to: int32): String in self;
     native function bytes(): byte[0];
@@ -48,16 +48,16 @@ public native type String {
 
     // Everything else is written here, in Larimar.
 
-    function isEmpty(): bool { return self.length() == 0; }
+    function isEmpty(): bool { return self.length == 0; }
 
     function isBlank(): bool { return self.trim().isEmpty(); }
 
-    function substring(from: int32): String in self { return self.substring(from, self.length()); }
+    function substring(from: int32): String in self { return self.substring(from, self.length); }
 
     /** Where s starts, looking from `from` on (a negative `from` is 0); null if it is not there. */
     function indexOf(s: String, from: int32): int32? {
-        let n: int32 = self.length();
-        let m: int32 = s.length();
+        let n: int32 = self.length;
+        let m: int32 = s.length;
         let i: int32 = from < 0 ? 0 : from;
         if (i > n) { return null; }
         while (i <= n - m) {
@@ -74,19 +74,19 @@ public native type String {
     function contains(s: String): bool { return self.indexOf(s, 0) != null; }
 
     function startsWith(prefix: String): bool {
-        return prefix.length() <= self.length() && self.substring(0, prefix.length()) == prefix;
+        return prefix.length <= self.length && self.substring(0, prefix.length) == prefix;
     }
 
     function endsWith(suffix: String): bool {
-        let slen: int32 = self.length();
-        let plen: int32 = suffix.length();
+        let slen: int32 = self.length;
+        let plen: int32 = suffix.length;
         if (plen > slen) { return false; }
         return self.substring(slen - plen) == suffix;
     }
 
     function trim(): String in self {
         let from: int32 = 0;
-        let to: int32 = self.length();
+        let to: int32 = self.length;
         while (from < to && isSpace(self[from])) { from += 1; }
         while (to > from && isSpace(self[to - 1])) { to -= 1; }
         return self.substring(from, to);
@@ -94,22 +94,22 @@ public native type String {
 
     function trimStart(): String in self {
         let i: int32 = 0;
-        while (i < self.length() && isSpace(self[i])) { i += 1; }
+        while (i < self.length && isSpace(self[i])) { i += 1; }
         return self.substring(i);
     }
 
     function trimEnd(): String in self {
-        let i: int32 = self.length();
+        let i: int32 = self.length;
         while (i > 0 && isSpace(self[i - 1])) { i -= 1; }
         return self.substring(0, i);
     }
 
     function lastIndexOf(needle: String): int32? {
-        let i: int32 = self.length() - needle.length();
+        let i: int32 = self.length - needle.length;
         while (i >= 0) {
             let j: int32 = 0;
-            while (j < needle.length() && self[i + j] == needle[j]) { j += 1; }
-            if (j == needle.length()) { return i; }
+            while (j < needle.length && self[i + j] == needle[j]) { j += 1; }
+            if (j == needle.length) { return i; }
             i -= 1;
         }
         return null;
@@ -121,7 +121,7 @@ public native type String {
         let at: int32? = self.indexOf(needle, 0);
         while (at != null) {
             cnt += 1;
-            at = self.indexOf(needle, at! + needle.length());
+            at = self.indexOf(needle, at! + needle.length);
         }
         return cnt;
     }
@@ -133,7 +133,7 @@ public native type String {
     }
 
     function equalsIgnoreCase(other: String): bool {
-        if (self.length() != other.length()) { return false; }
+        if (self.length != other.length) { return false; }
         for (i, c in self) {
             if (asciiLower(c) != asciiLower(other[i])) { return false; }
         }
@@ -142,21 +142,21 @@ public native type String {
 
     /** A copy with a-z as A-Z (other bytes stay). */
     function toUpperCase(): String {
-        let t: ByteText = byte_text_sized(self.length());
+        let t: ByteText = byte_text_sized(self.length);
         for (c in self) { byte_text_add(t, asciiUpper(c)); }
         return byte_text_view(t);
     }
 
     /** A copy with A-Z as a-z (other bytes stay). */
     function toLowerCase(): String {
-        let t: ByteText = byte_text_sized(self.length());
+        let t: ByteText = byte_text_sized(self.length);
         for (c in self) { byte_text_add(t, asciiLower(c)); }
         return byte_text_view(t);
     }
 
     function repeat(n: int32): String {
         if (n < 0) { panic("repeat() needs a count of 0 or more"); }
-        let total: int64 = (self.length() as int64) * (n as int64);
+        let total: int64 = (self.length as int64) * (n as int64);
         if (total > 0x7ffffff0) { panic("the repeated text would be too long"); }
         let t: ByteText = byte_text_sized(total as int32);
         for (k in 0..n) {
@@ -167,15 +167,15 @@ public native type String {
 
     /** A copy with every `from` changed to `to` (an empty `from` changes nothing). */
     function replace(from: String, to: String): String {
-        let n: int32 = self.length();
-        let fl: int32 = from.length();
+        let n: int32 = self.length;
+        let fl: int32 = from.length;
         let found: int32 = fl == 0 ? 0 : self.count(from);
-        let t: ByteText = byte_text_sized(n + found * (to.length() - fl));
+        let t: ByteText = byte_text_sized(n + found * (to.length - fl));
         let start: int32 = 0;
         let at: int32? = fl == 0 ? null : self.indexOf(from, 0);
         while (at != null) {
             addBytes(t, self, start, at!);
-            addBytes(t, to, 0, to.length());
+            addBytes(t, to, 0, to.length);
             start = at! + fl;
             at = self.indexOf(from, start);
         }
@@ -191,7 +191,7 @@ public native type String {
 
     /** "123", "-7", "+5", "0xFF", "0b1010", "1_000"; null if it is not a whole int64. */
     function toInt(): int64? {
-        let n: int32 = self.length();
+        let n: int32 = self.length;
         let i: int32 = 0;
         let negative: bool = false;
         if (i < n && (self[i] == '-' || self[i] == '+')) {
@@ -230,7 +230,7 @@ public native type String {
 
     /** A number as C's strtod reads it (the whole text, no spaces around); null if it is not one. */
     function toFloat(): float64? {
-        if (!text_is_float(self, self.length())) { return null; }
+        if (!text_is_float(self, self.length)) { return null; }
         return text_to_float(self);
     }
 
@@ -252,7 +252,7 @@ public native type String {
     /** The characters as numbers (UTF-8 decoded; a broken sequence gives 0xFFFD and moves one byte). */
     function codePoints(): int32[*] {
         let out: int32[*] = [];
-        let n: int32 = self.length();
+        let n: int32 = self.length;
         let i: int32 = 0;
         while (i < n) {
             let c: int32 = self[i] as int32;
@@ -311,11 +311,11 @@ function addBytes(t: ByteText, s: String, from: int32, to: int32): void {
 }
 
 function padded(s: String, width: int32, fill: String, atStart: bool): String {
-    let missing: int32 = fill.length() > 0 && width > s.length() ? width - s.length() : 0;
-    let t: ByteText = byte_text_sized(s.length() + missing);
-    if (!atStart) { addBytes(t, s, 0, s.length()); }
-    for (k in 0..missing) { byte_text_add(t, fill[k % fill.length()]); }
-    if (atStart) { addBytes(t, s, 0, s.length()); }
+    let missing: int32 = fill.length > 0 && width > s.length ? width - s.length : 0;
+    let t: ByteText = byte_text_sized(s.length + missing);
+    if (!atStart) { addBytes(t, s, 0, s.length); }
+    for (k in 0..missing) { byte_text_add(t, fill[k % fill.length]); }
+    if (atStart) { addBytes(t, s, 0, s.length); }
     return byte_text_view(t);
 }
 
@@ -391,7 +391,7 @@ public class StringBuilder {
     let buf: TextBuf = text_buf_new();
     native function add(text: String): void = text_buf_add(self.buf, text);
     native function addLine(text: String): void = text_buf_add_line(self.buf, text);
-    native function length(): int32 = text_buf_length(self.buf);
+    native let length: int32 = text_buf_length(self.buf);
     native function toString(): String in self = text_buf_view(self.buf);
     native function clear(): void = text_buf_clear(self.buf);
 }

@@ -152,10 +152,15 @@ public function analyze(program: Program in default): void {
     flowSummaries();          // before the field defaults: a call there must know if it creates its result
     checkFieldDefaults();
 
+    let initializers: Owner[*] = [] in default;       // what the initial value of each global calls and reads
     for (d in program.decls) {
         if (d is VarDecl v) {
             globals.push(v);
+            let o: Owner = newOwner();
+            globalFrame.owner = o;
             analyzeVarDecl(v);
+            globalFrame.owner = null;
+            initializers.push(o);
         }
     }
     for (f in functions) {
@@ -177,6 +182,7 @@ public function analyze(program: Program in default): void {
 
     resolveRegions();
     checkThreads();
+    checkGlobalOrder(initializers);
     checkMutations();
     checkMemoryUses();
     checkMain();
@@ -2704,6 +2710,49 @@ function checkThreads(): void {
             for (e in o.edges) { todo.push(e); }
         }
     }
+}
+
+// =====================================================================================
+// Globals are given their values in order: an initial value cannot reach a global that has none yet.
+// =====================================================================================
+
+/**
+ * The initial value of a global, and every function it calls however deep, cannot use a global that is
+ * initialized after it (or itself): it would find it without its value.
+ */
+function checkGlobalOrder(initializers: Owner[*] in default): void {
+    for (k, v in globals) {
+        markRound += 1;
+        let todo: Owner[*] = [initializers[k]] in default;
+        let found: bool = false;
+        let i: int32 = 0;
+        while (i < todo.length && !found) {
+            let o: Owner = todo[i];
+            i += 1;
+            if (o.mark == markRound) { continue; }
+            o.mark = markRound;
+            for (u, g in o.uses) {
+                if (found || !initializedFrom(g, k)) { continue; }
+                found = true;
+                let same: bool = v.symbol != null && v.symbol! == g;
+                error(v.line, same
+                    ? "The initial value of '${v.name}' calls code that uses '${v.name}' itself (line ${o.useLines[u]}), before it has a value."
+                    : "The initial value of '${v.name}' calls code that uses global '${g.name}' (line ${o.useLines[u]}), which gets its value later. Declare '${g.name}' before '${v.name}', or give '${v.name}' its value in main.");
+            }
+            for (e in o.edges) { todo.push(e); }
+        }
+    }
+}
+
+/** Whether global `g` is the k-th one or one initialized after it. */
+function initializedFrom(g: Symbol in default, k: int32): bool {
+    let j: int32 = k;
+    while (j < globals.length) {
+        let s: Symbol? = globals[j].symbol;
+        if (s != null && s! == g) { return true; }
+        j += 1;
+    }
+    return false;
 }
 
 // =====================================================================================

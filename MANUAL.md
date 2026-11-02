@@ -101,7 +101,9 @@ statements:
 Any declaration can have `public` in front so that other modules can use it.
 
 The order of the declarations does not matter: a function can use another one that is further down.
-Global variables are initialized in the order in which they appear, before `main`.
+Global variables are initialized in the order in which they appear, before `main`. So the initial value
+of a global can use only the ones above it, and the functions it calls cannot use one further down
+either: they would find it without its value, and the compiler says so.
 
 Comments are as in C: `// to the end of the line` and `/* in a block */`.
 Each statement ends in `;`, and blocks go between `{ }`.
@@ -116,6 +118,8 @@ let name: String = "Ana";
 age = 31;          // variables can be reassigned
 age += 1;          // also +=, -=, *=, /=, %=, &=, |=, ^=
 ```
+
+`a op= b` is `a = a op b`, with the place computed once: in `counts[next()] += 1`, `next()` runs once.
 
 - The **type is required**, and so is the **initial value**: there are no uninitialized variables.
 - A variable declared inside a block only exists inside it.
@@ -155,7 +159,8 @@ Output: `sensor: 0 of 16, 1048576 bytes`
 **Primitive types are written in lowercase**: they are simple values that never need memory, have
 no fields and cannot be redefined. Everything else starts with an uppercase letter: `String` (which
 does need memory), and the structs, classes, interfaces and enums you declare. So by looking at the
-name you know whether a type is the language's or yours.
+name you know whether a type is the language's or yours. It is a convention: the compiler does not
+enforce it, but the standard library and these pages follow it.
 
 ### Numeric literals
 
@@ -232,6 +237,14 @@ Output: `7 3.5 2147483647 0`
 From decimal to integer the value is truncated, and if it does not fit the nearest limit is used
 (instead of the undefined behavior of C).
 
+### Decimals as text
+
+A decimal is written with **the fewest digits that read back as the same value**, as in Go, Java or
+JavaScript: `0.1 * 3.0` is `0.30000000000000004` (that is its real value), a `float32` `0.1` is `0.1`.
+It always has a `.` or an exponent, so it reads as a decimal: `2.0`, `1234567.0`, `1e+20`, `1e-05`.
+Without an exponent from `0.0001` up to `1e15`. And `nan`, `inf`, `-inf`. What is printed, read back
+with `toFloat()`, gives the same number.
+
 ---
 
 ## 5. Operators
@@ -263,6 +276,10 @@ Rules:
 - `&&` and `||` do not evaluate the right side if it is not needed.
 - `==` compares numbers, `bool`, `String` (by content), enums without data and objects (by identity).
   An optional object (`Node?`) can be compared with a `Node`.
+- **Everything is evaluated from left to right**, once: the operands of an operator, the arguments of a
+  call (after the object of a method), the elements of a list and the fields of a literal **in the order
+  they are written**, and in an assignment the place before the value. C leaves that order open; Larimar
+  fixes it, so a program does the same with any C compiler.
 
 ### The conditional `c ? a : b`
 
@@ -421,6 +438,9 @@ true 007 ababab 72
   `in`: `s.toUpperCase() in memory`. The lists of `split`, `lines` and `codePoints` too.
 - `toUpperCase`, `toLowerCase` and `equalsIgnoreCase` change only ASCII letters.
 - A `String` is not modified: `s[0] = 65` is an error. To build text there is `StringBuilder`.
+- `length` is read without parentheses, here and everywhere (lists, arrays, `Any`, memories,
+  `StringBuilder`): what is a value has no parentheses, what does something has them. `s.length()` is an
+  error that says so.
 
 ### `StringBuilder`
 
@@ -432,7 +452,7 @@ function main(): int32 {
     for (i in 0..3) { out.add("item ${i}, "); }   // the interpolation is written straight into the builder
     out.addLine("end");
     let text: String = out.toString();          // a view of what has been built so far
-    println("${text.length} ${out.length()}");
+    println("${text.length} ${out.length}");
     print(text);
     return 0;
 }
@@ -444,7 +464,7 @@ Output:
 item 0, item 1, item 2, end
 ```
 
-`add(text)`, `addLine(text)`, `length()`, `toString()` and `clear()`. The text grows in the memory of
+`add(text)`, `addLine(text)`, `length`, `toString()` and `clear()`. The text grows in the memory of
 the builder. What `toString()` returns does not change even if more is added afterwards or `clear()`
 is called.
 
@@ -2118,6 +2138,9 @@ extern function close_window(w: Window): void;
 - In `std.lang`, `native type` declares methods of a primitive type of the language. A `native function`
   without a body declares an intrinsic operation; with `= expression;` it defines the method using a
   Larimar expression, often an `extern` call. In a class you can also write `native function ... = expression;`.
+- `native let name: T;` declares a value read without parentheses (`s.length`), which the compiler gives;
+  in a class, `native let name: T = expression;` gives it with that expression (`StringBuilder.length`).
+  It is never assigned.
 - `native operator []` declares the intrinsic indexing. `in self` in the return says that the returned
   value is a view tied to the life of the receiver. The initializers of class fields are evaluated for
   each object, inside the memory of that object.
@@ -2157,10 +2180,10 @@ For example, the API of a primitive type can mix intrinsics, methods implemented
 
 ```actionscript
 public native type String {
-    native function length(): int32;
+    native let length: int32;
     native operator [](i: int32): byte;
     native function substring(from: int32, to: int32): String in self;
-    function isEmpty(): bool { return self.length() == 0; }
+    function isEmpty(): bool { return self.length == 0; }
 }
 ```
 
@@ -2656,6 +2679,10 @@ public function area(s: Shape): float64 {
 `public` applies to the whole name: in a public class, its fields and methods are seen from outside.
 There is no `private`: writing it is an error (`'private' is not needed: ...`), because without `public`
 it already is.
+
+By convention, a field or a method that is not meant to be used from outside its class starts with
+`_`: `let _cache: Any = {};`. The compiler does not enforce it; it tells the reader. (A single `_`:
+names cannot contain `__`.)
 
 ### `import`
 
@@ -3781,7 +3808,9 @@ It looks for Larimar in this order: the `larimar.home` setting, the `LARIMAR_HOM
 on the `PATH` and, on macOS and Linux, the `LARIMAR_HOME` of your login shell (VS Code opened from the
 Dock does not see what `~/.zshrc` exports). It starts `$LARIMAR_HOME/bin/larimarc lsp`. It adds the
 commands **Larimar: Run Project** and **Debug Project** (also on the ▷ button of the editor), **Build
-Project**, **Check Project**, **Show Generated C** and **Restart Language Server**.
+Project**, **Check Project**, **Show Generated C** and **Restart Language Server**. The tests of the
+project show in the **Testing** view, each at its line, to run one, a file or all of them (with
+`larimar test --list --json` and `--json`, see [Tests](#tests-test-function-and-larimar-test)).
 
 Other editors (Neovim, Helix, Zed, Sublime...) only need to be told to start `larimarc lsp` for `.lar`
 files, with `LARIMAR_HOME` in the environment.
@@ -3960,8 +3989,17 @@ the test does not run.
 larimar test                      # all of tests/
 larimar test tests/shapes_test.lar
 larimar test --only circle        # the ones with "circle" in their name or path
+larimar test tests/shapes_test.lar --test names   # only that test, by its exact name
+larimar test --list               # the tests, without running them
 larimar test --no-sanitize
 ```
+
+**For editors**, `--json` writes one JSON object per line instead of the text above: with `--list`, one
+`{"event": "found", "file": ..., "path": ..., "name": ..., "line": ...}` per test; when they run, one
+`{"event": "result", ..., "result": "passed" | "failed" | "skipped", "message": ...}` per test and a
+final `{"event": "summary", "passed": ..., "failed": ..., "skipped": ...}`. A file that says what it
+expects is one test with the name `""`. That is how the VS Code extension shows the tests in its
+Testing view.
 
 The rules:
 

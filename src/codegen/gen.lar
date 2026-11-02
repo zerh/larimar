@@ -15,7 +15,7 @@
 import syntax.ast {
     ExternTypeDecl,
     Expr, Stmt, VarDecl, AssignStmt, ReturnStmt, ExprStmt, IfStmt, WhileStmt, ForStmt, BreakStmt, ContinueStmt, ThrowStmt,
-    YieldStmt, TryStmt, SwitchStmt, BlockStmt, Member, Index, Call, IsExpr, SwitchExpr, allStmts, allExprs
+    YieldStmt, TryStmt, SwitchStmt, BlockStmt, Member, Index, Call, IsExpr, SwitchExpr, Binary, allStmts, allExprs
 };
 import semantics.types {
     Type, TyK, NamedK, ArrK, T_STRING, T_VOID, T_ANY, T_BOOL, T_INT32, isError, isClass, isStruct, isInterface, isEnumT,
@@ -33,7 +33,7 @@ import semantics.expressions { hasRefs };
 import codegen.expressions {
     expr, value, hoist, strip, lazyPre, lazy, zero, stringLiteral, addrOf, discard, patternTest, bindPattern,
     boxDescriptors, cloneFunctions, requireClone, mangle, cType, structName, tname, lvalue, placeMemOf,
-    cloneTypeList, cloneHeader, needsDeepClone, cloneOf, classFieldPath
+    cloneTypeList, cloneHeader, needsDeepClone, cloneOf, classFieldPath, isPure, inOrder, forget
 };
 
 // =====================================================================================
@@ -394,7 +394,7 @@ public function generate(): String {
         for (c in classesByDepth()) { vtableStruct(out, c); }
         for (i in interfaces) { interfaceTableStruct(out, i); }
     }
-    if (literalTypes.length() > 0 || samInterfaces.length > 0) {
+    if (literalTypes.length > 0 || samInterfaces.length > 0) {
         section(out, "Objects created from literals and lambdas");
         out.add(literalTypes.toString());
         for (i in samInterfaces) {
@@ -502,7 +502,7 @@ public function generate(): String {
         out.add("static inline void rt_builder_add(StringBuilder* b, RtString s) {\n");
         out.add("    if (!b->_sb.buf) b->_sb = rt_sb_mem(rt_obj_mem(b), 0);\n    rt_sb_str(&b->_sb, s);\n}\n");
     }
-    if (methods.length() > 0) {
+    if (methods.length > 0) {
         section(out, "Methods");
         out.add(methods.toString());
     }
@@ -516,7 +516,7 @@ public function generate(): String {
             if (lambdaDone[i]) { out.add(d); }
         }
     }
-    if (literalThunks.length() > 0 || classes.length > 0) {
+    if (literalThunks.length > 0 || classes.length > 0) {
         section(out, "Interface thunks and cloning");
         out.add(literalThunks.toString());
         for (i in samInterfaces) { samThunk(out, interfaceOf(i)!); }
@@ -610,7 +610,7 @@ function shortName(n: String): String {
 }
 
 function sectionOf(out: StringBuilder, title: String, content: StringBuilder): void {
-    if (content.length() == 0) { return; }
+    if (content.length == 0) { return; }
     section(out, title);
     out.add(content.toString());
 }
@@ -1340,6 +1340,49 @@ function stmtInner(s: Stmt in default): void {
 
 function assign(s: AssignStmt in default): void {
     let target: Expr = s.target;
+    let parts: Expr[*] = [] in default;
+    placeParts(target, parts);
+    let held: Expr[*] = [] in default;
+    if (s.value is Binary b && b.left == target) {      // a[i()] += v reads and writes the same place: i() runs once
+        for (p in parts) {
+            if (!isPure(p)) {
+                p.computed = hoist(cType(p.ty!), expr(p));
+                held.push(p);
+            }
+        }
+    } else {                                            // the place, then the value (left to right)
+        parts.push(s.value);
+        held = inOrder(parts) in default;
+    }
+    assignTo(s, target);
+    forget(held);
+}
+
+/**
+ * The parts of a place that are computed, in order: the object and the index of a[i], the object of a.f.
+ * An object that is a value (a struct, a T[N]) is not copied: its own place is looked into.
+ */
+function placeParts(target: Expr in default, parts: Expr[*] in default): void {
+    switch (target) {
+        case Index x -> {
+            placeObject(x.object, parts);
+            parts.push(x.index);
+        }
+        case Member m -> { placeObject(m.object, parts); }
+        default -> { }
+    }
+}
+
+function placeObject(o: Expr in default, parts: Expr[*] in default): void {
+    let t: Type? = o.ty;
+    if (t != null && (isStruct(t) || t.kind == TyK.Array && t.ak == ArrK.Fixed)) {
+        placeParts(o, parts);
+    } else {
+        parts.push(o);
+    }
+}
+
+function assignTo(s: AssignStmt in default, target: Expr in default): void {
     let mi: MemberInfo? = target.member;
     if (target is Member m && mi != null && mi.kind == MbK.AnyKey) {
         let obj: String = hoist("RtAny", expr(m.object));

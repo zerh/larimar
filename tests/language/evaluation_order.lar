@@ -1,0 +1,49 @@
+// expect: run
+// output: ab -1
+// output: ab -1
+// output: ba 1 2
+// output: ba 1 2
+// output: ba 1
+// output: ba 2 1
+// output: ab 2
+// output: a 6 8
+// Left to right, whatever the C compiler: arguments, operands, the fields of a literal as they are
+// written, the elements of an array, and a place before its value.
+struct P { let x: int32; let y: int32; }
+class Q { let x: int32; let y: int32; }
+enum E { V(x: int32, y: int32) }
+
+let calls: int32 = 0;
+
+function a(): int32 {
+    print("a");
+    calls += 1;
+    return 1;
+}
+
+function b(): int32 {
+    print("b");
+    return 2;
+}
+
+function minus(x: int32, y: int32): int32 { return x - y; }
+
+function main(): int32 {
+    println(" ${minus(a(), b())}");
+    println(" ${a() - b()}");
+    let p: P = { y: b(), x: a() };
+    println(" ${p.x} ${p.y}");
+    let q: Q = { y: b(), x: a() };
+    println(" ${q.x} ${q.y}");
+    let e: E = E.V { y: b(), x: a() };
+    let x: int32 = switch (e) { case V { x } -> x; };
+    println(" ${x}");
+    let xs: int32[4] = [b(), a()];
+    println(" ${xs[0]} ${xs[1]}");
+    let ys: int32[*] = [0, 0, 0];
+    ys[a()] = b();
+    println(" ${ys[1]}");
+    let before: int32 = minus(calls, a());         // calls is read before a() changes it
+    println(" ${before} ${calls}");
+    return 0;
+}
