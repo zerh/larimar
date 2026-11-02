@@ -1,0 +1,6 @@
+// expect: error 'length' is read without parentheses: sb.length
+function main(): int32 {
+    let sb: StringBuilder = {};
+    sb.add("hola");
+    return sb.length();
+}

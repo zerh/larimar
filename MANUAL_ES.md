@@ -101,7 +101,9 @@ no instrucciones sueltas:
 Cualquier declaración puede llevar `public` delante para que otros módulos la usen.
 
 El orden de las declaraciones no importa: una función puede usar otra que esté más abajo.
-Las variables globales se inicializan en el orden en que aparecen, antes de `main`.
+Las variables globales se inicializan en el orden en que aparecen, antes de `main`. Por eso el valor
+inicial de una global solo puede usar las de arriba, y las funciones que llama tampoco pueden usar una
+de más abajo: la encontrarían sin su valor, y el compilador lo dice.
 
 Los comentarios son como en C: `// hasta el final de la línea` y `/* en bloque */`.
 Cada instrucción termina en `;`, y los bloques van entre `{ }`.
@@ -116,6 +118,8 @@ let name: String = "Ana";
 age = 31;          // las variables se pueden reasignar
 age += 1;          // también +=, -=, *=, /=, %=, &=, |=, ^=
 ```
+
+`a op= b` es `a = a op b`, con el lugar calculado una vez: en `counts[next()] += 1`, `next()` se ejecuta una vez.
 
 - El **tipo es obligatorio**, y también el **valor inicial**: no existen variables sin inicializar.
 - Una variable declarada dentro de un bloque solo existe dentro de él.
@@ -155,7 +159,8 @@ Salida: `sensor: 0 of 16, 1048576 bytes`
 Los tipos **primitivos se escriben en minúscula**: son valores simples que nunca necesitan memoria,
 no tienen campos y no se pueden redefinir. Todo lo demás empieza con mayúscula: `String` (que sí
 necesita memoria), y los structs, clases, interfaces y enums que declares. Así, con mirar el nombre
-se sabe si un tipo es del lenguaje o es tuyo.
+se sabe si un tipo es del lenguaje o es tuyo. Es una convención: el compilador no la exige, pero la
+biblioteca estándar y estas páginas la siguen.
 
 ### Literales numéricos
 
@@ -232,6 +237,14 @@ Salida: `7 3.5 2147483647 0`
 De decimal a entero se trunca, y si el valor no cabe se usa el límite más cercano (en lugar del
 comportamiento indefinido de C).
 
+### Decimales como texto
+
+Un decimal se escribe con **los dígitos justos para que, al leerlo, dé el mismo valor**, como en Go,
+Java o JavaScript: `0.1 * 3.0` es `0.30000000000000004` (ese es su valor real), y un `float32` `0.1` es
+`0.1`. Siempre lleva `.` o exponente, para que se lea como decimal: `2.0`, `1234567.0`, `1e+20`,
+`1e-05`. Sin exponente desde `0.0001` hasta `1e15`. Y `nan`, `inf`, `-inf`. Lo que se imprime, leído
+con `toFloat()`, da el mismo número.
+
 ---
 
 ## 5. Operadores
@@ -264,6 +277,10 @@ Reglas:
 - `&&` y `||` no evalúan el lado derecho si no hace falta.
 - `==` compara números, `bool`, `String` (por contenido), enums sin datos y objetos (por identidad).
   Un objeto opcional (`Node?`) se puede comparar con un `Node`.
+- **Todo se evalúa de izquierda a derecha**, una vez: los operandos de un operador, los argumentos de
+  una llamada (después del objeto de un método), los elementos de una lista y los campos de un literal
+  **en el orden en que están escritos**, y en una asignación el lugar antes que el valor. C deja ese
+  orden abierto; Larimar lo fija, así un programa hace lo mismo con cualquier compilador de C.
 
 ### El condicional `c ? a : b`
 
@@ -422,6 +439,8 @@ true 007 ababab 72
   con `in`: `s.toUpperCase() in memory`. Las listas de `split`, `lines` y `codePoints` también.
 - `toUpperCase`, `toLowerCase` y `equalsIgnoreCase` cambian solo letras ASCII.
 - Un `String` no se modifica: `s[0] = 65` es un error. Para construir texto está `StringBuilder`.
+- `length` se lee sin paréntesis, aquí y en todo (listas, arrays, `Any`, memorias, `StringBuilder`): lo
+  que es un dato no lleva paréntesis, lo que hace algo sí. `s.length()` es un error que lo dice.
 
 ### `StringBuilder`
 
@@ -433,7 +452,7 @@ function main(): int32 {
     for (i in 0..3) { out.add("item ${i}, "); }   // la interpolación se escribe directo en el builder
     out.addLine("end");
     let text: String = out.toString();          // una vista de lo construido hasta ahora
-    println("${text.length} ${out.length()}");
+    println("${text.length} ${out.length}");
     print(text);
     return 0;
 }
@@ -445,7 +464,7 @@ Salida:
 item 0, item 1, item 2, end
 ```
 
-`add(text)`, `addLine(text)`, `length()`, `toString()` y `clear()`. El texto crece en la memoria del
+`add(text)`, `addLine(text)`, `length`, `toString()` y `clear()`. El texto crece en la memoria del
 builder. Lo que devuelve `toString()` no cambia aunque después se añada más o se llame a `clear()`.
 
 ---
@@ -2114,6 +2133,9 @@ extern function close_window(w: Window): void;
 - En `std.lang`, `native type` declara métodos de un tipo primitivo del lenguaje. Un `native function` sin cuerpo
     declara una operación intrínseca; con `= expresión;` define el método usando una expresión Larimar, a menudo
     una llamada `extern`. En una clase también se puede escribir `native function ... = expresión;`.
+- `native let nombre: T;` declara un valor que se lee sin paréntesis (`s.length`) y que da el
+  compilador; en una clase, `native let nombre: T = expresión;` lo da con esa expresión
+  (`StringBuilder.length`). Nunca se asigna.
 - `native operator []` declara la indexación intrínseca. `in self` en el retorno indica que el valor devuelto
     es una vista ligada a la vida del receptor. Los inicializadores de campos de clase se evalúan por cada objeto,
     dentro de la memoria de ese objeto.
@@ -2153,10 +2175,10 @@ Por ejemplo, una API de tipo primitivo puede mezclar intrínsecos, métodos impl
 
 ```actionscript
 public native type String {
-    native function length(): int32;
+    native let length: int32;
     native operator [](i: int32): byte;
     native function substring(from: int32, to: int32): String in self;
-    function isEmpty(): bool { return self.length() == 0; }
+    function isEmpty(): bool { return self.length == 0; }
 }
 ```
 
@@ -2649,6 +2671,10 @@ public function area(s: Shape): float64 {
 
 `public` se aplica al nombre completo: en una clase pública, sus campos y métodos se ven desde fuera.
 No hay `private`: escribirlo es un error (`'private' is not needed: ...`), porque sin `public` ya lo es.
+
+Por convención, un campo o un método que no está pensado para usarse fuera de su clase empieza con `_`:
+`let _cache: Any = {};`. El compilador no lo exige; se lo dice a quien lee. (Un solo `_`: los nombres
+no pueden tener `__`.)
 
 ### `import`
 
@@ -3772,7 +3798,9 @@ Busca Larimar en este orden: el ajuste `larimar.home`, la variable `LARIMAR_HOME
 `PATH` y, en macOS y Linux, el `LARIMAR_HOME` de tu shell de inicio (VS Code abierto desde el Dock no
 ve lo que exporta `~/.zshrc`). Arranca `$LARIMAR_HOME/bin/larimarc lsp`. Añade los comandos
 **Larimar: Run Project** y **Debug Project** (también en el botón ▷ del editor), **Build Project**,
-**Check Project**, **Show Generated C** y **Restart Language Server**.
+**Check Project**, **Show Generated C** y **Restart Language Server**. Las pruebas del proyecto se
+ven en la vista **Testing**, cada una en su línea, para ejecutar una, un archivo o todas (con
+`larimar test --list --json` y `--json`, ver [Pruebas](#pruebas-test-function-y-larimar-test)).
 
 Otros editores (Neovim, Helix, Zed, Sublime...) solo necesitan que se les diga que arranquen
 `larimarc lsp` para los archivos `.lar`, con `LARIMAR_HOME` en el entorno.
@@ -3952,8 +3980,17 @@ en `beforeEach()`, la prueba no se ejecuta.
 larimar test                      # todas las de tests/
 larimar test tests/shapes_test.lar
 larimar test --only circle        # las que tienen "circle" en el nombre o la ruta
+larimar test tests/shapes_test.lar --test names   # solo esa prueba, por su nombre exacto
+larimar test --list               # las pruebas, sin ejecutarlas
 larimar test --no-sanitize
 ```
+
+**Para los editores**, `--json` escribe un objeto JSON por línea en lugar del texto de arriba: con
+`--list`, un `{"event": "found", "file": ..., "path": ..., "name": ..., "line": ...}` por prueba; al
+ejecutarlas, un `{"event": "result", ..., "result": "passed" | "failed" | "skipped", "message": ...}`
+por prueba y al final `{"event": "summary", "passed": ..., "failed": ..., "skipped": ...}`. Un archivo
+que dice lo que espera es una prueba con el nombre `""`. Así la extensión de VS Code muestra las pruebas
+en su vista Testing.
 
 Las reglas:
 

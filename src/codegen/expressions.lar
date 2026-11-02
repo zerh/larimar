@@ -136,7 +136,112 @@ function hoistIfNeeded(ct: String, v: String, e: Expr?): String {
     return e != null && isPure(e) ? paren(v) : hoist(ct, v);
 }
 
-function isPure(e: Expr): bool {
+// ---- left to right ----------------------------------------------------------------------
+//
+// C evaluates the arguments of a call, the operands of an operator and the initializers of a literal in
+// any order; Larimar, from left to right (SPEC §10.1). When a later part has effects, the parts before it
+// that those effects could change are computed first, in order, into temporaries, and the C of the
+// expression uses them (Expr.computed). The parts are forgotten once the C of the expression is written.
+
+/** Computes, in order, the parts before the last one with effects; returns them, for forget(). */
+public function inOrder(parts: Expr[*] in default): Expr[*] {
+    let held: Expr[*] = [];
+    let last: int32 = -1;
+    for (i, p in parts) {
+        if (hasEffects(p)) { last = i; }
+    }
+    for (i in 0..last) {
+        let p: Expr = parts[i];
+        if (p.computed != "" || unchangeable(p) || p.memArg != null || p.ty == null) { continue; }
+        let v: String = expr(p);
+        p.computed = hoist(cType(p.ty!), v);
+        held.push(p);
+    }
+    return held;
+}
+
+/** The C of these parts is written: they are computed again where they appear next. */
+public function forget(held: Expr[*]): void {
+    for (p in held) { p.computed = ""; }
+}
+
+/** Whether evaluating it can do something another part could see: a call, an index (a panic)... */
+function hasEffects(e: Expr): bool {
+    return switch (e) {
+        case IntLit, FloatLit, BoolLit, NullLit, Ident, SelfExpr, Lambda -> false;
+        case StringLit s -> anyEffects(s.exprs);
+        case Member m -> hasEffects(m.object);
+        case Unary u -> hasEffects(u.operand);
+        case Cast c -> hasEffects(c.expr);
+        case Binary b -> b.op == "/" || b.op == "%" || b.opMethod != null || hasEffects(b.left) || hasEffects(b.right);
+        default -> true;
+    };
+}
+
+function anyEffects(es: Expr[*]): bool {
+    for (e in es) {
+        if (hasEffects(e)) { return true; }
+    }
+    return false;
+}
+
+/** Whether nothing evaluated after it can change its value: literals, locals, parameters, constants. */
+function unchangeable(e: Expr): bool {
+    return switch (e) {
+        case IntLit, FloatLit, BoolLit, NullLit, SelfExpr, Lambda -> true;
+        case StringLit s -> s.exprs.length == 0;
+        case Ident id -> id.symbol == null || id.symbol!.kind != SymK.Global;
+        case Unary u -> unchangeable(u.operand);
+        case Cast c -> unchangeable(c.expr);
+        case Binary b -> b.opMethod == null && unchangeable(b.left) && unchangeable(b.right);
+        default -> false;
+    };
+}
+
+/** The parts of a call, in the order they are written: the object (not a struct, which is passed by address), then the arguments. */
+function callParts(c: Call in default): Expr[*] {
+    let parts: Expr[*] = [];
+    let ci: CallInfo = c.call!;
+    if (ci.kind == CallK.Builtin) { return parts; }
+    if (ci.kind == CallK.Closure || ci.kind == CallK.CPointer) {
+        parts.push(c.callee);
+    } else if (ci.kind == CallK.NativeMethod || ci.kind == CallK.InterfaceMethod || ci.kind == CallK.Method && ci.isClass) {
+        parts.push(receiver(c));
+    }
+    for (a in c.args) { parts.push(a); }
+    return parts;
+}
+
+function orderedCall(c: Call in default): String {
+    let held: Expr[*] = inOrder(callParts(c));
+    let v: String = call(c);
+    forget(held);
+    return v;
+}
+
+function orderedIndex(x: Index in default): String {
+    let held: Expr[*] = inOrder([x.object, x.index]);
+    let v: String = index(x);
+    forget(held);
+    return v;
+}
+
+function orderedBinary(b: Binary in default, t: Type): String {
+    if (b.op == "&&" || b.op == "||" || b.op == "??") { return binary(b, t); }     // the right side only when needed
+    let held: Expr[*] = inOrder([b.left, b.right]);
+    let v: String = binary(b, t);
+    forget(held);
+    return v;
+}
+
+/** The values of a literal, in the order they are written. */
+function writtenValues(o: ObjectLit in default): Expr[*] {
+    let values: Expr[*] = [];
+    for (f in o.fields) { values.push(f.value); }
+    return values;
+}
+
+public function isPure(e: Expr): bool {
     return switch (e) {
         case Ident, SelfExpr, IntLit, FloatLit, BoolLit -> true;
         case Member m -> isPure(m.object);
@@ -356,6 +461,7 @@ function toAny(v: String, from: Type in default, e: Expr in default): String {
 // =====================================================================================
 
 public function expr(e: Expr in default): String {
+    if (e.computed != "") { return e.computed; }
     let t: Type? = e.ty;
     return switch (e) {
         case IntLit n -> intLiteral(n.num, n.big, t);
@@ -366,10 +472,10 @@ public function expr(e: Expr in default): String {
         case Ident id -> identExpr(id);
         case SelfExpr -> selfExpr(e);
         case Member m -> member(m);
-        case Index x -> index(x);
-        case Call c -> call(c);
+        case Index x -> orderedIndex(x);
+        case Call c -> orderedCall(c);
         case Unary u -> unary(u, t!);
-        case Binary b -> binary(b, t!);
+        case Binary b -> orderedBinary(b, t!);
         case Ternary te -> ternary(te, t!);
         case IsExpr x -> isTest(x);
         case Cast c -> cast(c, t!);
@@ -458,6 +564,11 @@ function member(m: Member in default): String {
             return "((int64_t)(${memoryRef(mi.memory!)})->${field})";
         }
         case AnyKey -> { return "rt_any_get(${expr(m.object)}, ${stringLiteral(mi.key)})"; }
+        case Property -> {           // native let: its method, with no arguments
+            let pm: MethodInfo = mi.method!;
+            let o: String = value(m.object);
+            return isClass(mi.objectType!) ? "${dispatchName(pm.introducer, pm)}((${pm.introducer}*)${o})" : "${methodName(pm)}(&${paren(o)})";
+        }
         case Length -> {
             let ot: Type = mi.objectType!;
             let o: String = expr(m.object);
@@ -706,6 +817,8 @@ public function appendPieces(s: StringLit in default, sbRef: String): void {
             line("rt_sb_str(${sbRef}, ${v});");
         } else if (t == T_BOOL) {
             line("rt_sb_bool(${sbRef}, ${v});");
+        } else if (t == T_FLOAT32) {
+            line("rt_sb_f32(${sbRef}, ${v});");
         } else if (isFloat(t)) {
             line("rt_sb_f64(${sbRef}, (double)(${v}));");
         } else if (isSigned(t)) {
@@ -1627,13 +1740,19 @@ function objectLit(o: ObjectLit in default, t: Type in default): String {
     let variant: VariantInfo? = o.variant;
     if (variant != null) {
         let tag: String = "${t.name}_${variant.name}";
-        return variant.fields.length == 0 ? "((${tname(t.name)}){ .tag = ${tag} })" : "((${tname(t.name)}){ .tag = ${tag}, .as.${variant.name} = { ${fieldInits(variant.fields, o, "")} } })";
+        if (variant.fields.length == 0) { return "((${tname(t.name)}){ .tag = ${tag} })"; }
+        let held: Expr[*] = inOrder(writtenValues(o));
+        let v: String = "((${tname(t.name)}){ .tag = ${tag}, .as.${variant.name} = { ${fieldInits(variant.fields, o, "")} } })";
+        forget(held);
+        return v;
     }
     if (t.nk == NamedK.Struct) {
         let s: StructInfo = structOf(t.name)!;
         let sn: String = cType(t);              // a C struct has its own name
         if (s.fields.length == 0) { return s.decl.cName != "" ? "((${sn}){ 0 })" : "((${sn}){ ._none = 0 })"; }
+        let held: Expr[*] = inOrder(writtenValues(o));
         let inits: String = fieldInits(s.fields, o, "");
+        forget(held);
         return "((${sn}){ ${inits == "" ? "0" : inits} })";            // {0}: a C struct with nothing given
     }
     if (t.nk != NamedK.Class) { return interfaceLit(o, interfaceOf(t.name)!); }
@@ -1647,7 +1766,9 @@ function objectLit(o: ObjectLit in default, t: Type in default): String {
         line("RtSync* ${sync} = rt_sync_new(${mem}, ${o.line});");
         mem = "(&${sync}->own)" in default;
     }
+    let held: Expr[*] = inOrder(writtenValues(o));
     let init: String = classInit(c, c.name, o, mem);
+    forget(held);
     line("*${obj} = (${c.name}){ ${init}${sync != "" ? ", ._sync = ${sync}" : ""} };");
     return obj;
 }
@@ -1721,8 +1842,10 @@ function arrayLit(a: ArrayLit in default, t: Type): String {
         return l;
     }
     if (a.elems.length == 0) { return "((${cType(t)}){ .length = 0 })"; }
+    let held: Expr[*] = inOrder(a.elems);
     let vs: String[*] = [] in default;
     for (x in a.elems) { vs.push(value(x)); }
+    forget(held);
     return "((${cType(t)}){ .length = ${a.elems.length}, .items = { ${vs.join(", ")} } })";
 }
 

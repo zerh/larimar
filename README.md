@@ -20,6 +20,7 @@ larimar-compiler/
 ├── bin/larimar              # Wrapper installed as larimar/bin/larimar
 ├── MANUAL.md                # Language manual (English)
 ├── MANUAL_ES.md             # Language manual (Spanish)
+├── SPEC.md                  # Language specification (version 1.0)
 ├── larimarc_bootstrap.c     # C bootstrap
 ├── build-bootstrap.sh       # Build from the C bootstrap and install
 ├── larimar.toml             # Project configuration
@@ -93,7 +94,7 @@ Test the compiler:
 
 ```bash
 ./larimarc --version
-# Should output: larimar 0.4.0
+# Should output: larimar 0.4.1 (language 1.0)
 
 # Compile a test program
 echo 'function main(): void { println("Hello!"); }' > test.lar
@@ -128,6 +129,9 @@ language server (see "The editor" in section 26 of `MANUAL.md`): the server keep
 (`editor/docstore.lar`) and answers each request in a forked process that links and analyzes the program
 (`editor/session.lar`) and answers from the analysis (`editor/ide.lar`).
 
+`larimar test --list --json` lists the tests and `larimar test --json [file] [--test <name>]` runs them,
+one JSON object per line: that is how the VS Code extension shows them in its Testing view.
+
 `larimar build --debug` compiles with `-g -O0`, `#line` directives to the `.lar` files and a debug map
 (`build/<name>.debug.json`, from `codegen/debugmap.lar`). `larimar dap` (`editor/dap.lar`) is the debugger for editors:
 a DAP adapter written in Larimar over LLVM's `lldb-dap`, which shows the stack, variables and values
@@ -142,7 +146,7 @@ checks all of it.
 ```toml
 [project]
 name = "larimarc"
-version = "0.4.0"
+version = "0.4.1"
 main = "src/main.lar"
 
 [c]

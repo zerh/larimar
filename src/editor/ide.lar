@@ -697,8 +697,8 @@ function docAbove(index: int32, line: int32): String {
     let sb: StringBuilder = {};
     let i: int32 = out.length - 1;
     while (i >= 0) {
-        if (out[i] != "" || sb.length() > 0) {
-            if (sb.length() > 0) { sb.add("\n"); }
+        if (out[i] != "" || sb.length > 0) {
+            if (sb.length > 0) { sb.add("\n"); }
             sb.add(out[i]);
         }
         i -= 1;
@@ -1222,6 +1222,15 @@ function memberItems(items: Items, index: int32): void {
     typeMembers(items, t);
 }
 
+/** A method, or a native let (read without parentheses). */
+function memberItem(items: Items, m: MethodInfo): void {
+    if (m.decl.isProperty) {
+        add(items, m.name, CK_PROPERTY, "${m.name}: ${m.sig != null ? typeText(m.sig!.elem) : "?"}", docOf(m.decl.line));
+    } else {
+        add(items, m.name, CK_METHOD, methodLabel(m), docOf(m.decl.line));
+    }
+}
+
 function typeMembers(items: Items, t: Type): void {
     if (t.kind == TyK.Array) {
         add(items, "length", CK_PROPERTY, "length: int32", "");
@@ -1239,10 +1248,9 @@ function typeMembers(items: Items, t: Type): void {
     }
     if (t.kind == TyK.Prim) {
         for (m in nativeMethods) {
-            if (m.owner == t.name && !m.isOperator) { add(items, m.name, CK_METHOD, methodLabel(m), docOf(m.decl.line)); }
+            if (m.owner == t.name && !m.isOperator) { memberItem(items, m); }
         }
         if (t == T_STRING) {
-            add(items, "length", CK_METHOD, "length(): int32", "");
             add(items, "substring", CK_METHOD, "substring(from: int32, to: int32): String", "");
             add(items, "split", CK_METHOD, "split(separator: String): String[*]", "");
             add(items, "lines", CK_METHOD, "lines(): String[*]", "");
@@ -1261,7 +1269,7 @@ function typeMembers(items: Items, t: Type): void {
     if (so != null) {
         for (f in so.fields) { add(items, f.name, CK_FIELD, "let ${f.name}: ${typeText(f.type)}", docOf(f.line)); }
         for (m in so.methods) {
-            if (!m.isOperator) { add(items, m.name, CK_METHOD, methodLabel(m), docOf(m.decl.line)); }
+            if (!m.isOperator) { memberItem(items, m); }
         }
         return;
     }
@@ -1271,7 +1279,7 @@ function typeMembers(items: Items, t: Type): void {
         let i: int32 = ch.length - 1;
         while (i >= 0) {            // the class first, then its parents
             for (m in ch[i].methods) {
-                if (!m.isOperator && !m.decl.isStatic) { add(items, m.name, CK_METHOD, methodLabel(m), docOf(m.decl.line)); }
+                if (!m.isOperator && !m.decl.isStatic) { memberItem(items, m); }
             }
             i -= 1;
         }

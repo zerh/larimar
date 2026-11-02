@@ -31,7 +31,10 @@ import project.cc { windows, quote, commandLine, systemLibraries };
 import std.toml as Toml;
 import std.toml { TomlError };
 
-const VERSION: String = "0.4.0";
+const VERSION: String = "0.4.1";
+
+/** The version of the language this compiler implements (SPEC.md). */
+const LANGUAGE: String = "1.0";
 
 /** Set when a command fails; main prints it as "larimar: ...". */
 let toolError: String = "";
@@ -116,7 +119,7 @@ function command(args: String[]): int32 {
         return 0;
     }
     if (cmd == "version" || cmd == "--version") {
-        println("larimar ${VERSION}");
+        println("larimar ${VERSION} (language ${LANGUAGE})");
         return 0;
     }
     if (cmd == "help" || cmd == "--help" || cmd == "-h") {
@@ -127,14 +130,15 @@ function command(args: String[]): int32 {
 }
 
 function usage(): void {
-    println("larimar ${VERSION}");
+    println("larimar ${VERSION} (language ${LANGUAGE})");
     println("");
     println("  larimar new <name>            create a project in a new folder");
     println("  larimar build [folder]        compile the project (larimar.toml) to an executable");
     println("  larimar run [folder] [-- args] build, then run it with the arguments");
     println("  larimar build --debug         with -g -O0 and the .lar lines, for a debugger (lldb, gdb, VS Code)");
     println("  larimar check [file|folder]   find the errors without generating C (--json for tools)");
-    println("  larimar test [file|folder]... run the tests (tests/ by default; --only <text>, --no-sanitize)");
+    println("  larimar test [file|folder]... run the tests (tests/ by default; --only <text>, --test <name>,");
+    println("                                --list, --json, --no-sanitize)");
     println("  larimar lsp                   language server for editors (speaks LSP on stdin/stdout)");
     println("  larimar dap [--backend <lldb-dap>]  debugger for editors (DAP on stdin/stdout, over lldb-dap)");
     println("  larimar c <file.lar>          print the generated C of a file");

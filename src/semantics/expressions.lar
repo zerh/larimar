@@ -771,8 +771,23 @@ function checkMember(m: Member in default): Type {
         if (!hasRefs(f.type)) { setRegion(m, R_STATIC); }
         return f.type;
     }
-    if (methodOf(ot, m.name) != null) { return wrong(m.line, "Method '${m.name}' must be called: ${m.name}(...)"); }
+    let pm: MethodInfo? = methodOf(ot, m.name);
+    if (pm != null && pm.decl.isProperty) {         // native let: read like a field
+        if (hasRefs(pm.sig!.elem!)) { return wrong(m.line, "A native let gives a number or bool ('${m.name}' is ${pm.sig!.elem!.text})."); }
+        for (t in callTargets(ot, pm)) { edge(currentOwner(), t.own); }
+        m.member = MemberInfo { kind: MbK.Property, method: pm, objectType: ot } in default;
+        setRegion(m, R_STATIC);
+        return pm.sig!.elem!;
+    }
+    if (pm != null) { return wrong(m.line, "Method '${m.name}' must be called: ${m.name}(...)"); }
     return wrong(m.line, "'${ot.text}' has no field '${m.name}'.");
+}
+
+/** A value read without parentheses: the length of a String, an array, a list or an Any, or a native let. */
+function isProperty(t: Type in default, name: String): bool {
+    if (t == T_STRING || t == T_ANY || t.kind == TyK.Array) { return name == "length"; }
+    let mi: MethodInfo? = t.kind == TyK.Named ? methodOf(t, name) : null;
+    return mi != null && mi.decl.isProperty;
 }
 
 function fieldOf(t: Type in default, name: String): FieldInfo? {
@@ -1664,6 +1679,10 @@ function checkMethodCall(c: Call in default, callee: Member in default, expected
     if (isError(ot)) { return checkAllArgs(c); }
     if (isOpt(ot)) {
         error(callee.line, "'${describeExpr(obj)}' may be null: check it with != null first, or use ! or ??.");
+        return checkAllArgs(c);
+    }
+    if (isProperty(ot, name)) {
+        error(callee.line, "'${name}' is read without parentheses: ${describeExpr(obj)}.${name}");
         return checkAllArgs(c);
     }
     for (mi in nativeMethods) {

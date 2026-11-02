@@ -45,6 +45,8 @@ public class Node {
     let boxPlace: Place? = null;
     let anyFields: bool = false;
     let patternInfos: PatternInfo[*] = [];
+    // ---- filled by the generator
+    let computed: String = "";              // the C temporary that already holds this value
 }
 
 public class Expr extends Node { }
@@ -151,6 +153,7 @@ public class FunctionDecl extends Node {
     let typeName: String = "";          // for "function Type.method()" external syntax
     let exportName: String = "";        // export function: its name in C (the linker does not rename it)
     let isTest: bool = false;           // test function: only in `larimar test` (and the editor)
+    let isProperty: bool = false;       // native let: read without parentheses, never assigned
     /** wait until (cond): a method of a synchronized class that runs only when cond holds (the caller waits). */
     let waitUntil: Expr? = null;
 }

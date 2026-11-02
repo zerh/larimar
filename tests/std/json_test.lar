@@ -31,5 +31,5 @@ test function errorsSayWhere(): void {
 
 test function bigNumbers(): void throws Json.JsonError {
     let n: Any = Json.parse("[9223372036854775807, 9223372036854775808]");
-    checkText("9223372036854775807 9.22337203685478e+18", "${n[0]} ${n[1]}");
+    checkText("9223372036854775807 9.223372036854776e+18", "${n[0]} ${n[1]}");
 }

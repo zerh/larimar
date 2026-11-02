@@ -516,11 +516,41 @@ static inline void rt_sb_u64(RtSb* b, uint64_t v) {
     rt_sb_add(b, t, n);
 }
 
+/* The text of a decimal: the fewest digits that read back as the same value (17 at most for a float64,
+   9 for a float32). From 1e-4 up to 1e15 it is written without an exponent; always with a '.' or an
+   exponent, so that it reads as a decimal: 2.0, 0.1, 0.30000000000000004, 1e+20. */
+static int rt_fmt_float(char* t, size_t size, double v, bool single) {
+    if (v != v) return snprintf(t, size, "nan");
+    if (v - v != 0) return snprintf(t, size, v > 0 ? "inf" : "-inf");
+    int most = single ? 9 : 17;
+    char e[48];
+    int digits = 1;
+    for (; digits < most; digits++) {
+        snprintf(e, sizeof e, "%.*e", digits - 1, v);
+        double back = strtod(e, NULL);
+        if (single ? (float)back == (float)v : back == v) break;
+    }
+    snprintf(e, sizeof e, "%.*e", digits - 1, v);
+    int exponent = atoi(strchr(e, 'e') + 1);
+    int n;
+    if (exponent < -4 || exponent >= 15) {
+        n = snprintf(t, size, "%s", e);
+    } else {
+        int decimals = digits - 1 - exponent;
+        n = snprintf(t, size, "%.*f", decimals < 0 ? 0 : decimals, v);
+    }
+    if (n > 0 && (size_t)n + 2 < size && strpbrk(t, ".e") == NULL) { t[n++] = '.'; t[n++] = '0'; t[n] = 0; }
+    return n;
+}
+
 static inline void rt_sb_f64(RtSb* b, double v) {
     char t[64];
-    int n = snprintf(t, sizeof t, "%.15g", v);
-    if (n > 0 && n < 60 && strpbrk(t, ".eEni") == NULL) { t[n++] = '.'; t[n++] = '0'; t[n] = 0; }
-    rt_sb_add(b, t, n);
+    rt_sb_add(b, t, rt_fmt_float(t, sizeof t, v, false));
+}
+
+static inline void rt_sb_f32(RtSb* b, float v) {
+    char t[64];
+    rt_sb_add(b, t, rt_fmt_float(t, sizeof t, (double)v, true));
 }
 
 static inline void rt_sb_bool(RtSb* b, bool v) { rt_sb_cstr(b, v ? "true" : "false"); }
@@ -1017,7 +1047,8 @@ static inline void rt_sb_any_at(RtSb* b, RtAny a, int depth, bool quoted) {
         case RT_ANY_NULL: rt_sb_cstr(b, "null"); break;
         case RT_ANY_I8: case RT_ANY_I16: case RT_ANY_I32: case RT_ANY_I64: rt_sb_i64(b, a.as.i); break;
         case RT_ANY_U8: case RT_ANY_U16: case RT_ANY_U32: case RT_ANY_U64: rt_sb_u64(b, a.as.u); break;
-        case RT_ANY_F32: case RT_ANY_F64: rt_sb_f64(b, a.as.f); break;
+        case RT_ANY_F32: rt_sb_f32(b, (float)a.as.f); break;
+        case RT_ANY_F64: rt_sb_f64(b, a.as.f); break;
         case RT_ANY_BOOL: rt_sb_bool(b, a.as.b); break;
         case RT_ANY_OBJ: case RT_ANY_VAL:
             rt_sb_cstr(b, "<");

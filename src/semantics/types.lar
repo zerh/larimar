@@ -647,7 +647,7 @@ public class CallInfo {
     let receiverType: Type? = null;
 }
 
-public enum MbK { Field, EnumConst, Length, MemoryStat, AnyKey, StaticMethod }
+public enum MbK { Field, EnumConst, Length, MemoryStat, AnyKey, StaticMethod, Property }
 
 public class MemberInfo {
     let kind: MbK;
@@ -658,7 +658,7 @@ public class MemberInfo {
     let memory: Symbol? = null;
     let stat: String = "";
     let key: String = "";
-    let method: MethodInfo? = null;      // for StaticMethod
+    let method: MethodInfo? = null;      // for StaticMethod and Property
     let typeName: String = "";            // for StaticMethod
 }
 
