@@ -2135,9 +2135,9 @@ function culprit(d: Deferred in default, v: Region, st: Region, resolve: bool): 
             if (outlives(r, st)) { continue; }
             let copy: String = "let kept: ${s.type.text} = ${s.name}.clone()${keepVariable};";
             if (clonesInside(l, s.name)) {
-                return fill("The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}. ${s.name}.clone() runs only when the lambda is called, and by then '${s.name}' may no longer exist (its block ended). Clone it before: ${copy} and capture 'kept'.", r, st);
+                return fill("The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}. ${s.name}.clone() runs only when the lambda is called, by which time '${s.name}' may no longer exist. Clone it beforehand (${copy}) and capture 'kept' instead.", r, st);
             }
-            return fill("The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}. Give it a copy that lives as long: ${copy} and capture 'kept'.", r, st);
+            return fill("The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}. Give it a copy that lives as long (${copy}) and capture 'kept' instead.", r, st);
         }
         return "";
     }
