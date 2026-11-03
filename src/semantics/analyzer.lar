@@ -2145,8 +2145,7 @@ function culprit(d: Deferred in default, v: Region, st: Region, resolve: bool): 
             let r: Region = resolve ? resolveRegion(s.region) : s.region;
             if (outlives(r, st)) { continue; }
             // the copy goes where the target lives: its memory by name when there is one to write
-            let named: bool = keepVariable != "" && keepVariable != " in default";
-            let into: String = named ? keepVariable : " in <memory>";
+            let into: String = keepVariable != "" ? keepVariable : " in <memory>";     // its name, or default
             let fix: String = "Capture a copy made in the memory where ${d.target} lives: let kept: ${s.type.text} = ${s.name}.clone()${into}; and capture 'kept' instead.";
             let start: String = "The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}.";
             if (clonesInside(l, s.name)) {
