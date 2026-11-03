@@ -24,7 +24,7 @@ import semantics.types {
 import semantics.analyzer {
     error, wrong, frame, frames, frameTop, state, scope, pushFrame, popFrame, pushScope, popScope, declare, lookup,
     narrowedType, noteCapture, declareParam, checkReturns, analyzeStmts, analyzeBlock, analyzeThrow, requireBool,
-    requireHandled, lifetime, requireOutlives, livesHint, isReference, storageRegion, placeFor, rootSymbol, isLValue,
+    requireHandled, lifetime, lifetimeOf, requireOutlives, livesHint, isReference, storageRegion, placeFor, rootSymbol, isLValue,
     reassignedNames, currentOwner, edge, useGlobal, callTargets, checkThreadRun, checkThreadSafeLambda, anyFieldsLoop, block, blockRegion,
     returnedNames, viewMethod, callMemory, creatingMethod, staticName, platformCtx,
     Mutation, MutK, mutations, alwaysExits, FrameState, nonNull, narrow, bindingSymbol, objectOf
@@ -1086,7 +1086,7 @@ function checkFieldInits(o: ObjectLit in default, fields: FieldInfo[*] in defaul
         }
         coerce(fi.value, f.type, place, "Field '${fi.name}'");
         if (objRegion != null && hasRefs(f.type)) {
-            lifetime(regionOf(fi.value), objRegion, fi.line, "Field '${fi.name}' gets data from {v}, but the object lives in {st}, which lives longer. Use .clone(){hint}.");
+            lifetimeOf(fi.value, objRegion, fi.line, "Field '${fi.name}' gets data from {v}, but the object lives in {st}, which lives longer. Use .clone(){hint}.", "field ${fi.name}");
         }
     }
     let missing: String[*] = [] in default;

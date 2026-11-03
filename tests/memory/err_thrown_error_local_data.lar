@@ -1,0 +1,7 @@
+// expect: error An error can travel up to main, so 'message' must live the whole program: why: message.clone() in default
+enum ParseError { Bad(why: String) }
+function parse(text: String): int32 throws ParseError {
+    let message: String = "bad: ${text}";
+    throw ParseError.Bad { why: message };
+}
+function main(): int32 { return 0; }

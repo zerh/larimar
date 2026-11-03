@@ -111,6 +111,10 @@ public class Deferred {
     let frame: Frame? = null;
     /** The message when the storage lives forever and the value in a block or a statement. */
     let forever: String = "";
+    /** The value checked, to name what lives too little in the message ("" role: stored in `target`). */
+    let expr: Expr? = null;
+    let target: String = "";
+    let role: String = "";              // "", "field <name>", "throw", "return"
 }
 
 public let deferred: Deferred[*] = [] in default;
@@ -2029,7 +2033,8 @@ public function requireOutlives(value: Expr in default, storage: Region in defau
     let d: Deferred = Deferred {
         line, kind: DefK.Outlives, value: regionOf(value), storage,
         msg: "This value lives in {v}, but ${target} lives longer (in {st}). Use .clone() to copy it there{hint}.",
-        forever: "This value lives in {v}, but ${target} lives for the whole program: create it with 'in default'."
+        forever: "This value lives in {v}, but ${target} lives for the whole program: create it with 'in default'.",
+        expr: value, target: target.clone() in default
     } in default;
     if (symbolic(d.value) || symbolic(storage)) { deferred.push(d); } else { runCheck(d, false); }
 }
@@ -2038,6 +2043,12 @@ public function requireOutlives(value: Expr in default, storage: Region in defau
 public function lifetime(value: Region in default, storage: Region in default, line: int32, msg: String in default): void {
     let d: Deferred = Deferred { line, kind: DefK.Outlives, value, storage, msg } in default;
     if (symbolic(value) || symbolic(storage)) { deferred.push(d); } else { runCheck(d, false); }
+}
+
+/** The same, knowing the expression and what it is for (a field of a literal, a thrown error), to name the culprit. */
+public function lifetimeOf(value: Expr in default, storage: Region in default, line: int32, msg: String in default, role: String): void {
+    let d: Deferred = Deferred { line, kind: DefK.Outlives, value: regionOf(value), storage, msg, expr: value, role: role.clone() in default } in default;
+    if (symbolic(d.value) || symbolic(storage)) { deferred.push(d); } else { runCheck(d, false); }
 }
 
 public function mustLiveForever(value: Region in default, line: int32, msg: String in default): void {
@@ -2066,11 +2077,94 @@ function runCheck(d: Deferred in default, resolve: bool): void {
     let st: Region = resolve ? resolveRegion(d.storage) : d.storage;
     if (d.kind == DefK.ReturnLocal) {
         if (v.kind == RK.Local && v.scope!.frame == d.frame!) {
-            error(d.line, "The returned value lives in ${describe(v)}, which is freed when the function returns. Create it in the return statement (it then lives where the caller says), or clone it there.");
+            let e: Expr? = d.expr;
+            if (e != null && e! is Ident id) {
+                error(d.line, "'${id.name}' lives in ${describe(v)}, which is freed when the function returns: return ${id.name}.clone(), or create '${id.name}' without 'in'.");
+            } else {
+                error(d.line, "The returned value lives in ${describe(v)}, which is freed when the function returns. Create it in the return statement (it then lives where the caller says), or clone it there.");
+            }
         }
         return;
     }
-    if (!outlives(v, st)) { error(d.line, fill(d.forever != "" && st.kind == RK.Static && v.kind == RK.Local ? d.forever : d.msg, v, st)); }
+    if (!outlives(v, st)) {
+        let named: String = culprit(d, v, st, resolve);
+        error(d.line, named != "" ? named : fill(d.forever != "" && st.kind == RK.Static && v.kind == RK.Local ? d.forever : d.msg, v, st));
+    }
+}
+
+/** The methods whose result is a view of their object (it shares its bytes). */
+const VIEW_METHODS: String = " trim trimStart trimEnd substring bytes split lines toString ";
+
+/**
+ * A message that names what lives too little, and the code that fixes it, when the value is something
+ * the programmer wrote: a lambda (its capture), a view (its text), a variable. "" when there is none.
+ */
+function culprit(d: Deferred in default, v: Region, st: Region, resolve: bool): String {
+    let given: Expr? = d.expr;
+    if (given == null) { return ""; }
+    let e: Expr = given!;
+    if (e is Placed p) { e = p.expr; }
+    let lives: String = st.kind == RK.Static ? "for the whole program" : "longer (in {st})";
+    // a copy stored in a list, a field or a table goes to their memory on its own; a global variable asks for 'in default'
+    let keep: String = st.kind == RK.Static && d.target.startsWith("'") ? " in default" : "";
+    let keepVariable: String = st.kind == RK.Static ? " in default" : "";
+    if (d.role == "throw") {
+        if (e is ObjectLit o) {
+            for (fi in o.fields) {
+                let r: Region = resolve ? resolveRegion(regionOf(fi.value)) : regionOf(fi.value);
+                if (!outlives(r, R_STATIC) && fi.value is Ident id) {
+                    return "An error can travel up to main, so '${id.name}' must live the whole program: ${fi.name}: ${id.name}.clone() in default";
+                }
+            }
+        }
+        return "";
+    }
+    if (d.role.startsWith("field ")) {
+        let field: String = d.role.substring(6);
+        if (e is Ident id) {
+            return fill("Field '${field}' gets '${id.name}', which lives in {v}, but the object lives ${lives}: ${field}: ${id.name}.clone()${keep}", v, st);
+        }
+        let view: String = viewCulprit(e, v, "the object", lives, keep);
+        return view != "" ? fill("Field '${field}': ${view}", v, st) : "";
+    }
+    if (d.target == "") { return ""; }
+    if (e is Lambda l && l.lambda != null) {
+        for (s in l.lambda!.captures) {
+            if (s.kind == SymK.Self) { continue; }
+            let r: Region = resolve ? resolveRegion(s.region) : s.region;
+            if (outlives(r, st)) { continue; }
+            let copy: String = "let kept: ${s.type.text} = ${s.name}.clone()${keepVariable};";
+            if (clonesInside(l, s.name)) {
+                return fill("The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}. ${s.name}.clone() runs only when the lambda is called, and by then '${s.name}' may no longer exist (its block ended). Clone it before: ${copy} and capture 'kept'.", r, st);
+            }
+            return fill("The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}. Give it a copy that lives as long: ${copy} and capture 'kept'.", r, st);
+        }
+        return "";
+    }
+    let view: String = viewCulprit(e, v, d.target, lives, keep);
+    if (view != "") { return fill(view, v, st); }
+    if (e is Ident id && v.kind == RK.Local) {
+        return fill("'${id.name}' lives in {v}, but ${d.target} lives ${lives}. Keep a copy there: ${id.name}.clone()${keep}", v, st);
+    }
+    return "";
+}
+
+/** x.trim(), x.substring(...)...: the result shares the bytes of x. */
+function viewCulprit(e: Expr, v: Region, target: String, lives: String, keep: String): String {
+    if (!(e is Call c) || !(c.callee is Member m) || !VIEW_METHODS.contains(" ${m.name} ")) { return ""; }
+    let source: String = m.object is Ident id ? "'${id.name}'" : "its object";
+    let code: String = m.object is Ident oid ? "${oid.name}.${m.name}(${c.args.length == 0 ? "" : "..."})" : "the value";
+    return "${m.name}() shares the bytes of ${source}, which lives in {v}, but ${target} lives ${lives}: when that memory is freed, those bytes may no longer exist. Keep a copy: ${code}.clone()${keep}";
+}
+
+/** Does the body of the lambda call name.clone()? (It runs when the lambda is called, not when it is made.) */
+function clonesInside(l: Lambda, name: String): bool {
+    let xs: Expr[*] = [];
+    allExprs(l.body, true, xs);
+    for (x in xs) {
+        if (x is Call c && c.callee is Member m && m.name == "clone" && m.object is Ident id && id.name == name) { return true; }
+    }
+    return false;
 }
 
 function resolveRegions(): void {
@@ -2169,7 +2263,7 @@ function analyzeReturn(r: ReturnStmt in default): void {
     coerce(value, rt, hasRefs(rt) ? P_RESULT : P_TEMP, "Return value");
     let reg: Region = regionOf(value);
     if (hasRefs(rt)) {
-        let d: Deferred = Deferred { line: r.line, kind: DefK.ReturnLocal, value: reg, storage: R_STATIC, msg: "", frame: f } in default;
+        let d: Deferred = Deferred { line: r.line, kind: DefK.ReturnLocal, value: reg, storage: R_STATIC, msg: "", frame: f, expr: value, role: "return" } in default;
         if (symbolic(reg)) { deferred.push(d); } else { runCheck(d, false); }
     }
 }
@@ -2468,7 +2562,7 @@ public function analyzeThrow(t: ThrowStmt in default): void {
     }
     let ei: EnumInfo = enumOf(vt.name)!;
     ei.thrown = true;
-    mustLiveForever(regionOf(t.value), t.line, "A thrown error cannot carry data from {v} (it could be freed while the error travels); use .clone() to copy it to the default memory.");
+    lifetimeOf(t.value, R_STATIC, t.line, "A thrown error cannot carry data from {v} (it could be freed while the error travels); use .clone() to copy it to the default memory.", "throw");
     requireHandled(ei, t.line, "This 'throw'");
 }
 

@@ -1,0 +1,7 @@
+// expect: error label.clone() runs only when the lambda is called, and by then 'label' may no longer exist
+let actions: (() -> String)[*] = [] in default;
+function main(): int32 {
+    let label: String = "x".toUpperCase();
+    actions.push(() -> { return label.clone(); });
+    return 0;
+}
