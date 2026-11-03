@@ -275,6 +275,14 @@ public function meet(a: Region in default, b: Region in default): Region {
         if (b.kind == RK.Meet) { for (p in b.parts) { ps.push(p); } } else { ps.push(b); }
         return Region { kind: RK.Meet, parts: ps } in default;
     }
+    // data of two memories of the same block (one with a name): what it is made of is not known, so it is
+    // the block's own memory (Memory.compact needs to know what lives in a memory with a name)
+    if (a.kind == RK.Local && b.kind == RK.Local && a.scope! == b.scope! && a.label != b.label
+        && (a.label.startsWith("memory '") || b.label.startsWith("memory '"))) {
+        if (!a.label.startsWith("memory '")) { return a; }
+        if (!b.label.startsWith("memory '")) { return b; }
+        return rLocal(a.scope!, "the memory of this block");
+    }
     if (outlives(a, b)) { return b; }
     if (outlives(b, a)) { return a; }
     if (a.kind == RK.Local) { return a; }
@@ -316,6 +324,8 @@ public class Scope {
     let narrowSyms: Symbol[*] = [];
     let narrowTypes: Type[*] = [];
     let loop: bool = false;
+    /** The scope of a for over a list, a table or a text: it holds on to what it goes over. */
+    let iterating: bool = false;
     /** The scope of one statement: its temporaries are freed when it ends; names go to the block. */
     let statement: bool = false;
     /** A block: its statements, and the C name of its memory once something lives there. */
@@ -633,7 +643,7 @@ public class Conversion {
 }
 
 public enum CallK { Direct, Closure, Method, InterfaceMethod, Super, EnumCtor, NativeMethod, Builtin, StaticMethod, CPointer }
-public enum BK { None, Print, Println, Panic, Release, Push, Pop, Clear, Map, Filter, Clone, AnyLength, AnyPush, AnyRemove, AnyRemoveAt, AnyClear, AnyRemoveIf, AnyContains, AnyContainsKey, Wait, StringMethod, Join, Contains, Sort }
+public enum BK { None, Print, Println, Panic, Release, Push, Pop, Clear, Map, Filter, Clone, AnyLength, AnyPush, AnyRemove, AnyRemoveAt, AnyClear, AnyRemoveIf, AnyContains, AnyContainsKey, Wait, StringMethod, Join, Contains, Sort, MemLimit, MemCompact }
 
 public class CallInfo {
     let kind: CallK;
@@ -647,6 +657,9 @@ public class CallInfo {
     let variant: VariantInfo? = null;
     let builtin: BK = BK.None;
     let receiverType: Type? = null;
+    /** Memory.limit and Memory.compact: the memory, and (compact) the variables moved with it. */
+    let memory: Symbol? = null;
+    let roots: Symbol[*] = [];
 }
 
 public enum MbK { Field, EnumConst, Length, MemoryStat, AnyKey, StaticMethod, Property }

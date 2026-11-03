@@ -334,7 +334,15 @@ function topLevelDeclaration(): Node {
     }
     if (optional(TT.Interface)) { return interfaceDeclaration(); }
     if (optional(TT.Enum)) { return enumDeclaration(); }
-    if (optional(TT.Native)) { return nativeType(start.line); }
+    if (optional(TT.Native)) {
+        if (optional(TT.Function)) {               // native function f(...); : the compiler writes its calls
+            let declared: FunctionDecl = nativeFunction(start.line);
+            if (declared.hasBody) { error(start.line, "A native function of a module has no body: the compiler writes every call to it"); }
+            declared.isNative = true;
+            return declared;
+        }
+        return nativeType(start.line);
+    }
     if (at(TT.Override)) {
         error(start.line, "'override' is only valid inside a class");
         return BlockStmt { line: start.line } in default;
@@ -1240,6 +1248,8 @@ function postfix(): Expr {
             } else {
                 value = Member { line: name.line, object: value, name: name.text } in default;
             }
+        } else if (optional(TT.ColonColon)) {
+            value = methodReference(value);
         } else if (optional(TT.LBracket)) {
             let line: int32 = previous().line;
             value = Index { line, object: value, index: expression() } in default;
@@ -1251,6 +1261,19 @@ function postfix(): Expr {
         }
     }
     return value;
+}
+
+/**
+ * Module::function, variable::method, self::method: a lambda that calls it with its own parameters. The
+ * parameters come from the function type expected there (the analyzer adds them).
+ */
+function methodReference(target: Expr in default): Expr {
+    let name: Token = expect(TT.Ident, "Expected a function or method name after '::'");
+    if (!(target is Ident || target is SelfExpr || dottedPath(target) != "")) {
+        error(name.line, "'::' goes after a module, a variable or 'self' (like Pages::show or panel::create)");
+    }
+    let call: Call = Call { line: name.line, callee: Member { line: name.line, object: target, name: name.text } in default } in default;
+    return Lambda { line: name.line, body: [ReturnStmt { line: name.line, value: call } in default], ref: call } in default;
 }
 
 /**
@@ -1266,6 +1289,11 @@ function primary(): Expr {
     if (optional(TT.True) || optional(TT.False)) { return BoolLit { line, value: start.kind == TT.True } in default; }
     if (optional(TT.Null)) { return NullLit { line } in default; }
     if (optional(TT.Self)) { return SelfExpr { line } in default; }
+    if (optional(TT.ColonColon)) {             // ::name: a function of this module
+        let name: Token = expect(TT.Ident, "Expected a function name after '::'");
+        let call: Call = Call { line: name.line, callee: Ident { line: name.line, name: name.text } in default } in default;
+        return Lambda { line: name.line, body: [ReturnStmt { line: name.line, value: call } in default], ref: call } in default;
+    }
     if (optional(TT.Super)) {
         expect(TT.Dot, "Expected '.' after 'super'");
         let name: Token = expect(TT.Ident, "Expected method name after 'super.'");

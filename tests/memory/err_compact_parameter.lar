@@ -1,0 +1,4 @@
+// expect: error Memory.compact(m) needs the memory's own name: 'm' is a parameter, and could be any memory
+import std.memory as Memory;
+function clean(m: byte[*]): void { Memory.compact(m); }
+function main(): int32 { return 0; }

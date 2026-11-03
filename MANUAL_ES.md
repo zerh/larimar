@@ -1328,6 +1328,43 @@ Además:
 - Una función también puede recibir una memoria como parámetro (`m: byte[*]`) y crear ahí. Rara vez
   hace falta: basta con que quien llama escriba `f(x) in m`.
 
+### Memorias que viven mucho: `Memory.limit` y `Memory.compact`
+
+Una memoria libera todo de golpe cuando termina su bloque. Una memoria que vive horas y cambia todo el
+tiempo (el mundo de un juego, el caché de un algoritmo largo) también guarda los bytes de lo que descartó.
+`std.memory` tiene dos funciones para eso:
+
+```actionscript
+import std.memory as Memory;
+
+function jugar(): void {
+    let mundo: byte[*] = [] in heap;
+    Memory.limit(mundo, 256 * 1024 * 1024);      // más de 256 MB: un panic que nombra 'mundo'
+    let mapa: Any = {} in mundo;
+    let rutas: Ruta[*] = [] in mundo;
+    let vivo: int64 = 0;
+    while (corriendo) {
+        actualizar(mapa, rutas);
+        if (mundo.length > 2 * vivo + 1024 * 1024) {    // duplicó lo que estaba vivo la última vez
+            Memory.compact(mundo);                       // se copia lo que alcanzan mapa y rutas; lo demás se libera
+            vivo = mundo.length;                         // justo después de compact(): exactamente lo vivo
+        }
+    }
+}
+```
+
+- `Memory.compact(m)` copia a bloques nuevos lo que las variables de `m` todavía alcanzan dentro de `m`,
+  les da las copias a las variables (lo compartido sigue compartido, los ciclos siguen siendo ciclos) y
+  libera los bloques viejos. Lo que vive en otras memorias se queda donde está.
+- Una memoria no puede saber sola cuánto de `m.length` sigue vivo; justo después de un `compact()`, sí.
+  Compactar cuando eso se duplica reparte el costo entre todo lo creado entre medio.
+- El compilador revisa cada llamada: `m` crece (`byte[*] in heap`) y está declarada en una función
+  (`main`, o la que hace el trabajo); toda variable de su bloque que pueda apuntar dentro vive en ella;
+  nada de la memoria propia del bloque se guarda en ella; la llamada no está dentro de un `for` sobre
+  datos; y lo que mueve no tiene lambdas, hilos ni objetos sincronizados. Cada error nombra la variable y
+  cómo arreglarlo.
+- Una memoria pertenece a un solo hilo, así que nadie más la usa mientras se mueve.
+
 ### Cuándo usar cada una
 
 - **Casi siempre**: ninguna; las memorias automáticas ya liberan cada cosa cuando deja de usarse.
@@ -1537,6 +1574,22 @@ clase y las listas `T[*]` sí se pueden modificar, porque la lambda comparte la 
 - En métodos de clase, una lambda puede usar `self`. En métodos de struct no, porque el struct podría copiarse o desaparecer.
 - Las lambdas no pueden lanzar errores.
 - Una lambda no puede capturar otra lambda **de su mismo tipo** (el compilador lo detecta).
+
+### Referencias a funciones: `::`
+
+`::` pasa una función donde se espera un tipo función, sin escribir la lambda:
+
+```actionscript
+app.get("/casas/{id}", Casas::ver);         // una función de un módulo importado
+app.get("/", ::inicio);                     // una función de este módulo
+let sumar: (int32) -> void = contador::add; // un método de un objeto (captura 'contador')
+return self::refrescar;                     // un método de self
+```
+
+`Casas::ver` es la lambda `(ctx) -> { Casas.ver(ctx); }`, con los parámetros del tipo que se espera ahí.
+Una referencia a un método captura su objeto como cualquier lambda, con las mismas reglas. Antes de `::`
+va un módulo, una variable o `self`; una función con `throws` no se puede referenciar (las lambdas no
+lanzan errores).
 
 ---
 

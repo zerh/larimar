@@ -136,6 +136,8 @@ typedef struct RtMem {
     bool growable;
     RtFinal* finals;    /* run (newest first) before the memory is freed */
     bool shared;        /* used by several threads: the default memory */
+    size_t limit;       /* Memory.limit: the most it may obtain from the system (0: no limit) */
+    const char* name;   /* its name, for the message when it passes its limit */
 } RtMem;
 
 static inline size_t rt_align_up(size_t n) {
@@ -223,6 +225,60 @@ static inline void rt_mem_free(RtMem* m) {
     *m = rt_mem_empty();
 }
 
+/* Memory.limit: a memory that needs more than its limit stops the program, naming it. */
+static const char* rt_size_text(size_t n, char* out) {
+    if (n >= 1048576) snprintf(out, 32, "%.1f MB", (double)n / 1048576.0);
+    else snprintf(out, 32, "%.1f KB", (double)n / 1024.0);
+    return out;
+}
+
+static void rt_mem_over_limit(RtMem* m, size_t need) {
+    static char text[256];
+    char a[32], b[32], c[32];
+    snprintf(text, sizeof text, "memory '%s' passed its limit of %s (it has %s and needs %s more)", m->name ? m->name : "?",
+        rt_size_text(m->limit, a), rt_size_text(m->reserved, b), rt_size_text(need, c));
+    rt_panic(text, 0);
+}
+
+static inline void rt_mem_limit(RtMem* m, int64_t bytes, const char* name, int line) {
+    if (bytes < 0) rt_panic("a memory limit cannot be negative", line);
+    m->name = name;
+    m->limit = (size_t)bytes;
+    if (m->limit && m->reserved > m->limit) rt_mem_over_limit(m, 0);
+}
+
+/* Whether p points into one of these blocks (what Memory.compact moves). */
+static inline bool rt_owned(const RtChunk* c, const void* p) {
+    const uint8_t* q = (const uint8_t*)p;
+    for (; c; c = c->prev) {
+        const uint8_t* d = (const uint8_t*)c + rt_align_up(sizeof(RtChunk));
+        if (q >= d && q < d + c->cap) return true;
+    }
+    return false;
+}
+
+/* Memory.compact, first half: the memory keeps its name and limit, and starts again with no blocks; its
+   old blocks go to *old, from where the live data is copied back. */
+static inline void rt_mem_compact_begin(RtMem* m, RtMem* old, const char* name, int line) {
+    if (m->finals) {
+        static char text[256];
+        snprintf(text, sizeof text, "memory '%s' holds threads, synchronized objects or C resources; compact() cannot move them", name);
+        rt_panic(text, line);
+    }
+    *old = *m;
+    m->base = NULL;
+    m->cap = 0;
+    m->used = 0;
+    m->total = 0;
+    m->reserved = 0;
+    m->chunks = NULL;
+    m->last = NULL;
+    m->lastSize = 0;
+}
+
+/* Memory.compact, second half: the old blocks are freed. */
+static inline void rt_mem_compact_end(RtMem* old) { rt_mem_free(old); }
+
 static inline void rt_mem_track(RtMem* m, size_t add) {
     m->total += add;
     if (m->total > m->peak) m->peak = m->total;
@@ -237,6 +293,11 @@ static inline void* rt_mem_try_alloc_raw(RtMem* m, size_t size) {
         size_t chunk = 64 * 1024;
         if (m->cap * 2 > chunk && m->cap < ((size_t)64 << 20)) chunk = m->cap * 2;
         while (chunk < span) chunk *= 2;
+        if (m->limit && m->reserved + chunk > m->limit) {        /* the last block fits what is left */
+            size_t room = m->limit > m->reserved ? m->limit - m->reserved : 0;
+            if (room < span) rt_mem_over_limit(m, span);
+            chunk = room;
+        }
         RtChunk* c = rt_chunk_new(chunk);
         c->prev = m->chunks;
         m->chunks = c;
@@ -716,8 +777,9 @@ static inline bool rt_is_a(const RtClass* c, const RtClass* target) {
     return false;
 }
 
-/* Remembers already cloned objects so that cyclic graphs clone correctly. */
-typedef struct RtCloneMap { void** keys; void** vals; int32_t len; int32_t cap; } RtCloneMap;
+/* Remembers already cloned objects so that cyclic graphs clone correctly (a hash table of addresses).
+   only != NULL: Memory.compact, which copies only what lives in those blocks and keeps the rest. */
+typedef struct RtCloneMap { void** keys; void** vals; int32_t len; int32_t cap; const struct RtChunk* only; } RtCloneMap;
 
 static inline RtCloneMap rt_clone_map(void) {
     RtCloneMap m;
@@ -725,27 +787,49 @@ static inline RtCloneMap rt_clone_map(void) {
     m.vals = NULL;
     m.len = 0;
     m.cap = 0;
+    m.only = NULL;
     return m;
 }
 
+static inline size_t rt_clone_slot(const RtCloneMap* m, const void* key) {
+    uint64_t h = (uint64_t)(uintptr_t)key;
+    h ^= h >> 33;
+    h *= 0xff51afd7ed558ccdULL;
+    h ^= h >> 33;
+    return (size_t)h & (size_t)(m->cap - 1);
+}
+
 static inline void* rt_clone_get(RtCloneMap* m, void* key) {
-    for (int32_t i = 0; i < m->len; i++) if (m->keys[i] == key) return m->vals[i];
-    return NULL;
+    if (m->cap == 0) return NULL;
+    for (size_t i = rt_clone_slot(m, key);; i = (i + 1) & (size_t)(m->cap - 1)) {
+        if (m->keys[i] == key) return m->vals[i];
+        if (m->keys[i] == NULL) return NULL;
+    }
 }
 
 static inline void rt_clone_put(RtCloneMap* m, void* key, void* val) {
-    if (m->len == m->cap) {
-        int32_t nc = m->cap ? m->cap * 2 : 16;
-        void** k = (void**)realloc(m->keys, sizeof(void*) * (size_t)nc);
-        void** v = (void**)realloc(m->vals, sizeof(void*) * (size_t)nc);
-        if (!k || !v) rt_panic("out of memory while cloning", 0);
-        m->keys = k;
-        m->vals = v;
-        m->cap = nc;
+    if ((m->len + 1) * 2 > m->cap) {
+        RtCloneMap g = *m;
+        g.cap = m->cap ? m->cap * 2 : 64;
+        g.len = 0;
+        g.keys = (void**)calloc((size_t)g.cap, sizeof(void*));
+        g.vals = (void**)calloc((size_t)g.cap, sizeof(void*));
+        if (!g.keys || !g.vals) rt_panic("out of memory while cloning", 0);
+        for (int32_t i = 0; i < m->cap; i++) if (m->keys[i]) rt_clone_put(&g, m->keys[i], m->vals[i]);
+        free(m->keys);
+        free(m->vals);
+        *m = g;
     }
-    m->keys[m->len] = key;
-    m->vals[m->len] = val;
-    m->len++;
+    size_t i = rt_clone_slot(m, key);
+    while (m->keys[i] != NULL && m->keys[i] != key) i = (i + 1) & (size_t)(m->cap - 1);
+    if (m->keys[i] == NULL) m->len++;
+    m->keys[i] = key;
+    m->vals[i] = val;
+}
+
+/* Memory.compact: whether a value is left where it is (it does not live in the memory being compacted). */
+static inline bool rt_clone_keeps(const RtCloneMap* m, const void* p) {
+    return m->only != NULL && (p == NULL || !rt_owned(m->only, p));
 }
 
 static inline void rt_clone_done(RtCloneMap* m) {
@@ -1083,6 +1167,9 @@ static inline void rt_sb_any(RtSb* b, RtAny a) { rt_sb_any_at(b, a, 0, false); }
 
 /* A deep copy; tables that appear several times (or in cycles) are copied once. */
 static inline RtAny rt_any_clone(RtAny a, RtMem* mem, RtCloneMap* cm) {
+    if (a.kind == RT_ANY_STR && rt_clone_keeps(cm, a.as.s.ptr)) return a;
+    if ((a.kind == RT_ANY_OBJ || a.kind == RT_ANY_VAL) && rt_clone_keeps(cm, a.as.box.ptr)) return a;
+    if (a.kind == RT_ANY_TABLE && rt_clone_keeps(cm, a.as.t)) return a;
     if (a.kind == RT_ANY_STR) { a.as.s = rt_str_clone(a.as.s, mem, 0); return a; }
     if (a.kind == RT_ANY_OBJ) { a.as.box.ptr = rt_obj_vt(a.as.box.ptr)->clone(a.as.box.ptr, mem, cm); return a; }
     if (a.kind == RT_ANY_VAL) { a.as.box.ptr = ((const RtValType*)a.as.box.type)->clone(a.as.box.ptr, mem, cm); return a; }
