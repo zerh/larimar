@@ -13,7 +13,7 @@ import semantics.types {
     T_FLOAT32, T_FLOAT64, T_BOOL, T_STRING, T_VOID, T_ANY, T_ERROR, T_NULL, primByName, isPrimName, named, functionOf,
     funcT, arrayT, optT, bits, isFloat, isInteger, isNumeric, isSigned, isError, isClass, isStruct, isInterface,
     isEnumT, isExternT, isByteArray, isOpt, isArray, optIsPointer, minOf, maxOf, maxText,
-    Region, RK, R_STATIC, rStaticMemory, rCaller, rLocal, meet, Scope, Frame, FrameK, Owner, newOwner, Symbol, SymK, MemK, ConstK,
+    Region, RK, R_STATIC, rStaticMemory, rMemory, rCaller, rLocal, meet, Scope, Frame, FrameK, Owner, newOwner, Symbol, SymK, MemK, ConstK,
     isMemory, FieldInfo, FunctionInfo, MethodInfo, StructInfo, ClassInfo, InterfaceInfo, VariantInfo, EnumInfo,
     LambdaInfo, Place, PlaceK, P_TEMP, P_GLOBAL, P_RESULT, rResult, Conversion, ConvK, CallInfo, CallK, BK, MemberInfo, MbK, PatternInfo, PatK,
     SwitchInfo, isMemParam, usesAny, usedTypes, funcTypes, lambdaList, nativeMethods, structOf, classOf, interfaceOf, enumOf,
@@ -23,7 +23,7 @@ import semantics.types {
 };
 import semantics.analyzer {
     error, wrong, frame, frames, frameTop, state, scope, pushFrame, popFrame, pushScope, popScope, declare, lookup,
-    narrowedType, noteCapture, noteCompact, knownNative, declareParam, checkReturns, analyzeStmts, analyzeBlock, analyzeThrow, requireBool,
+    narrowedType, noteCapture, noteCompact, declareParam, checkReturns, analyzeStmts, analyzeBlock, analyzeThrow, requireBool,
     requireHandled, lifetime, lifetimeOf, requireOutlives, livesHint, isReference, storageRegion, placeFor, rootSymbol, isLValue,
     reassignedNames, currentOwner, edge, useGlobal, callTargets, checkThreadRun, checkThreadSafeLambda, anyFieldsLoop, block, blockRegion,
     returnedNames, viewMethod, callMemory, creatingMethod, staticName, platformCtx,
@@ -894,7 +894,7 @@ public function resolveMemory(e: Expr in default): Symbol? {
                 error(e.line, "'${s.name}' (${s.type.size} bytes) is too big for the stack; declare it with 'in heap' or as a global.");
             }
             s.memKind = global ? MemK.FixedStatic : MemK.FixedLocal;
-            s.memRegion = global ? rStaticMemory(s.name) : rLocal(s.scope, "memory '${s.name}'");
+            s.memRegion = global ? rStaticMemory(s) : rMemory(s);
         } else if (isByteArray(s.type)) {
             error(e.line, "'${s.name}' is not a memory. Memories are created as let ${s.name}: byte[N] = []; or let ${s.name}: byte[*] = [] in heap;");
             return null;
@@ -1581,7 +1581,7 @@ function checkCall(c: Call in default, expected: Type? in default, place: Place 
                 builtinCall(c, BK.Panic, null);
                 yield T_VOID;
             }
-            if (s != null && s.kind == SymK.Function && s.func!.decl != null && s.func!.decl!.isNative && knownNative(s.func!)) {
+            if (s != null && s.kind == SymK.Function && s.func!.decl != null && s.func!.decl!.isNative) {
                 id.symbol = s;
                 yield checkMemoryCall(c, s.func!.name.endsWith("compact"));
             }

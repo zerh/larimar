@@ -212,11 +212,14 @@ public class Region {
     let scope: Scope? = null;       // Local
     let label: String = "";         // Local: what it is
     let parts: Region[*] = [];      // Meet
+    let memory: Symbol? = null;     // a memory with a name (global or local): which one
 }
 
 public let R_STATIC: Region = Region { kind: RK.Static } in default;
 /** The region of a global memory: static like R_STATIC, but it keeps the memory's name for messages. */
-public function rStaticMemory(name: String in default): Region { return Region { kind: RK.Static, label: "memory '${name}'" } in default; }
+public function rStaticMemory(s: Symbol in default): Region { return Region { kind: RK.Static, label: "memory '${s.name}'", memory: s } in default; }
+/** The region of a local memory with a name. */
+public function rMemory(s: Symbol in default): Region { return Region { kind: RK.Local, scope: s.scope, label: "memory '${s.name}'", memory: s } in default; }
 public let R_CALLER_ANY: Region = Region { kind: RK.CallerAny } in default;
 
 public function rCaller(p: Symbol in default): Region { return Region { kind: RK.Caller, param: p } in default; }
@@ -277,10 +280,9 @@ public function meet(a: Region in default, b: Region in default): Region {
     }
     // data of two memories of the same block (one with a name): what it is made of is not known, so it is
     // the block's own memory (Memory.compact needs to know what lives in a memory with a name)
-    if (a.kind == RK.Local && b.kind == RK.Local && a.scope! == b.scope! && a.label != b.label
-        && (a.label.startsWith("memory '") || b.label.startsWith("memory '"))) {
-        if (!a.label.startsWith("memory '")) { return a; }
-        if (!b.label.startsWith("memory '")) { return b; }
+    if (a.kind == RK.Local && b.kind == RK.Local && a.scope! == b.scope! && a.memory != b.memory) {
+        if (a.memory == null) { return a; }
+        if (b.memory == null) { return b; }
         return rLocal(a.scope!, "the memory of this block");
     }
     if (outlives(a, b)) { return b; }

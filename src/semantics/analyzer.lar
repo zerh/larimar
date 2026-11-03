@@ -20,7 +20,7 @@ import semantics.types {
     hasThreadSafe, cTypeOf,
     Type, TyK, NamedK, ArrK, T_INT32, T_INT64, T_BYTE, T_BOOL, T_STRING, T_VOID, T_ANY, T_ERROR, isPrimName, named,
     funcT, arrayT, optT, isFloat, isInteger, isError, isClass, isStruct, isInterface, isEnumT, isExternT, isOpt, isArray,
-    optIsPointer, minOf, maxText, Region, RK, R_STATIC, rStaticMemory, rCaller, rLocal, rVar, symbolic, resolveRegion, outlives, meet,
+    optIsPointer, minOf, maxText, Region, RK, R_STATIC, rStaticMemory, rMemory, rCaller, rLocal, rVar, symbolic, resolveRegion, outlives, meet,
     sameRegion, isAncestorOrSelf, describe, Scope, newScope, Frame, FrameK, Owner, newOwner, Symbol, SymK, MemK, ConstK, isMemory,
     escapeName, FieldInfo, FunctionInfo, MethodInfo, StructInfo, ClassInfo, InterfaceInfo, VariantInfo, EnumInfo,
     LambdaInfo, Place, PlaceK, P_TEMP, SwitchInfo, MemberInfo, MbK, ForInfo, CatchInfo, isMemParam, includes,
@@ -30,7 +30,6 @@ import semantics.types {
     findField, findMethod, isSubclass, implementor, P_GLOBAL, P_RESULT, primByName, ExternTypeInfo, externInfos,
     isCValue, isExternStruct, cCodeStd, CallInfo, CallK, BK, includeWhens, isResource, externInfoOf, platformWithin, isPtr
 };
-import semantics.linker { fileNames, filePaths };
 import semantics.expressions {
     check, coerce, typeOf, regionOf, hasRefs, note, resolveType, resolveTop, resolveValue, evalConst, ConstVal,
     analyzeSwitch, TC_PARAM, TC_LET, TC_OTHER, intFits, namedHasRefs
@@ -1124,24 +1123,8 @@ public function noteCapture(s: Symbol in default, line: int32): void {
 /** The static function being analyzed ("" when none): for the message about self. */
 public let staticName: String = "";
 
-/** The native functions of modules (in std/memory.lar): the compiler writes every call to them. */
-public function knownNative(f: FunctionInfo in default): bool {
-    if (f.name == "std__memory__limit" || f.name == "std__memory__compact") { return true; }     // imported as std.memory
-    // std/memory.lar opened by itself (larimar check, the editor): its own path says it
-    let file: int32 = f.line / 1000000;
-    let shown: String = file < fileNames.length ? fileNames[file].replace("\\", "/") : "";
-    let path: String = file < filePaths.length ? filePaths[file].replace("\\", "/") : "";
-    let mine: bool = shown.endsWith("std/memory.lar") || path.endsWith("std/memory.lar");
-    return mine && (f.name == "limit" || f.name == "compact");
-}
-
 function analyzeFunction(f: FunctionInfo in default): void {
-    if (f.decl!.isNative) {
-        if (!knownNative(f)) {
-            error(f.line, "'${f.name.replace("__", ".")}' is declared native, but the compiler does not implement it: a native function of a module is only for the standard library.");
-        }
-        return;
-    }
+    if (f.decl!.isNative) { return; }         // the linker checked it is one the compiler writes
     staticName = f.decl!.typeName != "" ? f.name : "";
     let saved: Scope = scope;
     let body: Stmt[*] = f.decl!.body;
@@ -1467,7 +1450,7 @@ function declareHeapMemory(v: VarDecl in default, p: Placed in default, kind: Sy
     }
     let s: Symbol = declare(v.name, kind, t, v.line);
     s.memKind = mk;
-    s.memRegion = global ? rStaticMemory(v.name) : rLocal(s.scope, "memory '${v.name}'");
+    s.memRegion = global ? rStaticMemory(s) : rMemory(s);
     s.immutable = true;
     v.symbol = s;
 }
@@ -2107,8 +2090,8 @@ function runCheck(d: Deferred in default, resolve: bool): void {
     if (!outlives(v, st)) {
         let named: String = culprit(d, v, st, resolve);
         error(d.line, named != "" ? named : fill(d.forever != "" && st.kind == RK.Static && v.kind == RK.Local ? d.forever : d.msg, v, st));
-    } else if (st.kind == RK.Local && v.kind == RK.Local && v.scope! == st.scope! && v.label != st.label && st.label.startsWith("memory '")) {
-        mixings.push(Mixing { scope: st.scope!, label: st.label, line: d.line } in default);      // for Memory.compact
+    } else if (st.kind == RK.Local && st.memory != null && v.kind == RK.Local && v.scope! == st.scope! && v.memory != st.memory) {
+        mixings.push(Mixing { memory: st.memory!, line: d.line } in default);      // for Memory.compact
     }
 }
 
@@ -2117,9 +2100,7 @@ const VIEW_METHODS: String = " trim trimStart trimEnd substring bytes split line
 
 /** The `in` that puts a copy where a region lives, when the code can say it: " in default", " in m", or "". */
 function placementFor(r: Region): String {
-    if ((r.kind == RK.Static || r.kind == RK.Local) && r.label.startsWith("memory '") && r.label.endsWith("'")) {
-        return " in ${r.label.substring(8, r.label.length - 1)}";     // a memory with a name, global or local
-    }
+    if (r.memory != null) { return " in ${r.memory!.name}"; }      // a memory with a name, global or local
     return r.kind == RK.Static ? " in default" : "";
 }
 
@@ -2215,8 +2196,7 @@ public let compactCalls: CompactCall[*] = [] in default;
 
 /** Where data of another memory of the same block was stored in a memory with a name. */
 public class Mixing {
-    let scope: Scope;
-    let label: String;
+    let memory: Symbol;
     let line: int32;
 }
 
@@ -2254,7 +2234,7 @@ function checkCompacts(): void {
         let line: int32 = cc.call.line;
         let ok: bool = true;
         for (x in mixings) {
-            if (x.scope == mr.scope! && x.label == mr.label) {
+            if (x.memory == m) {
                 error(line, "Memory.compact(${m.name}): line ${x.line} keeps data of another memory of this block in '${m.name}', and compact() moves only what lives in '${m.name}'. Create that data in it (... in ${m.name}).");
                 ok = false;
                 break;
@@ -2264,10 +2244,10 @@ function checkCompacts(): void {
         for (v in cc.visible) {
             if (v == m || isMemory(v) || !(v.kind == SymK.Local || v.kind == SymK.Param) || !hasRefs(v.type)) { continue; }
             let r: Region = resolveRegion(v.region);
-            if (sameRegion(r, mr) && r.label == mr.label) {
+            if (r.memory == m) {
                 let why: String = notMovable(v.type, {} in default);
                 if (why != "") {
-                    error(line, "Memory.compact(${m.name}) cannot move '${v.name}': ${why}.");
+                    error(line, "Memory.compact(${m.name}) cannot move '${v.name}': it holds ${why}, which compact() cannot move.");
                     ok = false;
                 } else if (v.immutable) {
                     error(line, "Memory.compact(${m.name}) cannot move '${v.name}': it cannot be given a new value.");
@@ -2286,60 +2266,46 @@ function checkCompacts(): void {
     }
 }
 
-/** Why a value of this type cannot be moved by compact() ("" when it can). */
+/** What a value of this type may hold that compact() cannot move ("" when nothing): "a lambda", "a thread"... */
 function notMovable(t: Type in default, seen: Any in default): String {
     if (seen.contains(t.text)) { return ""; }
     seen[t.text] = true;
-    if (t == T_ANY) {             // a table can hold any object, struct or enum of the program
+    let parts: FieldInfo[*] = [] in default;            // what to look inside
+    if (t == T_ANY) {                                   // a table can hold any class, struct or enum of the program
         for (c in classes) {
             let why: String = notMovable(named(c.name, NamedK.Class), seen);
-            if (why != "") { return "it is an Any, and an Any can hold a ${c.name}, which ${why.startsWith("it ") ? why.substring(3) : why}"; }
+            if (why != "") { return "${why} (an Any can hold a ${c.name})"; }
         }
         for (st in structs) {
             let why: String = notMovable(named(st.name, NamedK.Struct), seen);
-            if (why != "") { return "it is an Any, and an Any can hold a ${st.name}, which ${why.startsWith("it ") ? why.substring(3) : why}"; }
+            if (why != "") { return "${why} (an Any can hold a ${st.name})"; }
         }
         return "";
     }
-    return switch (t.kind) {
-        case Func -> "it holds a lambda, which compact() cannot move";
-        case Opt, Array -> notMovable(t.elem!, seen);
-        case Named -> switch (t.nk) {
-            case Interface -> "it holds an interface value, which compact() cannot move";
-            case Class -> classNotMovable(t.name, seen);
-            case Struct -> fieldsNotMovable(structOf(t.name)!.fields, seen);
-            case Enum -> enumNotMovable(enumOf(t.name)!, seen);
-            default -> "";
-        };
-        default -> "";
-    };
-}
-
-function enumNotMovable(e: EnumInfo in default, seen: Any in default): String {
-    for (vr in e.variants) {
-        let why: String = fieldsNotMovable(vr.fields, seen);
-        if (why != "") { return why; }
-    }
-    return "";
-}
-
-function fieldsNotMovable(fields: FieldInfo[*] in default, seen: Any in default): String {
-    for (f in fields) {
-        let why: String = notMovable(f.type, seen);
-        if (why != "") { return "its field '${f.name}' ${why.startsWith("it ") ? why.substring(3) : why}"; }
-    }
-    return "";
-}
-
-/** A class: its own fields, its parents' and those of every class that extends it (any of them may be there). */
-function classNotMovable(name: String in default, seen: Any in default): String {
-    for (c in classes) {
-        if (c.name == name || isSubclass(name, c.name) || isSubclass(c.name, name)) {
-            if (c.sync) { return "it holds a synchronized object (${c.name}), which compact() cannot move"; }
-            if (c.thread) { return "it holds a thread (${c.name}), which compact() cannot move"; }
-            let why: String = fieldsNotMovable(c.fields, seen);
-            if (why != "") { return why; }
+    switch (t.kind) {
+        case Func -> { return "a lambda"; }
+        case Opt, Array -> { return notMovable(t.elem!, seen); }
+        case Named -> {
+            if (t.nk == NamedK.Interface) { return "an interface value"; }
+            if (t.nk == NamedK.Struct) { for (f in structOf(t.name)!.fields) { parts.push(f); } }
+            if (t.nk == NamedK.Enum) {
+                for (vr in enumOf(t.name)!.variants) { for (f in vr.fields) { parts.push(f); } }
+            }
+            if (t.nk == NamedK.Class) {                 // its fields, its parents' and those of the classes that extend it
+                for (c in classes) {
+                    if (c.name == t.name || isSubclass(t.name, c.name) || isSubclass(c.name, t.name)) {
+                        if (c.sync) { return "a synchronized object (${c.name})"; }
+                        if (c.thread) { return "a thread (${c.name})"; }
+                        for (f in c.fields) { parts.push(f); }
+                    }
+                }
+            }
         }
+        default -> { return ""; }
+    }
+    for (f in parts) {
+        let why: String = notMovable(f.type, seen);
+        if (why != "") { return "${why} (field '${f.name}' of ${f.owner})"; }
     }
     return "";
 }
@@ -2353,7 +2319,7 @@ function resolveRegions(): void {
         for (s in varSyms) {
             let old: Region = s.resolved!;
             let next: Region = meet(old, resolveRegion(s.varRegion ?? R_STATIC));
-            if (!sameRegion(old, next) || old.label != next.label) {      // the label: which memory of a block
+            if (!sameRegion(old, next) || old.memory != next.memory) {      // which memory of a block, too
                 s.resolved = next;
                 changed = true;
             }

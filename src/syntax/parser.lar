@@ -1272,8 +1272,13 @@ function methodReference(target: Expr in default): Expr {
     if (!(target is Ident || target is SelfExpr || dottedPath(target) != "")) {
         error(name.line, "'::' goes after a module, a variable or 'self' (like Pages::show or panel::create)");
     }
-    let call: Call = Call { line: name.line, callee: Member { line: name.line, object: target, name: name.text } in default } in default;
-    return Lambda { line: name.line, body: [ReturnStmt { line: name.line, value: call } in default], ref: call } in default;
+    return referenceLambda(Member { line: name.line, object: target, name: name.text } in default);
+}
+
+/** The lambda of a reference: its body calls `callee` (the analyzer adds the parameters). */
+function referenceLambda(callee: Expr in default): Lambda {
+    let call: Call = Call { line: callee.line, callee } in default;
+    return Lambda { line: callee.line, body: [ReturnStmt { line: callee.line, value: call } in default], ref: call } in default;
 }
 
 /**
@@ -1291,8 +1296,7 @@ function primary(): Expr {
     if (optional(TT.Self)) { return SelfExpr { line } in default; }
     if (optional(TT.ColonColon)) {             // ::name: a function of this module
         let name: Token = expect(TT.Ident, "Expected a function name after '::'");
-        let call: Call = Call { line: name.line, callee: Ident { line: name.line, name: name.text } in default } in default;
-        return Lambda { line: name.line, body: [ReturnStmt { line: name.line, value: call } in default], ref: call } in default;
+        return referenceLambda(Ident { line: name.line, name: name.text } in default);
     }
     if (optional(TT.Super)) {
         expect(TT.Dot, "Expected '.' after 'super'");
