@@ -1,0 +1,8 @@
+// expect: error Field 'customer' gets 'name', which lives in the memory of this block, but the object lives for the whole program: customer: name.clone()
+class Order { let customer: String; }
+let orders: Order[*] = [] in default;
+function main(): int32 {
+    let name: String = "ana".toUpperCase();
+    orders.push(Order { customer: name });
+    return 0;
+}

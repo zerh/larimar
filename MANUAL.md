@@ -1366,7 +1366,7 @@ function rename(c: Card): void {
 The error says:
 
 ```
-This value lives in memory 'draft', but field 'name' lives longer (in 'c' (owned by the caller)). Use .clone() to copy it there.
+'fresh' lives in memory 'draft', but field 'name' lives longer (in 'c' (owned by the caller)). Keep a copy there: fresh.clone()
 ```
 
 And the solution is the one it suggests: **`clone()`**, which copies the value to the place of the destination.
@@ -1531,7 +1531,11 @@ and `T[*]` lists can be modified, because the lambda shares the same reference.
 
 ### Other rules
 
-- A lambda can be returned or kept in fields without a problem: it carries its copies with it.
+- A lambda can be returned or kept in fields without a problem: it carries its copies with it. What it
+  captures must live as long as the place where the lambda is kept: to keep a lambda in a global list,
+  clone what it captures **before** creating it (`let kept: String = label.clone() in default;`, and
+  capture `kept`). A `label.clone()` inside the lambda runs only when the lambda is called: by then
+  `label` may no longer exist, and the compiler says so.
 - In class methods, a lambda can use `self`. In struct methods it cannot, because the struct could be copied or disappear.
 - Lambdas cannot throw errors.
 - A lambda cannot capture another lambda **of its own type** (the compiler detects it).
