@@ -7,7 +7,7 @@ document says, and an implementation is correct when it does what this document 
 [Manual](MANUAL.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 0.4.1 (language 1.0)`. A compiler release may add to the standard library and to the tools
+`larimar 0.5.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
@@ -1705,9 +1705,10 @@ A conforming implementation documents each of these.
 These belong to the tools and the library, which have their own versions and documentation (the
 [Manual](MANUAL.md)):
 
-- the modules of the standard library other than `std.lang` (`std.io`, `std.os`, `std.process`,
-  `std.net`, `std.json`, `std.toml`, `std.test`, ...);
-- the commands `larimar build`, `run`, `check`, `test`, `lsp`, `dap`, and the file `larimar.toml`;
+- the modules of the standard library other than `std.lang` (`std.io`, `std.io.files`, `std.os`,
+  `std.os.process`, `std.time`, `std.crypto`, `std.encoding.json`, `std.net`, `std.test`, ...);
+- the commands `larimar build`, `run`, `check`, `test`, `lsp`, `dap`, the plugins, and the file
+  `larimar.toml` (with `[dependencies]` and `deps/`);
 - the names and the shape of the generated C, other than what [§19](#19-c-interoperability) defines
   (`RtMem*`, `rt_mem_alloc`, the names of external and export functions);
 - the text of compile errors.

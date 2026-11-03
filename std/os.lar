@@ -123,3 +123,45 @@ public function platform(): String {
         return "other";
     #end
 }
+
+// ---- ending on request: Ctrl+C, SIGTERM (systemd, docker stop, kill) -------------------------
+
+c_code {
+#if defined(_WIN32)
+    static volatile LONG lm_os_terminating = 0;
+    static BOOL WINAPI lm_os_on_console(DWORD event) {
+        (void)event;
+        InterlockedExchange(&lm_os_terminating, 1);
+        return TRUE;                                  /* handled: the program ends on its own */
+    }
+    static void lm_os_catch_termination(void) { SetConsoleCtrlHandler(lm_os_on_console, TRUE); }
+    static int32_t lm_os_terminating_now(void) { return (int32_t)InterlockedCompareExchange(&lm_os_terminating, 0, 0); }
+#else
+    #include <signal.h>
+    static volatile sig_atomic_t lm_os_terminating = 0;
+    static void lm_os_on_signal(int s) { (void)s; lm_os_terminating = 1; }
+    static void lm_os_catch_termination(void) {
+        struct sigaction a;
+        memset(&a, 0, sizeof a);
+        a.sa_handler = lm_os_on_signal;
+        sigemptyset(&a.sa_mask);
+        sigaction(SIGINT, &a, NULL);
+        sigaction(SIGTERM, &a, NULL);
+    }
+    static int32_t lm_os_terminating_now(void) { return (int32_t)lm_os_terminating; }
+#endif
+}
+
+extern function lm_os_catch_termination(): void;
+extern function lm_os_terminating_now(): int32;
+
+/**
+ * From now on, Ctrl+C and SIGTERM (what systemd, docker stop and kill send) do not end the program at
+ * once: they only make terminating() true, so the program can finish what it is doing and end on its own.
+ * The servers of std.net look at it: they stop accepting, finish the connections they serve, and run()
+ * returns. Nothing changes until this is called.
+ */
+public function catchTermination(): void { lm_os_catch_termination(); }
+
+/** Whether Ctrl+C or SIGTERM arrived after catchTermination(). */
+public function terminating(): bool { return lm_os_terminating_now() != 0; }

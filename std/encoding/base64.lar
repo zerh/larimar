@@ -1,0 +1,77 @@
+// std.encoding.base64: bytes as base64 text (RFC 4648), and back.
+//
+//   import std.encoding.base64 as Base64;
+//   println(Base64.encode("hola".bytes()));                // aG9sYQ==
+//   println(Base64.encodeUrl(token));                      // for URLs and cookies: - and _, no '='
+//   let bytes: byte[*]? = Base64.decode("aG9sYQ==");
+
+const STANDARD: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const URL_SAFE: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+/** Base64 with + and /, padded with '='. */
+public function encode(bytes: byte[]): String { return encodeWith(bytes, STANDARD, true); }
+
+/** Base64 for URLs, file names and cookies: - and _ instead of + and /, without '='. */
+public function encodeUrl(bytes: byte[]): String { return encodeWith(bytes, URL_SAFE, false); }
+
+/** The bytes of base64 text (with + and /, the '=' optional), or null when it is not base64. */
+public function decode(text: String): byte[*]? { return decodeWith(text, STANDARD); }
+
+/** The bytes of URL base64 text (with - and _, the '=' optional), or null when it is not base64. */
+public function decodeUrl(text: String): byte[*]? { return decodeWith(text, URL_SAFE); }
+
+function encodeWith(bytes: byte[], alphabet: String, pad: bool): String {
+    let sb: StringBuilder = {};
+    let i: int32 = 0;
+    while (i < bytes.length) {
+        let left: int32 = bytes.length - i;
+        let n: uint32 = (bytes[i] as uint32) << 16;
+        if (left > 1) { n = n | ((bytes[i + 1] as uint32) << 8); }
+        if (left > 2) { n = n | (bytes[i + 2] as uint32); }
+        sb.add(letter(alphabet, (n >> 18) & 63));
+        sb.add(letter(alphabet, (n >> 12) & 63));
+        if (left > 1) { sb.add(letter(alphabet, (n >> 6) & 63)); } else if (pad) { sb.add("="); }
+        if (left > 2) { sb.add(letter(alphabet, n & 63)); } else if (pad) { sb.add("="); }
+        i += 3;
+    }
+    return sb.toString().clone();
+}
+
+function letter(alphabet: String, index: uint32): String {
+    return alphabet.substring(index as int32, (index as int32) + 1);
+}
+
+function decodeWith(text: String, alphabet: String): byte[*]? {
+    let out: byte[*] = [];
+    let end: int32 = text.length;
+    while (end > 0 && text[end - 1] == '=') { end -= 1; }
+    if (text.length - end > 2 || end % 4 == 1) { return null; }
+    let n: uint32 = 0;
+    let count: int32 = 0;
+    for (i in 0..end) {
+        let v: int32 = valueIn(alphabet, text[i]);
+        if (v < 0) { return null; }
+        n = (n << 6) | (v as uint32);
+        count += 1;
+        if (count == 4) {
+            out.push(((n >> 16) & 255) as byte);
+            out.push(((n >> 8) & 255) as byte);
+            out.push((n & 255) as byte);
+            n = 0;
+            count = 0;
+        }
+    }
+    if (count == 2) { out.push(((n >> 4) & 255) as byte); }
+    if (count == 3) {
+        out.push(((n >> 10) & 255) as byte);
+        out.push(((n >> 2) & 255) as byte);
+    }
+    return out;
+}
+
+function valueIn(alphabet: String, c: byte): int32 {
+    for (i, a in alphabet) {
+        if (a == c) { return i; }
+    }
+    return -1;
+}

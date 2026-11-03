@@ -7,7 +7,7 @@
 // "struct"|"class"|"interface"|"enum"|"raw", ...}; structs, classes, interfaces and enums by name, in
 // "types", so a type that contains itself is no problem.
 
-import std.json as Json;
+import std.encoding.json as Json;
 import syntax.ast { Stmt, Expr, VarDecl, ForStmt, TryStmt, SwitchStmt, IsExpr, SwitchExpr, allStmts, allExprs };
 import semantics.types {
     Type, TyK, NamedK, ArrK, T_STRING, T_ANY, Symbol, FunctionInfo, MethodInfo, LambdaInfo, ClassInfo, StructInfo, EnumInfo,

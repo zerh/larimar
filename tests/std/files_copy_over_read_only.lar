@@ -3,7 +3,7 @@
 // Files.copy replaces the destination even when it is read-only (like cp -f): a library copied from
 // Homebrew keeps its r--r--r--, and the next build copies it again.
 import std.io.files as Files;
-import std.io.files { IoError };
+import std.io { IoError };
 import std.os;
 
 function main(): void throws IoError {

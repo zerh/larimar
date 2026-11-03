@@ -27,13 +27,13 @@
 
 import std.os;
 import std.text { isIdentifierPart };
-import std.path as Paths;
+import std.io.path as Paths;
 import std.io.files as Files;
-import std.io.files { IoError };
+import std.io { IoError };
 import syntax.ast { Program, FunctionDecl, TK };
 import syntax.parser { parseProgram, parseError };
 import project.cc { windows, quote, commandLine, systemLibraries, selfPath };
-import std.json as Json;
+import std.encoding.json as Json;
 
 /** How the tests are compiled: the project's [c] settings, or the defaults when there is no project. */
 public class TestSettings {

@@ -4,8 +4,8 @@
 // output: <tres>
 // output: copiado
 // Regresión: Reader y copy usaban un byte[4096] de longitud 0 y no leían nada.
-import std.io.streams { MemoryInputStream, MemoryOutputStream, Reader, copy };
-import std.io.files { IoError };
+import std.io { MemoryInputStream, MemoryOutputStream, Reader, copy };
+import std.io { IoError };
 function main(): int32 throws IoError {
     let r: Reader = { from: MemoryInputStream { data: "uno\ndos\r\ntres" } };
     while (true) {

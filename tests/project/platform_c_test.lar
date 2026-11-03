@@ -1,10 +1,10 @@
 // larimar.toml: [c] for every platform, and [c.<platform>] added to it on that platform only. Each test
 // writes a small project in build/test/ and builds it with the compiler under test ($LARIMARC, else the PATH).
 import std.test { check, checkText, checkInt, fail };
-import std.process { Process, ProcessError, message, findProgram };
+import std.os.process { Process, ProcessError, message, findProgram };
 import std.io.files as Files;
-import std.io.files { IoError };
-import std.path as Paths;
+import std.io { IoError };
+import std.io.path as Paths;
 import std.os;
 
 function compiler(): String {

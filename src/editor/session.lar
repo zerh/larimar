@@ -4,16 +4,16 @@
 // of the editor (ide.lar).
 
 import std.os;
-import std.path as Paths;
+import std.io.path as Paths;
 import std.io.files as Files;
-import std.json as Json;
+import std.encoding.json as Json;
 import std.io.console as Console;
 import syntax.ast { Program };
 import semantics.linker { link, linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES };
 import semantics.types { files };
 import semantics.analyzer { analyze, analysisErrors };
-import std.toml as Toml;
-import std.toml { TomlError };
+import std.encoding.toml as Toml;
+import std.encoding.toml { TomlError };
 
 /** The program of the last analysis (empty when it could not be linked). */
 public let program: Program = Program { line: 1 } in default;

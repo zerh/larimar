@@ -1,4 +1,4 @@
-// std.net.http: an HTTP/1.1 client over std.net, with https:// through a TlsProvider (std.net.http.tls).
+// std.net.http: an HTTP/1.1 client over std.net, with https:// through a TlsProvider (std.net.tls).
 //
 //   import std.net.http { Client, Request, Response, Header, HttpError, message, get };
 //
@@ -21,12 +21,12 @@
 
 import std.net { Connection, TcpSocket, NetError };
 import std.net as Net;
-import std.net.http.tls { TlsProvider, SystemTls };
-import std.io.files { IoError };
+import std.net.tls { TlsProvider, SystemTls };
+import std.io { IoError };
 import std.io.files as Files;
-import std.io.streams { InputStream, Closeable, Reader, buffer };
-import std.json { JsonError };
-import std.json as Json;
+import std.io { InputStream, Closeable, Reader, buffer };
+import std.encoding.json { JsonError };
+import std.encoding.json as Json;
 
 /** Why there was no response. */
 public enum HttpError {
@@ -227,7 +227,7 @@ public class Response implements Closeable {
         return stringOfRange(all, 0, all.length);
     }
 
-    /** The body parsed as JSON (std.json); not JSON is a BadResponse. */
+    /** The body parsed as JSON (std.encoding.json); not JSON is a BadResponse. */
     function json(): Any throws HttpError {
         let t: String = self.text();
         try {
@@ -258,12 +258,6 @@ public function post(url: String, body: String, contentType: String): Response t
 public function send(req: Request): Response throws HttpError {
     let c: Client = {};
     return c.send(req);
-}
-
-/** A Connection as an InputStream, for the Reader. */
-class ConnectionInput implements InputStream {
-    let connection: Connection;
-    function read(buffer: byte[]): int32 throws IoError { return self.connection.read(buffer); }
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -386,7 +380,7 @@ function fetch(client: Client, req: Request, url: String, redirectsLeft: int32):
     } catch (IoError e) {
         throw HttpError.Net(Files.message(e));
     }
-    r.body.from = Reader { from: ConnectionInput { connection: conn } };
+    r.body.from = Reader { from: conn.input() };
     readHead(r, req.method.equalsIgnoreCase("HEAD"));
     let location: String? = r.header("Location");
     if (isRedirect(r.status) && location != null && client.maxRedirects > 0) {

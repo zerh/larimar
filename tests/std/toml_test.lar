@@ -1,7 +1,7 @@
-// std.toml: reading and writing TOML.
+// std.encoding.toml: reading and writing TOML.
 import std.test { check, checkText, checkInt, fail };
-import std.toml as Toml;
-import std.toml { TomlError, message };
+import std.encoding.toml as Toml;
+import std.encoding.toml { TomlError, message };
 
 test function readsSectionsAndValues(): void throws TomlError {
     let config: Any = Toml.parse("""

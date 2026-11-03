@@ -2,12 +2,12 @@
 // output: bad key rejected: true
 // output: served: 3
 // output: client: hello 0 over tls | hello 1 over tls | hello 2 over tls | plain client dropped
-// std.net: a TlsServer with OpenSslProvider (tests/tls/cert.pem, self-signed) and threads; a client with
+// std.net: a TcpServer with OpenSslProvider (tests/tls/cert.pem, self-signed) and threads; a client with
 // SystemTls (verify: false), and one that does not speak TLS, which never reaches onConnect.
-import std.net { TlsServer, TlsSocket, TcpSocket, OpenSslProvider, StopSignal, Connection, NetError, message };
-import std.net.http.tls { SystemTls };
-import std.io.streams { Reader, buffer };
-import std.io.files { IoError };
+import std.net { TcpServer, TlsSocket, TcpSocket, OpenSslProvider, StopSignal, Connection, NetError, message };
+import std.net.tls { SystemTls };
+import std.io { Reader, buffer };
+import std.io { IoError };
 
 synchronized class Counter {
     let n: int32 = 0;
@@ -76,14 +76,14 @@ function main(): int32 {
     try {
         let tls: OpenSslProvider = OpenSslProvider.load("tests/tls/cert.pem", "tests/tls/key.pem");
         t.start();
-        let server: TlsServer = {
+        let server: TcpServer = {
             port: 47823,
             threads: 3,
             stop: quit,
             tls: tls,
-            onConnect: (client: TlsSocket) -> {
+            onConnect: (client: Connection) -> {
                 try {
-                    let lines: Reader = { from: client };
+                    let lines: Reader = { from: client.input() };
                     let line: String = lines.readLine() ?? "";
                     client.writeText("${line} over tls\n");
                     served.add();

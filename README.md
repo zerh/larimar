@@ -13,7 +13,9 @@ larimar-compiler/
 │   ├── codegen/             # gen, expressions, runtime, runtimeselect, prune, debugmap
 │   ├── editor/              # session (larimar check), lsp, ide, docstore, dap
 │   └── project/             # cc (the C compiler), testing (larimar test)
-├── std/                     # Standard library source (edit it here); std/net.lar: TCP, UDP and their servers, TLS servers; std/net/http.lar: HTTP client; std/net/http/tls.lar: TLS
+├── std/                     # Standard library source (edit it here): io.lar and io/ (files, path, console), os.lar and os/process.lar,
+│                            # time.lar, crypto.lar, encoding/ (json, toml, base64, hex, url), net.lar (TCP, UDP, servers with TLS),
+│                            # net/tls.lar (client TLS), net/http.lar (HTTP client), text.lar and text/regex.lar, test.lar
 │                            # (net, io and os are written in Larimar over the system's C functions: extern, #when, T*, released by)
 ├── tests/                   # Tests (larimarc test, tests/run-tests.sh; tests/lsp for check and lsp)
 ├── debug/                   # lldb and gdb formatters for Larimar values (installed in larimar/debug)
@@ -94,7 +96,7 @@ Test the compiler:
 
 ```bash
 ./larimarc --version
-# Should output: larimar 0.4.1 (language 1.0)
+# Should output: larimar 0.5.0 (language 1.0)
 
 # Compile a test program
 echo 'function main(): void { println("Hello!"); }' > test.lar
@@ -118,9 +120,16 @@ they expect in their first lines (`// expect: run` with `// output:` lines, `// 
 Every bug found goes in as a test first.
 
 `tests/lsp/lsp_test.lar`, `tests/debug/debug_test.lar` and `tests/tls/tls_test.lar` start the compiler,
-the debuggers and a client as other programs (`std.process`) and talk to them like an editor would:
+the debuggers and a client as other programs (`std.os.process`) and talk to them like an editor would:
 `larimar check --json` and `larimar lsp`, `larimar --debug` with lldb, gdb and `larimar dap`, and
 `https://` against a local HTTPS server (the certificate in `tests/tls`). No Python is needed.
+
+## Plugins and dependencies
+
+Other programs of `$LARIMAR_HOME/bin` answer commands of `larimar`, declared in `$LARIMAR_HOME/plugins/<name>.toml`
+(that is how Minero gives `larimar add` and `larimar fetch`). A project's `[dependencies]` live in
+`deps/<name>/`: their modules are imported from `deps/<name>/src` and their `[c]` is added to the
+project's. (MANUAL.md, section 26.)
 
 ## Editor support
 
@@ -146,7 +155,7 @@ checks all of it.
 ```toml
 [project]
 name = "larimarc"
-version = "0.4.1"
+version = "0.5.0"
 main = "src/main.lar"
 
 [c]

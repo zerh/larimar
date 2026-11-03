@@ -3,9 +3,9 @@
 // output: udp served: 3
 // output: client: echo: hi 0 | echo: hi 1 | echo: hi 2 | echo: hi 3 | echo: hi 4 | echo: hi 5 | pong 4 | pong 4 | pong 4
 // std.net: TcpServer and UdpServer with threads, thread safe handlers and a StopSignal; clients in a thread.
-import std.net { TcpServer, TcpSocket, UdpServer, UdpSocket, Address, Datagram, StopSignal, NetError, message };
-import std.io.streams { Reader, buffer };
-import std.io.files { IoError };
+import std.net { TcpServer, TcpSocket, UdpServer, UdpSocket, Address, Datagram, StopSignal, NetError, message, Connection };
+import std.io { Reader, buffer };
+import std.io { IoError };
 
 synchronized class Counter {
     let n: int32 = 0;
@@ -76,9 +76,9 @@ function main(): int32 {
         port: 47821,
         threads: 4,
         stop: quitTcp,
-        onConnect: (c: TcpSocket) -> {
+        onConnect: (c: Connection) -> {
             try {
-                let lines: Reader = { from: c };
+                let lines: Reader = { from: c.input() };
                 let line: String = lines.readLine() ?? "";
                 c.writeText("echo: ${line}\n");
                 tcpCount.add();

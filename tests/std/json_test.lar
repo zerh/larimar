@@ -1,6 +1,6 @@
-// std.json, as test functions (larimar test).
+// std.encoding.json, as test functions (larimar test).
 import std.test { check, checkText, checkInt, fail };
-import std.json as Json;
+import std.encoding.json as Json;
 
 test function parsesValues(): void throws Json.JsonError {
     let v: Any = Json.parse(" {\"port\": 8080, \"names\": [\"a\", \"b\"], \"ok\": true, \"none\": null, \"r\": 2.5, \"neg\": -7, \"big\": 1e21 } ");

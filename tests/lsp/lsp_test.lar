@@ -2,12 +2,12 @@
 // it like an editor (JSON-RPC over its input and output), on the project of tests/lsp/project.
 // The compiler: $LARIMARC (tests/run-tests.sh sets it), else larimarc from the PATH.
 import std.test { check, checkText, checkInt, fail, skip };
-import std.process { Process, ProcessError, message, findProgram };
-import std.json as Json;
-import std.json { JsonError };
+import std.os.process { Process, ProcessError, message, findProgram };
+import std.encoding.json as Json;
+import std.encoding.json { JsonError };
 import std.io.files as Files;
-import std.io.files { IoError };
-import std.path as Paths;
+import std.io { IoError };
+import std.io.path as Paths;
 import std.os;
 
 function compiler(): String {

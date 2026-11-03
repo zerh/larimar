@@ -7,9 +7,9 @@
 //
 // Lines are file index * 1000000 + line; decode() turns them back into "file:line".
 
-import std.path as Paths;
+import std.io.path as Paths;
 import std.io.files as Files;
-import std.io.files { IoError };
+import std.io { IoError };
 import std.text { isIdentifierPart, isDigit };
 import syntax.ast {
     Node, Expr, Stmt, TK, TypeRef, Program, CIncludeDecl, CCodeDecl, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ConstDecl,
@@ -252,9 +252,47 @@ public function readSource(path: String): String? {
 
 public function isStd(path: String): bool { return path.startsWith("std."); }
 
-/** Where a module's file is. */
+/**
+ * Where a module's file is: std/, else the project's folder (the main file's), else a dependency: the
+ * deps/<name>/src folders of the project (the folder above the main file's, when it has deps/). Two
+ * dependencies with the same module: the first by name, and moduleClash says so.
+ */
 function moduleFile(path: String): String {
-    return isStd(path) ? Paths.join(stdDir, "${path.substring(4).replace(".", "/")}.lar") : Paths.join(rootDir, "${path.replace(".", "/")}.lar");
+    if (isStd(path)) { return Paths.join(stdDir, "${path.substring(4).replace(".", "/")}.lar"); }
+    let relative: String = "${path.replace(".", "/")}.lar";
+    let own: String = Paths.join(rootDir, relative);
+    if (Files.isFile(own)) { return own; }
+    let found: String = "";
+    for (d in dependencyRoots()) {
+        let candidate: String = Paths.join(d, relative);
+        if (Files.isFile(candidate)) {
+            if (found != "") {
+                moduleClash = "${Paths.relative(Paths.parent(rootDir), found)} and ${Paths.relative(Paths.parent(rootDir), candidate)}".clone() in default;
+                return found;
+            }
+            found = candidate;
+        }
+    }
+    return found != "" ? found : own;
+}
+
+/** When a module is in two dependencies: both files ("" when not). */
+let moduleClash: String = "";
+
+/** The src folders of the dependencies: deps/<name>/src next to the project's source folder, in name order. */
+function dependencyRoots(): String[*] {
+    let out: String[*] = [];
+    let deps: String = Paths.join(Paths.parent(rootDir), "deps");
+    if (!Files.isDirectory(deps)) { return out; }
+    try {
+        let names: String[*] = Files.list(deps);
+        names.sort();
+        for (n in names) {
+            let src: String = Paths.join(Paths.join(deps, n), "src");
+            if (Files.isDirectory(src)) { out.push(src.clone()); }
+        }
+    } catch (IoError e) { }
+    return out;
 }
 
 /** How a module's file is shown in messages. */
@@ -270,7 +308,9 @@ public let showFrom: String = "";
 function visit(m: Module in default): void {
     for (imp in m.program!.imports) {
         if (modIndex[imp.path] != null) { continue; }       // already loaded, or a cycle: fine for declarations
+        moduleClash = "";
         let source: String? = readSource(moduleFile(imp.path));
+        if (moduleClash != "") { error(imp.line, "Module '${imp.path}' is in two dependencies: ${moduleClash}."); }
         if (source == null) {
             error(imp.line, "Module '${imp.path}' not found (looked for ${shownName(imp.path)}).");
             continue;

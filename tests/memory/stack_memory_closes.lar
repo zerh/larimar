@@ -2,9 +2,9 @@
 // output: closed: uno dos
 // What closes itself (a File here; a socket too) closes when a byte[N] memory on the stack is freed, as
 // with any other memory: the text is in the file (flushed) right after the block, without close().
-import std.io.file { File, create };
+import std.io.files { File, create };
 import std.io.files as Files;
-import std.io.files { IoError };
+import std.io { IoError };
 
 function main(): int32 throws IoError {
     let path: String = "stack_memory_closes.tmp";

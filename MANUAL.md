@@ -2527,7 +2527,7 @@ function lastError(): int32 {
 - **A type can be declared once per system** (`Socket` above), as long as it covers all of them.
 
 That is how the network of the standard library (`std/net.lar`) is written: Unix and Windows sockets,
-in plain Larimar. So are the files (`std.io.file`, `std.io.files`), the console and `std.os`.
+in plain Larimar. So are the files (`std.io.files`, `std.io.files`), the console and `std.os`.
 
 ### Pointers to C functions
 
@@ -2743,18 +2743,22 @@ imported goes into the program, and the executable does not need the `std` folde
 | Module | What for |
 |---|---|
 | `std.lang` | types and methods available in every program (`String`, `Any`, `Thread`, `StringBuilder`); seen without importing it |
-| `std.io.files` | files and folders all at once, like Java's `Files` |
-| `std.io.file` | an open file (`File`), to read it line by line or write it in parts |
-| `std.io.streams` | `InputStream` and `OutputStream`: reading and writing no matter from where |
+| `std.io` | what all input and output shares: `IoError`, `InputStream`, `OutputStream`, `Closeable`, `Reader`, `copy`, `buffer`, streams in memory |
+| `std.io.files` | files and folders: whole files in one call, like Java's `Files`, and an open `File` to read or write in parts |
+| `std.io.path` | paths: folder, name, extension, join, normalize |
 | `std.io.console` | the input, the output and the error output |
-| `std.path` | paths: folder, name, extension, join, normalize |
-| `std.os` | the environment: variables, current folder, running commands |
+| `std.os` | the environment: variables, current folder, running commands, ending on Ctrl+C or SIGTERM |
+| `std.os.process` | other programs: `Process`, talking to them through their input and output |
+| `std.time` | the clock (`now`, `monotonic`), `sleep`, dates as text (HTTP, ISO 8601) |
+| `std.crypto` | SHA-256, SHA-1, HMAC-SHA256 and secure random bytes |
 | `std.text` | classifying bytes (for lexers and parsers) |
 | `std.text.regex` | regular expressions: `Regex`, `Match` (written in Larimar, without C libraries) |
-| `std.json` | JSON to `Any` and `Any` to JSON |
-| `std.net` | TCP, UDP and server TLS: `TcpSocket`, `TcpListener`, `TcpServer`, `UdpSocket`, `UdpServer`, `TlsServer`, `OpenSslProvider`, `StopSignal` |
+| `std.encoding.json` | JSON to `Any` and `Any` to JSON |
+| `std.encoding.toml` | TOML to `Any` and `Any` to TOML |
+| `std.encoding.base64`, `hex`, `url` | bytes as base64 and hex text; percent-encoding and query strings |
+| `std.net` | TCP and UDP: `TcpSocket`, `TcpListener`, `TcpServer` (plain or https), `UdpSocket`, `UdpServer`, `Connection`, `OpenSslProvider`, `StopSignal` |
 | `std.net.http` | HTTP/1.1 and `https://` client: `Client`, `Request`; the body as text, JSON or a stream |
-| `std.net.http.tls` | `TlsProvider` (the interface for encrypted connections) and `SystemTls` (the system's TLS) |
+| `std.net.tls` | `TlsProvider` (the interface for encrypted client connections) and `SystemTls` (the system's TLS) |
 
 **`std.lang`** is special: every program sees its names without writing `import`, and only what the
 program names (and what that needs) reaches the C. A name of the main file itself hides the one of `std.lang`.
@@ -2764,7 +2768,7 @@ program names (and what that needs) reaches the C. A name of the main file itsel
 It is imported with Java's name: `import std.io.files as Files;`. No function receives memories: what
 they return (the text of a file, the names in a folder) lives where the caller says, like what any
 function returns (`Files.readString(path) in memory`, if you want to choose). Everything that can fail
-throws `IoError` (`NotFound(path)`, `Denied(path)` or `Failed(path)`; `Files.message(e)` says it in text).
+throws `IoError`, from `std.io` ([below](#stdio-reading-and-writing-no-matter-from-where); `Files.message(e)` says it in text).
 
 | Function | What it does |
 |---|---|
@@ -2775,18 +2779,32 @@ throws `IoError` (`NotFound(path)`, `Denied(path)` or `Failed(path)`; `Files.mes
 | `Files.list(path): String[*]` | the names of what is in a folder |
 | `Files.createDirectories(path)` | creates the folder and the missing ones above it |
 | `Files.copy(from, to)`, `Files.delete(path)` | copy a file; delete a file or an empty folder |
+| `Files.modifiedTime(path)`, `Files.size(path)` | when it last changed (seconds since 1970, 0 if there is nothing), its size in bytes (-1) |
 
-### `std.io.file`: an open file
-
-`open(path)`, `create(path)` (empties it) and `append(path)` (writes at the end) give a `File`. As a
+**An open file.** `Files.open(path)`, `Files.create(path)` (empties it) and `Files.append(path)` (writes
+at the end) give a `File` (`import std.io.files { File };`). As a
 binary stream it implements `read(buffer: byte[]): int32`, `write(bytes: byte[])`, `flush()` and
 `close()`. `read` returns the bytes read and `0` at the end. It also offers `readLine(): String?`,
 `readAll()` and `writeText(text)` as text operations. **A `File` closes on its own when the memory
 where it lives is freed** (usually, when the block of its variable closes); `close()` closes it earlier.
 
-### `std.io.streams`: reading and writing no matter from where
+### `std.io`: reading and writing no matter from where
 
-The minimum, as in Go: bytes that are read, bytes that are written, and something that can be closed.
+**The error** of every input and output, from files to sockets:
+
+```actionscript
+public enum IoError {
+    NotFound(path: String),      // a file or folder that is not there
+    Denied(path: String),        // no permission
+    Closed,                      // the other side closed it (a socket, a pipe)
+    TimedOut,                    // a read or a write took longer than allowed
+    Failed(what: String)         // anything else: what failed
+}
+```
+
+`Io.message(e)` (with `import std.io as Io;`) gives it as text: `not found: notes.txt`, `timed out`...
+
+**The streams**: the minimum, as in Go: bytes that are read, bytes that are written, and something that can be closed.
 
 | Interface | Methods |
 |---|---|
@@ -2794,8 +2812,8 @@ The minimum, as in Go: bytes that are read, bytes that are written, and somethin
 | `OutputStream` | `write(bytes: byte[])` (all of them, or it throws `IoError`) and `flush()` |
 | `Closeable` | `close()`: lets go ahead of time of what it holds from the system (it lets go anyway when its memory is freed) |
 
-They are implemented by `File`, `TcpSocket`, the body of a `std.net.http` response and the streams of
-the console (`Console.input`, `Console.output`, `Console.error`). Also:
+They are implemented by `File`, `TcpSocket` and `TlsSocket` (and any `Connection` through `input()` and
+`output()`), the body of a `std.net.http` response and the streams of the console (`Console.input`, `Console.output`, `Console.error`). Also:
 
 | Name | What it is |
 |---|---|
@@ -2836,9 +2854,9 @@ and `Console.binaryMode()` (on Windows, so that `\n` is not turned into `\r\n`).
 A `wc` (counting lines, words and bytes), which works for a file or for the standard input:
 
 ```actionscript
-import std.io.files { IoError };
-import std.io.file { open };
-import std.io.streams { InputStream, Reader };
+import std.io { IoError };
+import std.io.files { open };
+import std.io { InputStream, Reader };
 import std.io.console as Console;
 
 function count(input: InputStream, name: String): void throws IoError {
@@ -2877,9 +2895,9 @@ function main(args: String[]): int32 {
 }
 ```
 
-### `std.path`: paths
+### `std.io.path`: paths
 
-`import std.path as Paths;`. The paths these functions create live where the caller says, like what
+`import std.io.path as Paths;`. The paths these functions create live where the caller says, like what
 any function returns; they accept `/` and `\`.
 
 | Function | Example |
@@ -2903,15 +2921,17 @@ any function returns; they accept `/` and `\`.
 | `os.programPath(): String` | the full path of the executable (`""` if it cannot be known) |
 | `os.platform(): String` | `"windows"`, `"linux"`, `"macos"` or `"other"` |
 | `os.exit(code)` | ends the program right away (without freeing memories or waiting for threads) |
+| `os.catchTermination()` | from now on, Ctrl+C and SIGTERM do not end the program: they make `os.terminating()` true |
+| `os.terminating(): bool` | whether Ctrl+C or SIGTERM arrived after `catchTermination()`; the servers of `std.net` stop on it |
 
-### `std.process`: other programs
+### `std.os.process`: other programs
 
 Starts a program and talks to it through its input and output. The literal says what to run (it cannot
 fail); `start()` runs it. Every read says how long it may wait, so a program that does not answer never
 hangs the caller.
 
 ```actionscript
-import std.process { Process, ProcessError, message };
+import std.os.process { Process, ProcessError, message };
 
 function main(): int32 {
     let cat: Process = { program: "cat" };
@@ -2935,6 +2955,7 @@ function main(): int32 {
 | `env` | `"NAME=value"` added to this program's environment for it |
 | `quiet` | `true`: its error output is thrown away (else it goes where this program's goes) |
 | `mergeErrors` | `true`: its error output comes with its output, and is read with it |
+| `shareConsole` | `true`: it uses this program's console (input, output, errors); nothing is read or written through the `Process` |
 
 | Method | What it does |
 |---|---|
@@ -2949,7 +2970,7 @@ function main(): int32 {
 
 `findProgram(name): String?` says where a program is in the PATH. A `Process` that is still running when
 its memory is freed is killed. The tests that talk to `larimar lsp`, `larimar dap` and the debuggers are
-written with `std.process`.
+written with `std.os.process`.
 
 ### `std.text`: reading text byte by byte
 
@@ -3000,8 +3021,8 @@ the `Reader` reads lines from it just like from a file, and `copy()` sends any s
 
 ```actionscript
 import std.net { TcpSocket, TcpListener, NetError, message };
-import std.io.streams { Reader };
-import std.io.files { IoError };
+import std.io { Reader };
+import std.io { IoError };
 import std.io.console as Console;
 
 function main(): int32 {
@@ -3042,7 +3063,7 @@ function main(): int32 {
 - To serve several connections at the same time, `TcpServer` (below). On Windows (Winsock) `larimar build`
   links `ws2_32` automatically.
 - `Connection` is the interface of a connection in both directions (`read`, `write`, `flush`, `close`):
-  `TcpSocket` implements it, and so does what a `TlsProvider` gives (see `std.net.http.tls`). Whoever
+  `TcpSocket` implements it, and so does what a `TlsProvider` gives (see `std.net.tls`). Whoever
   speaks a protocol over a `Connection` does not know whether it is encrypted.
 - `handle()` gives the system's socket (a `Socket`, the type of `std.net`), for a C library that works
   on a connection that is already open, like a TLS one: a C function that receives a `Socket` receives
@@ -3061,9 +3082,9 @@ What is done with each connection or datagram is a `thread safe` function, so th
 the threads of the server do not step on each other.
 
 ```actionscript
-import std.net { TcpServer, TcpSocket, StopSignal, NetError, message };
-import std.io.streams { Reader };
-import std.io.files { IoError };
+import std.net { TcpServer, Connection, StopSignal, NetError, message };
+import std.io { Reader, IoError };
+import std.os;
 
 synchronized class Stats {
     let served: int32 = 0;
@@ -3071,16 +3092,16 @@ synchronized class Stats {
 }
 
 function main(): int32 {
+    os.catchTermination();          // Ctrl+C and SIGTERM end run() in order (systemd, docker stop)
     let stats: Stats = {};
     let quit: StopSignal = {};
     let server: TcpServer = {
         port: 8080,                 // host: "127.0.0.1" unless another is given ("0.0.0.0": the whole network)
         threads: 8,                 // connections served at the same time (1 if not given)
         stop: quit,
-        onConnect: (client: TcpSocket) -> {
-            client.setTimeout(5000);
+        onConnect: (client: Connection) -> {
             try {
-                let lines: Reader = { from: client };
+                let lines: Reader = { from: client.input() };
                 let line: String = lines.readLine() ?? "";
                 if (line == "quit") { quit.stop(); }
                 client.writeText("hello #${stats.add()}: ${line}\n");
@@ -3088,7 +3109,7 @@ function main(): int32 {
         }                           // on return, client is closed and its memory is freed
     };
     try {
-        server.run();               // it waits here until quit.stop()
+        server.run();               // it waits here until quit.stop(), Ctrl+C or SIGTERM
     } catch (NetError e) {
         println("cannot listen: ${message(e)}");
         return 1;
@@ -3099,11 +3120,55 @@ function main(): int32 {
 
 - `run()` accepts in the thread that calls it and shares the connections among its `threads` threads;
   each connection is served with its own memory, which is freed when `onConnect` ends.
+- `onConnect` receives a `Connection`: `read`, `write`, `writeText`, `close`, and `input()`/`output()`
+  to use it as a stream (`Reader { from: client.input() }`, `copy`). With TLS it is the same type.
 - A `StopSignal` is a `synchronized` object with `stop()`: it is given to the literal (`stop: quit`) and
   called from anywhere, the handler included. The server notices it in less than a fifth of a second and
-  `run()` returns after the requests in progress. Without `stop`, it serves until the program ends.
-- It is a good idea to call `client.setTimeout(...)` at the start: a client that sends nothing takes up
-  a thread while it waits.
+  `run()` returns after the requests in progress. After `os.catchTermination()`, Ctrl+C and SIGTERM do
+  the same. Without either, it serves until the program ends.
+
+**The limits.** A server comes with the values of servers like nginx and Tomcat, so a slow or malicious
+client cannot hold its threads; a limit of `0` means none:
+
+| Field | Default | What it limits |
+|---|---|---|
+| `readTimeout`, `writeTimeout` | 30000 ms | one read, one write |
+| `requestTimeout` | 60000 ms | one call of `onConnect`, all its reads and writes together: a client that sends one byte at a time is cut off |
+| `idleTimeout` | 75000 ms | how long a kept connection (`keepAlive`) waits for its next request |
+| `maxQueue` | 100 | connections waiting for a free thread; more are closed at once |
+| `handshakeTimeout` | 10000 ms | the TLS handshake |
+
+When a limit is passed, the read or the write throws `IoError.TimedOut`.
+
+**Kept connections.** With `keepAlive: true`, the connection does not close when `onConnect` returns:
+when the client sends again, `onConnect` is called again with it, and it ends with `client.close()`. A
+plain connection that waits for its next request does not hold a thread: the thread of `run()` watches
+all of them with `poll` and gives one to a worker only when it has something to read. That is how HTTP
+keep-alive is served with few threads. When a kept client closes, `onConnect` is called once more and its
+first read gives 0 (a `Reader`'s `readLine`, `null`): close it then.
+
+**HTTPS.** With `tls`, the same server is https: the connections reach `onConnect` already decrypted.
+The certificate and its key are loaded once with `OpenSslProvider.load(certificate, key)`, which throws
+`NetError` if a file cannot be used or the key is not the certificate's:
+
+```actionscript
+let server: TcpServer = {
+    host: "0.0.0.0", port: 443, threads: 16, keepAlive: true,
+    tls: OpenSslProvider.load("/etc/letsencrypt/live/example.com/fullchain.pem",
+                              "/etc/letsencrypt/live/example.com/privkey.pem"),
+    onConnect: (client: Connection) -> { ... }       // the same handler as plain HTTP
+};
+```
+
+- With Let's Encrypt, `fullchain.pem` (the certificate with its chain) and `privkey.pem` are used. Only
+  root reads that file: the program needs permission to read it. When the certificate is renewed, the
+  server has to be restarted.
+- The handshake happens in the thread that serves, with `handshakeTimeout`: a client that does not
+  complete it, or does not speak TLS, is dropped without reaching `onConnect`.
+- A kept TLS connection keeps its thread while it waits for its next request (up to `idleTimeout`).
+- An `OpenSslProvider` is `synchronized`: the threads of the server share it, and so do several servers.
+- It uses OpenSSL 1.1 or 3, loaded the first time it is needed: on Linux it comes with the system; on
+  macOS, `brew install openssl@3`. On Windows it is not available yet: `load` throws `NetError.TlsUnavailable`.
 
 `UdpSocket` sends and receives datagrams: each one arrives whole or does not arrive, without a
 connection. `UdpSocket.bind(host, port)` receives on a port and `UdpSocket.open()` gives any port to
@@ -3127,68 +3192,18 @@ server.run();
 - `maxSize` (65507 if not given) is the biggest datagram received whole.
 - UDP does not resend: a datagram can be lost, and whoever sends decides whether to repeat it.
 
-### `std.net`: TLS servers (https)
-
-`TlsServer` is a `TcpServer` whose connections arrive already decrypted. The certificate and its key
-are loaded once with `OpenSslProvider.load(certificate, key)`, which throws `NetError` if a file cannot
-be used or the key is not the certificate's:
-
-```actionscript
-import std.net { TlsServer, TlsSocket, OpenSslProvider, NetError, message };
-import std.io.streams { Reader };
-import std.io.files { IoError };
-
-function main(): int32 {
-    try {
-        let tls: OpenSslProvider = OpenSslProvider.load(
-            "/etc/letsencrypt/live/example.com/fullchain.pem",
-            "/etc/letsencrypt/live/example.com/privkey.pem");
-        let server: TlsServer = {
-            host: "0.0.0.0",
-            port: 443,
-            threads: 8,
-            tls: tls,
-            onConnect: (client: TlsSocket) -> {
-                client.setTimeout(5000);
-                try {
-                    let request: Reader = { from: client };
-                    while ((request.readLine() ?? "") != "") {}                 // the headers
-                    client.writeText("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhola\n");
-                } catch (IoError e) {}
-            }
-        };
-        server.run();
-    } catch (NetError e) {
-        println(message(e));
-        return 1;
-    }
-    return 0;
-}
-```
-
-- With Let's Encrypt, `fullchain.pem` (the certificate with its chain; `cert.pem` alone is not enough
-  for every client) and `privkey.pem` are used. Only root reads that file: the program needs permission
-  to read it. When the certificate is renewed, the server has to be restarted.
-- A `TlsSocket` is used like a `TcpSocket`: `read`, `write`, `writeText`, `setTimeout`, `Reader`,
-  `copy()`. It closes on its own when its memory is freed.
-- The TLS handshake happens in the thread that serves, with `handshakeTimeout` (10 seconds if not
-  given): a client that does not complete it, or does not speak TLS, is dropped without reaching `onConnect`.
-- An `OpenSslProvider` is `synchronized`: the threads of the server share it, and so do several servers.
-- It uses OpenSSL 1.1 or 3, loaded the first time it is needed: on Linux it comes with the system; on
-  macOS, `brew install openssl@3`. On Windows it is not available yet: `load` throws `NetError.TlsUnavailable`.
-
 ### `std.net.http`: HTTP and HTTPS client
 
 A `Client` says **how to connect** (TLS, timeouts, redirects, headers of every request) and a `Request`
 **what to ask for**. `send` reads the status line and the headers; the body is read when it is asked
-for: whole with `text()`, `bytes()` or `json()` (with `std.json`), or in parts from `body`, which is an
+for: whole with `text()`, `bytes()` or `json()` (with `std.encoding.json`), or in parts from `body`, which is an
 `InputStream` (`Reader` and `copy()` work).
 
 ```actionscript
 import std.net.http { Client, Response, Header, HttpError, message };
-import std.io.file { create };
-import std.io.streams { copy };
-import std.io.files { IoError };
+import std.io.files { create };
+import std.io { copy };
+import std.io { IoError };
 
 function main(): int32 {
     let api: Client = {
@@ -3287,7 +3302,7 @@ function main(): int32 {
 }
 ```
 
-### `std.net.http.tls`: encrypted connections
+### `std.net.tls`: encrypted connections
 
 `https://` knows nothing about encryption: it asks a **`TlsProvider`** for an encrypted connection and
 speaks HTTP over it. The interface is a single function:
@@ -3350,8 +3365,8 @@ to know nothing about Larimar's memories:
 
 ```actionscript
 import std.net { Connection, TcpSocket, NetError, Socket };
-import std.net.http.tls { TlsProvider };
-import std.io.files { IoError };
+import std.net.tls { TlsProvider };
+import std.io { IoError, InputStream, OutputStream };
 
 c_code {
     #include <stdlib.h>
@@ -3474,7 +3489,7 @@ public class MbedTls implements TlsProvider {
 }
 
 /** The TLS session over its TcpSocket. */
-class MbedConnection implements Connection {
+class MbedConnection implements Connection, InputStream, OutputStream {
     let tcp: TcpSocket? = null;
     let tls: MbedHandle? = null;
 
@@ -3488,6 +3503,9 @@ class MbedConnection implements Connection {
         if (mbed_write(self.tls!, bytes) < 0) { throw IoError.Failed("mbedtls: ${mbed_error_text(self.tls!)}"); }
     }
 
+    function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+    function input(): InputStream { return self; }
+    function output(): OutputStream { return self; }
     function flush(): void throws IoError {}
 
     function close(): void throws IoError {
@@ -3530,7 +3548,7 @@ $ larimar run
 - mbedTLS goes inside the executable (static libraries): the program does not depend on what the
   system has. In exchange, updating mbedTLS when a security flaw comes out is the job of whoever uses it.
 
-### `std.json`: JSON
+### `std.encoding.json`: JSON
 
 `Json.parse(text): Any throws JsonError` turns a JSON text into an `Any`: an object is a table with
 names, an array a table by positions, the integers that fit are `int64` and the rest `float64`.
@@ -3538,8 +3556,8 @@ names, an array a table by positions, the integers that fit are `int64` and the 
 `String` as a JSON string, with its quotes and escapes.
 
 ```actionscript
-import std.json as Json;
-import std.json { JsonError };
+import std.encoding.json as Json;
+import std.encoding.json { JsonError };
 
 function main(): int32 {
     try {
@@ -3564,16 +3582,16 @@ port 8080, 2 names
 invalid JSON at 5: expected ',' or ']'
 ```
 
-### `std.toml`: TOML
+### `std.encoding.toml`: TOML
 
-`Toml.parse(text): Any` (`throws TomlError`) and `Toml.stringify(table): String`, like `std.json`. It
+`Toml.parse(text): Any` (`throws TomlError`) and `Toml.stringify(table): String`, like `std.encoding.json`. It
 covers what configuration files use: `[sections]` (also `[a.b]`, a table inside a table), `key = value`
 with texts, whole numbers, `true`/`false` and lists (which may span several lines), and comments with
 `#`. It is the same reader the compiler uses for `larimar.toml`.
 
 ```actionscript
-import std.toml as Toml;
-import std.toml { TomlError, message };
+import std.encoding.toml as Toml;
+import std.encoding.toml { TomlError, message };
 
 function main(): int32 {
     try {
@@ -3604,6 +3622,62 @@ A key named like a word of Larimar is read with brackets, as `length` or `push` 
 
 ---
 
+### `std.time`: the clock and dates
+
+```actionscript
+import std.time as Time;
+
+let started: int64 = Time.monotonic();
+Time.sleep(250);
+println("${Time.monotonic() - started} ms");          // about 250
+println(Time.httpDate(Time.now()));                    // Mon, 02 Nov 2026 23:04:00 GMT
+println(Time.isoDate(Time.now()));                     // 2026-11-02T23:04:00Z
+```
+
+| Function | What it does |
+|---|---|
+| `Time.now(): int64` | milliseconds since 1970 (UTC): the wall clock, which can jump when the system's clock is set |
+| `Time.monotonic(): int64` | milliseconds that only move forward: for measuring time and for deadlines |
+| `Time.sleep(ms)` | waits, in this thread |
+| `Time.fromMillis(ms): DateTime` | the parts of a moment (`year`, `month`, `day`, `hour`, `minute`, `second`, `millisecond`, `weekday`), UTC |
+| `Time.toMillis(t)` | back to milliseconds |
+| `Time.httpDate(ms)` | the date of HTTP (`Date`, `Last-Modified`, a cookie's `Expires`) |
+| `Time.isoDate(ms)`, `Time.parseIsoDate(text): int64?` | ISO 8601 in UTC, and back |
+
+### `std.crypto`: hashes and random bytes
+
+Written in Larimar; only the random bytes come from the system (`/dev/urandom`, `arc4random`, `RtlGenRandom`).
+
+| Function | What it gives |
+|---|---|
+| `Crypto.sha256(bytes): byte[*]` | the SHA-256 (32 bytes) |
+| `Crypto.sha1(bytes): byte[*]` | the SHA-1 (20 bytes): broken for signatures, only for protocols that ask for it (WebSocket) |
+| `Crypto.hmacSha256(key, bytes): byte[*]` | a signature with a key: for signed cookies and tokens |
+| `Crypto.randomBytes(n): byte[*]` | secure random bytes: for session ids, CSRF tokens, salts |
+| `Crypto.sameBytes(a, b): bool` | compares in the same time wherever they differ: for checking signatures |
+
+```actionscript
+import std.crypto as Crypto;
+import std.encoding.hex as Hex;
+import std.encoding.base64 as Base64;
+
+println(Hex.encode(Crypto.sha256("hola".bytes())));            // b221d9db...
+let session: String = Base64.encodeUrl(Crypto.randomBytes(32));
+```
+
+### `std.encoding.base64`, `hex` and `url`
+
+| Function | What it does |
+|---|---|
+| `Base64.encode(bytes)`, `Base64.decode(text): byte[*]?` | base64 with `+` and `/`, padded with `=` (RFC 4648) |
+| `Base64.encodeUrl(bytes)`, `Base64.decodeUrl(text)` | base64 for URLs, file names and cookies: `-` and `_`, without `=` |
+| `Hex.encode(bytes)`, `Hex.decode(text): byte[*]?` | two hex digits per byte |
+| `Url.encode(text)`, `Url.decode(text): String?` | percent-encoding: everything but letters, digits and `- _ . ~` as `%XX` |
+| `Url.parseQuery("a=1&b=two+words"): Any` | a query string (or a form) as a table of texts; `+` is a space |
+| `Url.query(table): String` | a query string from the named entries of a table |
+
+A decoder gives `null` when the text is not valid, instead of throwing: what to do then is up to the caller.
+
 ## 26. Projects: `larimar.toml` and `larimar build`
 
 A project is a folder with a `larimar.toml` file:
@@ -3625,8 +3699,24 @@ library_paths = ["libs"]     # where they are (-L)
 ```
 
 Paths are relative to the project folder. An unknown key or section is an error, so that a typo does
-not go unnoticed. The `[dependencies]` section is left for a dependency manager: the compiler does not
-read it.
+not go unnoticed.
+
+**Dependencies.** `[dependencies]` names the libraries the project uses and their versions:
+
+```toml
+[dependencies]
+sql = "github.com/zerh/sql@v1.2.0"
+```
+
+A dependency manager (Minero, with `larimar add` and `larimar fetch`) downloads each one into
+`deps/<name>/`. The compiler reads only the names, and does three things with them:
+
+- **An import looks in the dependencies too**: when `import sql.core;` is not in `src/`, it is looked for
+  in `deps/*/src/` (`deps/sql/src/sql/core.lar`). A module that is in two dependencies is an error that names both.
+- **The C of each dependency is added to the project's**: the `libraries`, `library_paths`, `include_paths`
+  and `sources` of `deps/<name>/larimar.toml` (its `[c]` and its platform's sections), with their paths
+  relative to the dependency's folder.
+- **A dependency that is not in `deps/` is an error**: `'sql' is in [dependencies] but not in deps/: get it with 'larimar fetch' (Minero)`.
 
 **Per platform.** `[c.linux]`, `[c.macos]`, `[c.windows]` and `[c.unix]` (Linux and macOS) take the same
 keys as `[c]` and count only on that platform: their lists are added to `[c]`'s, and a `compiler` there
@@ -3649,6 +3739,9 @@ libraries = ["SDL3", "ws2_32"]
 | `larimar build [folder]` | writes `build/<name>.c` and compiles it to the executable |
 | `larimar build --debug` | the same, for a debugger (see [Debugging](#debugging-larimar-build---debug-and-larimar-dap)) |
 | `larimar run [folder] [-- args]` | compiles and runs, passing it the arguments |
+| `larimar build --cc <program>` | builds with that C compiler instead of the project's |
+| `larimar test [file or folder]` | runs the tests (see [Tests](#tests-test-function-and-larimar-test)) |
+| `larimar <command of a plugin>` | runs the program of a plugin (see [Plugins](#plugins-commands-of-other-programs)) |
 | `larimar check [file or folder] [--json]` | looks for the errors without generating C (see [The editor](#the-editor-larimar-check-and-larimar-lsp)) |
 | `larimar lsp` | the language server for editors |
 | `larimar dap` | the debugger for editors (over `lldb-dap`) |
@@ -3900,6 +3993,31 @@ With gdb: `source $LARIMAR_HOME/debug/larimar_gdb.py` and `break main.lar:12`. I
 `larimar.debugger` setting can use CodeLLDB or the C/C++ extension with gdb instead of `larimar dap`,
 with these formatters.
 
+### Plugins: commands of other programs
+
+A program of `$LARIMAR_HOME/bin` can add commands to `larimar`, declared in a file of
+`$LARIMAR_HOME/plugins/`, one per plugin:
+
+```toml
+# $LARIMAR_HOME/plugins/minero.toml
+[plugin]
+name = "minero"
+program = "minero"           # in $LARIMAR_HOME/bin, nowhere else
+version = "1.0.0"
+
+[commands]
+add = ["add"]                # larimar add x  ->  bin/minero add x
+fetch = ["fetch"]
+```
+
+- `larimar add github.com/zerh/sql@v1` runs `bin/minero add github.com/zerh/sql@v1` on the same console,
+  with `LARIMAR_HOME` set, and its exit code is larimar's.
+- A plugin cannot take a command of larimar itself (`build`, `run`, `test`...), and two plugins cannot
+  take the same one: both are reported, and the command is not taken.
+- `larimar help` lists the commands of the plugins and who answers them.
+- If the program is not there, the error says so: `'larimar add' is answered by minero (plugins/minero.toml), but bin/minero does not exist`.
+- Installing a plugin is putting its program in `bin/` and its file in `plugins/`; removing it, deleting both.
+
 ### Tests: `test function` and `larimar test`
 
 A test is a function marked with `test`. It takes nothing (or a *setup*, below) and returns nothing;
@@ -3951,7 +4069,7 @@ check failed. If the test calls something that can throw an error, it declares i
 ```actionscript
 import std.test { checkText, fail, TestSetup };
 import std.io.files as Files;
-import std.io.files { IoError };
+import std.io { IoError };
 
 class TempFile implements TestSetup {
     let path: String = "build/test/tmp.txt";
@@ -4158,7 +4276,7 @@ larimar/
     semantics/             understanding the program: modules (linker), types, analysis, expressions
     codegen/               from tree to C: gen, expressions, runtime, prune, debug map
     editor/                larimar check, lsp and dap
-    project/               the C compiler, larimar test (larimar.toml is read with std.toml)
+    project/               the C compiler, larimar test (larimar.toml is read with std.encoding.toml)
   std/                   the standard library
   tests/                 the tests (tests/lsp: check and the language server)
   debug/                 value formatters for lldb and gdb
@@ -4238,7 +4356,7 @@ kept lambdas, `in default`, memories of your own, `clone()`, exceptions with liv
 `switch` that creates, objects, `Any`, threads, `export function` called from C, and what must be
 rejected. **Each failure that is found first goes in as a test**, and then it is fixed.
 
-Three test files start other programs with `std.process` and talk to them as an editor would, without
+Three test files start other programs with `std.os.process` and talk to them as an editor would, without
 Python. `tests/lsp/lsp_test.lar` tests `larimar check --json` and talks to `larimar lsp` over the project
 in `tests/lsp/project`: published errors, hover, definition, references, symbols, completion and
 signature help, with `fork()` and with `LARIMAR_LSP_NO_FORK=1`.
@@ -4275,13 +4393,12 @@ What Larimar does not have, and will not have, with what is used instead:
 - There is no `defer`.
 - An `Any` does not keep `[*]` lists, lambdas or interfaces.
 - A `synchronized` class cannot inherit, and `wait until` has no time limit (it waits until the condition holds).
-- The standard library is small: files, console, paths, environment, bytes, regular expressions, JSON,
-  TOML, other programs, TCP and UDP with their servers, a TLS server, and an HTTP and HTTPS client (`std.io.*`,
-  `std.path`, `std.os`, `std.process`, `std.test`, `std.text`, `std.text.regex`, `std.json`, `std.toml`, `std.net`,
-  `std.net.http`). The network does not
-  have an HTTP server, WebSockets, an event loop or reused HTTP connections (keep-alive) yet. The TLS
-  server is not available on Windows yet. The client TLS of macOS and Windows is written and compiles,
-  but its tests have only run on Linux.
+- The standard library is small: files, console, paths, environment, other programs, time, hashes and
+  random bytes, regular expressions, JSON, TOML, base64, hex and URLs, TCP and UDP with their servers
+  (plain or https), and an HTTP and HTTPS client. The network does not have an HTTP server (that is for a
+  framework on top of `TcpServer`), WebSockets or an event loop yet. A kept TLS connection holds its thread
+  while it waits. The TLS server is not available on Windows yet. The client TLS of macOS and Windows is
+  written and compiles, but its tests have only run on Linux.
 - Some operations of `String` and `Any` are still intrinsics of the compiler; lists are not declared in `std.lang` yet.
 - Only C functions (`extern` or `export`) can be passed to C, not lambdas with captures; the context
   travels in the library's `void* data`. A C struct cannot have array fields (except a text,

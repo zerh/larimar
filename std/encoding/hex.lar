@@ -1,0 +1,39 @@
+// std.encoding.hex: bytes as hexadecimal text, and back.
+//
+//   import std.encoding.hex as Hex;
+//   println(Hex.encode("hola".bytes()));                   // 686f6c61
+//   let bytes: byte[*]? = Hex.decode("686F6C61");          // upper or lower case
+
+const DIGITS: String = "0123456789abcdef";
+
+/** Two lowercase hex digits per byte. */
+public function encode(bytes: byte[]): String {
+    let sb: StringBuilder = {};
+    for (b in bytes) {
+        sb.add(DIGITS.substring((b >> 4) as int32, ((b >> 4) as int32) + 1));
+        sb.add(DIGITS.substring((b & 15) as int32, ((b & 15) as int32) + 1));
+    }
+    return sb.toString().clone();
+}
+
+/** The bytes of hex text (upper or lower case), or null when it is not hex or has an odd length. */
+public function decode(text: String): byte[*]? {
+    if (text.length % 2 != 0) { return null; }
+    let out: byte[*] = [];
+    let i: int32 = 0;
+    while (i < text.length) {
+        let hi: int32 = value(text[i]);
+        let lo: int32 = value(text[i + 1]);
+        if (hi < 0 || lo < 0) { return null; }
+        out.push((hi * 16 + lo) as byte);
+        i += 2;
+    }
+    return out;
+}
+
+function value(c: byte): int32 {
+    if (c >= '0' && c <= '9') { return (c - '0') as int32; }
+    if (c >= 'a' && c <= 'f') { return (c - 'a') as int32 + 10; }
+    if (c >= 'A' && c <= 'F') { return (c - 'A') as int32 + 10; }
+    return -1;
+}

@@ -12,12 +12,12 @@
 // changed last, and published for every file of its program.
 
 import std.os;
-import std.path as Paths;
+import std.io.path as Paths;
 import std.io.files as Files;
 import std.io.console as Console;
-import std.json as Json;
-import std.json { JsonError };
-import std.io.files { IoError };
+import std.encoding.json as Json;
+import std.encoding.json { JsonError };
+import std.io { IoError };
 import editor.session { analyzeFile, projectMain };
 import project.cc { selfPath };
 import editor.docstore { setDocument, removeDocument, document, documentCount, documentPath };
