@@ -1,6 +1,6 @@
-// std.path: paths as text, with / or \ between folders.
+// std.io.path: paths as text, with / or \ between folders.
 //
-//   import std.path as Paths;
+//   import std.io.path as Paths;
 //   let config: String = Paths.join(Paths.parent(file), "larimar.toml");
 //
 // The paths these functions create are short and go to the default memory.

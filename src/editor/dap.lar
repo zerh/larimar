@@ -19,12 +19,12 @@
 //     a panic happens.
 
 import std.os;
-import std.path as Paths;
+import std.io.path as Paths;
 import std.io.files as Files;
-import std.io.files { IoError };
+import std.io { IoError };
 import std.io.console as Console;
-import std.json as Json;
-import std.json { JsonError };
+import std.encoding.json as Json;
+import std.encoding.json { JsonError };
 
 c_code {
     #include <stdlib.h>

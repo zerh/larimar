@@ -2,9 +2,9 @@
 // args: the HTTPS port, the HTTP port.
 import std.net { Connection, NetError };
 import std.net.http { Client, Response, Header, HttpError, message, get };
-import std.net.http.tls { TlsProvider, SystemTls };
-import std.io.streams { MemoryOutputStream, copy };
-import std.io.files { IoError };
+import std.net.tls { TlsProvider, SystemTls };
+import std.io { MemoryOutputStream, copy };
+import std.io { IoError };
 
 /** A TlsProvider of its own: it counts the connections and leaves the TLS to SystemTls. */
 class Counting implements TlsProvider {

@@ -14,8 +14,8 @@
 // a redirection, an echo of a POST, a 404, a body that ends when the connection closes, a big body.
 import std.net.http { get, post, send, Client, Request, Response, Header, HttpError, message };
 import std.net { TcpSocket, TcpListener, NetError };
-import std.io.streams { Reader, MemoryOutputStream, copy, buffer };
-import std.io.files { IoError };
+import std.io { Reader, MemoryOutputStream, copy, buffer };
+import std.io { IoError };
 
 const ANSWERS: int32 = 9;              // connections the server answers (the redirection is two)
 

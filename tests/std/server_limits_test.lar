@@ -1,0 +1,125 @@
+// std.net: TcpServer with keepAlive (kept connections wait in the server's thread, not in a worker), the
+// deadline of requestTimeout against a client that sends slowly, the limit of the queue, and
+// os.catchTermination.
+import std.test { check, checkText, checkInt, fail };
+import std.net { TcpServer, TcpSocket, StopSignal, NetError, Connection };
+import std.io { Reader, IoError };
+import std.io as Io;
+import std.time as Time;
+import std.os;
+
+synchronized class Log {
+    let text: String = "";
+    function add(t: String): void { self.text = (self.text == "" ? t : "${self.text},${t}").clone(); }
+    function get(): String { return self.text; }
+}
+
+function connectRetry(port: int32): TcpSocket throws NetError {
+    let start: int64 = Time.monotonic();
+    while (true) {
+        try {
+            return TcpSocket.connect("127.0.0.1", port);
+        } catch (NetError e) {
+            if (Time.monotonic() - start > 5000) { throw e; }
+            Time.sleep(10);
+        }
+    }
+    throw NetError.Refused;
+}
+
+/** One line in, "<n>: <line>" out, and the connection stays open; "bye" closes it. */
+test function keptConnectionsServeSeveralRequestsWithOneThread(): void throws NetError {
+    let quit: StopSignal = {};
+    let log: Log = {};
+    let server: TcpServer = {
+        port: 47851, threads: 1, stop: quit, keepAlive: true, idleTimeout: 2000,
+        onConnect: (c: Connection) -> {
+            try {
+                let lines: Reader = { from: c.input() };
+                let line: String? = lines.readLine();
+                if (line == null || line == "bye") {      // null: the client closed while it was kept
+                    c.close();
+                    return;
+                }
+                log.add(line);
+                c.writeText("ok ${line}\n");
+            } catch (IoError e) {}
+        }
+    };
+    let answers: Log = {};
+    let client: Thread = {
+        run: () -> {
+            try {
+                // two clients at once, each sending twice: with one worker, they can only interleave if the
+                // kept connections wait in the server's thread
+                let a: TcpSocket = connectRetry(47851);
+                let b: TcpSocket = connectRetry(47851);
+                let ra: Reader = { from: a };
+                let rb: Reader = { from: b };
+                a.writeText("a1\n");
+                answers.add(ra.readLine() ?? "?");
+                b.writeText("b1\n");
+                answers.add(rb.readLine() ?? "?");
+                a.writeText("a2\n");
+                answers.add(ra.readLine() ?? "?");
+                b.writeText("b2\n");
+                answers.add(rb.readLine() ?? "?");
+                a.writeText("bye\n");
+                answers.add(ra.readLine() == null ? "closed" : "open");
+            } catch (NetError e) {
+                answers.add("net error");
+            } catch (IoError e) {
+                answers.add(Io.message(e));
+            }
+            quit.stop();
+        }
+    };
+    client.start();
+    server.run();
+    client.join();
+    checkText("ok a1,ok b1,ok a2,ok b2,closed", answers.get());
+    checkText("a1,b1,a2,b2", log.get());
+}
+
+/** A client that sends one byte every 100 ms, against a requestTimeout of 400 ms: it is cut off. */
+test function aSlowClientIsCutOffByTheDeadline(): void throws NetError {
+    let quit: StopSignal = {};
+    let log: Log = {};
+    let server: TcpServer = {
+        port: 47852, threads: 1, stop: quit, readTimeout: 300, requestTimeout: 400,
+        onConnect: (c: Connection) -> {
+            let start: int64 = Time.monotonic();
+            try {
+                let lines: Reader = { from: c.input() };
+                let line: String = lines.readLine() ?? "";
+                log.add("read ${line}");
+            } catch (IoError e) {
+                let took: int64 = Time.monotonic() - start;
+                log.add("${Io.message(e)} ${took < 1000 ? "in time" : "late: ${took}"}");
+            }
+        }
+    };
+    let client: Thread = {
+        run: () -> {
+            try {
+                let s: TcpSocket = connectRetry(47852);
+                for (i in 0..15) {                       // 1.5 s, one byte at a time: never 300 ms without one
+                    s.writeText("x");
+                    Time.sleep(100);
+                }
+            } catch (NetError e) {
+            } catch (IoError e) {}
+            quit.stop();
+        }
+    };
+    client.start();
+    server.run();
+    client.join();
+    checkText("timed out in time", log.get());
+}
+
+test function terminationIsOnlyCaughtWhenAsked(): void {
+    check(!os.terminating(), "nothing arrived");
+    os.catchTermination();
+    check(!os.terminating(), "catching it does not end anything");
+}

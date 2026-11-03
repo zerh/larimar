@@ -6,8 +6,8 @@
 //
 // input, output and error are also streams, for code that takes any InputStream or OutputStream.
 
-import std.io.files { IoError, raise };
-import std.io.streams { InputStream, OutputStream };
+import std.io { IoError, raise };
+import std.io { InputStream, OutputStream };
 
 c_include "<errno.h>";
 #when windows

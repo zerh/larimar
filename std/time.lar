@@ -1,0 +1,165 @@
+// std.time: the clock, waiting, and dates as text.
+//
+//   import std.time as Time;
+//   let started: int64 = Time.monotonic();
+//   Time.sleep(250);
+//   println("${Time.monotonic() - started} ms");               // about 250
+//   println(Time.httpDate(Time.now()));                         // Mon, 02 Nov 2026 23:04:00 GMT
+//   println(Time.isoDate(Time.now()));                          // 2026-11-02T23:04:00Z
+//
+// now() is the wall clock (it can jump when the system's clock is set); monotonic() only moves forward,
+// so it is the one for measuring time and for deadlines. Dates are UTC.
+
+c_code {
+#if defined(_WIN32)
+    #include <windows.h>
+    static int64_t lm_time_now(void) {
+        FILETIME f;
+        GetSystemTimeAsFileTime(&f);
+        uint64_t t = ((uint64_t)f.dwHighDateTime << 32) | f.dwLowDateTime;     /* 100 ns since 1601 */
+        return (int64_t)(t / 10000) - 11644473600000LL;
+    }
+    static int64_t lm_time_monotonic(void) { return (int64_t)GetTickCount64(); }
+    static void lm_time_sleep(int64_t ms) { if (ms > 0) Sleep((DWORD)ms); }
+#else
+    #include <time.h>
+    #include <errno.h>
+    static int64_t lm_time_now(void) {
+        struct timespec t;
+        clock_gettime(CLOCK_REALTIME, &t);
+        return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+    }
+    static int64_t lm_time_monotonic(void) {
+        struct timespec t;
+        clock_gettime(CLOCK_MONOTONIC, &t);
+        return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+    }
+    static void lm_time_sleep(int64_t ms) {
+        if (ms <= 0) return;
+        struct timespec t = { (time_t)(ms / 1000), (long)(ms % 1000) * 1000000L };
+        while (nanosleep(&t, &t) != 0 && errno == EINTR) { }
+    }
+#endif
+}
+
+extern function lm_time_now(): int64;
+extern function lm_time_monotonic(): int64;
+extern function lm_time_sleep(ms: int64): void;
+
+/** Milliseconds since 1970-01-01 00:00 UTC (the wall clock). */
+public function now(): int64 { return lm_time_now(); }
+
+/** Milliseconds from some fixed moment, only ever forward: for measuring time and for deadlines. */
+public function monotonic(): int64 { return lm_time_monotonic(); }
+
+/** Waits that many milliseconds (this thread only). */
+public function sleep(ms: int64): void { lm_time_sleep(ms); }
+
+/** A moment split into its parts, in UTC. */
+public struct DateTime {
+    let year: int32;
+    let month: int32;          // 1..12
+    let day: int32;            // 1..31
+    let hour: int32 = 0;
+    let minute: int32 = 0;
+    let second: int32 = 0;
+    let millisecond: int32 = 0;
+    let weekday: int32 = 0;    // 0 Sunday .. 6 Saturday (from fromMillis)
+}
+
+/** The parts of a moment (milliseconds since 1970, as now() gives). */
+public function fromMillis(ms: int64): DateTime {
+    let days: int64 = floorDiv(ms, 86400000);
+    let rest: int64 = ms - days * 86400000;
+    // days -> civil date (Howard Hinnant's algorithm)
+    let z: int64 = days + 719468;
+    let era: int64 = floorDiv(z, 146097);
+    let doe: int64 = z - era * 146097;
+    let yoe: int64 = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy: int64 = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp: int64 = (5 * doy + 2) / 153;
+    let d: int64 = doy - (153 * mp + 2) / 5 + 1;
+    let m: int64 = mp < 10 ? mp + 3 : mp - 9;
+    let y: int64 = yoe + era * 400 + (m <= 2 ? 1 : 0);
+    let wd: int64 = floorDiv(days + 4, 7);
+    return {
+        year: y as int32, month: m as int32, day: d as int32,
+        hour: (rest / 3600000) as int32, minute: (rest / 60000 % 60) as int32, second: (rest / 1000 % 60) as int32,
+        millisecond: (rest % 1000) as int32, weekday: (days + 4 - wd * 7) as int32
+    };
+}
+
+/** Milliseconds since 1970 of these parts (UTC); weekday is not used. */
+public function toMillis(t: DateTime): int64 {
+    let y: int64 = (t.year as int64) - (t.month <= 2 ? 1 : 0);
+    let era: int64 = floorDiv(y, 400);
+    let yoe: int64 = y - era * 400;
+    let m: int64 = t.month as int64;
+    let doy: int64 = (153 * (m > 2 ? m - 3 : m + 9) + 2) / 5 + (t.day as int64) - 1;
+    let doe: int64 = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days: int64 = era * 146097 + doe - 719468;
+    return days * 86400000 + (t.hour as int64) * 3600000 + (t.minute as int64) * 60000 + (t.second as int64) * 1000 + (t.millisecond as int64);
+}
+
+const WEEKDAYS: String = "SunMonTueWedThuFriSat";
+const MONTHS: String = "JanFebMarAprMayJunJulAugSepOctNovDec";
+
+/** The date of HTTP (Date, Last-Modified, the Expires of a cookie): "Mon, 02 Nov 2026 23:04:00 GMT". */
+public function httpDate(ms: int64): String {
+    let t: DateTime = fromMillis(ms);
+    let wd: String = WEEKDAYS.substring(t.weekday * 3, t.weekday * 3 + 3);
+    let mo: String = MONTHS.substring((t.month - 1) * 3, t.month * 3);
+    return "${wd}, ${two(t.day)} ${mo} ${t.year} ${two(t.hour)}:${two(t.minute)}:${two(t.second)} GMT";
+}
+
+/** ISO 8601 in UTC: "2026-11-02T23:04:00Z". */
+public function isoDate(ms: int64): String {
+    let t: DateTime = fromMillis(ms);
+    return "${t.year}-${two(t.month)}-${two(t.day)}T${two(t.hour)}:${two(t.minute)}:${two(t.second)}Z";
+}
+
+/** An ISO 8601 date in UTC ("2026-11-02", "2026-11-02T23:04:00Z", "2026-11-02T23:04:00.250Z") in milliseconds, or null. */
+public function parseIsoDate(text: String): int64? {
+    if (text.length < 10 || text[4] != '-' || text[7] != '-') { return null; }
+    let y: int64? = number(text, 0, 4);
+    let mo: int64? = number(text, 5, 7);
+    let d: int64? = number(text, 8, 10);
+    if (y == null || mo == null || d == null || mo < 1 || mo > 12 || d < 1 || d > 31) { return null; }
+    let t: DateTime = { year: y as int32, month: mo as int32, day: d as int32 };
+    if (text.length == 10) { return toMillis(t); }
+    if (text.length < 20 || (text[10] != 'T' && text[10] != ' ') || text[13] != ':' || text[16] != ':' || !text.endsWith("Z")) { return null; }
+    let h: int64? = number(text, 11, 13);
+    let mi: int64? = number(text, 14, 16);
+    let s: int64? = number(text, 17, 19);
+    if (h == null || mi == null || s == null || h > 23 || mi > 59 || s > 60) { return null; }
+    t.hour = h as int32;
+    t.minute = mi as int32;
+    t.second = s as int32;
+    if (text.length > 20) {
+        if (text[19] != '.') { return null; }
+        let fraction: int64? = number(text, 20, text.length - 1);
+        if (fraction == null || text.length - 21 > 3) { return null; }
+        let ms: int64 = fraction;
+        for (k in (text.length - 21)..3) { ms *= 10; }
+        t.millisecond = ms as int32;
+    }
+    return toMillis(t);
+}
+
+function number(text: String, from: int32, to: int32): int64? {
+    if (to <= from) { return null; }
+    let n: int64 = 0;
+    for (i in from..to) {
+        let b: byte = text[i];
+        if (b < '0' || b > '9') { return null; }
+        n = n * 10 + ((b - '0') as int64);
+    }
+    return n;
+}
+
+function two(n: int32): String { return n < 10 ? "0${n}" : "${n}"; }
+
+function floorDiv(a: int64, b: int64): int64 {
+    let q: int64 = a / b;
+    return (a % b != 0 && (a < 0) != (b < 0)) ? q - 1 : q;
+}

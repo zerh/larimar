@@ -2,13 +2,13 @@
 // one (which redirects to it) that this test serves, with the certificate of tests/tls (self-signed).
 // The compiler: $LARIMARC (tests/run-tests.sh sets it), else larimarc from the PATH; the C compiler: $CC or cc.
 import std.test { check, checkText, fail, skip };
-import std.process { Process, ProcessError, message, findProgram };
-import std.net { TlsServer, TlsSocket, TcpServer, TcpSocket, OpenSslProvider, StopSignal, NetError };
+import std.os.process { Process, ProcessError, message, findProgram };
+import std.net { TlsSocket, TcpServer, TcpSocket, OpenSslProvider, StopSignal, NetError, Connection };
 import std.net;
-import std.io.streams { Reader, buffer };
+import std.io { Reader, buffer };
 import std.io.files as Files;
-import std.io.files { IoError };
-import std.path as Paths;
+import std.io { IoError };
+import std.io.path as Paths;
 import std.os;
 
 const HTTPS_PORT: int32 = 47841;
@@ -32,9 +32,9 @@ function outDir(): String { return Paths.absolute("build/test/tls"); }
 // =========================================================================================
 
 /** One request over TLS: GET /chunked, GET /big, GET anything else ("secreto <path>"), POST (the body back). */
-function serveHttps(client: TlsSocket): void {
+function serveHttps(client: Connection): void {
     try {
-        let lines: Reader = { from: client };
+        let lines: Reader = { from: client.input() };
         let request: String = lines.readLine() ?? "";
         let length: int32 = 0;
         while (true) {
@@ -66,14 +66,14 @@ function serveHttps(client: TlsSocket): void {
     } catch (IoError e) { }
 }
 
-function respond(client: TlsSocket, body: String): void throws IoError {
+function respond(client: Connection, body: String): void throws IoError {
     client.writeText("HTTP/1.1 200 OK\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n${body}");
 }
 
 /** Plain HTTP: everything moves to https://127.0.0.1:<HTTPS_PORT>/b. */
-function serveRedirect(client: TcpSocket): void {
+function serveRedirect(client: Connection): void {
     try {
-        let lines: Reader = { from: client };
+        let lines: Reader = { from: client.input() };
         while ((lines.readLine() ?? "") != "") { }
         client.writeText("HTTP/1.1 302 Found\r\nLocation: https://127.0.0.1:${HTTPS_PORT}/b\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
     } catch (IoError e) { }
@@ -157,7 +157,7 @@ function againstTheServers(name: String, replace: String, with: String): Output 
     let quit: StopSignal = {};
     let redirect: Thread = {
         run: () -> {
-            let plain: TcpServer = { port: HTTP_PORT, threads: 2, stop: quit, onConnect: (c: TcpSocket) -> { serveRedirect(c); } };
+            let plain: TcpServer = { port: HTTP_PORT, threads: 2, stop: quit, onConnect: (c: Connection) -> { serveRedirect(c); } };
             try { plain.run(); } catch (NetError e) { result.set("", "the HTTP server: ${net.message(e)}"); }
         }
     };
@@ -171,7 +171,7 @@ function againstTheServers(name: String, replace: String, with: String): Output 
         let tls: OpenSslProvider = OpenSslProvider.load("tests/tls/cert.pem", "tests/tls/key.pem");
         redirect.start();
         client.start();
-        let secure: TlsServer = { port: HTTPS_PORT, threads: 4, stop: quit, tls: tls, onConnect: (c: TlsSocket) -> { serveHttps(c); } };
+        let secure: TcpServer = { port: HTTPS_PORT, threads: 4, stop: quit, tls: tls, onConnect: (c: Connection) -> { serveHttps(c); } };
         secure.run();
     } catch (NetError e) {
         result.set("", "the HTTPS server: ${net.message(e)}");

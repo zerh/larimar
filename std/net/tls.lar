@@ -1,4 +1,4 @@
-// std.net.http.tls: encrypted connections, for https:// (and whatever else needs TLS).
+// std.net.tls: encrypted connections, for https:// (and whatever else needs TLS).
 //
 //   public interface TlsProvider {
 //       function connect(host: String, port: int32, timeout: int32): Connection throws NetError;
@@ -16,7 +16,7 @@
 // memory it lives in is freed.
 
 import std.net { Connection, TcpSocket, NetError, Socket };
-import std.io.files { IoError };
+import std.io { IoError, InputStream, OutputStream };
 
 /** What gives encrypted connections. */
 public interface TlsProvider {
@@ -563,7 +563,7 @@ public class SystemTls implements TlsProvider {
 }
 
 /** A connection of SystemTls: the TLS session, over its TcpSocket (none on macOS: the system connects). */
-class SystemTlsConnection implements Connection {
+class SystemTlsConnection implements Connection, InputStream, OutputStream {
     let tcp: TcpSocket? = null;
     let tls: TlsHandle? = null;
 
@@ -576,6 +576,11 @@ class SystemTlsConnection implements Connection {
     function write(bytes: byte[]): void throws IoError {
         if (lm_tls_write(self.tls!, bytes) < 0) { fail(self.tls!); }
     }
+
+    function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+
+    function input(): InputStream { return self; }
+    function output(): OutputStream { return self; }
 
     function flush(): void throws IoError {}
 

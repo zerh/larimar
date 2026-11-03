@@ -1,0 +1,100 @@
+// std.encoding.hex, base64 and url, std.crypto and std.time: with the published test vectors.
+import std.test { check, checkText, checkInt, fail };
+import std.encoding.hex as Hex;
+import std.encoding.base64 as Base64;
+import std.encoding.url as Url;
+import std.crypto as Crypto;
+import std.time as Time;
+import std.time { DateTime };
+
+function text(bytes: byte[*]?): String { return bytes == null ? "(null)" : stringOf(bytes!); }
+
+test function hexBothWays(): void {
+    checkText("686f6c61", Hex.encode("hola".bytes()));
+    checkText("hola", text(Hex.decode("686F6C61")));
+    check(Hex.decode("abc") == null, "an odd length is not hex");
+    check(Hex.decode("zz") == null, "zz is not hex");
+}
+
+test function base64Rfc4648(): void {
+    let inputs: String[] = ["", "f", "fo", "foo", "foob", "fooba", "foobar"];
+    let outputs: String[] = ["", "Zg==", "Zm8=", "Zm9v", "Zm9vYg==", "Zm9vYmE=", "Zm9vYmFy"];
+    for (i, s in inputs) {
+        checkText(outputs[i], Base64.encode(s.bytes()));
+        checkText(s, text(Base64.decode(outputs[i])));
+    }
+    checkText("Zm9vYg", Base64.encodeUrl("foob".bytes()));
+    checkText("_-8", Base64.encodeUrl(Hex.decode("ffef")!));
+    checkText("ffef", Hex.encode(Base64.decodeUrl("_-8")!));
+    check(Base64.decode("Zm9v!") == null, "! is not base64");
+}
+
+test function urlEncodingAndQueries(): void {
+    checkText("casa%20en%20Punta%20Cana", Url.encode("casa en Punta Cana"));
+    checkText("a%2Bb%26c%3D%C3%B1", Url.encode("a+b&c=ñ"));
+    checkText("casa en ñ", Url.decode("casa%20en%20%C3%B1") ?? "?");
+    checkText("a+b", Url.decode("a+b") ?? "?");
+    check(Url.decode("50%") == null, "a % without two digits");
+    let q: Any = Url.parseQuery("?city=Santo+Domingo&rooms=3&empty=&flag");
+    checkText("Santo Domingo", q.city as String ?? "?");
+    checkText("3", q.rooms as String ?? "?");
+    checkText("", q.empty as String ?? "?");
+    checkText("", q.flag as String ?? "?");
+    checkText("city=La%20Romana&page=2&ok=true", Url.query({ city: "La Romana", page: 2, ok: true }));
+}
+
+test function sha256Vectors(): void {
+    checkText("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", Hex.encode(Crypto.sha256("".bytes())));
+    checkText("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", Hex.encode(Crypto.sha256("abc".bytes())));
+    checkText("248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+              Hex.encode(Crypto.sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".bytes())));
+}
+
+test function sha1Vectors(): void {
+    checkText("da39a3ee5e6b4b0d3255bfef95601890afd80709", Hex.encode(Crypto.sha1("".bytes())));
+    checkText("a9993e364706816aba3e25717850c26c9cd0d89d", Hex.encode(Crypto.sha1("abc".bytes())));
+    // the WebSocket handshake (RFC 6455): the key of the example gives this accept
+    let accept: byte[*] = Crypto.sha1("dGhlIHNhbXBsZSBub25jZQ==258EAFA5-E914-47DA-95CA-C5AB0DC85B11".bytes());
+    checkText("s3pPLMBiTxaQ9kYGzzhZRbK+xOo=", Base64.encode(accept));
+}
+
+test function hmacSha256Rfc4231(): void {
+    let key: byte[*] = Hex.decode("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b")!;
+    checkText("b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7", Hex.encode(Crypto.hmacSha256(key, "Hi There".bytes())));
+    checkText("5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
+              Hex.encode(Crypto.hmacSha256("Jefe".bytes(), "what do ya want for nothing?".bytes())));
+    let long: byte[*] = [];
+    for (i in 0..131) { long.push(0xaa); }
+    checkText("60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54",
+              Hex.encode(Crypto.hmacSha256(long, "Test Using Larger Than Block-Size Key - Hash Key First".bytes())));
+    check(Crypto.sameBytes("abc".bytes(), "abc".bytes()) && !Crypto.sameBytes("abc".bytes(), "abd".bytes()), "sameBytes");
+}
+
+test function randomBytesAreRandom(): void {
+    let a: byte[*] = Crypto.randomBytes(32);
+    let b: byte[*] = Crypto.randomBytes(32);
+    checkInt(32, a.length);
+    check(!Crypto.sameBytes(a, b), "two draws of 32 bytes differ");
+}
+
+test function datesAsText(): void {
+    checkText("Sun, 06 Nov 1994 08:49:37 GMT", Time.httpDate(784111777000));
+    checkText("1994-11-06T08:49:37Z", Time.isoDate(784111777000));
+    checkText("2000-02-29T00:00:00Z", Time.isoDate(951782400000));
+    checkText("1969-12-31T23:59:59Z", Time.isoDate(-1000));
+    let t: DateTime = Time.fromMillis(784111777250);
+    checkInt(0, t.weekday);
+    checkInt(250, t.millisecond);
+    check((Time.parseIsoDate("1994-11-06T08:49:37Z") ?? 0) == 784111777000, "parse ISO with time");
+    check((Time.parseIsoDate("1994-11-06T08:49:37.25Z") ?? 0) == 784111777250, "parse ISO with milliseconds");
+    check((Time.parseIsoDate("2000-02-29") ?? 0) == 951782400000, "parse ISO date");
+    check(Time.parseIsoDate("2000-13-01") == null, "month 13");
+}
+
+test function clocks(): void {
+    let start: int64 = Time.monotonic();
+    Time.sleep(50);
+    let took: int64 = Time.monotonic() - start;
+    check(took >= 45 && took < 2000, "sleep(50) took ${took} ms");
+    check(Time.now() > 1700000000000, "now() is after 2023");
+}

@@ -1,6 +1,8 @@
-// std.io.streams: bytes from anywhere, and text on top of them.
+// std.io: what every input and output shares: the error (IoError), the streams (bytes from anywhere and
+// to anywhere), text on top of them (Reader), and streams in memory.
 //
-//   import std.io.streams { InputStream, OutputStream, Closeable, MemoryInputStream, MemoryOutputStream, Reader, copy };
+//   import std.io { IoError, InputStream, OutputStream, Reader, copy };
+//   import std.io.files { open };
 //
 //   let lines: Reader = { from: open("notes.txt") };          // a File is an InputStream
 //   let line: String? = lines.readLine();
@@ -9,8 +11,9 @@
 //   copy(MemoryInputStream { data: "hello" }, out);
 //   println(out.toString());
 //
-// A File, the console (std.io.console) and the memory streams below are streams. Only what holds
-// something of the system (a File) is Closeable; it also closes itself when its memory is freed.
+// Files (std.io.files), sockets (std.net), the body of an HTTP response (std.net.http) and the console
+// (std.io.console) are streams, and their reads and writes throw IoError. Only what holds something of
+// the system (a File, a socket) is Closeable; it also closes itself when its memory is freed.
 //
 // Memory: reading and copying ask the system for memory only where they must. A Reader has one buffer
 // for its whole life, and a line is created once, at its exact size, wherever the caller puts the
@@ -23,7 +26,37 @@
 //       ...
 //   }
 
-import std.io.files { IoError };
+/** What went wrong reading or writing: a file, a folder, a socket, the console. */
+public enum IoError {
+    NotFound(path: String),      // a file or folder that is not there
+    Denied(path: String),        // no permission
+    Closed,                      // the other side closed it (a socket, a pipe)
+    TimedOut,                    // a read or a write took longer than allowed
+    Failed(what: String)         // anything else: what failed
+}
+
+/** "not found: notes.txt", "denied: ...", "closed", "timed out" or "failed: ...". */
+public function message(e: IoError): String {
+    return switch (e) {
+        case NotFound { path } -> "not found: ${path}";
+        case Denied { path } -> "denied: ${path}";
+        case Closed -> "closed";
+        case TimedOut -> "timed out";
+        case Failed { what } -> "failed: ${what}";
+    };
+}
+
+/** Throws the IoError of a result code: 1 not found, 2 denied, 3 failed, 4 closed, 5 timed out (0 is fine). */
+public function raise(code: int32, path: String): void throws IoError {
+    switch (code) {
+        case 0 -> {}
+        case 1 -> throw IoError.NotFound(path.clone() in default);
+        case 2 -> throw IoError.Denied(path.clone() in default);
+        case 4 -> throw IoError.Closed;
+        case 5 -> throw IoError.TimedOut;
+        default -> throw IoError.Failed(path.clone() in default);
+    }
+}
 
 /** The size of the buffers of Reader and copy(). */
 const CHUNK: int32 = 4096;

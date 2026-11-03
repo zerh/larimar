@@ -13,9 +13,9 @@
 
 import std.os;
 import std.text { isIdentifierPart, isDigit };
-import std.path as Paths;
+import std.io.path as Paths;
 import std.io.files as Files;
-import std.io.files { IoError };
+import std.io { IoError };
 import std.io.console as Console;
 import syntax.ast { Program };
 import semantics.linker { linkErrors, decode, readSource, testsKept };
@@ -27,11 +27,12 @@ import editor.lsp { serve, worker };
 import editor.dap { serveDebugger };
 import codegen.gen { generate, generatorErrors, debugLines, spreadLines };
 import codegen.debugmap { debugMap };
-import project.cc { windows, quote, commandLine, systemLibraries };
-import std.toml as Toml;
-import std.toml { TomlError };
+import project.cc { windows, quote, commandLine, systemLibraries, selfPath };
+import std.encoding.toml as Toml;
+import std.encoding.toml { TomlError };
+import std.os.process { Process, ProcessError };
 
-const VERSION: String = "0.4.1";
+const VERSION: String = "0.5.0";
 
 /** The version of the language this compiler implements (SPEC.md). */
 const LANGUAGE: String = "1.0";
@@ -68,6 +69,9 @@ function debugMapPath(cFile: String): String {
 /** --debug: #line for the debugger, -g -O0 */
 let debugBuild: bool = false;
 
+/** --cc <program>: the C compiler for this build, instead of the project's */
+let compilerOverride: String = "";
+
 function fail(msg: String in default): int32 {
     toolError = msg;
     return 1;
@@ -85,6 +89,9 @@ function command(args: String[]): int32 {
             dashed = true;
         } else if (args[i] == "--debug") {
             debugBuild = true;
+        } else if (args[i] == "--cc" && i + 1 < args.length) {
+            compilerOverride = args[i + 1].clone() in default;
+            i += 1;
         } else {
             rest.push(args[i]);
         }
@@ -126,7 +133,14 @@ function command(args: String[]): int32 {
         usage();
         return 0;
     }
-    return cmd.endsWith(".lar") ? compileTo(args) : fail("unknown command '${cmd}'. Run 'larimar help'.");
+    if (cmd.endsWith(".lar")) { return compileTo(args); }
+    let problems: String[*] = [];
+    let found: Plugin[*] = plugins(problems);
+    for (m in problems) { Console.printError("larimar: ${m}"); }
+    for (pl in found) {
+        if (pl.command == cmd) { return runPlugin(pl, args); }
+    }
+    return fail("unknown command '${cmd}'. Run 'larimar help'.");
 }
 
 function usage(): void {
@@ -143,7 +157,119 @@ function usage(): void {
     println("  larimar dap [--backend <lldb-dap>]  debugger for editors (DAP on stdin/stdout, over lldb-dap)");
     println("  larimar c <file.lar>          print the generated C of a file");
     println("  larimar <file.lar> -o <out.c> write the generated C of a file");
+    println("  larimar build --cc <program>  build with that C compiler instead of the project's");
+    let problems: String[*] = [];
+    let found: Plugin[*] = plugins(problems);
+    if (found.length > 0) {
+        println("");
+        println("  from plugins ($LARIMAR_HOME/plugins):");
+        for (pl in found) {
+            println("  larimar ${pl.command.padEnd(22, " ")} ${pl.program} ${pl.args.join(" ")}  (${pl.file})");
+        }
+    }
+    for (m in problems) { println("  problem: ${m}"); }
     println("");
+}
+
+// =========================================================================
+// Plugins: other programs of $LARIMAR_HOME/bin that answer commands of larimar
+// =========================================================================
+
+/** The commands of larimar itself: a plugin cannot take them. */
+const OWN_COMMANDS: String = " new build run check test test-main lsp lsp-worker dap c version help --version --help -h ";
+
+/** A command of a plugin: `larimar <command> x` runs `bin/<program> <args> x`. */
+class Plugin {
+    let file: String;          // plugins/<name>.toml
+    let program: String;
+    let command: String;
+    let args: String[*] = [];
+}
+
+/** $LARIMAR_HOME: the folder of bin/, std/ and plugins/. */
+function larimarHome(): String { return Paths.parent(stdDir()); }
+
+/**
+ * The commands that plugins declare, one file each in $LARIMAR_HOME/plugins:
+ *
+ *   [plugin]
+ *   name = "minero"
+ *   program = "minero"             # a program of $LARIMAR_HOME/bin, nowhere else
+ *   version = "1.0.0"
+ *
+ *   [commands]
+ *   add = ["add"]                  # larimar add x  ->  bin/minero add x
+ *
+ * A plugin cannot take a command of larimar itself, and two plugins cannot take the same one: both are
+ * problems (and that command is not taken).
+ */
+function plugins(problems: String[*]): Plugin[*] {
+    let out: Plugin[*] = [];
+    let dir: String = Paths.join(larimarHome(), "plugins");
+    if (!Files.isDirectory(dir)) { return out; }
+    let names: String[*] = [];
+    try { names = Files.list(dir); } catch (IoError e) { return out; }
+    names.sort();
+    for (name in names) {
+        if (!name.endsWith(".toml")) { continue; }
+        let shown: String = "plugins/${name}";
+        let config: Any = null;
+        try {
+            config = Toml.parse(Files.readString(Paths.join(dir, name)));
+        } catch (IoError e) {
+            problems.push("cannot read ${shown}".clone());
+            continue;
+        } catch (TomlError e) {
+            problems.push("${shown}: ${Toml.message(e)}".clone());
+            continue;
+        }
+        let program: String = config.plugin.program as String ?? "";
+        if (program == "" || program.contains("/") || program.contains("\\")) {
+            problems.push("${shown} needs [plugin] program = \"<a program of bin/>\"".clone());
+            continue;
+        }
+        for (command, value in config.commands.fields) {
+            if (OWN_COMMANDS.contains(" ${command} ")) {
+                problems.push("${shown} cannot take 'larimar ${command}': it is a command of larimar".clone());
+                continue;
+            }
+            let taken: String = "";
+            for (other in out) {
+                if (other.command == command) { taken = other.file; }
+            }
+            if (taken != "") {
+                problems.push("'larimar ${command}' is taken by ${taken} and by ${shown}".clone());
+                continue;
+            }
+            let args: String[*] = [];
+            for (i, a in value) { args.push((a as String ?? "").clone()); }
+            out.push(Plugin { file: shown.clone(), program: program.clone(), command: command.clone(), args });
+        }
+    }
+    return out;
+}
+
+/** Runs the program of a plugin with its arguments and the user's, on this console; its exit code is larimar's. */
+function runPlugin(pl: Plugin, args: String[]): int32 {
+    let home: String = larimarHome();
+    let exe: String = Paths.join(Paths.join(home, "bin"), windows() ? "${pl.program}.exe" : pl.program);
+    if (!Files.isFile(exe)) {
+        return fail("'larimar ${pl.command}' is answered by ${pl.program} (${pl.file}), but ${Paths.join("bin", Paths.fileName(exe))} does not exist in ${home}".clone() in default);
+    }
+    let all: String[*] = [];
+    for (a in pl.args) { all.push(a); }
+    for (i in 1..args.length) { all.push(args[i]); }
+    let p: Process = { program: exe, args: all, env: ["LARIMAR_HOME=${home}"], shareConsole: true };
+    try {
+        p.start();
+    } catch (ProcessError e) {
+        return fail("cannot start ${exe}".clone() in default);
+    }
+    while (true) {
+        let code: int32? = p.wait(60000);
+        if (code != null) { return code!; }
+    }
+    return 0;
 }
 
 /** larimar main.lar [-o out.c] */
@@ -329,7 +455,7 @@ function project(dir: String, config: Any): Project? {
             topKeys.push(sectionName.clone());
             continue;
         }
-        if (sectionName == "dependencies") { continue; }      // for a dependency manager (Minero): the compiler does not read it
+        if (sectionName == "dependencies") { continue; }      // the versions are for Minero; the compiler only looks for deps/<name>
         if (sectionName != "project" && sectionName != "c") {
             problems.push("unknown section [${sectionName}] (sections: [project], [c], [dependencies])");
             continue;
@@ -384,6 +510,34 @@ function project(dir: String, config: Any): Project? {
         for (x in list(platform, "library_paths", [])) { libraryPaths.push(x.clone()); }
         for (x in list(platform, "include_paths", [])) { includePaths.push(x.clone()); }
         for (x in list(platform, "sources", [])) { sources.push(x.clone()); }
+    }
+    // [dependencies]: Minero puts each one in deps/<name>; its modules are imported from deps/<name>/src,
+    // and the C of its [c] (libraries, paths, sources) is added to the project's
+    for (depName, _ in config.dependencies.fields) {
+        let depDir: String = Paths.join(Paths.join(dir, "deps"), depName);
+        if (!Files.isDirectory(depDir)) {
+            problems.push("'${depName}' is in [dependencies] but not in deps/: get it with 'larimar fetch' (Minero)".clone());
+            continue;
+        }
+        let depToml: String = Paths.join(depDir, "larimar.toml");
+        if (!Files.isFile(depToml)) { continue; }
+        try {
+            let depConfig: Any = Toml.parse(Files.readString(depToml));
+            let dc: Any = depConfig.c;
+            let depUnix: Any = windows() ? null : dc.unix;
+            let depHere: Any = dc[os.platform()];
+            let depSections: Any[] = [dc, depUnix, depHere];
+            for (section in depSections) {
+                for (x in list(section, "libraries", [])) { libraries.push(x.clone()); }
+                for (x in list(section, "library_paths", [])) { libraryPaths.push(Paths.join(depDir, x).clone()); }
+                for (x in list(section, "include_paths", [])) { includePaths.push(Paths.join(depDir, x).clone()); }
+                for (x in list(section, "sources", [])) { sources.push(Paths.join(depDir, x).clone()); }
+            }
+        } catch (IoError e) {
+            problems.push("cannot read deps/${depName}/larimar.toml".clone());
+        } catch (TomlError e) {
+            problems.push("deps/${depName}/larimar.toml: ${Toml.message(e)}".clone());
+        }
     }
     if (problems.length > 0) {
         for (m in problems) { compileErrors.push("Project Error [larimar.toml]: ${m}"); }
@@ -475,7 +629,7 @@ function build(p: Project, debug: bool): String {
         toolError = "cannot write ${cFile}" in default;
         return "";
     }
-    let cmd: String[*] = [p.compiler, "-std=c99"];
+    let cmd: String[*] = [compilerOverride != "" ? compilerOverride : p.compiler, "-std=c99"];
     for (f in p.flags) {
         if (!debug || !(f.startsWith("-O") || f == "-s")) { cmd.push(f); }     // --debug: no optimizing
     }

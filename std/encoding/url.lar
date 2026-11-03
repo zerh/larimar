@@ -1,0 +1,90 @@
+// std.encoding.url: percent-encoding (RFC 3986) and query strings.
+//
+//   import std.encoding.url as Url;
+//   println(Url.encode("casa en Punta Cana"));                         // casa%20en%20Punta%20Cana
+//   println(Url.decode("casa%20en%20Punta%20Cana") ?? "?");            // casa en Punta Cana
+//   let q: Any = Url.parseQuery("city=Santo+Domingo&rooms=3");         // { city: "Santo Domingo", rooms: "3" }
+//   println(Url.query({ city: "La Romana", page: 2 }));                 // city=La%20Romana&page=2
+
+const HEX: String = "0123456789ABCDEF";
+
+/** Everything but letters, digits and - _ . ~ as %XX (UTF-8 bytes): for a part of a path or a query value. */
+public function encode(text: String): String {
+    let sb: StringBuilder = {};
+    for (b in text) {
+        if ((b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '-' || b == '_' || b == '.' || b == '~') {
+            sb.add(stringOfRange([b], 0, 1));
+        } else {
+            sb.add("%");
+            sb.add(HEX.substring((b >> 4) as int32, ((b >> 4) as int32) + 1));
+            sb.add(HEX.substring((b & 15) as int32, ((b & 15) as int32) + 1));
+        }
+    }
+    return sb.toString().clone();
+}
+
+/** %XX back to bytes (a '+' stays a '+'), or null when a % is not followed by two hex digits. */
+public function decode(text: String): String? { return decodeWith(text, false); }
+
+/**
+ * The entries of a query string (what follows '?', or a form sent as application/x-www-form-urlencoded):
+ * a table of names and texts, '+' read as a space. When a name repeats, the last value stays. An entry
+ * that cannot be decoded is left out.
+ */
+public function parseQuery(query: String): Any {
+    let out: Any = {};
+    let text: String = query.startsWith("?") ? query.substring(1) : query;
+    for (part in text.split("&")) {
+        if (part.isEmpty()) { continue; }
+        let eq: int32 = part.indexOf("=") ?? -1;
+        let name: String? = decodeWith(eq < 0 ? part : part.substring(0, eq), true);
+        let value: String? = eq < 0 ? "" : decodeWith(part.substring(eq + 1), true);
+        if (name != null && value != null) { out[name!] = value!.clone(); }
+    }
+    return out;
+}
+
+/** A query string from the named entries of a table: "a=1&b=two%20words" (numbers and bool as text). */
+public function query(entries: Any): String {
+    let sb: StringBuilder = {};
+    let first: bool = true;
+    for (name, value in entries.fields) {
+        if (!first) { sb.add("&"); }
+        first = false;
+        sb.add(encode(name));
+        sb.add("=");
+        sb.add(encode(switch (value) {
+            case String s -> s;
+            case null -> "";
+            default -> "${value}";
+        }));
+    }
+    return sb.toString().clone();
+}
+
+function decodeWith(text: String, plusIsSpace: bool): String? {
+    let sb: StringBuilder = {};
+    let i: int32 = 0;
+    while (i < text.length) {
+        let b: byte = text[i];
+        if (b == '%') {
+            if (i + 2 > text.length - 1) { return null; }
+            let hi: int32 = hexValue(text[i + 1]);
+            let lo: int32 = hexValue(text[i + 2]);
+            if (hi < 0 || lo < 0) { return null; }
+            sb.add(stringOfRange([(hi * 16 + lo) as byte], 0, 1));
+            i += 3;
+        } else {
+            sb.add(b == '+' && plusIsSpace ? " " : stringOfRange([b], 0, 1));
+            i += 1;
+        }
+    }
+    return sb.toString().clone();
+}
+
+function hexValue(c: byte): int32 {
+    if (c >= '0' && c <= '9') { return (c - '0') as int32; }
+    if (c >= 'a' && c <= 'f') { return (c - 'a') as int32 + 10; }
+    if (c >= 'A' && c <= 'F') { return (c - 'A') as int32 + 10; }
+    return -1;
+}

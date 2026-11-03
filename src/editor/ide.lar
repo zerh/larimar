@@ -7,9 +7,9 @@
 // FILE_LINES) and knows the line of each node, not its column, so the column of a name is found in the
 // text of its line.
 
-import std.path as Paths;
+import std.io.path as Paths;
 import std.text { isIdentifierPart };
-import std.json as Json;
+import std.encoding.json as Json;
 import syntax.ast {
     Node, Expr, Stmt, Program, FunctionDecl, StructDecl, ClassDecl, InterfaceDecl, NativeTypeDecl, EnumDecl,
     EnumVariant, VarDecl, ConstDecl, FieldDecl, Param, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ForStmt, TryStmt,

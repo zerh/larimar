@@ -7,7 +7,7 @@
 // and it is also an InputStream and an OutputStream, so Reader and copy() work on it as on a file.
 //
 //   import std.net { TcpSocket, TcpListener, NetError };
-//   import std.io.streams { Reader };
+//   import std.io { Reader };
 //
 //   let socket: TcpSocket = TcpSocket.connect("example.com", 80);
 //   socket.writeText("GET / HTTP/1.0\r\nHost: example.com\r\n\r\n");
@@ -27,20 +27,29 @@
 // Written in Larimar over the C functions of the system (BSD sockets, Winsock on Windows): the C below is
 // only declarations.
 
-import std.io.files { IoError };
-import std.io.streams { InputStream, OutputStream, Closeable, buffer };
+import std.io { IoError };
+import std.io { InputStream, OutputStream, Closeable, buffer };
+import std.time as Time;
+import std.os;
 
 /**
- * A connection both ways: a TcpSocket is one, and so is what a TlsProvider (std.net.http.tls) gives. Whoever
- * speaks a protocol (std.net.http) works on a Connection, so it does not care whether it is encrypted.
+ * A connection both ways: a TcpSocket and a TlsSocket are one, and so is what a TlsProvider (std.net.tls)
+ * gives. Whoever speaks a protocol (std.net.http, a server's onConnect) works on a Connection, so it does
+ * not care whether it is encrypted.
  */
 public interface Connection {
     /** Reads what has arrived, up to the length of buffer; 0 when the other side closed. */
     function read(buffer: byte[]): int32 throws IoError;
     /** Writes all the bytes, or throws. */
     function write(bytes: byte[]): void throws IoError;
+    /** Writes a text (its UTF-8 bytes). */
+    function writeText(text: String): void throws IoError;
     function flush(): void throws IoError;
     function close(): void throws IoError;
+    /** The connection as an InputStream: for a Reader, or copy(). */
+    function input(): InputStream;
+    /** The connection as an OutputStream. */
+    function output(): OutputStream;
 }
 
 /** Why something of the network failed. */
@@ -198,6 +207,16 @@ c_code {
         p.revents = 0;
         return WSAPoll(&p, 1, ms) > 0;
     }
+    static long long lm_net_number(SOCKET s) { return (long long)s; }
+    /* which of these sockets (numbers) can be read (or were closed) within ms: 1 in ready[i] */
+    static int lm_net_poll(long long* fds, int count, int* ready, int readyCount, int ms) {
+        WSAPOLLFD p[1024];
+        int n = count < 1024 ? count : 1024;
+        for (int i = 0; i < n; i++) { p[i].fd = (SOCKET)fds[i]; p[i].events = POLLRDNORM; p[i].revents = 0; }
+        int r = WSAPoll(p, (ULONG)n, ms);
+        for (int i = 0; i < readyCount; i++) ready[i] = i < n && r > 0 && p[i].revents != 0;
+        return r;
+    }
 #else
     #include <poll.h>
     static long long lm_net_dup(int s) { return (long long)dup(s); }
@@ -209,11 +228,23 @@ c_code {
         p.revents = 0;
         return poll(&p, 1, ms) > 0;
     }
+    static long long lm_net_number(int s) { return (long long)s; }
+    /* which of these sockets (numbers) can be read (or were closed) within ms: 1 in ready[i] */
+    static int lm_net_poll(long long* fds, int count, int* ready, int readyCount, int ms) {
+        struct pollfd p[1024];
+        int n = count < 1024 ? count : 1024;
+        for (int i = 0; i < n; i++) { p[i].fd = (int)fds[i]; p[i].events = POLLIN; p[i].revents = 0; }
+        int r = poll(p, (nfds_t)n, ms);
+        for (int i = 0; i < readyCount; i++) ready[i] = i < n && r > 0 && p[i].revents != 0;
+        return r;
+    }
 #endif
 }
 extern function lm_net_dup(s: Socket): int64;
 extern function lm_net_adopt(n: int64): Socket?;
 extern function lm_net_readable(s: Socket, ms: int32): int32;
+extern function lm_net_number(s: Socket): int64;
+extern function lm_net_poll(fds: int64[], ready: int32[], ms: int32): int32;
 
 // error codes, as NetError: 1 host not found, 2 refused, 3 timeout, 4 closed, 5 reset, 6 address in use, 100+ other
 
@@ -275,9 +306,9 @@ function raise(code: int32, host: String): void throws NetError {
 /** For the stream interfaces, which throw IoError: what failed, as a path-like text. */
 function ioFailure(code: int32): void throws IoError {
     switch (code) {
-        case 3 -> throw IoError.Failed("socket: timed out");
-        case 4 -> throw IoError.Failed("socket: closed");
-        case 5 -> throw IoError.Failed("socket: connection reset");
+        case 3 -> throw IoError.TimedOut;
+        case 4 -> throw IoError.Closed;
+        case 5 -> throw IoError.Closed;              // reset by the other side
         default -> throw IoError.Failed("socket: error ${code}");
     }
 }
@@ -291,6 +322,9 @@ function option(s: Socket, level: int32, name: int32): void {
 /** A TCP connection. */
 public class TcpSocket implements InputStream, OutputStream, Closeable, Connection {
     let socket: Socket? = null;
+    let readLimit: int32 = 0;          // ms a read may wait (0: no limit)
+    let writeLimit: int32 = 0;         // ms a write may wait (0: no limit)
+    let deadline: int64 = 0;           // Time.monotonic() after which reads and writes fail (0: none)
 
     /** Connects to host:port (a name or an IP, v4 or v6). */
     static function connect(host: String, port: int32): TcpSocket throws NetError {
@@ -320,13 +354,28 @@ public class TcpSocket implements InputStream, OutputStream, Closeable, Connecti
 
     /** The socket, or an IoError when it is closed. */
     function live(): Socket throws IoError {
-        if (self.socket == null) { throw IoError.Failed("socket: closed"); }
+        if (self.socket == null) { throw IoError.Closed; }
         return self.socket!;
+    }
+
+    /**
+     * Before a read or a write: with a deadline, the wait is what is left of it (or the limit, when shorter),
+     * and past it the call fails with IoError.TimedOut. A client that sends one byte at a time cannot keep
+     * the connection longer than its deadline.
+     */
+    function prepare(writing: bool): void throws IoError {
+        if (self.deadline == 0 || self.socket == null) { return; }
+        let left: int64 = self.deadline - Time.monotonic();
+        if (left <= 0) { throw IoError.TimedOut; }
+        let limit: int64 = (writing ? self.writeLimit : self.readLimit) as int64;
+        let ms: int32 = (limit > 0 && limit < left ? limit : left) as int32;
+        if (writing) { sendTimeout(self.socket!, ms); } else { receiveTimeout(self.socket!, ms); }
     }
 
     /** Reads what has arrived, up to the length of buffer; 0 when the other side closed. */
     function read(buffer: byte[]): int32 throws IoError {
         let s: Socket = self.live();
+        self.prepare(false);
         if (buffer.length == 0) { return 0; }
         while (true) {
             let n: int64 = recv(s, buffer, 0);
@@ -339,6 +388,7 @@ public class TcpSocket implements InputStream, OutputStream, Closeable, Connecti
     /** Writes all the bytes, or throws. */
     function write(bytes: byte[]): void throws IoError {
         let s: Socket = self.live();
+        self.prepare(true);
         let n: int64 = 0;
         while (true) {
             n = send(s, bytes, 0);
@@ -355,11 +405,16 @@ public class TcpSocket implements InputStream, OutputStream, Closeable, Connecti
     /** Writes a text (its UTF-8 bytes). */
     function writeText(text: String): void throws IoError { self.write(text.bytes()); }
 
+    function input(): InputStream { return self; }
+    function output(): OutputStream { return self; }
+
     /** Nothing to do: what is written goes to the system at once (TCP_NODELAY). */
     function flush(): void throws IoError {}
 
     /** How long read and write wait before failing with a timeout (0: no limit). */
     function setTimeout(ms: int32): void {
+        self.readLimit = ms;
+        self.writeLimit = ms;
         if (self.socket != null) { timeout(self.socket!, ms); }
     }
 
@@ -394,15 +449,21 @@ public class TcpSocket implements InputStream, OutputStream, Closeable, Connecti
 
 /** How long reads and writes of a socket wait before failing with a timeout (0: no limit). */
 function timeout(s: Socket, ms: int32): void {
+    receiveTimeout(s, ms);
+    sendTimeout(s, ms);
+}
+
+function receiveTimeout(s: Socket, ms: int32): void { socketTimeout(s, SO_RCVTIMEO, ms); }
+function sendTimeout(s: Socket, ms: int32): void { socketTimeout(s, SO_SNDTIMEO, ms); }
+
+function socketTimeout(s: Socket, which: int32, ms: int32): void {
     let t: int32 = ms > 0 ? ms : 0;
     #when windows
         let w: uint32 = t as uint32;
-        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &w as Untyped, 4);
-        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &w as Untyped, 4);
+        setsockopt(s, SOL_SOCKET, which, &w as Untyped, 4);
     #else
         let tv: TimeVal = { tv_sec: (t / 1000) as int64, tv_usec: ((t % 1000) * 1000) as int64 };
-        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv as Untyped, TIMEVAL_SIZE);
-        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv as Untyped, TIMEVAL_SIZE);
+        setsockopt(s, SOL_SOCKET, which, &tv as Untyped, TIMEVAL_SIZE);
     #end
 }
 
@@ -484,13 +545,25 @@ function signalOf(given: StopSignal?): StopSignal {
     return {};
 }
 
-/** Connections accepted and not yet served, as copies of their sockets (numbers), for the workers. */
+/**
+ * Connections waiting for a worker, as copies of their sockets (numbers). It holds at most `limit`: when
+ * every worker is busy and it is full, put says no and the server closes the connection at once, instead
+ * of piling up connections that would time out anyway.
+ */
 synchronized class Handoff {
     let items: int64[*] = [];
     let head: int32 = 0;
     let closed: bool = false;
+    let limit: int32 = 100;
 
-    function put(n: int64): void { self.items.push(n); }
+    function setLimit(n: int32): void { self.limit = n > 0 ? n : 1; }
+
+    function put(n: int64): bool {
+        if (self.items.length - self.head >= self.limit) { return false; }
+        self.items.push(n);
+        return true;
+    }
+
     function close(): void { self.closed = true; }
 
     /** The next one, waiting for it; -1 when closed and empty. */
@@ -506,74 +579,195 @@ synchronized class Handoff {
     }
 }
 
+/** Connections a worker gives back to wait for their next request (keepAlive), as socket numbers. */
+synchronized class Returns {
+    let items: int64[*] = [];
+    let head: int32 = 0;
+
+    function put(n: int64): void { self.items.push(n); }
+
+    /** The next one, or -1 when there is none (it does not wait). */
+    function next(): int64 {
+        if (self.head == self.items.length) {
+            self.items.clear();
+            self.head = 0;
+            return -1;
+        }
+        let n: int64 = self.items[self.head];
+        self.head += 1;
+        return n;
+    }
+}
+
 /**
- * A TCP server: it listens on host:port and gives each connection to onConnect, in one of its threads.
- * The client closes when onConnect returns (its memory is freed).
+ * A TCP server, plain or with TLS (https): it listens on host:port and gives each connection to onConnect,
+ * in one of its threads.
  *
- *   let quit: StopSignal = {};
  *   let server: TcpServer = {
- *       port: 8080,                                   // host: "127.0.0.1" unless you say "0.0.0.0"
- *       threads: 8,                                   // connections served at the same time (1 by default)
- *       stop: quit,
- *       onConnect: (client: TcpSocket) -> { ... }    // thread safe: checked like the run of a Thread
+ *       port: 8080,                                     // host: "127.0.0.1" unless you say "0.0.0.0"
+ *       threads: 16,                                    // connections served at the same time
+ *       stop: quit,                                     // a StopSignal (also Ctrl+C and SIGTERM, after os.catchTermination())
+ *       onConnect: (client: Connection) -> { ... }      // thread safe: checked like the run of a Thread
  *   };
- *   server.run();                                     // until quit.stop()
+ *   server.run();
+ *
+ * With `tls: OpenSslProvider.load("fullchain.pem", "privkey.pem")` it is https: onConnect gets the
+ * connection already decrypted (a TlsSocket). Without keepAlive, the connection closes when onConnect
+ * returns. With keepAlive, it stays open, and when the client sends again onConnect is called again with
+ * it; onConnect ends it with close(). When a kept client closes, onConnect is called once more and its first
+ * read gives 0 (a Reader's readLine, null): close it then. A plain connection that waits for its next request does not hold a
+ * thread: one thread (the one of run) watches all of them with poll. (A TLS one keeps its thread while it
+ * waits, for now.)
+ *
+ * The limits, with the values of servers like nginx and Tomcat:
+ *   - readTimeout, writeTimeout (30 s): how long one read or one write may wait;
+ *   - requestTimeout (60 s): how long one call of onConnect may read and write in all: a client that sends
+ *     one byte at a time cannot keep a thread longer;
+ *   - idleTimeout (75 s): how long a kept connection may wait for its next request;
+ *   - maxQueue (100): connections waiting for a free thread; more are closed at once.
+ * A limit of 0 means none. When one is passed, reads and writes fail with IoError.TimedOut.
  */
 public class TcpServer {
     let host: String = "127.0.0.1";
     let port: int32 = 0;
     let threads: int32 = 1;
     let stop: StopSignal? = null;
-    let onConnect: (TcpSocket) -> void thread safe;
+    let tls: OpenSslProvider? = null;
+    /** How long a client has to finish the TLS handshake (ms). */
+    let handshakeTimeout: int32 = 10000;
+    let readTimeout: int32 = 30000;
+    let writeTimeout: int32 = 30000;
+    let requestTimeout: int32 = 60000;
+    let idleTimeout: int32 = 75000;
+    let maxQueue: int32 = 100;
+    let keepAlive: bool = false;
+    let onConnect: (Connection) -> void thread safe;
 
-    /**
-     * Listens and serves until its StopSignal says stop (without one, until the program ends). This
-     * thread accepts; the others serve. Throws when it cannot listen.
-     */
+    /** Listens and serves until its StopSignal says stop (or os.catchTermination() saw Ctrl+C or SIGTERM). Throws when it cannot listen. */
     function run(): void throws NetError {
         let listener: TcpListener = TcpListener.bind(self.host, self.port);
-        let handler: (TcpSocket) -> void thread safe = self.onConnect;
+        let handler: (Connection) -> void thread safe = self.onConnect;
         let signal: StopSignal = signalOf(self.stop);
+        let limits: Limits = {
+            read: self.readTimeout, write: self.writeTimeout, request: self.requestTimeout, idle: self.idleTimeout,
+            handshake: self.handshakeTimeout, keepAlive: self.keepAlive
+        };
+        let provider: OpenSslProvider? = self.tls;
         let queue: Handoff = {};
+        queue.setLimit(self.maxQueue);
+        let returns: Returns = {};
         {
             let workers: byte[*] = [] in heap;            // freed at the '}': it waits for the threads
             for (i in 0..(self.threads > 1 ? self.threads : 1)) {
-                let t: Thread = { run: () -> { serveConnections(queue, handler); } } in workers;
+                let t: Thread = { run: () -> { serveConnections(queue, returns, limits, provider, handler); } } in workers;
                 t.start();
             }
-            acceptInto(listener, signal, queue);
+            acceptInto(listener, signal, queue, returns, limits);
         }
     }
 }
 
+/** The limits of a server, for its threads (a value: each thread has a copy). */
+struct Limits {
+    let read: int32;
+    let write: int32;
+    let request: int32;
+    let idle: int32;
+    let handshake: int32;
+    let keepAlive: bool;
+}
+
 /**
- * The loop of a server's own thread: it accepts until the signal says stop and gives each connection to
- * the workers (a copy of its socket, which the worker owns). It closes the handoff when it ends, also
- * when it fails, so the workers end too.
+ * The loop of a server's own thread: it accepts connections and gives them to the workers (copies of their
+ * sockets, which the workers own), and it watches the kept connections that wait for their next request:
+ * one that sends goes back to the workers, one that waits longer than idleTimeout is closed. It ends when
+ * the signal says stop (or the program was asked to end), and closes the handoff, so the workers end too.
  */
-function acceptInto(listener: TcpListener, signal: StopSignal, queue: Handoff): void throws NetError {
+function acceptInto(listener: TcpListener, signal: StopSignal, queue: Handoff, returns: Returns, limits: Limits): void throws NetError {
+    let parked: int64[*] = [];                          // kept connections: their sockets (numbers)
+    let since: int64[*] = [];                           // when each started waiting
     try {
-        while (!signal.isStopped()) {
-            if (lm_net_readable(listener.socket!, 200) == 0) { continue; }
-            let client: TcpSocket = listener.accept();
-            let n: int64 = lm_net_dup(client.socket!);
-            if (n >= 0) { queue.put(n); }
-        }                                                 // this copy closes; the worker has its own
+        while (!signal.isStopped() && !os.terminating()) {
+            while (true) {                              // what the workers gave back
+                let n: int64 = returns.next();
+                if (n < 0) { break; }
+                parked.push(n);
+                since.push(Time.monotonic());
+            }
+            let fds: int64[*] = [lm_net_number(listener.socket!)];
+            for (n in parked) { fds.push(n); }
+            let ready: int32[*] = [];
+            for (n in fds) { ready.push(0); }
+            lm_net_poll(fds, ready, 200);
+            if (ready[0] != 0) {
+                let client: TcpSocket = listener.accept();
+                let n: int64 = lm_net_dup(client.socket!);
+                if (n >= 0 && !queue.put(n)) { closeNumber(n); }    // every worker busy and the queue full
+            }                                           // this copy closes; the worker has its own
+            let now: int64 = Time.monotonic();
+            let i: int32 = parked.length - 1;
+            while (i >= 0) {
+                let waited: int64 = now - since[i];
+                let wake: bool = i + 1 < ready.length && ready[i + 1] != 0;
+                if (wake || (limits.idle > 0 && waited > limits.idle as int64)) {
+                    let n: int64 = parked[i];
+                    if (!wake || !queue.put(n)) { closeNumber(n); }
+                    parked[i] = parked[parked.length - 1];
+                    since[i] = since[since.length - 1];
+                    parked.pop();
+                    since.pop();
+                }
+                i -= 1;
+            }
+        }
     } catch (NetError e) {
         queue.close();
+        for (n in parked) { closeNumber(n); }
         throw e;
     }
     queue.close();
+    for (n in parked) { closeNumber(n); }
+}
+
+/** Closes a socket known only by its number. */
+function closeNumber(n: int64): void {
+    let s: Socket? = lm_net_adopt(n);
+    release(s);
 }
 
 /** A worker of a TcpServer: it serves connections until the server closes the handoff. */
-function serveConnections(queue: Handoff, handler: (TcpSocket) -> void thread safe): void {
+function serveConnections(queue: Handoff, returns: Returns, limits: Limits, provider: OpenSslProvider?, handler: (Connection) -> void thread safe): void {
+    let context: int64 = provider != null ? provider!.contextNumber() : 0;
     while (true) {
         let n: int64 = queue.take();
         if (n < 0) { return; }
         let client: TcpSocket = {};
         client.socket = lm_net_adopt(n);
-        if (client.socket != null) { handler(client); }
+        if (client.socket == null) { continue; }
+        client.readLimit = limits.read;
+        client.writeLimit = limits.write;
+        if (provider == null) {
+            client.deadline = limits.request > 0 ? Time.monotonic() + (limits.request as int64) : 0;
+            handler(client);
+            if (limits.keepAlive && client.isOpen()) {   // it waits for its next request in the server's thread
+                let copy: int64 = lm_net_dup(client.socket!);
+                if (copy >= 0) { returns.put(copy); }
+            }
+            continue;
+        }
+        client.setTimeout(limits.handshake);
+        let secure: TlsSocket = { tcp: client };
+        secure.session = lm_tlss_accept(context, client.socket!);
+        if (lm_ossl_conn_error(secure.session!) != 0) { continue; }     // not TLS, or too slow: dropped
+        client.readLimit = limits.read;
+        client.writeLimit = limits.write;
+        while (true) {
+            client.deadline = limits.request > 0 ? Time.monotonic() + (limits.request as int64) : 0;
+            handler(secure);
+            if (!limits.keepAlive || !secure.isOpen()) { break; }
+            let wait: int32 = limits.idle > 0 ? limits.idle : -1;
+            if (lm_net_readable(client.socket!, wait) == 0) { break; }   // idle too long: closed
+        }
     }
 }
 
@@ -743,7 +937,7 @@ function serveDatagrams(n: int64, family: int32, maxSize: int32, signal: StopSig
 
 // ---- TLS servers ---------------------------------------------------------------------------
 
-// OpenSSL, for the servers here and for the client of std.net.http.tls on Linux: loaded the first time
+// OpenSSL, for the servers here and for the client of std.net.tls on Linux: loaded the first time
 // it is needed (libssl 3 or 1.1: Linux, and macOS with Homebrew's openssl@3), so nothing is loaded by a
 // program that never uses it. The functions are the same in OpenSSL 1.1 and 3, and no headers are
 // needed to compile. A TLS server is not available on Windows yet: OpenSslProvider.load throws
@@ -1067,7 +1261,7 @@ public synchronized class OpenSslProvider {
 }
 
 /**
- * A connection of a TlsServer, already decrypted: used like a TcpSocket (read, write, writeText, Reader,
+ * A connection of a TcpServer with tls, already decrypted: used like a TcpSocket (read, write, writeText, Reader,
  * copy). It closes when its memory is freed.
  */
 public class TlsSocket implements InputStream, OutputStream, Closeable, Connection {
@@ -1076,7 +1270,8 @@ public class TlsSocket implements InputStream, OutputStream, Closeable, Connecti
 
     /** Reads what has arrived, up to the length of buffer; 0 when the other side closed. */
     function read(buffer: byte[]): int32 throws IoError {
-        if (self.session == null) { throw IoError.Failed("tls: closed"); }
+        if (self.session == null) { throw IoError.Closed; }
+        if (self.tcp != null) { self.tcp!.prepare(false); }
         let n: int32 = lm_ossl_read(self.session!, buffer);
         if (n < 0) { tlsFailure(self.session!); }
         return n;
@@ -1084,12 +1279,16 @@ public class TlsSocket implements InputStream, OutputStream, Closeable, Connecti
 
     /** Writes all the bytes, or throws. */
     function write(bytes: byte[]): void throws IoError {
-        if (self.session == null) { throw IoError.Failed("tls: closed"); }
+        if (self.session == null) { throw IoError.Closed; }
+        if (self.tcp != null) { self.tcp!.prepare(true); }
         if (lm_ossl_write(self.session!, bytes) < 0) { tlsFailure(self.session!); }
     }
 
     /** Writes a text (its UTF-8 bytes). */
     function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+
+    function input(): InputStream { return self; }
+    function output(): OutputStream { return self; }
 
     function flush(): void throws IoError {}
 
@@ -1098,78 +1297,22 @@ public class TlsSocket implements InputStream, OutputStream, Closeable, Connecti
         if (self.tcp != null) { self.tcp!.setTimeout(ms); }
     }
 
+    function isOpen(): bool { return self.session != null && self.tcp != null && self.tcp!.isOpen(); }
+
     /** Closes it now (it tells the client); otherwise it closes when its memory is freed. */
     function close(): void throws IoError {
         if (self.session != null) { lm_ossl_close(self.session!); }
+        self.session = null;
         if (self.tcp != null) { self.tcp!.close(); }
     }
 }
 
 function tlsFailure(t: TlsSessionHandle): void throws IoError {
     switch (lm_ossl_conn_error(t)) {
-        case 3 -> throw IoError.Failed("tls: timed out");
-        case 4 -> throw IoError.Failed("tls: closed");
-        case 5 -> throw IoError.Failed("tls: connection reset");
+        case 3 -> throw IoError.TimedOut;
+        case 4 -> throw IoError.Closed;
+        case 5 -> throw IoError.Closed;
         default -> throw IoError.Failed("tls: ${lm_ossl_conn_text(t)}");
     }
 }
 
-/**
- * A TLS server (https, or any protocol over TLS): a TcpServer whose connections are decrypted before
- * onConnect gets them. The handshake happens in the worker thread, with handshakeTimeout; a client that
- * fails it (or does not speak TLS) is dropped without reaching onConnect.
- *
- *   let tls: OpenSslProvider = OpenSslProvider.load("fullchain.pem", "privkey.pem");
- *   let server: TlsServer = {
- *       port: 8443,
- *       threads: 8,
- *       tls: tls,
- *       onConnect: (client: TlsSocket) -> { ... }
- *   };
- *   server.run();
- */
-public class TlsServer {
-    let host: String = "127.0.0.1";
-    let port: int32 = 0;
-    let threads: int32 = 1;
-    let stop: StopSignal? = null;
-    let tls: OpenSslProvider;
-    /** How long a client has to finish the handshake (ms). */
-    let handshakeTimeout: int32 = 10000;
-    let onConnect: (TlsSocket) -> void thread safe;
-
-    /** Listens and serves until its StopSignal says stop. Throws when it cannot listen. */
-    function run(): void throws NetError {
-        let listener: TcpListener = TcpListener.bind(self.host, self.port);
-        let handler: (TlsSocket) -> void thread safe = self.onConnect;
-        let signal: StopSignal = signalOf(self.stop);
-        let provider: OpenSslProvider = self.tls;
-        let timeout: int32 = self.handshakeTimeout;
-        let queue: Handoff = {};
-        {
-            let workers: byte[*] = [] in heap;            // freed at the '}': it waits for the threads
-            for (i in 0..(self.threads > 1 ? self.threads : 1)) {
-                let t: Thread = { run: () -> { serveTls(queue, provider, timeout, handler); } } in workers;
-                t.start();
-            }
-            acceptInto(listener, signal, queue);
-        }
-    }
-}
-
-/** A worker of a TlsServer: the handshake, then onConnect. */
-function serveTls(queue: Handoff, provider: OpenSslProvider, timeout: int32, handler: (TlsSocket) -> void thread safe): void {
-    let context: int64 = provider.contextNumber();
-    while (true) {
-        let n: int64 = queue.take();
-        if (n < 0) { return; }
-        let client: TlsSocket = { tcp: TcpSocket {} };
-        client.tcp!.socket = lm_net_adopt(n);
-        if (client.tcp!.socket == null) { continue; }
-        client.tcp!.setTimeout(timeout);
-        client.session = lm_tlss_accept(context, client.tcp!.socket!);
-        if (lm_ossl_conn_error(client.session!) != 0) { continue; }    // not TLS, or too slow: dropped
-        client.tcp!.setTimeout(0);
-        handler(client);
-    }
-}

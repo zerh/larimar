@@ -1,6 +1,6 @@
-// std.toml: TOML text to Any, and Any to TOML text.
+// std.encoding.toml: TOML text to Any, and Any to TOML text.
 //
-//   import std.toml as Toml;
+//   import std.encoding.toml as Toml;
 //   let config: Any = Toml.parse(Files.readString("larimar.toml"));
 //   println(config.project.name as String ?? "?");
 //   println(Toml.stringify({ project: { name: "demo", version: "1.0.0" } }));

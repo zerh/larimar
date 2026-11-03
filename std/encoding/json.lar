@@ -1,6 +1,6 @@
-// std.json: JSON text to Any, and Any to JSON text.
+// std.encoding.json: JSON text to Any, and Any to JSON text.
 //
-//   import std.json as Json;
+//   import std.encoding.json as Json;
 //   let config: Any = Json.parse("{\"port\": 8080, \"names\": [\"a\", \"b\"]}");
 //   println("${config.port as int32 ?? 80}");
 //   println(Json.stringify({ ok: true, list: { 1, 2, 3 } }));

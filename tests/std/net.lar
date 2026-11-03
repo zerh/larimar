@@ -6,8 +6,8 @@
 // output: refused: connection refused
 // std.net: a server and a client (in a thread) on 127.0.0.1, lines both ways with Reader, a block with copy().
 import std.net { TcpSocket, TcpListener, NetError, message };
-import std.io.streams { Reader, MemoryInputStream, copy };
-import std.io.files { IoError };
+import std.io { Reader, MemoryInputStream, copy };
+import std.io { IoError };
 
 synchronized class Result {
     let text: String = "";
