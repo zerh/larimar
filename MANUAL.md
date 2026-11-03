@@ -62,7 +62,7 @@ larimar run                      # translates to C, compiles with gcc or clang a
 
 The first program (`src/main.lar`):
 
-```actionscript
+```ts
 function main(): int32 {
     println("Hello, world");
     return 0;
@@ -112,7 +112,7 @@ Each statement ends in `;`, and blocks go between `{ }`.
 
 ## 3. Variables and constants
 
-```actionscript
+```ts
 let age: int32 = 30;
 let name: String = "Ana";
 age = 31;          // variables can be reassigned
@@ -128,7 +128,7 @@ age += 1;          // also +=, -=, *=, /=, %=, &=, |=, ^=
 **Constants** are declared at the top level, and their value is computed when compiling. They can
 be numbers, `bool` or `String`, and they can be used as the size of an array:
 
-```actionscript
+```ts
 const SIZE: int32 = 16;
 const KILO: int64 = 1024;
 const MEGA: int64 = KILO * KILO;
@@ -164,7 +164,7 @@ enforce it, but the standard library and these pages follow it.
 
 ### Numeric literals
 
-```actionscript
+```ts
 let a: int32 = 1_000_000;     // _ separates digits
 let b: byte = 0xFF;           // hexadecimal
 let c: byte = 0b1010_0101;    // binary
@@ -179,7 +179,7 @@ An integer literal takes the type that is expected in that place. The compiler c
 `'a'` is the code of the character (its Unicode number), and it is used like any integer literal:
 it takes the type that is expected. It is useful above all to compare the bytes of a text:
 
-```actionscript
+```ts
 function digits(s: String): int32 {
     let n: int32 = 0;
     for (b in s) {
@@ -205,7 +205,7 @@ character; if the code does not fit in the type (`let b: byte = '€';`), it is 
 Integers **wrap around** when they go past the maximum or the minimum, signed and unsigned.
 There is never undefined behavior:
 
-```actionscript
+```ts
 function main(): int32 {
     let max: int32 = 2147483647;
     let b: byte = 255;
@@ -221,7 +221,7 @@ Output: `-2147483648 0`
 
 There are no automatic conversions between numeric types. They are done with `as`:
 
-```actionscript
+```ts
 function main(): int32 {
     let n: int32 = 7;
     let wide: int64 = n as int64;
@@ -285,7 +285,7 @@ Rules:
 
 It gives `a` if the condition is `true`, and `b` otherwise. Only the chosen side is evaluated:
 
-```actionscript
+```ts
 class Animal { let name: String; }
 class Dog extends Animal { }
 class Cat extends Animal { }
@@ -319,7 +319,7 @@ Output: `1 Rex true -`
 A `String` is **immutable**: once created, it does not change. It is compared by content and has
 `length` (in bytes, because the text is UTF-8).
 
-```actionscript
+```ts
 enum Color { Red, Green }
 
 function main(): int32 {
@@ -354,7 +354,7 @@ As in Java, a text block starts with `"""` and a line break, and ends with `"""`
 common to all the lines (and to the line of the closing `"""`, if it is alone) is removed, and so are
 the spaces at the end of each line. Quotes need no escape, and escapes and `${...}` work the same:
 
-```actionscript
+```ts
 function main(): int32 {
     let name: String = "Ana";
     let page: String = """
@@ -382,7 +382,7 @@ A `raw"""` is a text block taken **exactly as written**: without escapes (a back
 backslash) and without `${...}`. It is useful for text that has its own quotes and backslashes, like
 C code, SQL, regular expressions or templates:
 
-```actionscript
+```ts
 let code: String = raw"""
     printf("hola\n");      /* \n is two characters: \ and n */
     char* p = "${HOME}";   /* ${...} is text, it is not interpolated */
@@ -399,7 +399,7 @@ let code: String = raw"""
 A `String` is made of **bytes** (UTF-8): `s[i]` is a `byte`, `for (b in s)` goes over its bytes,
 and `length` counts bytes. An accented letter takes two; to count letters there is `codePointCount()`.
 
-```actionscript
+```ts
 function main(): int32 {
     let s: String = "  Hello, Larimar world!  ";
     let t: String = s.trim();                                  // a view: it copies nothing
@@ -446,7 +446,7 @@ true 007 ababab 72
 
 To build a big text in parts without creating a new one each time:
 
-```actionscript
+```ts
 function main(): int32 {
     let out: StringBuilder = {};
     for (i in 0..3) { out.add("item ${i}, "); }   // the interpolation is written straight into the builder
@@ -474,7 +474,7 @@ is called.
 
 ### `if`
 
-```actionscript
+```ts
 function classify(n: int32): String {
     if (n < 0) {
         return "negative";
@@ -490,7 +490,7 @@ Braces are required. The condition must be `bool`: `if (1)` is an error.
 
 ### `while`
 
-```actionscript
+```ts
 let i: int32 = 0;
 while (i < 10) {
     i += 1;
@@ -499,7 +499,7 @@ while (i < 10) {
 
 ### `for`
 
-```actionscript
+```ts
 for (i in 0..5) { }            // 0, 1, 2, 3, 4 (the end is not included)
 for (x in items) { }           // each element
 for (i, x in items) { }        // index and element
@@ -512,7 +512,7 @@ The variables of the `for` cannot be reassigned inside the body.
 Loose braces form a block: what is declared inside only exists there, and the memories created inside
 are freed when it closes. It is useful to bound memories and threads ([section 22](#22-threads)).
 
-```actionscript
+```ts
 {
     let scratch: byte[*] = [] in heap;
     let text: String = "temporary ${1}" in scratch;
@@ -524,7 +524,7 @@ are freed when it closes. It is useful to bound memories and threads ([section 2
 
 They work as in C or Java, inside `while` and `for`.
 
-```actionscript
+```ts
 function main(): int32 {
     let sum: int32 = 0;
     for (i in 0..10) {
@@ -543,7 +543,7 @@ Output: `16`
 
 ## 8. Functions
 
-```actionscript
+```ts
 function add(a: int32, b: int32): int32 {
     return a + b;
 }
@@ -567,7 +567,7 @@ function bye() {               // ": void" can be left out
 
 `main` can receive the arguments the program was run with (without its own name):
 
-```actionscript
+```ts
 function main(args: String[]): int32 {
     if (args.length == 0) {
         println("usage: greet <name>");
@@ -587,7 +587,7 @@ With `larimar run -- Ana` it prints `Hello, Ana`. What `main` returns is the exi
 A `struct` is a **value**: a group of fields that is copied whole when it is assigned or passed.
 It needs no special memory; it lives where the variable lives.
 
-```actionscript
+```ts
 struct Vector2 {
     let x: int32;
     let y: int32 = 0;                      // default value
@@ -646,7 +646,7 @@ Without `operator ==`, comparing two structs with `==` is an error.
 A class defines **objects**: they have identity, live in a memory and are used by **reference**.
 Assigning an object to another variable does not copy it; both variables point to the same object.
 
-```actionscript
+```ts
 class Animal {
     let name: String;
 
@@ -719,7 +719,7 @@ A static function belongs to the type, not to an object: it has no `self` and is
 of the type. It can be written inside the type with `static`, or outside with `function Type.name`;
 both forms are the same.
 
-```actionscript
+```ts
 class Order {
     let id: int32;
     let owner: String;
@@ -754,7 +754,7 @@ function main(): int32 {
 
 An interface describes **what can be done** with something: only method signatures, without fields.
 
-```actionscript
+```ts
 interface Drawable {
     function draw(): void;
 }
@@ -764,7 +764,7 @@ There are three ways to fulfill it:
 
 **1. With a class**, declaring it with `implements` (a class can implement several):
 
-```actionscript
+```ts
 class Circle implements Drawable {
     let radius: float64;
     function draw(): void { println("circle of radius ${self.radius}"); }
@@ -773,19 +773,19 @@ class Circle implements Drawable {
 
 **2. With a literal**, giving each method as a lambda:
 
-```actionscript
+```ts
 let mark: Drawable = { draw: () -> { println("X"); } };
 ```
 
 **3. With a lambda**, if the interface has a single method:
 
-```actionscript
+```ts
 let quick: Drawable = () -> { println("quick"); };
 ```
 
 A complete example:
 
-```actionscript
+```ts
 interface Drawable {
     function draw(): void;
 }
@@ -820,7 +820,7 @@ Whoever receives a `Drawable` does not care which of the three forms is behind i
 
 An enum is a value that is **one of several variants**. Variants can carry data.
 
-```actionscript
+```ts
 enum State { Off, On, Failed }
 
 enum Shape {
@@ -832,7 +832,7 @@ enum Shape {
 
 Creating values:
 
-```actionscript
+```ts
 let s: State = State.On;
 let a: Shape = Shape.Circle { radius: 2.0 };            // by name
 let b: Shape = Shape.Rect { height: 4.0, width: 3.0 };  // the order does not matter
@@ -854,7 +854,7 @@ case to the next, and `break` is not needed.
 
 ### As a statement
 
-```actionscript
+```ts
 switch (state) {
     case Off -> println("off");
     case On -> {
@@ -869,7 +869,7 @@ A case without braces must be a call; for anything else use `{ }`.
 
 ### As an expression
 
-```actionscript
+```ts
 let text: String = switch (n) {
     case 0 -> "zero";
     case 1, 2, 3 -> "a few";               // several values in a case
@@ -883,7 +883,7 @@ let text: String = switch (n) {
 Inside a `switch` used as an expression, blocks end with `yield value;`, and `return` is not allowed.
 If the result is optional (`T?`), a case can give `null`:
 
-```actionscript
+```ts
 function digit(c: byte): int32? {
     return switch (c) {
         case '0' -> 0;
@@ -912,7 +912,7 @@ The fields of a pattern are taken **by name**: the order does not matter and the
 
 `when` adds a condition to a case:
 
-```actionscript
+```ts
 enum Shape { Circle(radius: float64), Rect(width: float64, height: float64), Empty }
 
 class Animal { let name: String; }
@@ -964,7 +964,7 @@ To ask about a single class a `switch` is not needed: `x is Dog` is `true` if `x
 to be true: inside the `if`, on the right of `&&`, on one side of `?:`, and after an
 `if (!(x is Dog d)) { return ...; }`.
 
-```actionscript
+```ts
 class Animal { let name: String; }
 class Dog extends Animal { let breed: String = "mixed"; }
 
@@ -992,7 +992,7 @@ Output: `Rex, a beagle | not a dog | not a dog | false`
 
 No value is `null` unless its type allows it with `?`.
 
-```actionscript
+```ts
 let a: int32 = null;      // error
 let b: int32? = null;     // fine
 ```
@@ -1006,7 +1006,7 @@ To use an optional:
 | `if (x != null) { ... }` | inside the block, `x` is used as if it were not optional |
 | `switch (x) { case null -> ...; default -> ... }` | by cases |
 
-```actionscript
+```ts
 class Node {
     let value: int32;
     let next: Node? = null;
@@ -1078,7 +1078,7 @@ There are three ways to group elements of the same type:
 
 ### `T[N]`
 
-```actionscript
+```ts
 function main(): int32 {
     let xs: int32[8] = [5, 3, 8];         // capacity 8, length 3
     let ok: bool = xs.push(1);            // true: it fit
@@ -1106,7 +1106,7 @@ false
 A `T[]` parameter accepts any array or list of `T`, without copying it. Its elements can be read and
 changed, but not added:
 
-```actionscript
+```ts
 function sum(xs: int32[]): int32 {
     let total: int32 = 0;
     for (x in xs) { total += x; }
@@ -1116,7 +1116,7 @@ function sum(xs: int32[]): int32 {
 
 ### `T[*]`
 
-```actionscript
+```ts
 let numbers: int32[*] = [];
 for (i in 0..1000) { numbers.push(i); }
 ```
@@ -1141,7 +1141,7 @@ An index out of range, or `pop()` on an empty list, stops the program with a mes
 
 `map` needs to know the type of the result, so it is used where there is a declared type:
 
-```actionscript
+```ts
 function main(): int32 {
     let numbers: int32[*] = [3, 8, 15, 4];
     let even: int32[*] = numbers.filter((n) -> { return n % 2 == 0; });
@@ -1168,7 +1168,7 @@ another order, `sort` takes a comparator: a function `(a, b) -> int32` that give
 `a` goes first, zero if they are equal and a positive one if it goes after, like `Comparator` in Java.
 It sorts the list in place and is stable: of two equal elements, the one that was first stays first.
 
-```actionscript
+```ts
 class User {
     let name: String;
     let age: int32;
@@ -1219,7 +1219,7 @@ Without writing anything, each thing lives where it belongs:
 | what a function returns | the memory the caller says | it depends on the caller |
 | the initial value of a global variable | the default memory | never |
 
-```actionscript
+```ts
 class Order { let customer: String; let total: int32 = 0; }
 
 function createOrder(customer: String, n: int32): Order {
@@ -1256,13 +1256,13 @@ copying it. The caller decides where, almost always without writing it: `let` pu
 `push` in the list, an assignment to a field in the object, a `return` in the memory of *its* call.
 To say it explicitly, the call has `in`, like any other value:
 
-```actionscript
+```ts
 let report: String = summary(data);
 ```
 
 - The variables that the function returns are also created in the caller's memory:
 
-```actionscript
+```ts
 function parts(text: String): String[*] {
     let out: String[*] = [];          // it is returned: it lives where the caller says
     for (p in text.split(",")) { out.push(p.trim()); }
@@ -1292,7 +1292,7 @@ without it being seen in the code: it is used only when asked for with `in defau
 When it is better to decide it yourself (to let go of something big earlier, to group what belongs
 to a task), memories are created. A memory is a block of bytes, `byte[...]`:
 
-```actionscript
+```ts
 let a: byte[4096] = [];             // 4 KB on the stack (or static, if it is global)
 let b: byte[1024] = [] in heap;     // a block asked from the system
 let c: byte[*] = [] in heap;        // it grows by asking the system for more blocks
@@ -1305,7 +1305,7 @@ let c: byte[*] = [] in heap;        // it grows by asking the system for more bl
 
 And they are used with `in`:
 
-```actionscript
+```ts
 let text: String = "hello ${name}" in c;
 let pet: Animal = Animal { name: "Kitty" } in c;
 let numbers: int32[*] = [] in c;
@@ -1335,7 +1335,7 @@ A memory frees everything at once when its block ends. A memory that lives for h
 (the world of a game, the cache of a long algorithm) also keeps the bytes of what it dropped. `std.memory`
 has two functions for it:
 
-```actionscript
+```ts
 import std.memory as Memory;
 
 function play(): void {
@@ -1389,7 +1389,7 @@ The compiler guarantees that **nothing points to memory that was already freed**
 
 For example:
 
-```actionscript
+```ts
 class Card { let name: String = ""; }
 
 function rename(c: Card): void {
@@ -1407,7 +1407,7 @@ The error says:
 
 And the solution is the one it suggests: **`clone()`**, which copies the value to the place of the destination.
 
-```actionscript
+```ts
 c.name = fresh.clone();      // fine: it is copied to c's memory
 ```
 
@@ -1432,7 +1432,7 @@ c.name = fresh.clone();      // fine: it is copied to c's memory
   from the caller without `clone()`, because the compiler does not know which of the two lives longer.
   It is the typical case:
 
-```actionscript
+```ts
 class Contact {
     let name: String = "";
     function setName(n: String): void {
@@ -1444,7 +1444,7 @@ class Contact {
 - For variables that are reassigned, the compiler considers every value they receive (in loops too).
   This pattern is valid:
 
-```actionscript
+```ts
 let last: Animal? = null;
 for (a in animals) { last = a; }
 ```
@@ -1464,7 +1464,7 @@ the parameter can say where its data lives, just as `in` says where something is
 Inside the function, that parameter can be kept there without `clone()`. The compiler checks it in
 each call:
 
-```actionscript
+```ts
 class Node {
     let name: String;
     let kids: Node[*] = [];
@@ -1509,7 +1509,7 @@ And when the `in` is missing, the error message suggests it: `... or declare the
 A lambda is a function without a name that is kept in a variable or passed as an argument.
 Its type is written with the parameters and the result:
 
-```actionscript
+```ts
 let double: (int32) -> int32 = (x) -> { return x * 2; };
 let add: (int32, int32) -> int32 = (a: int32, b: int32) -> { return a + b; };
 let warn: () -> void = () -> { println("warning"); };
@@ -1522,7 +1522,7 @@ The type of the parameters can be left out when it is deduced from the context.
 A lambda can use variables from around it. It **copies** them at the moment it is created
 (objects are copied as a reference: the lambda sees the same object).
 
-```actionscript
+```ts
 function makeAdder(base: int32): (int32) -> int32 {
     return (x) -> { return x + base; };
 }
@@ -1556,7 +1556,7 @@ Output:
 **Rule:** a captured variable **cannot be reassigned or modified**, neither before nor after the
 lambda, nor inside it. That way the copy never gets out of date:
 
-```actionscript
+```ts
 let x: int32 = 5;
 let f: () -> int32 = () -> { return x; };
 x = 10;     // error: 'x' is captured
@@ -1580,7 +1580,7 @@ and `T[*]` lists can be modified, because the lambda shares the same reference.
 
 `::` passes a function where a function type is expected, without writing the lambda:
 
-```actionscript
+```ts
 app.get("/houses/{id}", Houses::show);      // a function of an imported module
 app.get("/", ::home);                       // a function of this module
 let add: (int32) -> void = counter::add;    // a method of an object (it captures 'counter')
@@ -1597,7 +1597,7 @@ goes a module, a variable or `self`; a function that `throws` cannot be referenc
 
 Expected errors (a file that does not exist, an invalid read) are represented with enums:
 
-```actionscript
+```ts
 enum FileError {
     NotFound,
     Denied(user: String),
@@ -1672,7 +1672,7 @@ These failures are not caught with `catch`: they mean an error in the program, n
 The program can also stop like this on purpose, with **`panic("message")`**, when it finds something
 that should never happen:
 
-```actionscript
+```ts
 function name(n: int32): String {
     if (n == 1) { return "one"; }
     panic("I cannot say ${n}");
@@ -1695,7 +1695,7 @@ know (configuration, messages, JSON) there is **`Any`**: a value that can be a n
 `String`, `null`, an object, a struct, an enum or a **table**. A table has, as in Lua, two parts: one
 **by position** (0, 1, 2…) and another **by name**.
 
-```actionscript
+```ts
 function main(): int32 {
     let config: Any = {
         "web", "api",                  // positions 0 and 1
@@ -1737,7 +1737,7 @@ web server 100
 Since the type of what is inside is not known when compiling, reading a value with a type gives an
 **optional**: the value if there is one and it is of that type, or `null`. It is combined with `??`:
 
-```actionscript
+```ts
 function main(): int32 {
     let config: Any = { port: 8080, ratio: 0.75, name: "web" };
     let port: int32 = config.port as int32 ?? 80;         // 8080: an integer that fits is converted
@@ -1760,7 +1760,7 @@ classes, structs and enums: `v as Dog` gives a `Dog?`.
 `for (i, v in table)` goes over the part by position and `for (name, v in table.fields)` the part by
 name. To know what each value holds, a `switch` with the type is used; `case Any t` is a table:
 
-```actionscript
+```ts
 function describe(v: Any): String {
     return switch (v) {
         case int64 n when n > 1000 -> "big number ${n}";
@@ -1805,7 +1805,7 @@ An `Any` also keeps objects, structs and enums, and they are recovered with thei
 - **a struct or an enum is kept copied** in the memory of the table. Outside a table, the copy goes
   to the memory of the variable (or where you say with `in`): `let v: Any = point;`.
 
-```actionscript
+```ts
 struct Point { let x: int32; let y: int32; }
 class Animal { let name: String; }
 class Dog extends Animal { let breed: String = "mixed"; }
@@ -1855,7 +1855,7 @@ are shared.
 object) and `null`. It does not look at the values of the entries with a name: those are gone over
 with `fields`. Used with names, an `Any` is a set:
 
-```actionscript
+```ts
 function main(): int32 {
     let seen: Any = {};
     let words: String[] = ["x", "y", "x"];
@@ -1879,7 +1879,7 @@ Output: `again: x`
 | `t.removeIf((v) -> ...)` | removes, from both parts, the values for which the lambda gives `true`; returns how many |
 | `t.removeIf((name, v) -> ...)` | the same with the part by name, also receiving the name |
 
-```actionscript
+```ts
 function main(): int32 {
     let config: Any = { 1, null, 3, name: "x", debug: null, port: 80 };
     config.remove("name");
@@ -1903,7 +1903,7 @@ what lives in a memory is freed together, when the memory is freed.
 A thread runs code at the same time as the rest of the program. In Larimar, a **`Thread`** is an
 object that lives in a memory, and what it runs (its `run`) is a lambda written right there:
 
-```actionscript
+```ts
 let worker: Thread = { run: () -> { println("working"); } };
 worker.start();       // it starts running
 worker.join();        // it waits for it to end
@@ -1925,7 +1925,7 @@ only use** two kinds of things from outside, and the compiler checks it:
 A `synchronized` class protects its data with a lock. Each method takes it when it starts and lets it
 go when it leaves, by any path, so two threads are never inside the same object at the same time:
 
-```actionscript
+```ts
 synchronized class Counter {
     let total: int64 = 0;
     function add(n: int64): void { self.total += n; }
@@ -1971,7 +1971,7 @@ A method of a `synchronized` class can say **when** it can run, with `wait until
 signature. Whoever calls it **waits there** (without using the processor and letting go of the lock
 in the meantime) until the condition holds, and then the method runs with the lock taken:
 
-```actionscript
+```ts
 synchronized class Queue {
     let items: int32[64] = [];
     let closed: bool = false;
@@ -2037,7 +2037,7 @@ Output: `sum 55`
 Instead of a lambda, `run` can be a `synchronized` object that implements `Runnable`
 (`interface Runnable { function run(): void; }`):
 
-```actionscript
+```ts
 synchronized class Download implements Runnable {
     let done: bool = false;
     function run(): void { self.done = true; }
@@ -2062,7 +2062,7 @@ A function that other threads will call, sometimes several at the same time, is 
 **`thread safe`** at the end of its type. Whoever designs the API (a server, a pool of threads)
 writes it; whoever uses it writes a normal lambda:
 
-```actionscript
+```ts
 class Pool {
     let threads: int32 = 4;
     let work: (int32) -> void thread safe;        // the Pool's threads call it at the same time
@@ -2098,7 +2098,7 @@ lock; a `thread safe` function needs no lock because it only touches things that
 
 ### What the compiler rejects
 
-```actionscript
+```ts
 let hits: int32 = 0;
 class Box { let n: int32 = 0; }
 
@@ -2132,7 +2132,7 @@ API on Windows. `larimar build` adds what is needed to compile.
 
 ## 23. Calling C
 
-```actionscript
+```ts
 c_include "<stdio.h>";
 c_include "<math.h>";
 
@@ -2152,7 +2152,7 @@ With `<math.h>`, on some systems the math library has to be linked: `libraries =
 
 A library of your own is declared the same way. For example, for one of windows:
 
-```actionscript
+```ts
 c_include "windows_lib.h";
 
 extern type Window;                                      // an opaque C pointer
@@ -2173,7 +2173,7 @@ extern function close_window(w: Window): void;
   arguments**: a pointer to the elements and how many there are. C can read them and write to them, so
   it is the way for C to fill a Larimar buffer (reading from a file or a socket) without copying anything:
 
-  ```actionscript
+  ```ts
   c_code {
       static int32_t fill(uint8_t* items, int32_t length) { /* writes to items[0..length) */ return length; }
   }
@@ -2209,7 +2209,7 @@ structs, pointers and resources (the following sections). For what is still bett
 algorithm, a library with callbacks, an Apple block), a C function is written inside the file itself
 and declared with `extern function`:
 
-```actionscript
+```ts
 c_code {
     #include <ctype.h>
 
@@ -2233,7 +2233,7 @@ Output: `35`
 
 For example, the API of a primitive type can mix intrinsics, methods implemented in Larimar and C calls:
 
-```actionscript
+```ts
 public native type String {
     native let length: int32;
     native operator [](i: int32): byte;
@@ -2244,7 +2244,7 @@ public native type String {
 
 A native function with an implementation delegates to a Larimar expression; that expression can call a C function:
 
-```actionscript
+```ts
 public class StringBuilder {
     let buffer: TextBuf = text_buf_new();
     native function add(text: String): void = text_buf_add(self.buffer, text);
@@ -2277,7 +2277,7 @@ call, the same one a Larimar function would receive, so what it returns lives wh
 (its block, the list it is added to, or the memory written with `in`). It is the right way for C to
 return text:
 
-```actionscript
+```ts
 c_code {
     #include <ctype.h>
 
@@ -2314,7 +2314,7 @@ A memory in another parameter (not the first) is passed written, like any argume
 
 This is how the Windows example that used to need a separate `.c` file looks:
 
-```actionscript
+```ts
 c_code {
     #include <windows.h>
 
@@ -2339,7 +2339,7 @@ Everything that comes from C is declared with `extern type`. After the `=` goes 
 | `extern type Point = struct { ... };` | a C struct, by value, with the fields that are used | the C struct |
 | `extern type Op = (int32, int32) -> int32;` | a pointer to a C function | `int32_t (*)(int32_t, int32_t)` |
 
-```actionscript
+```ts
 c_code {
     #include <stdio.h>
 
@@ -2393,7 +2393,7 @@ Output: `(2.0, 1.0)`, and `listo` on the error output.
 
 C constants, macros and global variables are used by their name, declaring them with their type:
 
-```actionscript
+```ts
 c_include "<errno.h>";
 c_include "<limits.h>";
 
@@ -2420,7 +2420,7 @@ Many C functions ask for or return pointers: a linked list (`getaddrinfo`), a re
 variable (`accept(fd, &addr, &len)`), a buffer. **`T*`** is a C pointer to a number, to `bool`, to a C
 struct, to an `extern` type or to another pointer:
 
-```actionscript
+```ts
 c_code {
     typedef struct Node { int value; struct Node* next; const char* name; } Node;
     static Node nodes[3] = { { 10, &nodes[1], "one" }, { 20, &nodes[2], "two" }, { 30, NULL, "three" } };
@@ -2473,7 +2473,7 @@ Some things from C have to be let go: a file (`fclose`), a socket (`close`), a w
 (`SDL_DestroyWindow`), a database (`sqlite3_close`). It is declared once, in its `extern type`, with
 the function that lets it go:
 
-```actionscript
+```ts
 c_include "<stdio.h>";
 
 extern type CFile = c "FILE*" released by fclose;
@@ -2511,7 +2511,7 @@ What changes between systems is written between **`#when`** and **`#end`**, whic
 compiled (`#if`), not when it runs. They start with `#` so that they look different from the logic of
 the program:
 
-```actionscript
+```ts
 c_include "<errno.h>";
 #when unix
     c_include "<unistd.h>";
@@ -2547,7 +2547,7 @@ function lastError(): int32 {
 - **The `#when`, `#else` and `#end` of the same choice start in the same column.** A `#when` with more
   indentation is nested inside a branch:
 
-  ```actionscript
+  ```ts
   #when windows
       return "windows";
   #else
@@ -2562,7 +2562,7 @@ function lastError(): int32 {
 
 - **What every branch declares, with the same type, keeps existing after `#end`**:
 
-  ```actionscript
+  ```ts
   #when windows
       let sep: String = "\\";
   #else
@@ -2589,7 +2589,7 @@ in plain Larimar. So are the files (`std.io.files`, `std.io.files`), the console
 `extern type Op = (A, B) -> R;` declares the type of a pointer to a C function. A value of that type is
 passed to C, kept and **called like a function**:
 
-```actionscript
+```ts
 c_code {
     typedef int32_t (*op_fn)(int32_t, int32_t);
 
@@ -2638,7 +2638,7 @@ Output:
 compiler generates it in C with that same name and with C types, so C can call it, keep it in a pointer
 or receive it as a callback:
 
-```actionscript
+```ts
 c_code {
     typedef void (*item_fn)(int32_t index, const char* name, void* data);
 
@@ -2714,7 +2714,7 @@ What a module declares is **private** unless it has `public` in front. Any decla
 be marked: functions, constants, global variables, structs, classes, interfaces, enums and `extern`
 declarations.
 
-```actionscript
+```ts
 // src/geo/shapes.lar
 public const PI: float64 = 3.14159;
 
@@ -2743,7 +2743,7 @@ names cannot contain `__`.)
 
 The `import`s go at the start of the file and have three forms:
 
-```actionscript
+```ts
 import geo.shapes;                   // the names are used with the prefix: shapes.area(s)
 import geo.shapes as g;              // with another prefix: g.area(s)
 import geo.shapes { Shape, area };   // those names, without a prefix: area(s)
@@ -2753,7 +2753,7 @@ With the prefix everything public is reached: functions (`shapes.area(s)`), cons
 types (`let s: shapes.Shape`, `shapes.Figure { ... }`, `class Wheel extends shapes.Figure`,
 `catch (shapes.ShapeError e)`) and variants (`shapes.Shape.Circle { radius: 1.0 }`).
 
-```actionscript
+```ts
 import geo.shapes;
 import geo.shapes { Shape };
 
@@ -2847,7 +2847,7 @@ where it lives is freed** (usually, when the block of its variable closes); `clo
 
 **The error** of every input and output, from files to sockets:
 
-```actionscript
+```ts
 public enum IoError {
     NotFound(path: String),      // a file or folder that is not there
     Denied(path: String),        // no permission
@@ -2885,7 +2885,7 @@ The `Reader` has one buffer for its whole life, and a line is created only once,
 the caller says. With a memory on the stack, reading a file (or a socket) of any size asks for no
 memory in the loop:
 
-```actionscript
+```ts
 while (true) {
     let scratch: byte[4096] = [];
     let line: String? = lines.readLine() in scratch;   // the line lives in scratch, until the end of the turn
@@ -2908,7 +2908,7 @@ and `Console.binaryMode()` (on Windows, so that `\n` is not turned into `\r\n`).
 
 A `wc` (counting lines, words and bytes), which works for a file or for the standard input:
 
-```actionscript
+```ts
 import std.io { IoError };
 import std.io.files { open };
 import std.io { InputStream, Reader };
@@ -2985,7 +2985,7 @@ Starts a program and talks to it through its input and output. The literal says 
 fail); `start()` runs it. Every read says how long it may wait, so a program that does not answer never
 hangs the caller.
 
-```actionscript
+```ts
 import std.os.process { Process, ProcessError, message };
 
 function main(): int32 {
@@ -3038,7 +3038,7 @@ Unicode character: `fromCode(241)` is `"ñ"`).
 
 Written in Larimar, without any C library: they work the same on every system.
 
-```actionscript
+```ts
 import std.text.regex { Regex, Match, RegexError, message };
 
 let email: Regex = Regex.compile("([a-z]+)@([a-z]+)\\.com");      // RegexError if the pattern is wrong
@@ -3074,7 +3074,7 @@ system chooses one, and `port()` says which). A `TcpSocket` is used directly, as
 `write(bytes)`, `writeText(text)`, `close()`), and it is also an `InputStream` and an `OutputStream`:
 the `Reader` reads lines from it just like from a file, and `copy()` sends any stream over the network.
 
-```actionscript
+```ts
 import std.net { TcpSocket, TcpListener, NetError, message };
 import std.io { Reader };
 import std.io { IoError };
@@ -3136,7 +3136,7 @@ literal (which cannot fail) and `run()` does the work (listening can fail, and i
 What is done with each connection or datagram is a `thread safe` function, so the compiler checks that
 the threads of the server do not step on each other.
 
-```actionscript
+```ts
 import std.net { TcpServer, Connection, StopSignal, NetError, message };
 import std.io { Reader, IoError };
 import std.os;
@@ -3206,7 +3206,7 @@ first read gives 0 (a `Reader`'s `readLine`, `null`): close it then.
 The certificate and its key are loaded once with `OpenSslProvider.load(certificate, key)`, which throws
 `NetError` if a file cannot be used or the key is not the certificate's:
 
-```actionscript
+```ts
 let server: TcpServer = {
     host: "0.0.0.0", port: 443, threads: 16, keepAlive: true,
     tls: OpenSslProvider.load("/etc/letsencrypt/live/example.com/fullchain.pem",
@@ -3230,7 +3230,7 @@ connection. `UdpSocket.bind(host, port)` receives on a port and `UdpSocket.open(
 send from; `sendTo(bytes, Address { host, port })` sends and `receive(buffer)` waits for one and gives a
 `Datagram` (`length` and `from`, the `Address` of whoever sent it). `UdpServer` is its server:
 
-```actionscript
+```ts
 let server: UdpServer = {
     port: 9000,
     threads: 4,
@@ -3254,7 +3254,7 @@ A `Client` says **how to connect** (TLS, timeouts, redirects, headers of every r
 for: whole with `text()`, `bytes()` or `json()` (with `std.encoding.json`), or in parts from `body`, which is an
 `InputStream` (`Reader` and `copy()` work).
 
-```actionscript
+```ts
 import std.net.http { Client, Response, Header, HttpError, message };
 import std.io.files { create };
 import std.io { copy };
@@ -3326,7 +3326,7 @@ function main(): int32 {
 If several are needed at the same time, each one goes in a `Thread` (there is no `sendAsync`: that way
 you see where each one runs, where its response lives and when it is waited for):
 
-```actionscript
+```ts
 import std.net.http { get, HttpError, message };
 
 synchronized class Results {
@@ -3362,7 +3362,7 @@ function main(): int32 {
 `https://` knows nothing about encryption: it asks a **`TlsProvider`** for an encrypted connection and
 speaks HTTP over it. The interface is a single function:
 
-```actionscript
+```ts
 public interface TlsProvider {
     /** An encrypted connection to host:port, after the TLS handshake. timeout: for reads and writes, in ms. */
     function connect(host: String, port: int32, timeout: int32): Connection throws NetError;
@@ -3418,7 +3418,7 @@ implement the interfaces. The mbedTLS session is a **resource**: C creates it wi
 lets it go with `mbed_free` when the memory of the connection is freed (`released by`), so the C needs
 to know nothing about Larimar's memories:
 
-```actionscript
+```ts
 import std.net { Connection, TcpSocket, NetError, Socket };
 import std.net.tls { TlsProvider };
 import std.io { IoError, InputStream, OutputStream };
@@ -3572,7 +3572,7 @@ class MbedConnection implements Connection, InputStream, OutputStream {
 
 And `src/main.lar` uses it like any other:
 
-```actionscript
+```ts
 import std.net.http { Client, Response, HttpError, message };
 import mbed { MbedTls };
 
@@ -3610,7 +3610,7 @@ names, an array a table by positions, the integers that fit are `int64` and the 
 `Json.stringify(v)` does the opposite (an empty table is written `{}`), and `Json.quote(s)` gives a
 `String` as a JSON string, with its quotes and escapes.
 
-```actionscript
+```ts
 import std.encoding.json as Json;
 import std.encoding.json { JsonError };
 
@@ -3644,7 +3644,7 @@ covers what configuration files use: `[sections]` (also `[a.b]`, a table inside 
 with texts, whole numbers, `true`/`false` and lists (which may span several lines), and comments with
 `#`. It is the same reader the compiler uses for `larimar.toml`.
 
-```actionscript
+```ts
 import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError, message };
 
@@ -3679,7 +3679,7 @@ A key named like a word of Larimar is read with brackets, as `length` or `push` 
 
 ### `std.time`: the clock and dates
 
-```actionscript
+```ts
 import std.time as Time;
 
 let started: int64 = Time.monotonic();
@@ -3711,7 +3711,7 @@ Written in Larimar; only the random bytes come from the system (`/dev/urandom`, 
 | `Crypto.randomBytes(n): byte[*]` | secure random bytes: for session ids, CSRF tokens, salts |
 | `Crypto.sameBytes(a, b): bool` | compares in the same time wherever they differ: for checking signatures |
 
-```actionscript
+```ts
 import std.crypto as Crypto;
 import std.encoding.hex as Hex;
 import std.encoding.base64 as Base64;
@@ -3825,7 +3825,7 @@ library_paths = ["vendor/lib"]               # where to look for the libraries (
 libraries = ["mylib", "tone", "m"]           # libmylib.a (static), libtone.so (dynamic), libm (system)
 ```
 
-```actionscript
+```ts
 c_include "vendor.h";
 c_include "<math.h>";
 
@@ -3868,7 +3868,7 @@ a single file, the library is linked statically or compiled as source code.
 
 ### An example with Windows
 
-```actionscript
+```ts
 // src/win.lar: the module that talks to Windows
 c_include "<windows.h>";
 
@@ -3880,7 +3880,7 @@ public const MB_YESNO: uint32 = 0x04;
 public const IDYES: int32 = 6;
 ```
 
-```actionscript
+```ts
 // src/main.lar
 import win;
 
@@ -4078,7 +4078,7 @@ fetch = ["fetch"]
 A test is a function marked with `test`. It takes nothing (or a *setup*, below) and returns nothing;
 inside, the functions of `std.test` check what must happen:
 
-```actionscript
+```ts
 // tests/shapes_test.lar
 import std.test { check, checkText, checkInt, checkFloat };
 import geo.shapes { Shape, area, name };
@@ -4121,7 +4121,7 @@ check failed. If the test calls something that can throw an error, it declares i
 **A setup** gets something ready before each test and cleans it after. It is a class that implements
 `TestSetup`, and the test receives it as its parameter:
 
-```actionscript
+```ts
 import std.test { checkText, fail, TestSetup };
 import std.io.files as Files;
 import std.io { IoError };
@@ -4277,7 +4277,7 @@ like this:
 That way, reading or writing a single byte too many stops at that line, with the error and the call
 stack. It happens above all with C code (`c_code`) that writes into a memory:
 
-```actionscript
+```ts
 c_code {
     static const char* bad(RtMem* m) {
         char* out = (char*)rt_mem_alloc(m, 4, 0);
@@ -4382,7 +4382,7 @@ tests are `test function`s ([section 26](#tests-test-function-and-larimar-test))
 they test the compiler itself (an error it must give, the C it generates). `larimar test` runs both
 kinds, with AddressSanitizer and UBSan:
 
-```actionscript
+```ts
 // expect: run
 // output: hola 3
 function make(n: int32): String { return "hola ${n}"; }
@@ -4476,7 +4476,7 @@ What Larimar does not have, and will not have, with what is used instead:
 
 ## 30. Quick reference
 
-```actionscript
+```ts
 // Modules
 import geo.shapes;                      // shapes.area(s)
 import geo.shapes as g;                 // g.area(s)

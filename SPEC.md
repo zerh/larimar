@@ -946,7 +946,7 @@ shared between threads, and creating values in it is safe from any thread.
 
 ### 14.5 Memories of your own
 
-```actionscript
+```ts
 let a: byte[4096] = [];             // in the function's frame (static storage, if global)
 let b: byte[1024] = [] in heap;     // asked from the system
 let c: byte[*] = [] in heap;        // grows by asking the system for more blocks
@@ -1268,7 +1268,7 @@ object, a struct, an enum, or a **table**. It cannot hold `T[*]` lists, lambdas 
 A table has two parts: entries **by position** (0, 1, 2…) and entries **by name**, which keep the order
 they were added in.
 
-```actionscript
+```ts
 let config: Any = { "web", "api", name: "server", limits: { max: 100 } };
 ```
 
