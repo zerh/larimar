@@ -3,6 +3,6 @@
 let actions: (() -> String)[*] = [] in default;
 function main(): int32 {
     let label: String = "x".toUpperCase();
-    actions.push(() -> { return label; });
+    actions.push(() -> { return label.clone(); });
     return 0;
 }
