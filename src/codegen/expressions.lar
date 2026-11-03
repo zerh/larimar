@@ -1576,16 +1576,21 @@ public function cloneOf(t: Type in default, v: String): String {
     return "clone_${mangle(t)}(${v}, mem, cm)";
 }
 
-function cloneCall(c: Call in default, b: CallInfo in default): String {
-    let t: Type = b.receiverType!;
-    let v: String = value(receiver(c));
-    if (!needsDeepClone(t)) { return v; }
-    requireClone(t);
+/** A class object is copied by its own class (a subclass, maybe): every class's fields may need copying. */
+function requireClassClones(): void {
     for (ci in classes) {
         if (!ci.sync && !ci.thread) {
             for (f in ci.fields) { requireClone(f.type); }
         }
     }
+}
+
+function cloneCall(c: Call in default, b: CallInfo in default): String {
+    let t: Type = b.receiverType!;
+    let v: String = value(receiver(c));
+    if (!needsDeepClone(t)) { return v; }
+    requireClone(t);
+    requireClassClones();
     let mem: String = placeMem(c);
     let map: String = tmp("clones");
     let res: String = tmp("copy");
@@ -1602,11 +1607,7 @@ function cloneCall(c: Call in default, b: CallInfo in default): String {
  */
 function compactCall(c: Call in default, b: CallInfo in default): String {
     let ms: Symbol = b.memory!;
-    for (ci in classes) {
-        if (!ci.sync && !ci.thread) {
-            for (f in ci.fields) { requireClone(f.type); }
-        }
-    }
+    requireClassClones();
     let old: String = tmp("old");
     let map: String = tmp("moved");
     line("{");

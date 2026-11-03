@@ -266,14 +266,10 @@ static inline void rt_mem_compact_begin(RtMem* m, RtMem* old, const char* name, 
         rt_panic(text, line);
     }
     *old = *m;
-    m->base = NULL;
-    m->cap = 0;
-    m->used = 0;
-    m->total = 0;
-    m->reserved = 0;
-    m->chunks = NULL;
-    m->last = NULL;
-    m->lastSize = 0;
+    *m = rt_mem_growable();          /* empty again; it keeps its limit, its name and its peak */
+    m->limit = old->limit;
+    m->name = old->name;
+    m->peak = old->peak;
 }
 
 /* Memory.compact, second half: the old blocks are freed. */

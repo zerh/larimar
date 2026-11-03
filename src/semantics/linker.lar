@@ -411,6 +411,12 @@ function local(n: String): bool {
     return false;
 }
 
+/** The native functions of modules: Memory.limit and Memory.compact, in std/memory.lar (imported, or opened alone). */
+function nativeKnown(m: Module in default, name: String): bool {
+    let alone: bool = m.path == "" && m.index < filePaths.length && filePaths[m.index].replace("\\", "/").endsWith("std/memory.lar");
+    return (m.path == "std.memory" || alone) && (name == "limit" || name == "compact");
+}
+
 function rewriteDecl(m: Module in default, d: Node in default): void {
     rm = m;
     scopeDepth = 0;
@@ -419,6 +425,9 @@ function rewriteDecl(m: Module in default, d: Node in default): void {
     let own: String = (lang != null && m == lang! && mapped != "" ? mapped : "${m.prefix}${dn}") in default;
     switch (d) {
         case FunctionDecl f -> {
+            if (f.isNative && !nativeKnown(m, f.name)) {
+                error(f.line, "'${f.name}' is declared native, but the compiler does not implement it: a native function of a module is only for the standard library.");
+            }
             if (f.typeName == "") {
                 function_(f, own);
             } else {                                                 // static: Type.name, in the module of Type
