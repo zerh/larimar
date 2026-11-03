@@ -1,0 +1,9 @@
+// expect: error the array lives for the whole program (in memory 'mem'). Capture a copy made in the memory where the array lives: let kept: String = label.clone() in mem;
+let mem: byte[*] = [] in heap;
+let actions: (() -> String)[*] = [] in mem;
+
+function main(): int32 {
+    let label: String = "x".toUpperCase().clone();
+    actions.push(() -> { return label; });
+    return 0;
+}

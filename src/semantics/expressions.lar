@@ -13,7 +13,7 @@ import semantics.types {
     T_FLOAT32, T_FLOAT64, T_BOOL, T_STRING, T_VOID, T_ANY, T_ERROR, T_NULL, primByName, isPrimName, named, functionOf,
     funcT, arrayT, optT, bits, isFloat, isInteger, isNumeric, isSigned, isError, isClass, isStruct, isInterface,
     isEnumT, isExternT, isByteArray, isOpt, isArray, optIsPointer, minOf, maxOf, maxText,
-    Region, RK, R_STATIC, rCaller, rLocal, meet, Scope, Frame, FrameK, Owner, newOwner, Symbol, SymK, MemK, ConstK,
+    Region, RK, R_STATIC, rStaticMemory, rCaller, rLocal, meet, Scope, Frame, FrameK, Owner, newOwner, Symbol, SymK, MemK, ConstK,
     isMemory, FieldInfo, FunctionInfo, MethodInfo, StructInfo, ClassInfo, InterfaceInfo, VariantInfo, EnumInfo,
     LambdaInfo, Place, PlaceK, P_TEMP, P_GLOBAL, P_RESULT, rResult, Conversion, ConvK, CallInfo, CallK, BK, MemberInfo, MbK, PatternInfo, PatK,
     SwitchInfo, isMemParam, usesAny, usedTypes, funcTypes, lambdaList, nativeMethods, structOf, classOf, interfaceOf, enumOf,
@@ -894,7 +894,7 @@ public function resolveMemory(e: Expr in default): Symbol? {
                 error(e.line, "'${s.name}' (${s.type.size} bytes) is too big for the stack; declare it with 'in heap' or as a global.");
             }
             s.memKind = global ? MemK.FixedStatic : MemK.FixedLocal;
-            s.memRegion = global ? R_STATIC : rLocal(s.scope, "memory '${s.name}'");
+            s.memRegion = global ? rStaticMemory(s.name) : rLocal(s.scope, "memory '${s.name}'");
         } else if (isByteArray(s.type)) {
             error(e.line, "'${s.name}' is not a memory. Memories are created as let ${s.name}: byte[N] = []; or let ${s.name}: byte[*] = [] in heap;");
             return null;

@@ -1,0 +1,10 @@
+// expect: error Capture a copy made in the memory where the array lives: let kept: String = label.clone() in scratch;
+function main(): int32 {
+    let scratch: byte[*] = [] in heap;
+    let actions: (() -> String)[*] = [] in scratch;
+    {
+        let label: String = "x".toUpperCase();
+        actions.push(() -> { return label; });
+    }
+    return 0;
+}

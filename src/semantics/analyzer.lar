@@ -20,7 +20,7 @@ import semantics.types {
     hasThreadSafe, cTypeOf,
     Type, TyK, NamedK, ArrK, T_INT32, T_INT64, T_BYTE, T_BOOL, T_STRING, T_VOID, T_ANY, T_ERROR, isPrimName, named,
     funcT, arrayT, optT, isFloat, isInteger, isError, isClass, isStruct, isInterface, isEnumT, isExternT, isOpt, isArray,
-    optIsPointer, minOf, maxText, Region, RK, R_STATIC, rCaller, rLocal, rVar, symbolic, resolveRegion, outlives, meet,
+    optIsPointer, minOf, maxText, Region, RK, R_STATIC, rStaticMemory, rCaller, rLocal, rVar, symbolic, resolveRegion, outlives, meet,
     sameRegion, describe, Scope, newScope, Frame, FrameK, Owner, newOwner, Symbol, SymK, MemK, ConstK, isMemory,
     escapeName, FieldInfo, FunctionInfo, MethodInfo, StructInfo, ClassInfo, InterfaceInfo, VariantInfo, EnumInfo,
     LambdaInfo, Place, PlaceK, P_TEMP, SwitchInfo, MemberInfo, MbK, ForInfo, CatchInfo, isMemParam, includes,
@@ -1449,7 +1449,7 @@ function declareHeapMemory(v: VarDecl in default, p: Placed in default, kind: Sy
     }
     let s: Symbol = declare(v.name, kind, t, v.line);
     s.memKind = mk;
-    s.memRegion = global ? R_STATIC : rLocal(s.scope, "memory '${v.name}'");
+    s.memRegion = global ? rStaticMemory(v.name) : rLocal(s.scope, "memory '${v.name}'");
     s.immutable = true;
     v.symbol = s;
 }
@@ -2099,15 +2099,26 @@ const VIEW_METHODS: String = " trim trimStart trimEnd substring bytes split line
  * A message that names what lives too little, and the code that fixes it, when the value is something
  * the programmer wrote: a lambda (its capture), a view (its text), a variable. "" when there is none.
  */
+/** The `in` that puts a copy where a region lives, when the code can say it: " in default", " in m", or "". */
+function placementFor(r: Region): String {
+    if (r.label.startsWith("memory '") && r.label.endsWith("'") && (r.kind == RK.Static || r.kind == RK.Local)) {
+        return " in ${r.label.substring(8, r.label.length - 1)}";
+    }
+    if ((r.kind == RK.Static || r.kind == RK.Local) && r.label.startsWith("memory '") && r.label.endsWith("'")) {
+        return " in ${r.label.substring(8, r.label.length - 1)}";     // a memory with a name, global or local
+    }
+    return r.kind == RK.Static ? " in default" : "";
+}
+
 function culprit(d: Deferred in default, v: Region, st: Region, resolve: bool): String {
     let given: Expr? = d.expr;
     if (given == null) { return ""; }
     let e: Expr = given!;
     if (e is Placed p) { e = p.expr; }
-    let lives: String = st.kind == RK.Static ? "for the whole program" : "longer (in {st})";
+    let lives: String = st.kind != RK.Static ? "longer (in {st})" : st.label != "" ? "for the whole program (in ${st.label})" : "for the whole program";
     // a copy stored in a list, a field or a table goes to their memory on its own; a global variable asks for 'in default'
     let keep: String = st.kind == RK.Static && d.target.startsWith("'") ? " in default" : "";
-    let keepVariable: String = st.kind == RK.Static ? " in default" : "";
+    let keepVariable: String = placementFor(st);
     if (d.role == "throw") {
         if (e is ObjectLit o) {
             for (fi in o.fields) {
@@ -2133,11 +2144,15 @@ function culprit(d: Deferred in default, v: Region, st: Region, resolve: bool): 
             if (s.kind == SymK.Self) { continue; }
             let r: Region = resolve ? resolveRegion(s.region) : s.region;
             if (outlives(r, st)) { continue; }
-            let copy: String = "let kept: ${s.type.text} = ${s.name}.clone()${keepVariable};";
+            // the copy goes where the target lives: its memory by name when there is one to write
+            let named: bool = keepVariable != "" && keepVariable != " in default";
+            let into: String = named ? keepVariable : " in <memory>";
+            let fix: String = "Capture a copy made in the memory where ${d.target} lives: let kept: ${s.type.text} = ${s.name}.clone()${into}; and capture 'kept' instead.";
+            let start: String = "The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}.";
             if (clonesInside(l, s.name)) {
-                return fill("The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}. ${s.name}.clone() runs only when the lambda is called, by which time '${s.name}' may no longer exist. Clone it beforehand (${copy}) and capture 'kept' instead.", r, st);
+                return fill("${start} ${s.name}.clone() runs only when the lambda is called, by which time '${s.name}' may no longer exist. ${fix}", r, st);
             }
-            return fill("The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}. Give it a copy that lives as long (${copy}) and capture 'kept' instead.", r, st);
+            return fill("${start} ${fix}", r, st);
         }
         return "";
     }
