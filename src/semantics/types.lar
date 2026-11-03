@@ -215,6 +215,8 @@ public class Region {
 }
 
 public let R_STATIC: Region = Region { kind: RK.Static } in default;
+/** The region of a global memory: static like R_STATIC, but it keeps the memory's name for messages. */
+public function rStaticMemory(name: String in default): Region { return Region { kind: RK.Static, label: "memory '${name}'" } in default; }
 public let R_CALLER_ANY: Region = Region { kind: RK.CallerAny } in default;
 
 public function rCaller(p: Symbol in default): Region { return Region { kind: RK.Caller, param: p } in default; }
@@ -265,8 +267,8 @@ public function outlives(a: Region, b: Region): bool {
 
 /** The shorter-lived of two regions. */
 public function meet(a: Region in default, b: Region in default): Region {
-    if (a == R_STATIC) { return b; }
-    if (b == R_STATIC) { return a; }
+    if (a.kind == RK.Static) { return b; }
+    if (b.kind == RK.Static) { return a; }
     if (symbolic(a) || symbolic(b)) {
         let ps: Region[*] = [] in default;
         if (a.kind == RK.Meet) { for (p in a.parts) { ps.push(p); } } else { ps.push(a); }

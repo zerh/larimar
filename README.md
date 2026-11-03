@@ -96,7 +96,7 @@ Test the compiler:
 
 ```bash
 ./larimarc --version
-# Should output: larimar 0.5.1 (language 1.0)
+# Should output: larimar 0.5.2 (language 1.0)
 
 # Compile a test program
 echo 'function main(): void { println("Hello!"); }' > test.lar
@@ -155,7 +155,7 @@ checks all of it.
 ```toml
 [project]
 name = "larimarc"
-version = "0.5.1"
+version = "0.5.2"
 main = "src/main.lar"
 
 [c]
