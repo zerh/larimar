@@ -243,7 +243,7 @@ public function generate(): String {
     // Bodies first: they discover lambdas, literal objects and helpers.
     let functionsOut: StringBuilder = {} in default;
     for (f in functions) {
-        if (f.isExtern) { continue; }
+        if (f.isExtern || f.decl!.isNative) { continue; }     // native: every call is written in place
         functionsOut.add(functionHeader(f));
         functionsOut.addLine(" {");
         functionsOut.add(body(f.decl!.body, f.sig!.elem!, f.throwsType != null, null, f.paramSymbols, "", f.line));
@@ -413,7 +413,7 @@ public function generate(): String {
         }
     }
     for (f in functions) {
-        if (!f.isExtern) { out.add("${functionHeader(f)};\n"); }
+        if (!f.isExtern && !f.decl!.isNative) { out.add("${functionHeader(f)};\n"); }
         if (!f.isExtern && f.exportName != "") { out.add("${exportHeader(f, false)};\n"); }
     }
     for (s in structs) {

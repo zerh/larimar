@@ -1329,6 +1329,42 @@ Also:
 - A function can also receive a memory as a parameter (`m: byte[*]`) and create things there. It is
   rarely needed: it is enough for the caller to write `f(x) in m`.
 
+### Memories that live long: `Memory.limit` and `Memory.compact`
+
+A memory frees everything at once when its block ends. A memory that lives for hours and keeps changing
+(the world of a game, the cache of a long algorithm) also keeps the bytes of what it dropped. `std.memory`
+has two functions for it:
+
+```actionscript
+import std.memory as Memory;
+
+function play(): void {
+    let world: byte[*] = [] in heap;
+    Memory.limit(world, 256 * 1024 * 1024);      // past 256 MB: a panic that names 'world'
+    let map: Any = {} in world;
+    let paths: Path[*] = [] in world;
+    let alive: int64 = 0;
+    while (running) {
+        update(map, paths);
+        if (world.length > 2 * alive + 1024 * 1024) {   // it doubled what was alive last time
+            Memory.compact(world);                       // what map and paths reach is copied; the rest freed
+            alive = world.length;                        // right after compact(): exactly what is alive
+        }
+    }
+}
+```
+
+- `Memory.compact(m)` copies what the variables of `m` still reach, inside `m`, to new blocks, gives the
+  variables the copies (shared data stays shared, cycles stay cycles) and frees the old blocks. What
+  lives in other memories is left where it is.
+- A memory cannot tell by itself how much of `m.length` is still alive; right after a `compact()` it can.
+  Compacting when it doubles that keeps the cost spread over what was created in between.
+- The compiler checks every call: `m` grows (`byte[*] in heap`) and is declared in a function (`main`,
+  or the one that runs the work); every variable of its block that may point into it lives in it;
+  nothing of the block's own memory is stored in it; the call is not inside a `for` over data; and what
+  it moves holds no lambdas, threads or synchronized objects. Each error names the variable and the fix.
+- A memory belongs to one thread, so nothing else uses it while it moves.
+
 ### When to use each one
 
 - **Almost always**: none; the automatic memories already free each thing when it is no longer used.
@@ -1539,6 +1575,21 @@ and `T[*]` lists can be modified, because the lambda shares the same reference.
 - In class methods, a lambda can use `self`. In struct methods it cannot, because the struct could be copied or disappear.
 - Lambdas cannot throw errors.
 - A lambda cannot capture another lambda **of its own type** (the compiler detects it).
+
+### Function references: `::`
+
+`::` passes a function where a function type is expected, without writing the lambda:
+
+```actionscript
+app.get("/houses/{id}", Houses::show);      // a function of an imported module
+app.get("/", ::home);                       // a function of this module
+let add: (int32) -> void = counter::add;    // a method of an object (it captures 'counter')
+return self::refresh;                       // a method of self
+```
+
+`Houses::show` is the lambda `(ctx) -> { Houses.show(ctx); }`, with the parameters of the type expected
+there. A reference to a method captures its object like any lambda, with the same rules. Before `::`
+goes a module, a variable or `self`; a function that `throws` cannot be referenced (lambdas cannot throw).
 
 ---
 

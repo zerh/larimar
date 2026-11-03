@@ -1,0 +1,38 @@
+// std.memory: a limit for a memory that grows, and compacting one that has been used for a long time.
+//
+//   import std.memory as Memory;
+//
+//   function play(): void {
+//       let world: byte[*] = [] in heap;
+//       Memory.limit(world, 256 * 1024 * 1024);       // past 256 MB the program stops, naming 'world'
+//       let map: Any = {} in world;
+//       let paths: Path[*] = [] in world;
+//       while (running) {
+//           update(map, paths);                          // adds things, and drops others, for hours
+//           if (world.length > 64 * 1024 * 1024) {
+//               Memory.compact(world);                   // what map and paths still reach is copied; the rest is freed
+//           }
+//       }
+//   }
+//
+// A memory frees everything at once, when its block ends; a memory that lives long and keeps changing
+// keeps the bytes of what was dropped too. compact() copies what its variables still reach to new blocks,
+// points the variables at the copies, and frees the old blocks. world.length, .capacity and .peak say how
+// much it uses.
+//
+// The compiler checks every compact() call:
+//   - the memory is declared in a function (main, or the one that runs the work) and grows (byte[*] in heap);
+//   - every variable of its block that may point into it lives in it (it moves with it); any other is an
+//     error, and so is data of another memory of the block stored in it;
+//   - the call is not inside a 'for' over data, and what it moves holds no lambdas, interface values,
+//     threads or synchronized objects.
+// A memory with threads, synchronized objects or C resources in it stops the program when compacted. C must
+// not keep pointers it was given after a call returns (the rule of every extern function).
+
+/** The most bytes `memory` may obtain from the system; past it the program stops with a message that names
+    it. 0: no limit. Only for memories that grow (byte[*] in heap): a fixed one already has its size. */
+public native function limit(memory: byte[*], bytes: int64): void;
+
+/** Copies what the variables of `memory` still reach to new blocks, points them at the copies, and frees
+    the old blocks: the memory then holds only what is alive. Data of other memories is left where it is. */
+public native function compact(memory: byte[*]): void;

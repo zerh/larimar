@@ -1,0 +1,7 @@
+// expect: error Memory.compact() works on memories declared in a function: declare 'cache' in main
+import std.memory as Memory;
+let cache: byte[*] = [] in heap;
+function main(): int32 {
+    Memory.compact(cache);
+    return 0;
+}

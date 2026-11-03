@@ -3,7 +3,7 @@ let mem: byte[*] = [] in heap;
 let actions: (() -> String)[*] = [] in mem;
 
 function main(): int32 {
-    let label: String = "x".toUpperCase().clone();
+    let label: String = "x".toUpperCase();
     actions.push(() -> { return label; });
     return 0;
 }

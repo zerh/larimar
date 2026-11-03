@@ -154,6 +154,7 @@ public class FunctionDecl extends Node {
     let exportName: String = "";        // export function: its name in C (the linker does not rename it)
     let isTest: bool = false;           // test function: only in `larimar test` (and the editor)
     let isProperty: bool = false;       // native let: read without parentheses, never assigned
+    let isNative: bool = false;         // native function of a module: the compiler writes every call to it
     /** wait until (cond): a method of a synchronized class that runs only when cond holds (the caller waits). */
     let waitUntil: Expr? = null;
 }
@@ -363,6 +364,8 @@ public class Unwrap extends Expr { let expr: Expr; }
 public class Lambda extends Expr {
     let params: Param[*] = [];
     let body: Stmt[*] = [];
+    /** Module::function or object::method: the call its body makes (the analyzer adds the parameters). */
+    let ref: Call? = null;
 }
 
 /** name "": a positional entry ({ 1, 2 } in an Any). shorthand: written { x } for { x: x }. */

@@ -14,7 +14,7 @@ larimar-compiler/
 │   ├── editor/              # session (larimar check), lsp, ide, docstore, dap
 │   └── project/             # cc (the C compiler), testing (larimar test)
 ├── std/                     # Standard library source (edit it here): io.lar and io/ (files, path, console), os.lar and os/process.lar,
-│                            # time.lar, crypto.lar, encoding/ (json, toml, base64, hex, url), net.lar (TCP, UDP, servers with TLS),
+│                            # time.lar, crypto.lar, memory.lar, encoding/ (json, toml, base64, hex, url), net.lar (TCP, UDP, servers with TLS),
 │                            # net/tls.lar (client TLS), net/http.lar (HTTP client), text.lar and text/regex.lar, test.lar
 │                            # (net, io and os are written in Larimar over the system's C functions: extern, #when, T*, released by)
 ├── tests/                   # Tests (larimarc test, tests/run-tests.sh; tests/lsp for check and lsp)
@@ -96,7 +96,7 @@ Test the compiler:
 
 ```bash
 ./larimarc --version
-# Should output: larimar 0.5.2 (language 1.0)
+# Should output: larimar 1.0.0 (language 1.0)
 
 # Compile a test program
 echo 'function main(): void { println("Hello!"); }' > test.lar
@@ -155,7 +155,7 @@ checks all of it.
 ```toml
 [project]
 name = "larimarc"
-version = "0.5.2"
+version = "1.0.0"
 main = "src/main.lar"
 
 [c]

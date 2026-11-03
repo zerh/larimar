@@ -1,0 +1,71 @@
+// std.memory: Memory.compact copies what the variables of a memory still reach and frees the rest (cycles,
+// shared lists and data of other memories included); Memory.limit stops a memory that grows too much.
+import std.test { check, checkText, checkInt };
+import std.memory as Memory;
+
+class Node { let name: String; let next: Node? = null; }
+struct Path { let from: String; let to: String; }
+
+let kept: String = "lives in default";
+
+test function compactKeepsWhatIsAliveAndFreesTheRest(): void {
+    let world: byte[*] = [] in heap;
+    let map: Any = {} in world;
+    let paths: Path[*] = [] in world;
+    for (i in 0..20000) {
+        map["k${i % 50}"] = "value number ${i}".clone();      // overwritten: the old values become garbage
+        if (paths.length < 10) { paths.push({ from: "x${i}".clone(), to: "y".clone() }); }
+    }
+    let before: int64 = world.length;
+    Memory.compact(world);
+    check(world.length < before / 10, "the garbage is gone (${before} -> ${world.length})");
+    checkText("value number 19957", map["k7"] as String ?? "?");
+    checkInt(10, paths.length);
+    checkText("x3", paths[3].from);
+    check(world.peak >= before, "the peak is kept");
+    map["new"] = "after".clone();                              // the memory goes on working
+    checkText("after", map["new"] as String ?? "?");
+}
+
+test function compactKeepsCyclesAndSharing(): void {
+    let world: byte[*] = [] in heap;
+    let ring: Node = Node { name: "a" } in world;
+    ring.next = Node { name: "b", next: ring } in world;
+    let paths: Path[*] = [] in world;
+    let same: Path[*] = paths;                                // two variables, one list
+    paths.push({ from: "p".clone(), to: "q".clone() });
+    Memory.compact(world);
+    check(ring.next!.next! == ring, "the cycle is still one cycle");
+    checkText("b", ring.next!.name);
+    same.push({ from: "r".clone(), to: "s".clone() });
+    checkInt(2, paths.length);
+}
+
+test function compactLeavesDataOfOtherMemories(): void {
+    let world: byte[*] = [] in heap;
+    let names: String[*] = [] in world;
+    names.push(kept);                                          // lives in default: not copied
+    names.push("made here".clone());
+    Memory.compact(world);
+    checkText(kept, names[0]);
+    checkText("made here", names[1]);
+}
+
+test function compactInALoop(): void {
+    let world: byte[*] = [] in heap;
+    let last: Any = {} in world;
+    for (turn in 0..50) {
+        for (i in 0..200) { last["n${i}"] = "turn ${turn}".clone(); }
+        if (world.length > 32 * 1024) { Memory.compact(world); }
+    }
+    checkText("turn 49", last["n199"] as String ?? "?");
+    check(world.length < 64 * 1024, "it stays small (${world.length})");
+}
+
+test function limitLetsAMemoryGrowUpToIt(): void {
+    let cache: byte[*] = [] in heap;
+    Memory.limit(cache, 1024 * 1024);
+    let items: String[*] = [] in cache;
+    for (i in 0..1000) { items.push("item ${i}".clone()); }
+    check(cache.capacity <= 1024 * 1024, "within the limit");
+}

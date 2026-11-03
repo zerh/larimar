@@ -13,7 +13,7 @@ public enum TT {
     Ident, Int, Float, Str,
     Assign, Eq, Ne, Lt, Le, Gt, Ge, Plus, Minus, Star, Slash, Percent,
     Amp, Pipe, Caret, Tilde, Shl, Shr, And, Or, Not, Question, QQ,
-    Arrow, Dot, DotDot, Ellipsis, Comma, Colon, Semi, OpAssign,
+    Arrow, Dot, DotDot, Ellipsis, Comma, Colon, ColonColon, Semi, OpAssign,
     LParen, RParen, LBrace, RBrace, LBracket, RBracket, Eof,
     HashWhen, HashElse, HashEnd          // #when platform, #else, #end: each alone on its line
 }
@@ -592,6 +592,7 @@ function punctuation(c: byte): void {
         case "||" -> TT.Or;
         case "??" -> TT.QQ;
         case ".." -> TT.DotDot;
+        case "::" -> TT.ColonColon;
         default -> null;
     };
     if (pair != null) {

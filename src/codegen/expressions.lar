@@ -1284,6 +1284,11 @@ function builtin(c: Call in default, b: CallInfo in default): String {
     if (k == BK.Print || k == BK.Println) { return printCall(c, k == BK.Println); }
     if (k == BK.Panic) { return c.args.length == 1 ? "rt_panic_str(${value(c.args[0])}, ${c.line})" : "rt_panic(\"panic\", ${c.line})"; }
     if (k == BK.Release) { return "rt_res_release((void*)(${value(c.args[0])}))"; }   // now, not when its memory is freed
+    if (k == BK.MemLimit) {
+        let ms: Symbol = b.memory!;
+        return "rt_mem_limit(${memoryRef(ms)}, (int64_t)(${value(c.args[1])}), \"${ms.name}\", ${c.line})";
+    }
+    if (k == BK.MemCompact) { return compactCall(c, b); }
     let obj: Expr = receiver(c);
     let at: Type = b.receiverType ?? T_VOID;
     return switch (k) {
@@ -1590,6 +1595,37 @@ function cloneCall(c: Call in default, b: CallInfo in default): String {
     return res;
 }
 
+/**
+ * Memory.compact(m): m starts again with no blocks; what its variables reach in the old blocks is copied
+ * back (each thing once, cycles included), the variables are pointed at the copies, and the old blocks are
+ * freed. What lives in other memories is left where it is.
+ */
+function compactCall(c: Call in default, b: CallInfo in default): String {
+    let ms: Symbol = b.memory!;
+    for (ci in classes) {
+        if (!ci.sync && !ci.thread) {
+            for (f in ci.fields) { requireClone(f.type); }
+        }
+    }
+    let old: String = tmp("old");
+    let map: String = tmp("moved");
+    line("{");
+    line("    RtMem ${old};");
+    line("    rt_mem_compact_begin(${memoryRef(ms)}, &${old}, \"${ms.name}\", ${c.line});");
+    line("    RtCloneMap ${map} = rt_clone_map();");
+    line("    ${map}.only = ${old}.chunks;");
+    line("    RtMem* mem = ${memoryRef(ms)};");
+    line("    RtCloneMap* cm = &${map};");
+    for (r in b.roots) {
+        if (needsDeepClone(r.type)) { line("    ${r.cName} = ${cloneOf(r.type, r.cName)};"); }
+    }
+    line("    (void)mem;");
+    line("    rt_clone_done(cm);");
+    line("    rt_mem_compact_end(&${old});");
+    line("}");
+    return "((void)0)";
+}
+
 public function cloneFunctions(): String {
     let out: StringBuilder = {} in default;
     // Generating a function may require more: go on until there are no new ones.
@@ -1606,7 +1642,7 @@ public function cloneFunctions(): String {
 
 function cloneBody(out: StringBuilder, t: Type in default): void {
     if (t == T_STRING) {
-        out.add("    return rt_str_clone(v, mem, 0);\n");
+        out.add("    if (rt_clone_keeps(cm, v.ptr)) return v;\n    return rt_str_clone(v, mem, 0);\n");
         return;
     }
     if (t == T_ANY) {
@@ -1614,6 +1650,7 @@ function cloneBody(out: StringBuilder, t: Type in default): void {
         return;
     }
     if (isClass(t)) {
+        out.add("    if (rt_clone_keeps(cm, v)) return v;\n");
         out.add("    return (${cType(t)})rt_obj_vt(v)->clone(v, mem, cm);\n");
         return;
     }
@@ -1651,7 +1688,11 @@ function cloneBody(out: StringBuilder, t: Type in default): void {
     }
     if (isArray(t, ArrK.Growable)) {
         let n: String = structName(t);
+        // Memory.compact copies a list once however many places share it; clone() gives each its own copy
+        out.add("    if (rt_clone_keeps(cm, v)) return v;\n");
+        out.add("    if (cm->only) { void* done = rt_clone_get(cm, v); if (done) return (${n}*)done; }\n");
         out.add("    ${n}* r = ${n}_new(mem, 0);\n");
+        out.add("    if (cm->only) rt_clone_put(cm, v, r);\n");
         out.add("    for (int32_t i = 0; i < v->length; i++) ${n}_add(r, ${cloneOf(t.elem!, "v->items[i]")}, 0);\n");
         out.add("    return r;\n");
         return;

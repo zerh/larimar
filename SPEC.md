@@ -7,7 +7,7 @@ document says, and an implementation is correct when it does what this document 
 [Manual](MANUAL.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 0.5.2 (language 1.0)`. A compiler release may add to the standard library and to the tools
+`larimar 1.0.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
@@ -167,7 +167,7 @@ a phrase; keywords that start a declaration are a single token (`c_include`, `c_
 
 ```
 +    -    *    /    %    &    |    ^    ~    !    <<   >>
-==   !=   <    <=   >    >=   &&   ||   ??   ?    :    ->
+==   !=   <    <=   >    >=   &&   ||   ??   ?    :    ::   ->
 =    +=   -=   *=   /=   %=   &=   |=   ^=
 (    )    [    ]    {    }    ,    ;    .    ..
 ```
@@ -269,7 +269,7 @@ Primitive types need no memory, have no fields, and cannot be declared again.
 
 A `String` is an immutable sequence of bytes, by convention UTF-8 text. Its `length` is its number of
 bytes; `s[i]` is the `byte` at position `i`. Strings are compared by content. A string can be a
-*view* of part of another one ([§14.7](#147-views)). Its methods are in [§23](#23-predeclared-names).
+*view* of part of another one ([§14.8](#148-views)). Its methods are in [§23](#23-predeclared-names).
 
 ### 5.3 Arrays and lists
 
@@ -536,6 +536,10 @@ An enum value is one of its variants; a variant can carry fields. Enums are valu
 - `native operator [](i: int32): T;` declares indexing;
 - ordinary `function`s and `static` functions can also appear.
 
+A module of the standard library can also declare `native function f(...);` at the top level: a
+function the compiler implements, written in place at every call (`Memory.compact`, `Memory.limit`).
+Outside the functions the compiler knows it is an error.
+
 `native function ... = expression;` can also be written in a class, and so can
 `native let name: T = expression;`: a value read without parentheses (`sb.length`), computed by that
 expression, of a number type or `bool`. A `native let` is never assigned, and calling it with
@@ -579,7 +583,7 @@ From the lowest to the highest:
 | multiplicative | `*` `/` `%` | left |
 | conversion | `as` | left |
 | unary | `-` `!` `~` `&` | right |
-| postfix | call `f(...)`, field `a.b`, index `a[i]`, `x!` | left |
+| postfix | call `f(...)`, field `a.b`, index `a[i]`, `x!`, reference `a::f` | left |
 
 Bitwise operators bind more tightly than comparisons: `x & 1 == 0` is `(x & 1) == 0`.
 `as` binds more tightly than comparisons: `n > MAX as int64` is `n > (MAX as int64)`. After `as T`, a
@@ -730,6 +734,27 @@ them. Its type is a function type, or an interface with one method.
 - A lambda cannot throw errors.
 - A lambda cannot capture another lambda of its own type.
 - A lambda can be returned and stored: it carries its copies.
+
+### 10.14 Function references: `::`
+
+```
+:: NAME                 a function of this module
+module :: NAME          a function of an imported module
+variable :: NAME        a method of the object in a local variable or parameter
+self :: NAME            a method of self
+```
+
+`a::f` is a lambda that calls `f` with its own parameters and returns what it returns: where the type
+`(P1, ..., Pn) -> R` is expected, `Pages::show` is `(p1: P1, ..., pn: Pn) -> { return Pages.show(p1, ..., pn); }`
+(without `return` when `R` is `void`).
+
+- Its type comes from the place where it is used, like a lambda without parameter types: without an
+  expected function type it is an error. The call it makes is checked like any call.
+- `variable::f` and `self::f` capture the variable (or `self`) as a lambda does
+  ([§10.13](#1013-lambdas)), with the same rules: what it captures must live as long as the place
+  where the reference is kept ([§15](#15-the-lifetime-rule)).
+- Only a module, a variable or `self` goes before `::` (or nothing, for this module): `a.b::f` is an error (keep `a.b` in a variable).
+- A function that declares `throws` cannot be referenced: a lambda cannot throw.
 
 ---
 
@@ -887,7 +912,7 @@ Where a value is created is decided by the place it goes to, unless the program 
 | a value not stored anywhere: an argument, part of an expression, the text of a `println` | the temporary memory of the statement | at the end of the statement |
 | the value of a local variable (initialized or assigned) | the memory of the variable's block | when the block ends; in a loop, at the end of each turn |
 | a value pushed to a list, stored in a field, an element or a table | the memory of that list, object or table | with it |
-| a value returned by a function that creates it | the memory the caller gives ([§14.6](#146-results-of-functions)) | according to the caller |
+| a value returned by a function that creates it | the memory the caller gives ([§14.7](#147-results-of-functions)) | according to the caller |
 | the initial value of a global variable | the default memory | never |
 
 A memory is freed on **every** exit of its block: at its end, by `return`, `break`, `continue`, and when
@@ -938,7 +963,37 @@ let c: byte[*] = [] in heap;        // grows by asking the system for more block
 - A fixed memory that is full: creating a value there is a panic, and `push` to a list there returns
   `false`.
 
-### 14.6 Results of functions
+### 14.6 Limiting and compacting a memory
+
+`std.memory` has two functions that act on a memory itself, so their first argument is the memory's
+name (not a parameter that receives a memory):
+
+- `Memory.limit(m, bytes)`: `m` (a `byte[*]` memory) may obtain at most `bytes` from the system; a
+  creation that would need more is a panic that names `m`. `0` removes the limit. A fixed memory
+  (`byte[N]`) is an error: its size is its limit.
+- `Memory.compact(m)`: what the variables of `m` reach inside `m` is copied to new storage of `m`, each
+  value once (shared values stay shared, cycles stay cycles); the variables are given the copies; the old
+  storage is freed. Values that live in other memories are not copied. `m.length` then counts only what
+  is alive; `m.peak` is kept.
+
+`Memory.compact(m)` is an error when:
+
+1. `m` is not a `byte[*]` memory declared in a function (a global memory, a parameter, a fixed memory,
+   or `default`);
+2. a local variable visible at the call, of a type with references ([§14.1](#141-values-that-need-memory)),
+   lives in the memory of `m`'s block or of a block inside it, and not in `m`: it could point into `m`
+   and would be left pointing to freed storage;
+3. data that lives in the memory of `m`'s block (not in `m`) is stored in `m` anywhere in its block;
+4. a variable of `m` holds, or may hold through a class, a struct, an enum or `Any`, a lambda, an
+   interface value, a synchronized object or a thread;
+5. the call is inside a `for` over a list, a table or a text, between the call and `m`'s block.
+
+A memory that holds threads, synchronized objects or resources when it is compacted is a panic. A memory
+other than `default` belongs to one thread ([§18.5](#185-what-a-thread-can-use)), so no other thread
+uses it while it is compacted. C code must not keep a pointer it received after the call returns
+([§19.6](#196-pointers)); compacting relies on it.
+
+### 14.7 Results of functions
 
 A function that returns a value it creates (in the `return` expression, or in a local variable that is
 returned) creates it **directly in the memory of the caller**, without copying. The caller's memory is
@@ -954,13 +1009,13 @@ as created: it lives in the caller's memory.
 The arguments that can become part of the result (for example a string the function returns a view of)
 are created where the result goes; the others are temporaries of the statement.
 
-### 14.7 Views
+### 14.8 Views
 
 Some operations return a **view**: a value that shares the storage of another one, without copying.
 `substring`, `trim`, `trimStart`, `trimEnd`, `bytes` and `StringBuilder.toString` return views. A view
 lives as long as the value it shares, and the lifetime rule treats it as that value.
 
-### 14.8 What freeing a memory does
+### 14.9 What freeing a memory does
 
 Before the storage of a memory is reclaimed, every thread created in it is joined
 ([§18.1](#181-thread)) and every resource stored in it is released ([§19.7](#197-resources)).
@@ -989,7 +1044,7 @@ an `in` on a parameter.
 | **static** | lives the whole program: literals, constants, values that need no memory, globals, the default memory |
 | **local(B)** | the memory of the block `B`, or of a memory declared in `B`; the temporary memory of a statement is the local region of that statement |
 | **caller(p)** | data that came to the function through its parameter `p` (also `self`, and a memory parameter) |
-| **caller(result)** | the memory the caller gives for the result of the function ([§14.6](#146-results-of-functions)) |
+| **caller(result)** | the memory the caller gives for the result of the function ([§14.7](#147-results-of-functions)) |
 | **caller-any** | data of the caller, through a parameter that is not known |
 | **meet(r₁, …, rₙ)** | the shortest of those regions: what lives as long as each of them |
 
@@ -1110,7 +1165,7 @@ Fixed answers:
 What they decide:
 
 - A function that **creates** receives from each call the memory its result goes to: the result lives
-  where the caller puts it ([§14.6](#146-results-of-functions)). A function that sometimes creates and
+  where the caller puts it ([§14.7](#147-results-of-functions)). A function that sometimes creates and
   sometimes returns existing data creates.
 - A function whose result **flows** from a parameter makes the caller check, at each call, that the
   argument lives as long as the place the result goes to.
@@ -1359,7 +1414,7 @@ extern function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ =
 - `= c "name"` gives the C name when it differs from the Larimar one. A `public extern function` keeps
   its C name inside a module.
 - A memory as the **first** parameter is not written in the call: the function receives the memory of
-  the call, so its result lives where the caller says ([§14.6](#146-results-of-functions)). In C it is an
+  the call, so its result lives where the caller says ([§14.7](#147-results-of-functions)). In C it is an
   `RtMem*`, and `rt_mem_alloc(m, bytes, 0)` reserves zeroed bytes in it. The C may use the memory only
   during the call. A memory in another position is passed explicitly.
 
@@ -1605,6 +1660,7 @@ topLevel             = const NAME : Type = expression ;
                      | function
                      | test function
                      | export function
+                     | native nativeFunction
                      | struct NAME { ( field | static staticMember | function | operator )* }
                      | [ synchronized ] class NAME [ extends qualifiedName ] [ implements qualifiedName ( , qualifiedName )* ]
                            { ( field | static staticMember | [ override ] function | native ( nativeFunction | nativeLet ) | operator )* }
@@ -1672,9 +1728,9 @@ additive             = multiplicative ( ( + | - ) multiplicative )*
 multiplicative       = cast ( ( * | / | % ) cast )*
 cast                 = unary ( as Type )*
 unary                = ( - | ! | ~ | & ) unary | postfix
-postfix              = primary ( arguments | . NAME | . NAME objectLiteral | [ expression ] | ! )*
+postfix              = primary ( arguments | . NAME | . NAME objectLiteral | [ expression ] | ! | :: NAME )*
 arguments            = ( [ expression ( , expression )* ] )
-primary              = NUMBER | CHAR | STRING | TEXTBLOCK | true | false | null | self | super . NAME
+primary              = NUMBER | CHAR | STRING | TEXTBLOCK | true | false | null | self | super . NAME | :: NAME
                      | objectLiteral | [ [ expression ( , expression )* ] ] | switch ( expression ) { case* }
                      | NAME [ objectLiteral ] | lambda | ( expression )
 objectLiteral        = { [ entry ( , entry )* [ , ] ] }

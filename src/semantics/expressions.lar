@@ -4,7 +4,7 @@
 import syntax.ast {
     Node, Expr, Stmt, TK, TypeRef, Param, IntLit, FloatLit, StringLit, BoolLit, NullLit, Ident, SelfExpr, SuperMember,
     Member, Index, Call, Unary, Binary, Ternary, IsExpr, Cast, Unwrap, Lambda, FieldInit, ObjectLit, ArrayLit, Placed,
-    Pattern, SwitchCase, SwitchExpr, YieldStmt, ThrowStmt, IfStmt, TryStmt, BlockStmt, ExternFunctionDecl, ExternValueDecl,
+    Pattern, SwitchCase, SwitchExpr, YieldStmt, ThrowStmt, IfStmt, TryStmt, BlockStmt, ExprStmt, ExternFunctionDecl, ExternValueDecl,
     PL_MEMORY, PL_HEAP, PL_STACK, PL_DEFAULT, PT_NAME, PT_TYPE, PT_DESTRUCTURE, PT_CONSTANT, PT_NULL
 };
 import semantics.types {
@@ -23,7 +23,7 @@ import semantics.types {
 };
 import semantics.analyzer {
     error, wrong, frame, frames, frameTop, state, scope, pushFrame, popFrame, pushScope, popScope, declare, lookup,
-    narrowedType, noteCapture, declareParam, checkReturns, analyzeStmts, analyzeBlock, analyzeThrow, requireBool,
+    narrowedType, noteCapture, noteCompact, knownNative, declareParam, checkReturns, analyzeStmts, analyzeBlock, analyzeThrow, requireBool,
     requireHandled, lifetime, lifetimeOf, requireOutlives, livesHint, isReference, storageRegion, placeFor, rootSymbol, isLValue,
     reassignedNames, currentOwner, edge, useGlobal, callTargets, checkThreadRun, checkThreadSafeLambda, anyFieldsLoop, block, blockRegion,
     returnedNames, viewMethod, callMemory, creatingMethod, staticName, platformCtx,
@@ -617,7 +617,7 @@ function checkIdent(id: Ident in default, expected: Type? in default): Type {
         let sig: Type? = et != null ? externSig(et) : null;
         let f: FunctionInfo? = s.func;
         if (sig != null && f != null) { return cFunctionValue(id, f, et!, sig); }
-        return wrong(id.line, "'${s.name}' is a function, not a value. Wrap it in a lambda: (x) -> { return ${s.name}(x); }");
+        return wrong(id.line, "'${s.name}' is a function, not a value: pass ::${s.name} (a lambda that calls it), or write the lambda: (x) -> { return ${s.name}(x); }");
     }
     if (isMemory(s)) {
         return wrong(id.line, "'${s.name}' is a memory: it can be used after 'in', passed to a memory parameter, or asked for .length, .capacity and .peak.");
@@ -911,6 +911,9 @@ public function resolveMemory(e: Expr in default): Symbol? {
 
 function checkLambda(l: Lambda in default, expected: Type? in default): Type {
     if (expected == null || expected.kind != TyK.Func) {
+        if (l.ref != null && (expected == null || !isError(expected))) {
+            return wrong(l.line, "${refText(l.ref!)} is a reference to a function: use it where a function type is expected (a parameter, a variable or a field of type (A) -> B).");
+        }
         if (expected == null) { return wrong(l.line, "Cannot infer the type of this lambda. Give it a function type, e.g. let f: (int32) -> int32 = (x) -> { ... };"); }
         if (externSig(expected) != null) {
             error(l.line, "${expected.text} is a pointer to a C function, and a lambda is not one: pass an extern function or an 'export function'.");
@@ -920,6 +923,15 @@ function checkLambda(l: Lambda in default, expected: Type? in default): Type {
         return T_ERROR;
     }
     let ft: Type = expected;
+    if (l.ref != null && l.params.length == 0 && !referenceTarget(l.ref!)) { return T_ERROR; }
+    if (l.ref != null && l.params.length == 0) {              // Module::function: a lambda with the expected parameters
+        let call: Call = l.ref!;
+        for (i in 0..ft.params.length) {
+            l.params.push(Param { line: l.line, name: "__ref${i}" } in default);
+            call.args.push(Ident { line: l.line, name: "__ref${i}" } in default);
+        }
+        if (ft.elem! == T_VOID) { l.body = [ExprStmt { line: l.line, expr: call } in default] in default; }
+    }
     if (l.params.length != ft.params.length) { return wrong(l.line, "This lambda has ${l.params.length} parameter(s) but ${ft.text} expects ${ft.params.length}."); }
     for (i, p in l.params) {
         if (p.type == null) { continue; }
@@ -945,6 +957,26 @@ function checkLambda(l: Lambda in default, expected: Type? in default): Type {
     setRegion(l, r);
     note(ft);
     return ft;
+}
+
+/** How a method reference was written: Pages::show. */
+function refText(c: Call): String {
+    if (c.callee is Member m) { return "${describeExpr(m.object)}::${m.name}"; }
+    if (c.callee is Ident id) {          // module.name was already renamed to the name itself: std__encoding__hex__encode
+        let shown: String = id.name.replace("__", ".");
+        let i: int32 = shown.lastIndexOf(".") ?? -1;
+        return i > 0 ? "${shown.substring(0, i)}::${shown.substring(i + 1)}" : "::${shown}";
+    }
+    return "this reference";
+}
+
+/** Module::function, variable::method or self::method; not a field (it would be read on every call). */
+function referenceTarget(c: Call in default): bool {
+    if (c.callee is Member m && m.object is Member) {
+        error(c.line, "'::' takes a module, a variable or 'self' before it: keep '${describeExpr(m.object)}' in a variable first.");
+        return false;
+    }
+    return true;
 }
 
 function checkValues(o: ObjectLit in default): Type {
@@ -1549,6 +1581,10 @@ function checkCall(c: Call in default, expected: Type? in default, place: Place 
                 builtinCall(c, BK.Panic, null);
                 yield T_VOID;
             }
+            if (s != null && s.kind == SymK.Function && s.func!.decl != null && s.func!.decl!.isNative && knownNative(s.func!)) {
+                id.symbol = s;
+                yield checkMemoryCall(c, s.func!.name.endsWith("compact"));
+            }
             if (s != null && s.kind == SymK.Function) {
                 id.symbol = s;
                 yield checkFunctionCall(c, s.func!, place);
@@ -1559,6 +1595,39 @@ function checkCall(c: Call in default, expected: Type? in default, place: Place 
         case Member m -> checkMethodCall(c, m, expected, place);
         default -> closureCall(c, check(c.callee, null, P_TEMP), regionOf(c.callee), place);
     };
+}
+
+/**
+ * Memory.limit(m, bytes) and Memory.compact(m): they work on the memory itself, so m must be its name.
+ * compact() is checked again at the end (checkCompacts), once the memory of every variable is known.
+ */
+function checkMemoryCall(c: Call in default, compact: bool): Type {
+    let what: String = compact ? "Memory.compact(m)" : "Memory.limit(m, bytes)";
+    if (c.args.length != (compact ? 1 : 2)) { return wrong(c.line, "${what} takes ${compact ? "the memory" : "the memory and the most bytes it may hold"}."); }
+    if (!compact) { coerce(c.args[1], T_INT64, P_TEMP, "The limit"); }
+    let arg: Expr = c.args[0];
+    let ms: Symbol? = memoryNamed(arg);
+    if (ms == null) {
+        if (arg is Ident id && id.name == "default") { return wrong(arg.line, "${what}: the default memory holds a bit of everything and is never compacted or limited; give the data a memory of its own (let data: byte[*] = [] in heap;)."); }
+        check(arg, null, P_TEMP);
+        return wrong(arg.line, "${what} takes the name of a memory, like ${compact ? "Memory.compact(world)" : "Memory.limit(cache, 64 * 1024 * 1024)"}.");
+    }
+    let m: Symbol = ms;
+    arg.symbol = m;
+    m.used = true;
+    noteCapture(m, arg.line);
+    if (m.memKind == MemK.Param) {
+        return wrong(arg.line, "${what} needs the memory's own name: '${m.name}' is a parameter, and could be any memory.");
+    }
+    if (m.memKind != MemK.HeapGrowable) {
+        return wrong(arg.line, compact
+            ? "'${m.name}' is a fixed memory (byte[N]); compact() works on memories that grow (let ${m.name}: byte[*] = [] in heap;)."
+            : "'${m.name}' is a fixed memory (byte[N]): its size is already its limit.");
+    }
+    builtinCall(c, compact ? BK.MemCompact : BK.MemLimit, null);
+    c.call!.memory = m;
+    if (compact) { noteCompact(c, m); }
+    return T_VOID;
 }
 
 function checkFunctionCall(c: Call in default, f: FunctionInfo in default, place: Place in default): Type {

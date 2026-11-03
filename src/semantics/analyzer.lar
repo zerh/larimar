@@ -21,7 +21,7 @@ import semantics.types {
     Type, TyK, NamedK, ArrK, T_INT32, T_INT64, T_BYTE, T_BOOL, T_STRING, T_VOID, T_ANY, T_ERROR, isPrimName, named,
     funcT, arrayT, optT, isFloat, isInteger, isError, isClass, isStruct, isInterface, isEnumT, isExternT, isOpt, isArray,
     optIsPointer, minOf, maxText, Region, RK, R_STATIC, rStaticMemory, rCaller, rLocal, rVar, symbolic, resolveRegion, outlives, meet,
-    sameRegion, describe, Scope, newScope, Frame, FrameK, Owner, newOwner, Symbol, SymK, MemK, ConstK, isMemory,
+    sameRegion, isAncestorOrSelf, describe, Scope, newScope, Frame, FrameK, Owner, newOwner, Symbol, SymK, MemK, ConstK, isMemory,
     escapeName, FieldInfo, FunctionInfo, MethodInfo, StructInfo, ClassInfo, InterfaceInfo, VariantInfo, EnumInfo,
     LambdaInfo, Place, PlaceK, P_TEMP, SwitchInfo, MemberInfo, MbK, ForInfo, CatchInfo, isMemParam, includes,
     usesThreads, cCode, structs, nativeMethods, structIndex, classes, classIndex, interfaces, interfaceIndex, enums, enumIndex,
@@ -30,6 +30,7 @@ import semantics.types {
     findField, findMethod, isSubclass, implementor, P_GLOBAL, P_RESULT, primByName, ExternTypeInfo, externInfos,
     isCValue, isExternStruct, cCodeStd, CallInfo, CallK, BK, includeWhens, isResource, externInfoOf, platformWithin, isPtr
 };
+import semantics.linker { fileNames, filePaths };
 import semantics.expressions {
     check, coerce, typeOf, regionOf, hasRefs, note, resolveType, resolveTop, resolveValue, evalConst, ConstVal,
     analyzeSwitch, TC_PARAM, TC_LET, TC_OTHER, intFits, namedHasRefs
@@ -1123,7 +1124,24 @@ public function noteCapture(s: Symbol in default, line: int32): void {
 /** The static function being analyzed ("" when none): for the message about self. */
 public let staticName: String = "";
 
+/** The native functions of modules (in std/memory.lar): the compiler writes every call to them. */
+public function knownNative(f: FunctionInfo in default): bool {
+    if (f.name == "std__memory__limit" || f.name == "std__memory__compact") { return true; }     // imported as std.memory
+    // std/memory.lar opened by itself (larimar check, the editor): its own path says it
+    let file: int32 = f.line / 1000000;
+    let shown: String = file < fileNames.length ? fileNames[file].replace("\\", "/") : "";
+    let path: String = file < filePaths.length ? filePaths[file].replace("\\", "/") : "";
+    let mine: bool = shown.endsWith("std/memory.lar") || path.endsWith("std/memory.lar");
+    return mine && (f.name == "limit" || f.name == "compact");
+}
+
 function analyzeFunction(f: FunctionInfo in default): void {
+    if (f.decl!.isNative) {
+        if (!knownNative(f)) {
+            error(f.line, "'${f.name.replace("__", ".")}' is declared native, but the compiler does not implement it: a native function of a module is only for the standard library.");
+        }
+        return;
+    }
     staticName = f.decl!.typeName != "" ? f.name : "";
     let saved: Scope = scope;
     let body: Stmt[*] = f.decl!.body;
@@ -2089,27 +2107,26 @@ function runCheck(d: Deferred in default, resolve: bool): void {
     if (!outlives(v, st)) {
         let named: String = culprit(d, v, st, resolve);
         error(d.line, named != "" ? named : fill(d.forever != "" && st.kind == RK.Static && v.kind == RK.Local ? d.forever : d.msg, v, st));
+    } else if (st.kind == RK.Local && v.kind == RK.Local && v.scope! == st.scope! && v.label != st.label && st.label.startsWith("memory '")) {
+        mixings.push(Mixing { scope: st.scope!, label: st.label, line: d.line } in default);      // for Memory.compact
     }
 }
 
 /** The methods whose result is a view of their object (it shares its bytes). */
 const VIEW_METHODS: String = " trim trimStart trimEnd substring bytes split lines toString ";
 
-/**
- * A message that names what lives too little, and the code that fixes it, when the value is something
- * the programmer wrote: a lambda (its capture), a view (its text), a variable. "" when there is none.
- */
 /** The `in` that puts a copy where a region lives, when the code can say it: " in default", " in m", or "". */
 function placementFor(r: Region): String {
-    if (r.label.startsWith("memory '") && r.label.endsWith("'") && (r.kind == RK.Static || r.kind == RK.Local)) {
-        return " in ${r.label.substring(8, r.label.length - 1)}";
-    }
     if ((r.kind == RK.Static || r.kind == RK.Local) && r.label.startsWith("memory '") && r.label.endsWith("'")) {
         return " in ${r.label.substring(8, r.label.length - 1)}";     // a memory with a name, global or local
     }
     return r.kind == RK.Static ? " in default" : "";
 }
 
+/**
+ * A message that names what lives too little, and the code that fixes it, when the value is something
+ * the programmer wrote: a lambda (its capture), a view (its text), a variable. "" when there is none.
+ */
 function culprit(d: Deferred in default, v: Region, st: Region, resolve: bool): String {
     let given: Expr? = d.expr;
     if (given == null) { return ""; }
@@ -2147,7 +2164,9 @@ function culprit(d: Deferred in default, v: Region, st: Region, resolve: bool): 
             // the copy goes where the target lives: its memory by name when there is one to write
             let into: String = keepVariable != "" ? keepVariable : " in <memory>";     // its name, or default
             let fix: String = "Capture a copy made in the memory where ${d.target} lives: let kept: ${s.type.text} = ${s.name}.clone()${into}; and capture 'kept' instead.";
-            let start: String = "The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}.";
+            let start: String = l.ref != null && l.ref!.callee is Member rm
+                ? "${s.name}::${rm.name} keeps '${s.name}', which lives in {v}, but ${d.target} lives ${lives}."
+                : "The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}.";
             if (clonesInside(l, s.name)) {
                 return fill("${start} ${s.name}.clone() runs only when the lambda is called, by which time '${s.name}' may no longer exist. ${fix}", r, st);
             }
@@ -2181,6 +2200,150 @@ function clonesInside(l: Lambda, name: String): bool {
     return false;
 }
 
+// =====================================================================================
+// Memory.compact
+// =====================================================================================
+
+/** A call to Memory.compact(m): its memory, and the variables that could be seen where it is. */
+public class CompactCall {
+    let call: Call;
+    let memory: Symbol;
+    let visible: Symbol[*] = [];
+}
+
+public let compactCalls: CompactCall[*] = [] in default;
+
+/** Where data of another memory of the same block was stored in a memory with a name. */
+public class Mixing {
+    let scope: Scope;
+    let label: String;
+    let line: int32;
+}
+
+public let mixings: Mixing[*] = [] in default;
+
+/** Memory.compact(m) here: m must belong to this function, and the call cannot be inside a for over data. */
+public function noteCompact(c: Call in default, m: Symbol in default): void {
+    if (m.kind == SymK.Global) {
+        error(c.line, "Memory.compact() works on memories declared in a function: declare '${m.name}' in main or in the function that runs the work (let ${m.name}: byte[*] = [] in heap;).");
+        return;
+    }
+    let cc: CompactCall = CompactCall { call: c, memory: m } in default;
+    let sc: Scope? = scope;
+    while (sc != null) {
+        if (sc.iterating) {
+            error(c.line, "Memory.compact() cannot run inside a 'for' over a list, a table or a text: the loop keeps pointing to what it goes over. Compact before or after the loop.");
+            return;
+        }
+        for (k, v in sc.names.fields) { cc.visible.push(allSymbols[v as int32 ?? 0]); }
+        if (sc == m.scope) { break; }
+        sc = sc.parent;
+    }
+    compactCalls.push(cc);
+}
+
+/**
+ * Once every variable's memory is known: the variables of the compacted memory move with it; any other
+ * variable of its block (or of a block inside it) that may point into it would be left pointing to freed
+ * memory, so it is an error. So is data of another memory of the block stored in it.
+ */
+function checkCompacts(): void {
+    for (cc in compactCalls) {
+        let m: Symbol = cc.memory;
+        let mr: Region = m.memRegion!;
+        let line: int32 = cc.call.line;
+        let ok: bool = true;
+        for (x in mixings) {
+            if (x.scope == mr.scope! && x.label == mr.label) {
+                error(line, "Memory.compact(${m.name}): line ${x.line} keeps data of another memory of this block in '${m.name}', and compact() moves only what lives in '${m.name}'. Create that data in it (... in ${m.name}).");
+                ok = false;
+                break;
+            }
+        }
+        let roots: Symbol[*] = [] in default;
+        for (v in cc.visible) {
+            if (v == m || isMemory(v) || !(v.kind == SymK.Local || v.kind == SymK.Param) || !hasRefs(v.type)) { continue; }
+            let r: Region = resolveRegion(v.region);
+            if (sameRegion(r, mr) && r.label == mr.label) {
+                let why: String = notMovable(v.type, {} in default);
+                if (why != "") {
+                    error(line, "Memory.compact(${m.name}) cannot move '${v.name}': ${why}.");
+                    ok = false;
+                } else if (v.immutable) {
+                    error(line, "Memory.compact(${m.name}) cannot move '${v.name}': it cannot be given a new value.");
+                    ok = false;
+                } else {
+                    roots.push(v);
+                }
+            } else if (r.kind == RK.Local && isAncestorOrSelf(mr.scope!, r.scope!)) {
+                error(line, "Memory.compact(${m.name}): '${v.name}' lives in ${describe(r)} and may point into '${m.name}', so compact() would leave it pointing to freed memory. Create it in '${m.name}' (... in ${m.name}), or declare it after the compact() call.");
+                ok = false;
+            }
+        }
+        if (ok) {
+            for (rt in roots) { cc.call.call!.roots.push(rt); }
+        }
+    }
+}
+
+/** Why a value of this type cannot be moved by compact() ("" when it can). */
+function notMovable(t: Type in default, seen: Any in default): String {
+    if (seen.contains(t.text)) { return ""; }
+    seen[t.text] = true;
+    if (t == T_ANY) {             // a table can hold any object, struct or enum of the program
+        for (c in classes) {
+            let why: String = notMovable(named(c.name, NamedK.Class), seen);
+            if (why != "") { return "it is an Any, and an Any can hold a ${c.name}, which ${why.startsWith("it ") ? why.substring(3) : why}"; }
+        }
+        for (st in structs) {
+            let why: String = notMovable(named(st.name, NamedK.Struct), seen);
+            if (why != "") { return "it is an Any, and an Any can hold a ${st.name}, which ${why.startsWith("it ") ? why.substring(3) : why}"; }
+        }
+        return "";
+    }
+    return switch (t.kind) {
+        case Func -> "it holds a lambda, which compact() cannot move";
+        case Opt, Array -> notMovable(t.elem!, seen);
+        case Named -> switch (t.nk) {
+            case Interface -> "it holds an interface value, which compact() cannot move";
+            case Class -> classNotMovable(t.name, seen);
+            case Struct -> fieldsNotMovable(structOf(t.name)!.fields, seen);
+            case Enum -> enumNotMovable(enumOf(t.name)!, seen);
+            default -> "";
+        };
+        default -> "";
+    };
+}
+
+function enumNotMovable(e: EnumInfo in default, seen: Any in default): String {
+    for (vr in e.variants) {
+        let why: String = fieldsNotMovable(vr.fields, seen);
+        if (why != "") { return why; }
+    }
+    return "";
+}
+
+function fieldsNotMovable(fields: FieldInfo[*] in default, seen: Any in default): String {
+    for (f in fields) {
+        let why: String = notMovable(f.type, seen);
+        if (why != "") { return "its field '${f.name}' ${why.startsWith("it ") ? why.substring(3) : why}"; }
+    }
+    return "";
+}
+
+/** A class: its own fields, its parents' and those of every class that extends it (any of them may be there). */
+function classNotMovable(name: String in default, seen: Any in default): String {
+    for (c in classes) {
+        if (c.name == name || isSubclass(name, c.name) || isSubclass(c.name, name)) {
+            if (c.sync) { return "it holds a synchronized object (${c.name}), which compact() cannot move"; }
+            if (c.thread) { return "it holds a thread (${c.name}), which compact() cannot move"; }
+            let why: String = fieldsNotMovable(c.fields, seen);
+            if (why != "") { return why; }
+        }
+    }
+    return "";
+}
+
 function resolveRegions(): void {
     for (s in varSyms) { s.resolved = R_STATIC; }
     let changed: bool = true;
@@ -2190,7 +2353,7 @@ function resolveRegions(): void {
         for (s in varSyms) {
             let old: Region = s.resolved!;
             let next: Region = meet(old, resolveRegion(s.varRegion ?? R_STATIC));
-            if (!sameRegion(old, next)) {
+            if (!sameRegion(old, next) || old.label != next.label) {      // the label: which memory of a block
                 s.resolved = next;
                 changed = true;
             }
@@ -2198,6 +2361,7 @@ function resolveRegions(): void {
         guard += 1;
     }
     for (d in deferred) { runCheck(d, true); }
+    checkCompacts();
 }
 
 /** The object of a field or element access: a.b and a[i] give a. */
@@ -2550,6 +2714,7 @@ function analyzeFor(f: ForStmt in default): void {
         idx.immutable = true;
         info.index = idx;
     }
+    scope.iterating = f.rangeEnd == null;
     let v: Symbol = declare(f.varName, SymK.Local, elem, f.line);
     v.immutable = true;
     v.region = hasRefs(elem) ? regionOf(f.iterable) : R_STATIC;

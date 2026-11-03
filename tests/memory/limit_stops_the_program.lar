@@ -1,0 +1,9 @@
+// expect: panic memory 'cache' passed its limit of 64.0 KB
+import std.memory as Memory;
+function main(): int32 {
+    let cache: byte[*] = [] in heap;
+    Memory.limit(cache, 64 * 1024);
+    let items: String[*] = [] in cache;
+    for (i in 0..100000) { items.push("item number ${i}".clone()); }
+    return 0;
+}
