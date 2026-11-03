@@ -19,6 +19,7 @@ c_code {
     }
 #elif defined(__APPLE__)
     #include <stdlib.h>
+    void arc4random_buf(void* buffer, size_t length);   /* declared here: -std=c99 hides it in stdlib.h */
     static int32_t lm_random_fill(uint8_t* items, int32_t length) {
         arc4random_buf(items, (size_t)length);
         return 0;
