@@ -191,7 +191,7 @@
     "hero.body": "Larimar transpila a un único archivo C99, no tiene recolector de basura (la memoria se libera por bloques, en puntos que se ven en el código) y su compilador está escrito en el propio Larimar.",
     "hero.status.html": "<strong>Estado:</strong> 189 pruebas: memoria, hilos, red, depurador, editor y biblioteca estándar. Especificación del lenguaje 1.0.",
     "hero.copy": "Copiar",
-    "hero.download": "o descarga el archivo",
+    "hero.download": "¿Prefieres descargarlo tú?",
     "hero.needs": "Se instala en ~/.larimar, sin sudo. Para compilar programas hace falta un compilador de C (gcc o clang): el instalador dice cómo conseguirlo si falta.",
     "features.eyebrow": "El lenguaje",
     "features.title": "Lo que trae el lenguaje",
