@@ -450,7 +450,7 @@
       <div class="container">
         <div class="hero-grid">
           <div>
-            <div class="eyebrow"><span style="width:0.375rem; height:0.375rem; border-radius:50%; background:var(--larimar);"></span><span data-i18n="hero.eyebrow">v1.0 · language 1.0 · transpiles to C99</span></div>
+            <div class="eyebrow"><span style="width:0.375rem; height:0.375rem; border-radius:50%; background:var(--larimar);"></span><span data-i18n="hero.eyebrow">v1.1 · language 1.0 · transpiles to C99</span></div>
             <h1 style="font-size: clamp(2.25rem, 4.5vw, 3.75rem); font-weight: 700; line-height: 1.1; margin-top: 1.5rem; letter-spacing: -0.025em;" data-i18n-html="hero.title.html">A small language that <span class="gradient-text">compiles to C</span>.</h1>
             <p style="color: var(--text-muted); font-size: 1.125rem; line-height: 1.625; margin-top: 1.5rem;" data-i18n="hero.body">Larimar transpiles to a single C99 file, has no garbage collector (memory is freed in blocks, at points you can see in the code), and its compiler is written in Larimar itself.</p>
             <div class="status-note" data-i18n-html="hero.status.html"><strong>Status:</strong> 189 tests: memory, threads, network, debugger, editor and standard library. Language specification 1.0.</div>
@@ -462,7 +462,7 @@
               </div>
               <div class="code-block install-cmd" data-os="unix"><code><span class="install-dollar">$</span> <span class="install-text">curl -fsSL https://zerh.github.io/larimar/install.sh | sh</span></code><button type="button" class="install-copy" data-i18n="hero.copy">Copy</button></div>
               <div class="code-block install-cmd" data-os="win" hidden><code><span class="install-dollar">&gt;</span> <span class="install-text">powershell -c "irm https://zerh.github.io/larimar/install.ps1 | iex"</span></code><button type="button" class="install-copy" data-i18n="hero.copy">Copy</button></div>
-              <p class="install-note" data-i18n="hero.needs">It installs into ~/.larimar, no sudo. Building programs needs a C compiler (gcc or clang): the installer tells you how to get one if it is missing.</p>
+              <p class="install-note" data-i18n="hero.needs">It installs into ~/.larimar, no sudo. On Linux and Windows it comes with tcc: larimar hello.lar works right away. On macOS it uses Apple&#x27;s compiler (the installer says how).</p>
 
               <details class="dl-details">
                 <summary data-i18n="hero.download">Prefer to download it yourself?</summary>

@@ -2,6 +2,8 @@
 
 import std.os;
 import std.io.path as Paths;
+import std.io.files as Files;
+import std.io { IoError };
 
 public function windows(): bool { return os.platform() == "windows"; }
 public function mac(): bool { return os.platform() == "macos"; }
@@ -44,4 +46,99 @@ public function selfPath(): String {
     let path: String = os.programPath();
     if (path != "") { return path; }
     return Paths.join(os.programDir(), windows() ? "larimarc.exe" : "larimarc");
+}
+
+// =========================================================================
+// Which C compiler: the system's, or the tcc that comes with Larimar
+// =========================================================================
+
+/** The C compiler of a build: the program and the arguments that go right after it. */
+public class CCompiler {
+    let program: String;
+    let first: String[*] = [];
+    let bundled: bool = false;     // the tcc of $LARIMAR_HOME/toolchain
+    let fallback: bool = false;    // a project got it because there was no other: worth a note
+}
+
+/** The tcc that comes with Larimar on Linux and Windows ($LARIMAR_HOME/toolchain/tcc), or "". */
+public function bundledTcc(home: String): String {
+    let exe: String = Paths.join(Paths.join(Paths.join(home, "toolchain"), "tcc"), windows() ? "tcc.exe" : "tcc");
+    return Files.isFile(exe) ? exe : "";
+}
+
+/** The bundled tcc with what it needs: on Linux it links statically with the musl next to it. */
+function tccCompiler(exe: String): CCompiler {
+    let first: String[*] = [];
+    if (windows()) {
+        first.push("-ladvapi32");                         // RtlGenRandom, for std.crypto
+    } else {
+        first.push("-B${Paths.join(Paths.parent(exe), "lib")}");
+        first.push("-static");
+    }
+    return CCompiler { program: exe, first, bundled: true };
+}
+
+/** The system's C compiler: cc, gcc or clang (on Windows gcc, clang or cc), or "" when there is none. */
+public function systemCompiler(): String {
+    if (mac() && os.run("xcode-select -p >/dev/null 2>&1") != 0) { return ""; }     // cc would only offer to install them
+    let names: String[] = windows() ? ["gcc", "clang", "cc"] : ["cc", "gcc", "clang"];
+    for (n in names) {
+        if (os.run(windows() ? "${n} --version >NUL 2>&1" : "${n} --version >/dev/null 2>&1") == 0) { return n.clone(); }
+    }
+    return "";
+}
+
+/**
+ * The C compiler for a build. `wanted` is what was asked for (--cc, [c] compiler, CC; "" for none, and
+ * "tcc" is the bundled one when the system has no tcc). A script (larimar file.lar) prefers the bundled
+ * tcc, which starts fast; a project the system's, which optimizes. A program with TLS needs the system's:
+ * the bundled tcc cannot build it. null when there is none, and `problem` says what to install.
+ */
+public function chooseCompiler(home: String, wanted: String, script: bool, tls: bool, problem: String[*]): CCompiler? {
+    let tcc: String = bundledTcc(home);
+    if (wanted != "") {
+        if (wanted == "tcc" && tcc != "" && os.run(windows() ? "tcc -v >NUL 2>&1" : "tcc -v >/dev/null 2>&1") != 0) {
+            if (tls) {
+                problem.push("this program uses TLS (https), which the bundled tcc cannot build. Install a C compiler: ${installHint()}".clone());
+                return null;
+            }
+            return tccCompiler(tcc);
+        }
+        return CCompiler { program: wanted };
+    }
+    let system: String = systemCompiler();
+    if (tls) {
+        if (system != "") { return CCompiler { program: system }; }
+        problem.push((tcc != ""
+            ? "this program uses TLS (https), which the bundled tcc cannot build. Install a C compiler: ${installHint()}"
+            : "no C compiler found. Install one: ${installHint()}").clone());
+        return null;
+    }
+    if (script && tcc != "") { return tccCompiler(tcc); }
+    if (system != "") { return CCompiler { program: system }; }
+    if (tcc != "") {
+        let c: CCompiler = tccCompiler(tcc);
+        c.fallback = true;
+        return c;
+    }
+    problem.push("no C compiler found. Install one: ${installHint()}".clone());
+    return null;
+}
+
+/** The command that installs a C compiler here. */
+public function installHint(): String {
+    if (mac()) { return "xcode-select --install"; }
+    if (windows()) { return "winget install LLVM.LLVM"; }
+    let id: String = "";
+    try {
+        for (line in Files.readString("/etc/os-release").lines()) {
+            if (line.startsWith("ID=") || line.startsWith("ID_LIKE=")) { id = "${id} ${line.toLowerCase()}"; }
+        }
+    } catch (IoError e) {}
+    if (id.contains("debian") || id.contains("ubuntu")) { return "sudo apt install build-essential"; }
+    if (id.contains("fedora") || id.contains("rhel") || id.contains("centos")) { return "sudo dnf install gcc"; }
+    if (id.contains("arch")) { return "sudo pacman -S base-devel"; }
+    if (id.contains("alpine")) { return "sudo apk add build-base"; }
+    if (id.contains("suse")) { return "sudo zypper install gcc"; }
+    return "gcc or clang, from the packages of your system";
 }

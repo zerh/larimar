@@ -48,17 +48,28 @@ Larimar is translated into a single C99 file, which is then compiled with any C 
 executable. The `larimar` tool does both steps:
 
 ```sh
-./build-bootstrap.sh             # once: builds larimarc and installs it in ../out/larimar (bin/, std/, MANUAL.md)
-export LARIMAR_HOME="$PWD/../out/larimar"
-export PATH="$LARIMAR_HOME/bin:$PATH"   # on Windows, add the bin folder to the PATH
+curl -fsSL https://zerh.github.io/larimar/install.sh | sh     # macOS, Linux (Windows: install.ps1)
 
-larimar new hello                # creates hello/larimar.toml and hello/src/main.lar
+larimar hello.lar                # one file: builds it and runs it
+larimar new hello                # a project: hello/larimar.toml and hello/src/main.lar
 cd hello
-larimar run                      # translates to C, compiles with gcc or clang and runs
+larimar run                      # translates to C, compiles it and runs it
 ```
 
-`larimar run` needs a C compiler installed (gcc or clang; on Windows, MinGW).
-[Section 26](#26-projects-larimartoml-and-larimar-build) explains the project file.
+Larimar needs a C compiler. On Linux and Windows it comes with one, **tcc**, in
+`$LARIMAR_HOME/toolchain/tcc`; on macOS it uses Apple's (`xcode-select --install`, once). Which one
+builds a program:
+
+- `larimar file.lar` (one file, run right away) uses the bundled tcc first: it builds in a moment.
+- A project (`larimar run`, `build`, `test`) uses the system's compiler (cc, gcc or clang), which
+  optimizes; the bundled tcc only when there is none, with a note saying so.
+- `--cc <program>`, `CC` or `compiler = "..."` in `[c]` choose another (`tcc`: the bundled one).
+- A program that uses TLS (https) needs the system's compiler: the bundled tcc cannot build it, and
+  Larimar says what to install. Tests built with tcc run without AddressSanitizer.
+
+`larimar file.lar` passes the arguments after the file to the program (after `--` when they look like
+options of larimar), prints only what the program prints, and ends with its exit code: it works for
+scripts and pipes. [Section 26](#26-projects-larimartoml-and-larimar-build) explains the project file.
 
 The first program (`src/main.lar`):
 
@@ -3794,12 +3805,14 @@ libraries = ["SDL3", "ws2_32"]
 | `larimar build [folder]` | writes `build/<name>.c` and compiles it to the executable |
 | `larimar build --debug` | the same, for a debugger (see [Debugging](#debugging-larimar-build---debug-and-larimar-dap)) |
 | `larimar run [folder] [-- args]` | compiles and runs, passing it the arguments |
-| `larimar build --cc <program>` | builds with that C compiler instead of the project's |
+| `larimar build --cc <program>` | builds with that C compiler instead of the project's (`tcc`: the bundled one) |
 | `larimar test [file or folder]` | runs the tests (see [Tests](#tests-test-function-and-larimar-test)) |
 | `larimar <command of a plugin>` | runs the program of a plugin (see [Plugins](#plugins-commands-of-other-programs)) |
 | `larimar check [file or folder] [--json]` | looks for the errors without generating C (see [The editor](#the-editor-larimar-check-and-larimar-lsp)) |
 | `larimar lsp` | the language server for editors |
 | `larimar dap` | the debugger for editors (over `lldb-dap`) |
+| `larimar <file.lar> [args]` | builds one file (the bundled tcc first) and runs it with the arguments |
+| `larimar <file.lar> -o <out.c>` | writes the generated C of a file |
 | `larimar c <file.lar>` | shows the generated C of a file (with its modules) |
 
 ### C libraries: static, dynamic and source code

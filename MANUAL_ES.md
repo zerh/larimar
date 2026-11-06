@@ -48,17 +48,30 @@ Larimar se traduce a un único archivo C99, que luego se compila con cualquier c
 obtener un ejecutable. La herramienta `larimar` hace los dos pasos:
 
 ```sh
-./build-bootstrap.sh             # una vez: compila larimarc e instala en ../out/larimar (bin/, std/, MANUAL.md)
-export LARIMAR_HOME="$PWD/../out/larimar"
-export PATH="$LARIMAR_HOME/bin:$PATH"   # en Windows, añade la carpeta bin al PATH
+curl -fsSL https://zerh.github.io/larimar/install.sh | sh     # macOS, Linux (Windows: install.ps1)
 
-larimar new hello                # crea hello/larimar.toml y hello/src/main.lar
+larimar hola.lar                 # un archivo: lo compila y lo ejecuta
+larimar new hello                # un proyecto: hello/larimar.toml y hello/src/main.lar
 cd hello
-larimar run                      # traduce a C, compila con gcc o clang y ejecuta
+larimar run                      # traduce a C, lo compila y lo ejecuta
 ```
 
-`larimar run` necesita un compilador de C instalado (gcc o clang; en Windows, MinGW). El
-[apartado 26](#26-proyectos-larimartoml-y-larimar-build) explica el archivo de proyecto.
+Larimar necesita un compilador de C. En Linux y Windows trae uno, **tcc**, en
+`$LARIMAR_HOME/toolchain/tcc`; en macOS usa el de Apple (`xcode-select --install`, una vez). Cuál
+compila un programa:
+
+- `larimar archivo.lar` (un archivo, ejecutado al momento) usa primero el tcc incluido: compila en un
+  instante.
+- Un proyecto (`larimar run`, `build`, `test`) usa el compilador del sistema (cc, gcc o clang), que
+  optimiza; el tcc incluido solo cuando no hay ninguno, con una nota que lo dice.
+- `--cc <programa>`, `CC` o `compiler = "..."` en `[c]` eligen otro (`tcc`: el incluido).
+- Un programa que usa TLS (https) necesita el compilador del sistema: el tcc incluido no puede
+  compilarlo, y Larimar dice qué instalar. Las pruebas compiladas con tcc corren sin AddressSanitizer.
+
+`larimar archivo.lar` le pasa al programa los argumentos que van después del archivo (después de `--`
+cuando parecen opciones de larimar), solo imprime lo que imprime el programa y termina con su código de
+salida: sirve para scripts y tuberías. El [apartado 26](#26-proyectos-larimartoml-y-larimar-build)
+explica el archivo de proyecto.
 
 El primer programa (`src/main.lar`):
 
@@ -3788,12 +3801,14 @@ libraries = ["SDL3", "ws2_32"]
 | `larimar build [carpeta]` | escribe `build/<name>.c` y lo compila al ejecutable |
 | `larimar build --debug` | lo mismo, para un depurador (ver [Depurar](#depurar-larimar-build---debug-y-larimar-dap)) |
 | `larimar run [carpeta] [-- args]` | compila y ejecuta, pasándole los argumentos |
-| `larimar build --cc <programa>` | compila con ese compilador de C en lugar del del proyecto |
+| `larimar build --cc <programa>` | compila con ese compilador de C en lugar del del proyecto (`tcc`: el incluido) |
 | `larimar test [archivo o carpeta]` | ejecuta las pruebas (ver [Pruebas](#pruebas-test-function-y-larimar-test)) |
 | `larimar <comando de un plugin>` | ejecuta el programa de un plugin (ver [Plugins](#plugins-comandos-de-otros-programas)) |
 | `larimar check [archivo o carpeta] [--json]` | busca los errores sin generar C (ver [El editor](#el-editor-larimar-check-y-larimar-lsp)) |
 | `larimar lsp` | el servidor de lenguaje para editores |
 | `larimar dap` | el depurador para editores (sobre `lldb-dap`) |
+| `larimar <archivo.lar> [args]` | compila un archivo (primero con el tcc incluido) y lo ejecuta con los argumentos |
+| `larimar <archivo.lar> -o <salida.c>` | escribe el C generado de un archivo |
 | `larimar c <archivo.lar>` | muestra el C generado de un archivo (con sus módulos) |
 
 ### Bibliotecas de C: estáticas, dinámicas y código fuente

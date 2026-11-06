@@ -13,6 +13,9 @@
 c_code {
 #if defined(_WIN32)
     #include <windows.h>
+    #if defined(__TINYC__)          /* the windows.h of tcc predates Vista */
+    ULONGLONG WINAPI GetTickCount64(void);
+    #endif
     static int64_t lm_time_now(void) {
         FILETIME f;
         GetSystemTimeAsFileTime(&f);

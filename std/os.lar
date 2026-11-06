@@ -27,8 +27,10 @@ extern function strlen(text: byte*): uint64;
 extern function cExit(code: int32): void = c "exit";
 #when unix
     extern function getcwd(into: byte*, size: uint64): Untyped?;
+    extern function getpid(): int32;
 #when windows
     extern function _getcwd(into: byte*, size: int32): Untyped?;
+    extern function GetCurrentProcessId(): uint32;
     extern function GetModuleFileNameA(module: Untyped?, into: byte*, size: uint32): uint32;
 #end
 #when linux
@@ -36,6 +38,15 @@ extern function cExit(code: int32): void = c "exit";
 #when macos
     extern function _NSGetExecutablePath(into: byte*, size: uint32*): int32;
 #end
+
+/** The number the system gives this running program (its process id). */
+public function processId(): int64 {
+    #when windows
+        return GetCurrentProcessId() as int64;
+    #else
+        return getpid() as int64;
+    #end
+}
 
 /** The value of an environment variable, or null if it is not set. */
 public function env(name: String): String? { return getenv(name); }
