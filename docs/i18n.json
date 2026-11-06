@@ -14,7 +14,7 @@
     "hero.body": "Larimar transpiles to a single C99 file, has no garbage collector (memory is freed in blocks, at points you can see in the code), and its compiler is written in Larimar itself.",
     "hero.status.html": "<strong>Status:</strong> 189 tests: memory, threads, network, debugger, editor and standard library. Language specification 1.0.",
     "hero.copy": "Copy",
-    "hero.download": "or download the archive",
+    "hero.download": "Prefer to download it yourself?",
     "hero.needs": "It installs into ~/.larimar, no sudo. Building programs needs a C compiler (gcc or clang): the installer tells you how to get one if it is missing.",
     "features.eyebrow": "The language",
     "features.title": "What the language brings",
