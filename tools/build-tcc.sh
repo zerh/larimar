@@ -4,7 +4,7 @@
 # headers and static library. Programs it builds are static: they need nothing from the system.
 #
 #   sudo apt-get install musl-dev
-#   toolchain/build-tcc.sh ../out/larimar
+#   tools/build-tcc.sh ../out/larimar
 #
 # Larimar uses it for `larimar file.lar` (it starts fast) and when the system has no C compiler. Programs
 # that use TLS need the system's compiler (std.net.tls loads the system's OpenSSL).
@@ -12,7 +12,7 @@ set -eu
 
 TCC_COMMIT=2d3eea205cb6c0f796d01d7d0858eb6c6c1d993f     # github.com/TinyCC/tinycc (mob), tested with Larimar
 
-[ $# -eq 1 ] || { echo "usage: toolchain/build-tcc.sh <larimar folder>"; exit 2; }
+[ $# -eq 1 ] || { echo "usage: tools/build-tcc.sh <larimar folder>"; exit 2; }
 DEST="$(cd "$1" && pwd)/toolchain/tcc"
 TRIPLE="$(gcc -dumpmachine | sed 's/-gnu$/-musl/')"     # x86_64-linux-musl, aarch64-linux-musl
 MUSL_INC="/usr/include/$TRIPLE"
