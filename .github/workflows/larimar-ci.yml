@@ -18,7 +18,13 @@ jobs:
           - os: ubuntu-latest
             artifact_name: larimar-linux-x86_64.tar.gz
             script_type: sh
-          - os: macos-latest
+          - os: ubuntu-24.04-arm          # ARM64: Raspberry Pi 4/5, ARM servers
+            artifact_name: larimar-linux-arm64.tar.gz
+            script_type: sh
+          - os: macos-latest              # Apple Silicon
+            artifact_name: larimar-macos-arm64.tar.gz
+            script_type: sh
+          - os: macos-13                  # Intel
             artifact_name: larimar-macos-x86_64.tar.gz
             script_type: sh
           - os: windows-latest
@@ -89,6 +95,8 @@ jobs:
         run: |
           mkdir -p final-release
           find downloaded-artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} final-release/ \;
+          # install.sh and install.ps1 check each download against this list
+          (cd final-release && sha256sum *.tar.gz *.zip > SHA256SUMS)
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
