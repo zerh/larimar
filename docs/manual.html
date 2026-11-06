@@ -435,9 +435,8 @@
     @keyframes sk-shine { from { background-position: 100% 0; } to { background-position: -100% 0; } }
     @media (prefers-reduced-motion: reduce) { .sk-line, .sk-block { animation: none; } }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-    .manual-body { opacity: 1; }
-    .manual-body.shown { animation: md-in 0.25s ease-out; }
-    @keyframes md-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    /* no animation on the whole manual: an element that tall, animated, takes a layer of its whole size,
+       and the phone's browser runs out of memory and reloads the page */
     .manual-status a { color: var(--larimar-light); }
     .manual-body h1 { font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 700; color: var(--text-main); letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1rem; }
     .manual-body h2 { font-size: 1.75rem; font-weight: 700; color: var(--text-main); margin: 3.5rem 0 1rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); letter-spacing: -0.01em; }
@@ -750,7 +749,6 @@
         words();
         var file = FILES[lang];
         article.innerHTML = SKELETON;           // the shape of the page while the manual arrives
-        article.classList.remove('shown');
         fetchFirst(sources(file)).then(function (md) {
           used = {};
           article.innerHTML = marked.parse(md);
@@ -775,7 +773,6 @@
           });
           buildToc();
           spy();
-          requestAnimationFrame(function () { article.classList.add('shown'); });
           search.dispatchEvent(new Event('input'));
           if (location.hash) {
             var target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
