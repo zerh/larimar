@@ -18,6 +18,25 @@
   <meta property="og:image:alt" content="Larimar: a small language that compiles to C">
   <meta name="twitter:card" content="summary_large_image">
   <script>
+    // the install command: the tab of the visitor's system, and a copy button
+    document.addEventListener('DOMContentLoaded', function () {
+      function show(os) {
+        document.querySelectorAll('.install-tab').forEach(function (t) { t.classList.toggle('active', t.dataset.os === os); });
+        document.querySelectorAll('.install-cmd').forEach(function (c) { c.hidden = c.dataset.os !== os; });
+      }
+      document.querySelectorAll('.install-tab').forEach(function (t) { t.addEventListener('click', function () { show(t.dataset.os); }); });
+      if (/Windows/i.test(navigator.userAgent)) { show('win'); }
+      document.querySelectorAll('.install-copy').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var text = b.parentElement.querySelector('.install-text').textContent;
+          var label = b.textContent;
+          var done = function () { b.textContent = '✓'; setTimeout(function () { b.textContent = label; }, 1500); };
+          try { navigator.clipboard.writeText(text).then(done, function () {}); } catch (e) {}
+        });
+      });
+    });
+  </script>
+  <script>
     // Hidden for a moment while i18n.json loads, so the page does not flash in the other language.
     document.documentElement.classList.add('i18n-pending');
     setTimeout(function () { document.documentElement.classList.remove('i18n-pending'); }, 1500);
@@ -378,6 +397,24 @@
     .get .step-code { margin-top: 0.75rem; }
     .step-code { overflow-x: auto; }
     .get .step { justify-content: flex-start; }
+
+    .install-box { margin-top: 2rem; }
+    .install-tabs { display: flex; gap: 0.25rem; margin-bottom: 0.5rem; }
+    .install-tab { background: none; border: 1px solid transparent; border-radius: 0.375rem; color: var(--text-muted); cursor: pointer; font: inherit; font-size: 0.8125rem; padding: 0.25rem 0.75rem; }
+    .install-tab.active { border-color: var(--border, rgba(255,255,255,0.12)); color: var(--text); }
+    .install-cmd { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 1rem; }
+    .install-cmd[hidden] { display: none; }
+    .install-cmd code { font-size: 0.8125rem; overflow-x: auto; white-space: nowrap; }
+    .install-dollar { color: var(--text-muted); user-select: none; }
+    .install-copy { background: none; border: 1px solid var(--border, rgba(255,255,255,0.12)); border-radius: 0.375rem; color: var(--text-muted); cursor: pointer; flex: none; font: inherit; font-size: 0.75rem; padding: 0.2rem 0.6rem; }
+    .install-copy:hover { color: var(--text); }
+    .install-note { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; }
+    .dl-details { margin-top: 1rem; font-size: 0.875rem; }
+    .dl-details summary { cursor: pointer; color: var(--larimar-light); }
+    .dl-details .downloads { justify-content: flex-start; margin-top: 1rem; }
+    .dl-after { margin-top: 1rem; font-weight: 600; }
+    .dl-code { margin-top: 0.5rem; padding: 0.75rem 1rem; white-space: pre; font-size: 0.8125rem; }
+    .src-code { text-align: left; margin-top: 1.5rem; white-space: pre; }
   </style>
 </head>
 <body>
@@ -402,7 +439,7 @@
           <span class="lt-opt" data-lang="es">ES</span>
           <span class="lt-opt" data-lang="en">EN</span>
         </button>
-        <a href="#install" class="btn-ghost" style="padding: 0.5rem 1rem;" data-i18n="nav.try">Try it</a>
+        <a href="#get" class="btn-ghost" style="padding: 0.5rem 1rem;" data-i18n="nav.try">Install</a>
       </div>
     </div>
   </header>
@@ -417,15 +454,35 @@
             <h1 style="font-size: clamp(2.25rem, 4.5vw, 3.75rem); font-weight: 700; line-height: 1.1; margin-top: 1.5rem; letter-spacing: -0.025em;" data-i18n-html="hero.title.html">A small language that <span class="gradient-text">compiles to C</span>.</h1>
             <p style="color: var(--text-muted); font-size: 1.125rem; line-height: 1.625; margin-top: 1.5rem;" data-i18n="hero.body">Larimar transpiles to a single C99 file, has no garbage collector (memory is freed in blocks, at points you can see in the code), and its compiler is written in Larimar itself.</p>
             <div class="status-note" data-i18n-html="hero.status.html"><strong>Status:</strong> 189 tests: memory, threads, network, debugger, editor and standard library. Language specification 1.0.</div>
-            <div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;">
-              <a href="#install" class="btn-primary" data-i18n="hero.try">Try it</a>
-              <a href="#features" class="btn-ghost" data-i18n="hero.examples">See examples</a>
-            </div>
-            <div style="margin-top: 2.5rem;">
-              <div class="code-block" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem;">
-                <code style="font-size: 0.875rem;"><span style="color: var(--text-muted);">$</span> <span class="tok-fn">larimar</span> new hello <span style="color:var(--text-muted)">&amp;&amp;</span> cd hello <span style="color:var(--text-muted)">&amp;&amp;</span> larimar run</code>
+            <!-- the install command for the visitor's system (install.sh / install.ps1, next to this page) -->
+            <div id="get" class="install-box">
+              <div class="install-tabs" role="tablist">
+                <button type="button" class="install-tab active" data-os="unix">macOS · Linux</button>
+                <button type="button" class="install-tab" data-os="win">Windows</button>
               </div>
-              <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;" data-i18n="hero.needs">You need gcc or clang (MinGW on Windows).</p>
+              <div class="code-block install-cmd" data-os="unix"><code><span class="install-dollar">$</span> <span class="install-text">curl -fsSL https://zerh.github.io/larimar/install.sh | sh</span></code><button type="button" class="install-copy" data-i18n="hero.copy">Copy</button></div>
+              <div class="code-block install-cmd" data-os="win" hidden><code><span class="install-dollar">&gt;</span> <span class="install-text">powershell -c "irm https://zerh.github.io/larimar/install.ps1 | iex"</span></code><button type="button" class="install-copy" data-i18n="hero.copy">Copy</button></div>
+              <p class="install-note" data-i18n="hero.needs">It installs into ~/.larimar, no sudo. Building programs needs a C compiler (gcc or clang): the installer tells you how to get one if it is missing.</p>
+
+              <details class="dl-details">
+                <summary data-i18n="hero.download">or download the archive</summary>
+                <div class="downloads">
+                  <a class="btn-ghost" href="https://github.com/zerh/larimar/releases/latest/download/larimar-macos-arm64.tar.gz">macOS <span class="dl-note">Apple Silicon</span></a>
+                  <a class="btn-ghost" href="https://github.com/zerh/larimar/releases/latest/download/larimar-macos-x86_64.tar.gz">macOS <span class="dl-note">Intel</span></a>
+                  <a class="btn-ghost" href="https://github.com/zerh/larimar/releases/latest/download/larimar-linux-x86_64.tar.gz">Linux <span class="dl-note">x86_64</span></a>
+                  <a class="btn-ghost" href="https://github.com/zerh/larimar/releases/latest/download/larimar-linux-arm64.tar.gz">Linux <span class="dl-note">ARM64</span></a>
+                  <a class="btn-ghost" href="https://github.com/zerh/larimar/releases/latest/download/larimar-windows-x86_64.zip">Windows <span class="dl-note">x86_64</span></a>
+                </div>
+                <p class="dl-after" data-i18n="get.dl.title">After downloading</p>
+                <div class="code-block dl-code">tar -xzf larimar-*.tar.gz
+export PATH="$PWD/larimar/bin:$PATH"</div>
+                <ul class="bullets get-notes">
+                  <li data-i18n-html="get.dl.keep.html">To keep it in every new terminal, put that <code style="color:var(--larimar-light);">export</code> line in <code style="color:var(--larimar-light);">~/.zshrc</code> (macOS) or <code style="color:var(--larimar-light);">~/.bashrc</code> (Linux), with the full path.</li>
+                  <li data-i18n-html="get.dl.win.html">On Windows: unpack the <code style="color:var(--larimar-light);">.zip</code> and add <code style="color:var(--larimar-light);">larimar\bin</code> to <code style="color:var(--larimar-light);">Path</code> in <em>Edit the system environment variables</em>.</li>
+                  <li data-i18n-html="get.dl.mac.html">On macOS, if it warns that it cannot verify the developer: <code style="color:var(--larimar-light);">xattr -dr com.apple.quarantine larimar</code>. There is no need to set <code style="color:var(--larimar-light);">LARIMAR_HOME</code>: <code style="color:var(--larimar-light);">larimar</code> takes it from its own folder.</li>
+                </ul>
+                <p class="dl-more"><a href="https://github.com/zerh/larimar/releases" data-i18n="install.all">All versions and release notes on GitHub</a></p>
+              </details>
             </div>
           </div>
 
@@ -953,64 +1010,14 @@ server.<span class="tok-fn">run</span>();</pre>
     <section id="install" class="section">
       <div class="container">
         <div style="text-align: center; max-width: 48rem; margin: 0 auto;">
-          <div class="eyebrow" data-i18n="install.eyebrow">Try it</div>
-          <h2 class="h2" data-i18n="install.title">Your first program</h2>
-          <p class="lead" data-i18n="install.body">Download the latest version for your system. To build your programs you need a C compiler (gcc or clang; MinGW on Windows).</p>
-          <!-- the latest release, built by GitHub Actions for each system -->
-          <div class="downloads">
-            <a class="btn-primary" href="https://github.com/zerh/larimar/releases/latest/download/larimar-macos-x86_64.tar.gz">macOS <span class="dl-note">Apple Silicon</span></a>
-            <a class="btn-primary" href="https://github.com/zerh/larimar/releases/latest/download/larimar-linux-x86_64.tar.gz">Linux <span class="dl-note">x86_64</span></a>
-            <a class="btn-primary" href="https://github.com/zerh/larimar/releases/latest/download/larimar-windows-x86_64.zip">Windows <span class="dl-note">x86_64</span></a>
-          </div>
-          <p class="dl-more"><a href="https://github.com/zerh/larimar/releases" data-i18n="install.all">All versions and release notes on GitHub</a></p>
-        </div>
-
-        <!-- two ways to get it: the release built by GitHub Actions, or from the source -->
-        <div class="grid-2 get" style="margin-top: 3.5rem;">
-          <div class="card step">
-            <div>
-              <h3 class="step-title" data-i18n="get.dl.title">After downloading</h3>
-              <p class="card-body" data-i18n-html="get.dl.path.html">Unpack it wherever you like: inside is the <code style="color:var(--larimar-light);">larimar</code> folder (<code style="color:var(--larimar-light);">bin</code>, <code style="color:var(--larimar-light);">std</code> and the manual). For the terminal to find the <code style="color:var(--larimar-light);">larimar</code> command, add <code style="color:var(--larimar-light);">larimar/bin</code> to the <code style="color:var(--larimar-light);">PATH</code> environment variable:</p>
-            </div>
-            <div class="code-block step-code">tar -xzf larimar-*.tar.gz
-export PATH="$PWD/larimar/bin:$PATH"</div>
-            <ul class="bullets get-notes">
-              <li data-i18n-html="get.dl.keep.html">To keep it in every new terminal, put that <code style="color:var(--larimar-light);">export</code> line in <code style="color:var(--larimar-light);">~/.zshrc</code> (macOS) or <code style="color:var(--larimar-light);">~/.bashrc</code> (Linux), with the full path.</li>
-              <li data-i18n-html="get.dl.win.html">On Windows: unpack the <code style="color:var(--larimar-light);">.zip</code> and add <code style="color:var(--larimar-light);">larimar\bin</code> to <code style="color:var(--larimar-light);">Path</code> in <em>Edit the system environment variables</em>.</li>
-              <li data-i18n-html="get.dl.mac.html">On macOS, if it warns that it cannot verify the developer: <code style="color:var(--larimar-light);">xattr -dr com.apple.quarantine larimar</code>. There is no need to set <code style="color:var(--larimar-light);">LARIMAR_HOME</code>: <code style="color:var(--larimar-light);">larimar</code> takes it from its own folder.</li>
-            </ul>
-          </div>
-          <div class="card step">
-            <div>
-              <h3 class="step-title" data-i18n="get.src.title">Or build it yourself</h3>
-              <p class="card-body" data-i18n="get.src.body">From the source, with gcc or clang. The compiler is built from its C version and checked by compiling itself.</p>
-            </div>
-            <div class="code-block step-code">git clone https://github.com/zerh/larimar
+          <div class="eyebrow" data-i18n="install.eyebrow">From the source</div>
+          <h2 class="h2" data-i18n="install.title">Or build it yourself</h2>
+          <p class="lead" data-i18n="get.src.body">From the source, with gcc or clang. The compiler is built from its C version and checked by compiling itself.</p>
+          <div class="code-block step-code src-code">git clone https://github.com/zerh/larimar
 cd larimar
 ./build-bootstrap.sh --verify
 export PATH="$PWD/../out/larimar/bin:$PATH"</div>
-            <p class="card-body" style="margin-top: 1rem;" data-i18n-html="get.src.note.html">It installs into <code style="color:var(--larimar-light);">../out/larimar</code>, with the same layout as the download. It is the way to go if you want to change the compiler or use a version not yet released.</p>
-          </div>
-        </div>
-
-        <div class="grid-2" style="margin-top: 1.5rem;">
-          <div class="card step">
-            <div>
-              <span class="step-n">01</span>
-              <h3 class="step-title" data-i18n="s2.title">Create a project</h3>
-              <p class="card-body" data-i18n="s2.body">larimar new makes the folder with larimar.toml and a main.</p>
-            </div>
-            <div class="code-block step-code">larimar new hello
-cd hello</div>
-          </div>
-          <div class="card step">
-            <div>
-              <span class="step-n">02</span>
-              <h3 class="step-title" data-i18n="s3.title">Run it</h3>
-              <p class="card-body" data-i18n="s3.body">Transpiles to C, builds with gcc or clang and runs, in one command.</p>
-            </div>
-            <div class="code-block step-code">larimar run</div>
-          </div>
+          <p class="card-body" style="margin-top: 1rem;" data-i18n-html="get.src.note.html">It installs into <code style="color:var(--larimar-light);">../out/larimar</code>, with the same layout as the download. It is the way to go if you want to change the compiler or use a version not yet released.</p>
         </div>
 
         <div style="margin-top: 5rem;" class="split">
