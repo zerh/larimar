@@ -2095,8 +2095,29 @@ Las reglas de una clase `synchronized`:
 - Sus campos solo se usan dentro de sus métodos, a través de `self`.
 - Sus métodos reciben y devuelven valores u objetos `synchronized`, nunca listas, objetos normales ni `Any`:
   así sus datos no salen sin el candado.
-- No hereda ni se hereda, y dentro de sus métodos `self` no se usa en lambdas (podrían ejecutarse sin el candado).
+- Solo hereda de otra clase `synchronized`, y solo una clase `synchronized` hereda de ella. El objeto
+  tiene un único candado, y todos los métodos lo toman, también los heredados.
+- Dentro de una lambda de sus métodos, `self` solo se usa para llamar a sus métodos (`self.run()` o
+  `self::run`), que toman el candado; sus campos no, porque la lambda podría ejecutarse más tarde, sin él.
 - Un método puede llamar a otro del mismo objeto: el candado se puede tomar varias veces.
+
+```ts
+synchronized class Queue {
+    let items: int32[*] = [];
+    function put(x: int32): void { self.items.push(x); }
+    function size(): int32 { return self.items.length; }
+}
+
+synchronized class LimitedQueue extends Queue {      // el mismo candado para put, size y later
+    let limit: int32 = 100;
+    override function put(x: int32): void {
+        if (self.size() < self.limit) { super.put(x); }
+    }
+    function later(): () -> void thread safe {
+        return () -> { self.put(0); };                // bien: put toma el candado
+    }
+}
+```
 
 ### Esperar a que algo ocurra: `wait until`
 
@@ -4604,7 +4625,7 @@ Lo que Larimar no tiene, ni va a tener, con lo que se usa en su lugar:
 
 - No hay `defer`.
 - Un `Any` no guarda listas `[*]`, lambdas ni interfaces.
-- Una clase `synchronized` no puede heredar, y `wait until` no tiene tiempo límite (espera hasta que la condición se cumpla).
+- `wait until` no tiene tiempo límite (espera hasta que la condición se cumpla).
 - La biblioteca estándar es pequeña: archivos, consola, rutas, entorno, otros programas, tiempo, hashes y
   bytes aleatorios, expresiones regulares, JSON, TOML, base64, hex y URLs, TCP y UDP con sus servidores
   (normales o https), y un cliente HTTP y HTTPS. La red aún no tiene servidor HTTP (eso es para un

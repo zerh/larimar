@@ -1,0 +1,34 @@
+// The locals of a block arm of a switch that is returned live in the arm's block: only what it yields is
+// the result (a text made there once went to the caller's memory, which here is none).
+class Shape { let n: int32 = 0; }
+class Circle extends Shape { let name: String = "circle"; }
+class Kind { let k: int32 = 0; }
+
+function label(c: Circle): String { return "${c.name}::r"; }
+
+function kind(s: Shape): Kind {
+    return switch (s) {
+        case Circle c -> {
+            let shown: String = label(c);
+            let dotted: String = shown.replace("::", ".");
+            println(dotted.startsWith(".") ? dotted.substring(1) : dotted);
+            yield Kind { k: 1 };
+        }
+        default -> Kind {};
+    };
+}
+
+function count(s: Shape): int32 {
+    return switch (s) {
+        case Circle c -> {
+            let shown: String = label(c);
+            yield shown.length;
+        }
+        default -> 0;
+    };
+}
+
+function main(): int32 {
+    let c: Circle = {};
+    return kind(c).k == 1 && count(c) == 9 ? 0 : 1;
+}

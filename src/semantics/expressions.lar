@@ -653,15 +653,16 @@ function cFunctionValue(id: Ident in default, f: FunctionInfo in default, ft: Ty
     return ft;
 }
 
+/** The last self checked was reached from inside a lambda of the method. */
+let selfInLambda: bool = false;
+
 function checkSelf(se: Expr in default): Type {
     let i: int32 = frameTop - 1;
     while (i >= 0) {
         let f: Frame = frames[i];
         let st: Type? = f.selfType;
         if (st != null) {
-            if (i < frameTop - 1 && isClass(st) && classOf(st.name)!.sync) {
-                error(se.line, "'self' of a synchronized class cannot be used inside a lambda: the lambda could run later, without the lock.");
-            }
+            selfInLambda = i < frameTop - 1;       // its fields, then, are not under the lock (checkMember)
             let s: Symbol = lookupIn(f.root!, "self")!;
             se.symbol = s;
             noteCapture(s, se.line);
@@ -766,6 +767,8 @@ function checkMember(m: Member in default): Type {
     if (f != null) {
         if (ot.nk == NamedK.Class && classOf(ot.name)!.sync && !(obj is SelfExpr)) {
             error(m.line, "The fields of synchronized class '${ot.name}' are only used inside its methods (through self), where the object is locked.");
+        } else if (obj is SelfExpr && selfInLambda && ot.nk == NamedK.Class && classOf(ot.name)!.sync) {
+            error(m.line, "'self.${m.name}' of a synchronized class cannot be used inside a lambda: the lambda could run later, without the lock. Call a method instead, which takes the lock: self::method, or () -> { self.method(); }");
         }
         m.member = MemberInfo { kind: MbK.Field, field: f, objectType: ot } in default;
         if (!hasRefs(f.type)) { setRegion(m, R_STATIC); }
@@ -959,8 +962,17 @@ function checkLambda(l: Lambda in default, expected: Type? in default): Type {
     return ft;
 }
 
+/** pepito::run(): the parentheses call it; the reference is written without them. */
+function calledReference(c: Call in default, ref: Call in default): Type {
+    let shown: String = refText(ref);
+    let call: String = shown.replace("::", ".");
+    if (call.startsWith(".")) { call = call.substring(1); }
+    error(c.line, "'${shown}()' calls a reference: for the reference write '${shown}' (without parentheses); to call the function, ${call}(...).");
+    return checkAllArgs(c);
+}
+
 /** How a method reference was written: Pages::show. */
-function refText(c: Call): String {
+public function refText(c: Call): String {
     if (c.callee is Member m) { return "${describeExpr(m.object)}::${m.name}"; }
     if (c.callee is Ident id) {          // module.name was already renamed to the name itself: std__encoding__hex__encode
         let shown: String = id.name.replace("__", ".");
@@ -1593,6 +1605,7 @@ function checkCall(c: Call in default, expected: Type? in default, place: Place 
         }
         case SuperMember sm -> checkSuperCall(c, sm, place);
         case Member m -> checkMethodCall(c, m, expected, place);
+        case Lambda l -> l.ref != null ? calledReference(c, l.ref!) : closureCall(c, check(c.callee, null, P_TEMP), regionOf(c.callee), place);
         default -> closureCall(c, check(c.callee, null, P_TEMP), regionOf(c.callee), place);
     };
 }
@@ -1805,6 +1818,9 @@ function checkMethodCall(c: Call in default, callee: Member in default, expected
             error(callee.line, "'${ot.text}' has no method or field '${name}'.");
         }
         return checkAllArgs(c);
+    }
+    if (obj is SelfExpr && selfInLambda && isClass(ot) && classOf(ot.name)!.sync) {
+        error(callee.line, "'self.${name}' of a synchronized class cannot be used inside a lambda: the lambda could run later, without the lock. Call a method instead, which takes the lock: self::method, or () -> { self.method(); }");
     }
     callee.member = MemberInfo { kind: MbK.Field, field: f, objectType: ot } in default;
     callee.ty = f.type;

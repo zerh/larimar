@@ -1,0 +1,5 @@
+// expect: error 'tarea = ...' is a statement: at top level only declarations are allowed
+let tarea: int32 = 0;
+tarea = 3;
+
+function main(): int32 { return 0; }

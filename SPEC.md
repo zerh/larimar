@@ -1343,8 +1343,10 @@ releases it on every exit. The lock is re-entrant: a method can call another met
 - Its fields are used only inside its methods, through `self`.
 - Its methods take and return only values ([§18.5](#185-what-a-thread-can-use)), objects of synchronized
   classes and `thread safe` functions: never lists, ordinary objects or `Any`.
-- It does not extend and is not extended.
-- `self` cannot be captured by a lambda inside its methods.
+- It extends only another synchronized class, and only a synchronized class extends it. The object has a
+  single lock, taken by every method, the inherited ones too.
+- Inside a lambda of its methods, `self` is used only to call its methods (`self.m()`, `self::m`), which
+  take the lock; its fields are not used there, since the lambda could run later, without the lock.
 
 ### 18.3 `wait until`
 

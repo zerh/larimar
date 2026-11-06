@@ -1,0 +1,23 @@
+// A lambda in a method of a synchronized class can call the methods of self: each one takes the lock
+// (it is recursive, so calling from a method that already has it works).
+synchronized class Pepito {
+    let n: int32 = 0;
+    function run(): void { self.n += 1; }
+    function count(): int32 { return self.n; }
+    function twice(): void {
+        let f: () -> void thread safe = self::run;
+        f();
+        let g: () -> void = () -> { self.run(); };
+        g();
+    }
+}
+
+let pepito: Pepito = {};
+let tarea: () -> void thread safe = pepito::run;
+
+function main(): int32 {
+    pepito.twice();
+    tarea();
+    println("${pepito.count()}");
+    return pepito.count() == 3 ? 0 : 1;
+}

@@ -1,0 +1,9 @@
+// expect: error '::bump' is given where a 'thread safe' function is expected, but it can reach global 'hits'
+let hits: int32 = 0;
+function bump(x: int32): void { hits += 1; }
+function take(f: (int32) -> void thread safe): void { f(1); }
+
+function main(): int32 {
+    take(::bump);
+    return 0;
+}

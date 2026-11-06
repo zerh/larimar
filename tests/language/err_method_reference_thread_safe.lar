@@ -1,0 +1,9 @@
+// expect: error 'b::get' is given where a 'thread safe' function is expected, but it keeps 'b' (Box)
+class Box { let n: int32 = 0; function get(x: int32): void { self.n = x; } }
+function take(f: (int32) -> void thread safe): void { f(1); }
+
+function main(): int32 {
+    let b: Box = {};
+    take(b::get);
+    return 0;
+}

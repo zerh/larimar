@@ -32,7 +32,7 @@ import semantics.types {
 };
 import semantics.expressions {
     check, coerce, typeOf, regionOf, hasRefs, note, resolveType, resolveTop, resolveValue, evalConst, ConstVal,
-    analyzeSwitch, TC_PARAM, TC_LET, TC_OTHER, intFits, namedHasRefs
+    analyzeSwitch, TC_PARAM, TC_LET, TC_OTHER, intFits, namedHasRefs, refText
 };
 
 // =====================================================================================
@@ -1746,6 +1746,18 @@ function mentioned(e: Expr, out: Any, viaPlaced: bool): void {
                     exprAll(m, true, skip);
                 }
             }
+            case SwitchExpr sw -> {          // of a block arm only what it yields is the value; its other statements are not
+                for (k in sw.cases) {
+                    exprAll(k.guard, true, skip);
+                    if (!k.hasBlock) { continue; }
+                    allExprs(k.block, true, skip);
+                    let stmts: Stmt[*] = [];
+                    allStmts(k.block, stmts);
+                    for (st in stmts) {
+                        if (st is YieldStmt y) { mentioned(y.value, out, viaPlaced); }
+                    }
+                }
+            }
             case Ident id -> { out[id.name] = 1; }
             case SelfExpr _ -> { out["self"] = 1; }
             default -> {}
@@ -2873,10 +2885,15 @@ function sendableIn(t: Type in default, visiting: Any): bool {
 
 function checkSynchronizedClasses(): void {
     for (c in classes) {
-        if (c.sync && c.superName != "") { error(c.line, "Synchronized class '${c.name}' cannot extend another class."); }
         let parent: ClassInfo? = c.superName != "" ? classOf(c.superName) : null;
-        if (parent != null && (parent.sync || parent.thread)) {
-            error(c.line, "Class '${c.name}' cannot extend ${parent.thread ? "Thread" : "synchronized class '${parent.name}'"}.");
+        // synchronized from synchronized: every method, the parent's too, takes the same lock
+        if (c.sync && parent != null && !parent.sync) {
+            error(c.line, "Synchronized class '${c.name}' can only extend another synchronized class: the methods of '${parent.name}' use its fields without the lock.");
+        }
+        if (!c.sync && parent != null && (parent.sync || parent.thread)) {
+            error(c.line, parent.thread
+                ? "Class '${c.name}' cannot extend Thread."
+                : "Class '${c.name}' cannot extend synchronized class '${parent.name}': declare it 'synchronized class ${c.name}', so its methods take the same lock.");
         }
         if (!c.sync) { continue; }
         for (m in c.methods) {
@@ -2920,10 +2937,15 @@ let markRound: int32 = 0;
 
 function checkThreads(): void {
     for (tr in threadRuns) {
+        let ref: Call? = tr.lambda.node.ref;
+        // a reference: '::bump' / 'b::get' is given where a 'thread safe' function is expected, but it ...
+        let given: String = ref != null ? "'${refText(ref!)}' is given where a 'thread safe' function is expected, but it" : "";
         for (s in tr.lambda.captures) {
             if (sendable(s.type)) { continue; }
             let what: String = s.kind == SymK.Self ? "self" : "'${s.name}'";
-            error(tr.line, tr.safe
+            error(tr.line, ref != null
+                ? "${given} keeps ${what} (${s.type.text}), which other threads could change at the same time. It can use only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes and 'thread safe' functions."
+                : tr.safe
                 ? "This 'thread safe' lambda uses ${what} (${s.type.text}), which other threads could change at the same time. It can use only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes and 'thread safe' functions."
                 : "This thread uses ${what} (${s.type.text}), which could change while the thread runs. A thread can share only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes and 'thread safe' functions.");
         }
@@ -2941,7 +2963,7 @@ function checkThreads(): void {
                 if (reported.contains(key) || !(isMemory(g) || g.mutatedGlobal || !sendable(g.type))) { continue; }
                 reported[key] = true;
                 let line: int32 = o.useLines[i];
-                let who: String = tr.safe ? "This 'thread safe' lambda" : "This thread";
+                let who: String = ref != null ? given : tr.safe ? "This 'thread safe' lambda" : "This thread";
                 error(tr.line, isMemory(g)
                     ? "${who} can reach global memory '${g.name}' (line ${line}). Between threads only the default memory is shared: create things 'in default' or in a memory of the thread."
                     : "${who} can reach global '${g.name}' (line ${line}), which can change while threads use it. Keep shared state in an object of a synchronized class.");

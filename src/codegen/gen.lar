@@ -23,7 +23,7 @@ import semantics.types {
     FieldInfo, FunctionInfo, MethodInfo, StructInfo, ClassInfo, InterfaceInfo, VariantInfo, EnumInfo, LambdaInfo,
     hasCapture, cSuffix, isMemParam, PatternInfo, PatK, SwitchInfo, ForInfo, CatchInfo, CallInfo, CallK, MemberInfo, MbK,
     includes, usesAny, usesThreads, cCode, files, structs, nativeMethods, classes, interfaces, enums, externTypes, functions, globals,
-    lambdaList, funcTypes, typeOrder, structOf, classOf, interfaceOf, enumOf, parentOf, chain, findMethod, allFields, classDepth, primByName,
+    lambdaList, funcTypes, typeOrder, structOf, classOf, interfaceOf, enumOf, parentOf, syncField, chain, findMethod, allFields, classDepth, primByName,
     externInfos, externInfoOf, ExternTypeInfo, cCodeStd, includeWhens, isResource, platformCondition
 };
 import codegen.runtimeselect { selectRuntime };
@@ -302,7 +302,7 @@ public function generate(): String {
                 methods.add("}\n\n");
                 continue;
             }
-            let lock: String = c.sync ? "self->_sync" : "";
+            let lock: String = c.sync ? "self->${syncField(c)}" : "";
             methods.add(body(m.decl.body, m.sig!.elem!, m.throwsType != null, null, m.paramSymbols, lock, m.decl.line));
             methods.add("}\n\n");
         }
@@ -779,7 +779,7 @@ function define(out: StringBuilder, t: Type): void {
             } else {
                 out.add("    ${tname(c.superName)} _super;\n");
             }
-            if (c.sync) { out.add("    RtSync* _sync;\n"); }
+            if (c.sync && syncField(c) == "_sync") { out.add("    RtSync* _sync;\n"); }     // a child uses its parent's
             for (f in c.fields) { out.add("    ${cType(f.type)} ${escapeName(f.name)};\n"); }
             if (c.thread) { out.add("    RtThread _thread;\n"); }
             if (c.builder) { out.add("    RtSb _sb;\n"); }

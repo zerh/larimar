@@ -872,6 +872,12 @@ public function parentOf(c: ClassInfo): ClassInfo? {
     return c.superName == "" ? null : classOf(c.superName);
 }
 
+/** Where the lock of a synchronized class is in its C struct: the first synchronized class of the chain has it. */
+public function syncField(c: ClassInfo in default): String {
+    let p: ClassInfo? = parentOf(c);
+    return p != null && p.sync ? "_super.${syncField(p!)}" : "_sync";
+}
+
 /** Root first; safe on broken hierarchies. */
 public function chain(name: String in default): ClassInfo[*] {
     let rev: ClassInfo[*] = [] in default;

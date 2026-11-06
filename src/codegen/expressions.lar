@@ -12,7 +12,7 @@ import semantics.types {
     isArray, isFloat, isInteger, isSigned, isNumeric, bits, optIsPointer, ascii, isCReserved, escapeName, arrayT,
     Symbol, SymK, MemK, ConstK, isMemory, FieldInfo, FunctionInfo, MethodInfo, StructInfo, ClassInfo, InterfaceInfo,
     VariantInfo, EnumInfo, LambdaInfo, hasCapture, isMemParam, Place, PlaceK, Conversion, ConvK, CallInfo, CallK, BK,
-    MemberInfo, MbK, PatternInfo, PatK, classes, structOf, classOf, interfaceOf, enumOf, parentOf, findMethod, allFields,
+    MemberInfo, MbK, PatternInfo, PatK, classes, structOf, classOf, interfaceOf, enumOf, parentOf, syncField, findMethod, allFields,
     isPtr, isResource, externInfoOf, ExternTypeInfo
 };
 import codegen.gen {
@@ -1327,7 +1327,7 @@ function builtin(c: Call in default, b: CallInfo in default): String {
         }
         case AnyContains -> "rt_any_contains(${expr(obj)}, ${value(c.args[0])})";
         case AnyContainsKey -> "rt_any_contains_key(${expr(obj)}, ${value(c.args[0])})";
-        case Wait -> "rt_sync_wait(self->_sync)";
+        case Wait -> "rt_sync_wait(self->${syncField(classOf(b.receiverType!.name)!)})";
         default -> cloneCall(c, b);
     };
 }
@@ -1811,7 +1811,8 @@ function objectLit(o: ObjectLit in default, t: Type in default): String {
     let held: Expr[*] = inOrder(writtenValues(o));
     let init: String = classInit(c, c.name, o, mem);
     forget(held);
-    line("*${obj} = (${c.name}){ ${init}${sync != "" ? ", ._sync = ${sync}" : ""} };");
+    line("*${obj} = (${c.name}){ ${init} };");
+    if (sync != "") { line("${obj}->${syncField(c)} = ${sync};"); }
     return obj;
 }
 
