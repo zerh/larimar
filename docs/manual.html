@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1' y1='0' y2='0'%3E%3Cstop offset='0' stop-color='%2372e2dd'/%3E%3Cstop offset='.5' stop-color='%233fc9c4'/%3E%3Cstop offset='1' stop-color='%2334d399'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='2' y='2' width='60' height='60' rx='14' fill='%23080b0f' stroke='url(%23g)' stroke-width='3'/%3E%3Cpath d='M22 15h9v27h15v8H22z' fill='url(%23g)'/%3E%3C/svg%3E">
+  <title>Larimar Manual</title>
+  <meta name="description" content="The Larimar manual: the language, its memory, threads, C, the standard library and the tools.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Larimar">
+  <meta property="og:title" content="Larimar Manual">
+  <meta property="og:description" content="The language, its memory, threads, C, the standard library and the tools.">
+  <meta property="og:url" content="https://zerh.github.io/larimar/manual.html">
+  <meta property="og:image" content="https://zerh.github.io/larimar/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    :root {
+      --bg-dark: #080b0f;
+      --bg-card: rgba(15, 20, 25, 0.6);
+      --border-color: #383e48;
+      --larimar: #3fc9c4;
+      --larimar-light: #72e2dd;
+      --gem: #34d399;
+      --text-main: #ecedf1;
+      --text-muted: #828e9c;
+    }
+
+    *, ::before, ::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      border: 0 solid var(--border-color);
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 6rem;
+      font-family: Inter, system-ui, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+    }
+
+    body {
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    ul { list-style: none; }
+
+    .container {
+      width: 100%;
+      max-width: 80rem;
+      margin: 0 auto;
+      padding: 0 1.25rem;
+    }
+
+    @media (min-width: 640px) { .container { padding: 0 2rem; } }
+    @media (min-width: 1024px) { .container { padding: 0 3rem; } }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      border-radius: 0.75rem;
+      background-color: var(--larimar);
+      padding: 0.75rem 1.25rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #080b0f;
+      box-shadow: 0 0 40px -10px rgba(34, 170, 166, 0.45);
+      transition: background-color 0.2s, transform 0.1s;
+      cursor: pointer;
+    }
+    .btn-primary:hover { background-color: #55dcd7; }
+    .btn-primary:active { transform: scale(0.98); }
+
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      border-radius: 0.75rem;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-card);
+      padding: 0.75rem 1.25rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-main);
+      backdrop-filter: blur(8px);
+      transition: border-color 0.2s, background-color 0.2s;
+      cursor: pointer;
+    }
+    .btn-ghost:hover { border-color: rgba(63, 201, 196, 0.4); background-color: rgba(56, 62, 72, 0.8); }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-radius: 9999px;
+      border: 1px solid rgba(63, 201, 196, 0.3);
+      background-color: rgba(34, 170, 166, 0.1);
+      padding: 0.25rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--larimar-light);
+    }
+
+    code { overflow-wrap: anywhere; }
+
+    .card {
+      border-radius: 1rem;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-card);
+      backdrop-filter: blur(8px);
+      transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
+    }
+    .card:hover {
+      transform: translateY(-0.25rem);
+      border-color: rgba(63, 201, 196, 0.4);
+      box-shadow: 0 16px 40px -12px rgba(15, 20, 25, 0.25);
+    }
+
+    .code-block {
+      border-radius: 1rem;
+      border: 1px solid var(--border-color);
+      background-color: rgba(8, 11, 15, 0.8);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.875rem;
+      line-height: 1.625;
+      overflow-x: auto;
+    }
+
+    .gradient-text {
+      background: linear-gradient(to right, var(--larimar-light), var(--larimar), var(--gem));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* HEADER AL 100% DE ANCHO */
+    header {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      z-index: 50;
+      background: rgba(8, 11, 15, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      width: 100%;
+    }
+
+    .nav-container {
+      display: flex;
+      height: 4rem;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 100%;
+      padding: 0 2rem;
+    }
+
+    @media (min-width: 1024px) { 
+      .nav-container { 
+        padding: 0 4rem; 
+      } 
+    }
+
+    .nav-links {
+      display: none;
+      gap: 2rem;
+    }
+    @media(min-width: 768px) { .nav-links { display: flex; } }
+    .nav-links a { font-size: 0.875rem; font-weight: 500; color: var(--text-muted); transition: color 0.2s; }
+    .nav-links a:hover { color: var(--larimar-light); }
+
+    .section {
+      padding: 6rem 0;
+      scroll-margin-top: 5rem;
+    }
+
+    .tok-kw { color: var(--larimar-light); }
+    .tok-type { color: #6ee7b7; }
+    .tok-str { color: #fde68a; }
+    .tok-num { color: #fda4af; }
+    .tok-com { font-style: italic; color: #647180; }
+    .tok-fn { color: #7dd3fc; }
+    .tok-punct { color: #aeb6c0; }
+
+    /* GRID DEL HERO Y SECCIONES */
+    .hero-grid {
+      display: grid;
+      align-items: center;
+      gap: 3.5rem;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    @media (min-width: 1024px) {
+      .hero-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 3rem;
+      }
+    }
+
+    .grid-3 { display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr); }
+    @media(min-width: 640px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
+    @media(min-width: 1024px) { .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+
+    .tok-plain { color: var(--text-main); }
+
+    .footer-bottom {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+    @media(min-width: 640px) { .footer-bottom { flex-direction: row; } }
+
+    .footer-grid {
+      display: grid;
+      gap: 2.5rem;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    @media(min-width: 768px) { .footer-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media(min-width: 1024px) { .footer-grid { grid-template-columns: 1.5fr 1fr 1fr 1fr; } }
+  
+    /* while i18n.json loads (at most 1.5 s), so the page does not flash in the other language */
+    html.i18n-pending body { opacity: 0; }
+    body { transition: opacity 0.15s; }
+
+    pre { padding: 1rem 1.25rem; overflow-x: auto; }
+    .code-title {
+      display: flex; align-items: center; gap: 0.5rem;
+      border-bottom: 1px solid var(--border-color);
+      background: rgba(15,20,25,0.8);
+      padding: 0.625rem 1rem;
+      font-size: 0.75rem; color: var(--text-muted);
+    }
+
+    .h2 { font-size: clamp(1.75rem, 3.5vw, 2.25rem); font-weight: 700; margin-top: 1.25rem; }
+    .h3 { font-size: clamp(1.5rem, 3vw, 1.875rem); font-weight: 700; margin-top: 1.25rem; }
+    .lead { color: var(--text-muted); font-size: 1.125rem; line-height: 1.6; margin-top: 1.25rem; }
+    .text { color: var(--text-muted); line-height: 1.6; margin-top: 1rem; }
+    .card-title { font-size: 1.125rem; font-weight: 600; }
+    .card-body { color: var(--text-muted); font-size: 0.875rem; line-height: 1.6; margin-top: 0.625rem; }
+    .card-h4 { color: var(--larimar-light); font-weight: 600; }
+    .card-small { color: var(--text-muted); font-size: 0.875rem; line-height: 1.55; margin-top: 0.5rem; }
+    .caption { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; }
+
+    .split {
+      display: grid; align-items: center; gap: 3.5rem;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    @media (min-width: 1024px) { .split { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3rem; } }
+    @media (max-width: 1023px) { .split > * { order: 0 !important; } }
+
+    .stack { display: flex; flex-direction: column; gap: 1rem; }
+    .bullets { margin-top: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; color: var(--text-muted); font-size: 0.875rem; }
+    .bullets li { padding-left: 1rem; position: relative; line-height: 1.55; }
+    .bullets li::before { content: "•"; position: absolute; left: 0; color: var(--larimar); }
+    .mini-code {
+      margin-top: 1.5rem; border-radius: 0.75rem; border: 1px solid var(--border-color);
+      background: rgba(15,20,25,0.5); padding: 1rem;
+      font-family: "JetBrains Mono", monospace; font-size: 0.875rem; overflow-x: auto;
+    }
+
+    .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; margin-top: 1rem; text-align: center; }
+    .stat-n { font-size: 1.25rem; font-weight: 700; color: var(--larimar); }
+    .stat-l { font-size: 0.75rem; color: var(--text-muted); }
+
+    .pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+    .pair-k { font-size: 0.75rem; font-weight: 600; color: var(--larimar-light); font-family: "JetBrains Mono", monospace; }
+    .pair-v { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.125rem; }
+
+    .cmd { padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; font-size: 0.875rem; }
+    .cmd span { color: var(--text-muted); font-size: 0.75rem; text-align: right; }
+
+    .step { padding: 1.5rem; display: flex; flex-direction: column; justify-content: space-between; }
+    .step-n { font-size: 1.5rem; font-weight: 700; color: var(--border-color); }
+    .step-title { font-size: 1.25rem; font-weight: 600; margin-top: 0.75rem; }
+    .step-code { padding: 0.75rem; margin-top: 1rem; font-size: 0.75rem; white-space: pre; }
+
+    .status-note {
+      margin-top: 1.5rem; padding: 0.875rem 1rem;
+      border-radius: 0.75rem; border: 1px solid rgba(251, 191, 36, 0.3);
+      background: rgba(251, 191, 36, 0.06);
+      color: var(--text-muted); font-size: 0.875rem; line-height: 1.55;
+    }
+    .status-note strong { color: #fde68a; font-weight: 600; }
+
+    .lang-toggle {
+      position: relative; display: inline-grid; grid-template-columns: 1fr 1fr;
+      width: 4.75rem; height: 2rem; padding: 0.1875rem;
+      border: 1px solid var(--border-color); border-radius: 9999px;
+      background: var(--bg-card); cursor: pointer; font: inherit;
+    }
+    .lang-toggle:disabled { cursor: not-allowed; opacity: 0.6; }
+    .lt-knob {
+      position: absolute; top: 0.1875rem; left: 0.1875rem;
+      width: calc(50% - 0.1875rem); height: calc(100% - 0.375rem);
+      border-radius: 9999px; background: rgba(63, 201, 196, 0.2);
+      border: 1px solid rgba(63, 201, 196, 0.45);
+      transition: transform 0.2s ease;
+    }
+    .lang-toggle[data-current="en"] .lt-knob { transform: translateX(100%); }
+    .lt-opt {
+      position: relative; z-index: 1; display: grid; place-items: center;
+      font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; color: var(--text-muted);
+      transition: color 0.2s;
+    }
+    .lang-toggle[data-current="es"] .lt-opt[data-lang="es"],
+    .lang-toggle[data-current="en"] .lt-opt[data-lang="en"] { color: var(--larimar-light); }
+    @media (prefers-reduced-motion: reduce) { .lt-knob, .lt-opt { transition: none; } }
+    .lang-toggle:focus-visible, .btn-primary:focus-visible, .btn-ghost:focus-visible, a:focus-visible {
+      outline: 2px solid var(--larimar); outline-offset: 2px;
+    }
+
+    footer { border-top: 1px solid var(--border-color); background: rgba(8,11,15,0.8); margin-top: 6rem; padding: 4rem 0; }
+    .footer-h { font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .footer-list { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; font-size: 0.875rem; color: var(--text-muted); }
+    .footer-list a:hover { color: var(--larimar-light); }
+    .footer-bottom { border-top: 1px solid var(--border-color); margin-top: 3rem; padding-top: 2rem; font-size: 0.75rem; color: var(--text-muted); }
+    .nav-container { gap: 1rem; }
+    @media (max-width: 639px) { .nav-container { padding: 0 1rem; } }
+
+    .tok-wait { color: #7dd3fc; }
+    pre { font-size: 0.8125rem; }
+    .error-box {
+      margin-top: 0.5rem; padding: 0.75rem 1rem; border-radius: 0.75rem;
+      border: 1px solid rgba(244, 63, 94, 0.35); background: rgba(244, 63, 94, 0.07);
+      color: #fda4af; font-family: "JetBrains Mono", monospace; font-size: 0.75rem; line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    /* the logo: an L like the C of the title, in a box like the code blocks */
+    .logo-mark {
+      display: grid;
+      place-items: center;
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: 0.6rem;
+      border: 1.5px solid transparent;                        /* the border takes the gradient of the title */
+      background:
+        linear-gradient(#0b0f14, #0b0f14) padding-box,
+        linear-gradient(to right, var(--larimar-light), var(--larimar), var(--gem)) border-box;
+      font-weight: 700;
+      font-size: 1.05rem;
+      line-height: 1;
+    }
+    .logo-mark > span { transform: translateY(0.07em); }   /* a capital sits high in its line box */
+
+    /* download buttons of the latest release */
+    .downloads { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; margin-top: 2rem; }
+    .downloads .btn-primary { display: inline-flex; align-items: baseline; gap: 0.4rem; }
+    .dl-note { font-weight: 500; font-size: 0.8em; opacity: 0.75; }
+    .dl-more { margin-top: 1rem; font-size: 0.875rem; }
+    .dl-more a { color: var(--larimar-light); text-decoration: none; }
+    .dl-more a:hover { text-decoration: underline; }
+
+    /* two columns (one on narrow screens) */
+    .grid-2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+    @media (min-width: 900px) { .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .get-notes { margin-top: 1rem; font-size: 0.875rem; }
+    .get .step-code { margin-top: 0.75rem; }
+    .step-code { overflow-x: auto; }
+    .get .step { justify-content: flex-start; }
+
+    .install-box { margin-top: 2rem; }
+    .install-tabs { display: flex; gap: 0.25rem; margin-bottom: 0.5rem; }
+    .install-tab { background: none; border: 1px solid transparent; border-radius: 0.375rem; color: var(--text-muted); cursor: pointer; font: inherit; font-size: 0.8125rem; padding: 0.25rem 0.75rem; }
+    .install-tab.active { border-color: var(--border, rgba(255,255,255,0.12)); color: var(--text); }
+    .install-cmd { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem 1rem; }
+    .install-cmd[hidden] { display: none; }
+    .install-cmd code { font-size: 0.8125rem; overflow-x: auto; white-space: nowrap; }
+    .install-dollar { color: var(--text-muted); user-select: none; }
+    .install-copy { background: none; border: 1px solid var(--border, rgba(255,255,255,0.12)); border-radius: 0.375rem; color: var(--text-muted); cursor: pointer; flex: none; font: inherit; font-size: 0.75rem; padding: 0.2rem 0.6rem; }
+    .install-copy:hover { color: var(--text); }
+    .install-note { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; }
+    .dl-details { margin-top: 1rem; font-size: 0.875rem; }
+    .dl-details summary { cursor: pointer; color: var(--larimar-light); }
+    .dl-details .downloads { justify-content: flex-start; margin-top: 1rem; }
+    .dl-after { margin-top: 1rem; font-weight: 600; }
+    .dl-code { margin-top: 0.5rem; padding: 0.75rem 1rem; white-space: pre; font-size: 0.8125rem; }
+    .src-code { text-align: left; margin-top: 1.5rem; white-space: pre; }
+
+    /* ---- the manual ---- */
+    .manual-layout { display: flex; max-width: 90rem; margin: 0 auto; padding-top: 4rem; }
+    .manual-toc {
+      position: sticky; top: 4rem; align-self: flex-start;
+      width: 19rem; flex: none; height: calc(100vh - 4rem); overflow-y: auto;
+      border-right: 1px solid var(--border-color); padding: 1.25rem 1rem 3rem 1.5rem;
+    }
+    .toc-search {
+      width: 100%; margin-bottom: 1rem; padding: 0.5rem 0.75rem; border-radius: 0.5rem;
+      border: 1px solid var(--border-color); background: rgba(15, 20, 25, 0.8);
+      color: var(--text-main); font: inherit; font-size: 0.8125rem;
+    }
+    .toc-search:focus { outline: none; border-color: var(--larimar); }
+    .toc-chapter { margin-bottom: 0.15rem; }
+    #toc a { display: block; border-radius: 0.375rem; color: var(--text-muted); line-height: 1.35; transition: color 0.15s, background-color 0.15s; }
+    #toc a:hover { color: var(--text-main); }
+    .toc-h2 { font-size: 0.8125rem; font-weight: 600; padding: 0.35rem 0.5rem; }
+    .toc-h3 { font-size: 0.78rem; padding: 0.25rem 0.5rem 0.25rem 1.25rem; }
+    .toc-sections { display: none; margin: 0.1rem 0 0.4rem; border-left: 1px solid var(--border-color); margin-left: 0.6rem; }
+    .toc-chapter.open .toc-sections, .toc-chapter.searching .toc-sections { display: block; }
+    #toc a.active { color: var(--larimar-light); background: rgba(63, 201, 196, 0.08); }
+    .toc-chapter.open > .toc-h2 { color: var(--text-main); }
+    .toc-none { color: var(--text-muted); font-size: 0.8125rem; padding: 0.5rem; }
+
+    .manual-body { flex: 1; min-width: 0; max-width: 52rem; padding: 2.5rem 3rem 6rem; color: #c9ced6; line-height: 1.7; font-size: 0.975rem; }
+    .manual-status { color: var(--text-muted); padding: 3rem 0; }
+    .manual-status a { color: var(--larimar-light); }
+    .manual-body h1 { font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 700; color: var(--text-main); letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1rem; }
+    .manual-body h2 { font-size: 1.75rem; font-weight: 700; color: var(--text-main); margin: 3.5rem 0 1rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); letter-spacing: -0.01em; }
+    .manual-body h3 { font-size: 1.25rem; font-weight: 600; color: var(--text-main); margin: 2.25rem 0 0.75rem; }
+    .manual-body h4 { font-size: 1.05rem; font-weight: 600; color: var(--text-main); margin: 1.75rem 0 0.5rem; }
+    .manual-body h2, .manual-body h3, .manual-body h4 { position: relative; scroll-margin-top: 5rem; }
+    .manual-body .anchor { position: absolute; left: -1.1em; color: var(--larimar); opacity: 0; font-weight: 400; transition: opacity 0.15s; }
+    .manual-body h2:hover .anchor, .manual-body h3:hover .anchor, .manual-body h4:hover .anchor { opacity: 0.7; }
+    .manual-body p, .manual-body ul, .manual-body ol, .manual-body .table-box, .manual-body blockquote { margin: 0.9rem 0; }
+    .manual-body ul { list-style: disc; padding-left: 1.4rem; }
+    .manual-body ol { list-style: decimal; padding-left: 1.6rem; }
+    .manual-body li { margin: 0.3rem 0; }
+    .manual-body li::marker { color: var(--larimar); }
+    .manual-body a { color: var(--larimar-light); }
+    .manual-body a:hover { text-decoration: underline; }
+    .manual-body strong { color: var(--text-main); font-weight: 600; }
+    .manual-body :not(pre) > code {
+      font-family: "JetBrains Mono", monospace; font-size: 0.85em; color: var(--larimar-light);
+      background: rgba(63, 201, 196, 0.08); border-radius: 0.3rem; padding: 0.1em 0.35em;
+    }
+    .manual-body hr { border-top: 1px solid var(--border-color); margin: 2.5rem 0; }
+    .manual-body blockquote { border-left: 3px solid var(--larimar); padding: 0.25rem 0 0.25rem 1rem; color: var(--text-muted); }
+    .md-code { position: relative; margin: 1.1rem 0; }
+    .md-code pre { margin: 0; }
+    .md-code code { color: var(--text-main); }
+    .md-copy {
+      position: absolute; top: 0.5rem; right: 0.5rem; opacity: 0; background: rgba(15, 20, 25, 0.9);
+      border: 1px solid var(--border-color); border-radius: 0.375rem; color: var(--text-muted);
+      font: inherit; font-size: 0.7rem; padding: 0.15rem 0.5rem; cursor: pointer; transition: opacity 0.15s;
+    }
+    .md-code:hover .md-copy, .md-copy:focus { opacity: 1; }
+    .table-box { overflow-x: auto; border: 1px solid var(--border-color); border-radius: 0.75rem; }
+    .manual-body table { border-collapse: collapse; width: 100%; font-size: 0.875rem; }
+    .manual-body th { text-align: left; color: var(--text-main); font-weight: 600; background: rgba(15, 20, 25, 0.8); }
+    .manual-body th, .manual-body td { padding: 0.55rem 0.85rem; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+    .manual-body tr:last-child td { border-bottom: none; }
+
+    .toc-toggle {
+      display: none; position: fixed; top: 4.5rem; right: 1rem; z-index: 40;
+      border-radius: 0.75rem; border: 1px solid var(--border-color); background: rgba(15, 20, 25, 0.95);
+      color: var(--text-main); font: inherit; font-size: 0.8125rem; font-weight: 600; padding: 0.45rem 0.9rem; cursor: pointer;
+    }
+    @media (max-width: 899px) {
+      .toc-toggle { display: block; }
+      .manual-toc {
+        position: fixed; left: 0; top: 4rem; z-index: 45; width: min(20rem, 85vw); background: var(--bg-dark);
+        transform: translateX(-100%); transition: transform 0.2s; box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+      }
+      body.toc-open .manual-toc { transform: none; }
+      .manual-body { padding: 3.5rem 1rem 5rem; }
+      .manual-body .anchor { display: none; }
+    }
+  </style>
+</head>
+<body class="manual-page">
+
+  <header>
+    <div class="nav-container">
+      <a href="index.html" style="display: flex; align-items: center; gap: 0.6rem; font-weight: 700; font-size: 1.125rem;">
+        <span class="logo-mark" aria-hidden="true"><span class="gradient-text">L</span></span>
+        Larimar
+      </a>
+      <nav class="nav-links">
+        <a href="index.html#features" data-t="features">Language</a>
+        <a href="index.html#memory" data-t="memory">Memory</a>
+        <a href="index.html#concurrency" data-t="concurrency">Threads</a>
+        <a href="index.html#interop">C</a>
+        <a href="index.html#docs" data-t="tools">Tools</a>
+      </nav>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <button type="button" class="lang-toggle" role="switch" aria-checked="true" data-current="en" aria-label="Language">
+          <span class="lt-knob" aria-hidden="true"></span>
+          <span class="lt-opt" data-lang="es">ES</span>
+          <span class="lt-opt" data-lang="en">EN</span>
+        </button>
+        <a href="index.html#get" class="btn-ghost" style="padding: 0.5rem 1rem;" data-t="install">Install</a>
+      </div>
+    </div>
+  </header>
+
+  <button type="button" class="toc-toggle" aria-expanded="false" data-t="contents">Contents</button>
+
+  <div class="manual-layout">
+    <aside class="manual-toc" aria-label="Contents">
+      <input type="search" class="toc-search" data-t-placeholder="search" placeholder="Search the manual">
+      <nav id="toc"></nav>
+    </aside>
+    <article id="manual" class="manual-body">
+      <p class="manual-status" data-t="loading">Loading the manual…</p>
+    </article>
+  </div>
+
+  <script>
+    // The manual is MANUAL.md (English) or MANUAL_ES.md (Spanish), read from the repository and shown here
+    // with the style of the page: what is in main is what this page shows. The language is the one of the
+    // page (ES / EN, remembered in 'larimar-lang'), then the browser's, then English.
+    (function () {
+      var REPO = 'https://raw.githubusercontent.com/zerh/larimar/main/';
+      var FILES = { en: 'MANUAL.md', es: 'MANUAL_ES.md' };
+      var KEY = 'larimar-lang';
+      var WORDS = {
+        en: { features: 'Language', memory: 'Memory', concurrency: 'Threads', tools: 'Tools', install: 'Install',
+              contents: 'Contents', search: 'Search the manual', loading: 'Loading the manual…',
+              failed: 'The manual could not be loaded. Read it on GitHub: ', copy: 'Copy', nothing: 'Nothing found' },
+        es: { features: 'Lenguaje', memory: 'Memoria', concurrency: 'Hilos', tools: 'Herramientas', install: 'Instalar',
+              contents: 'Contenido', search: 'Buscar en el manual', loading: 'Cargando el manual…',
+              failed: 'No se pudo cargar el manual. Léelo en GitHub: ', copy: 'Copiar', nothing: 'No se encontró nada' }
+      };
+      var article = document.getElementById('manual');
+      var toc = document.getElementById('toc');
+      var search = document.querySelector('.toc-search');
+      var lang = 'en';
+      var observer = null;
+
+      function supported(tag) {
+        var base = String(tag || '').toLowerCase().split('-')[0];
+        return FILES[base] ? base : null;
+      }
+
+      function chosen() {
+        var fromUrl = supported(new URLSearchParams(location.search).get('lang'));
+        if (fromUrl) { return fromUrl; }
+        try { var saved = supported(localStorage.getItem(KEY)); if (saved) { return saved; } } catch (e) { }
+        var prefs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
+        for (var i = 0; i < prefs.length; i++) { var l = supported(prefs[i]); if (l) { return l; } }
+        return 'en';
+      }
+
+      function words() {
+        var w = WORDS[lang];
+        document.documentElement.lang = lang;
+        document.querySelectorAll('[data-t]').forEach(function (el) { el.textContent = w[el.getAttribute('data-t')]; });
+        document.querySelectorAll('[data-t-placeholder]').forEach(function (el) { el.placeholder = w[el.getAttribute('data-t-placeholder')]; });
+        var toggle = document.querySelector('.lang-toggle');
+        toggle.setAttribute('data-current', lang);
+        toggle.setAttribute('aria-checked', lang === 'en' ? 'true' : 'false');
+      }
+
+      // ---- code with the colors of the page --------------------------------------------------------
+      var KEYWORDS = {
+        larimar: 'function let const if else while for in return break continue class struct enum interface extends implements import as public native extern static override synchronized thread throws throw try catch switch case default yield null true false self super is test heap c_code c_include export released by wait until safe private type',
+        c: 'int char void unsigned signed long short float double struct typedef static const return if else while for do switch case default break continue sizeof include define ifdef ifndef endif extern inline',
+        sh: 'export cd if then else fi for do done case esac in echo',
+        toml: 'true false'
+      };
+      var TYPES = 'int8 int16 int32 int64 uint8 uint16 uint32 uint64 float32 float64 bool byte void String Any';
+      function escape(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+      function span(cls, s) { return '<span class="' + cls + '">' + escape(s) + '</span>'; }
+
+      function highlight(code, language) {
+        var kind = /^(ts|actionscript|larimar|lar|java)$/.test(language) ? 'larimar'
+          : /^(c|h)$/.test(language) ? 'c' : /^(sh|bash|shell|console|ps|powershell)$/.test(language) ? 'sh'
+          : language === 'toml' ? 'toml' : '';
+        if (!kind) { return escape(code); }
+        var keywords = ' ' + KEYWORDS[kind] + ' ';
+        var types = ' ' + TYPES + ' ';
+        var comment = kind === 'sh' || kind === 'toml' ? '#[^\\n]*' : '\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/';
+        var re = new RegExp('(' + comment + ')|("""[\\s\\S]*?"""|"(?:[^"\\\\\\n]|\\\\.)*"|\'(?:[^\'\\\\\\n]|\\\\.)*\')|' +
+          '(\\b(?:0x[0-9a-fA-F_]+|\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b)|([A-Za-z_][A-Za-z0-9_]*)|(\\[[A-Za-z_.]+\\](?=\\s*$))', 'gm');
+        var out = '', last = 0, m;
+        while ((m = re.exec(code)) !== null) {
+          out += escape(code.slice(last, m.index));
+          if (m[1]) { out += span('tok-com', m[1]); }
+          else if (m[2]) { out += span('tok-str', m[2]); }
+          else if (m[3]) { out += span('tok-num', m[3]); }
+          else if (m[5]) { out += kind === 'toml' ? span('tok-kw', m[5]) : escape(m[5]); }
+          else {
+            var w = m[4];
+            var next = code.slice(re.lastIndex).match(/^\s*\(/);
+            if (keywords.indexOf(' ' + w + ' ') >= 0) { out += span('tok-kw', w); }
+            else if (kind === 'larimar' && (types.indexOf(' ' + w + ' ') >= 0 || /^[A-Z][A-Za-z0-9]*$/.test(w) && w.length > 1)) { out += span('tok-type', w); }
+            else if (next && kind !== 'sh') { out += span('tok-fn', w); }
+            else if (kind === 'toml' && /^\s*=/.test(code.slice(re.lastIndex))) { out += span('tok-fn', w); }
+            else { out += escape(w); }
+          }
+          last = re.lastIndex;
+        }
+        return out + escape(code.slice(last));
+      }
+
+      // ---- headings with the anchors of GitHub (the manual links to them) --------------------------
+      var used = {};
+      function slug(text) {
+        var s = text.trim().toLowerCase().replace(/<[^>]*>/g, '').replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
+        if (used[s] != null) { used[s] += 1; return s + '-' + used[s]; }
+        used[s] = 0;
+        return s;
+      }
+      function plain(html) { var d = document.createElement('div'); d.innerHTML = html; return d.textContent; }
+
+      marked.use({
+        gfm: true,
+        renderer: {
+          heading: function (text, depth) {
+            var id = slug(plain(text));
+            return '<h' + depth + ' id="' + id + '"><a class="anchor" href="#' + id + '" aria-hidden="true">#</a>' + text + '</h' + depth + '>\n';
+          },
+          code: function (code, info) {
+            var language = String(info || '').trim().split(/\s+/)[0].toLowerCase();
+            return '<div class="code-block md-code"><button type="button" class="md-copy">' + WORDS[lang].copy + '</button><pre><code>' +
+              highlight(code.replace(/\n$/, ''), language) + '</code></pre></div>\n';
+          },
+          link: function (href, title, text) {
+            var url = href || '';
+            var other = url.match(/^(?:\.\/)?(MANUAL(?:_ES)?\.md)(#.*)?$/);       // the other language: this page
+            if (other) { return '<a href="manual.html?lang=' + (other[1] === 'MANUAL.md' ? 'en' : 'es') + (other[2] || '') + '">' + text + '</a>'; }
+            if (!/^(https?:|mailto:|#)/.test(url)) { url = 'https://github.com/zerh/larimar/blob/main/' + url.replace(/^\.\//, ''); }
+            var outside = /^https?:/.test(url) ? ' target="_blank" rel="noopener"' : '';
+            return '<a href="' + url + '"' + (title ? ' title="' + title + '"' : '') + outside + '>' + text + '</a>';
+          }
+        }
+      });
+
+      // ---- the contents: chapters (##) and, under the open one, its sections (###) ---------------
+      function buildToc() {
+        toc.innerHTML = '';
+        var chapter = null;
+        article.querySelectorAll('h2, h3').forEach(function (h) {
+          var a = document.createElement('a');
+          a.href = '#' + h.id;
+          a.textContent = h.textContent.replace(/^#/, '');
+          a.dataset.target = h.id;
+          if (h.tagName === 'H2') {
+            chapter = document.createElement('div');
+            chapter.className = 'toc-chapter';
+            a.className = 'toc-h2';
+            chapter.appendChild(a);
+            var list = document.createElement('div');
+            list.className = 'toc-sections';
+            chapter.appendChild(list);
+            toc.appendChild(chapter);
+          } else if (chapter) {
+            a.className = 'toc-h3';
+            chapter.querySelector('.toc-sections').appendChild(a);
+          }
+        });
+        toc.addEventListener('click', function (e) {
+          if (e.target.tagName === 'A') { document.body.classList.remove('toc-open'); }
+        });
+      }
+
+      function mark(id) {
+        var link = toc.querySelector('a[data-target="' + CSS.escape(id) + '"]');
+        if (!link) { return; }
+        toc.querySelectorAll('.active').forEach(function (x) { x.classList.remove('active'); });
+        toc.querySelectorAll('.open').forEach(function (x) { x.classList.remove('open'); });
+        link.classList.add('active');
+        var chapter = link.closest('.toc-chapter');
+        chapter.classList.add('open');
+        if (!search.value) {
+          var box = toc.parentElement, top = link.offsetTop, h = box.clientHeight;
+          if (top < box.scrollTop + 60 || top > box.scrollTop + h - 60) { box.scrollTop = top - h / 3; }
+        }
+      }
+
+      function spy() {
+        if (observer) { observer.disconnect(); }
+        var visible = {};
+        observer = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) { visible[e.target.id] = e.isIntersecting; });
+          var heads = article.querySelectorAll('h2, h3');
+          for (var i = 0; i < heads.length; i++) {
+            if (visible[heads[i].id]) { mark(heads[i].id); return; }
+          }
+        }, { rootMargin: '-80px 0px -65% 0px' });
+        article.querySelectorAll('h2, h3').forEach(function (h) { observer.observe(h); });
+      }
+
+      search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase();
+        var any = false;
+        toc.querySelectorAll('.toc-chapter').forEach(function (c) {
+          var chapterHit = c.querySelector('.toc-h2').textContent.toLowerCase().indexOf(q) >= 0;
+          var hits = 0;
+          c.querySelectorAll('.toc-h3').forEach(function (a) {
+            var hit = !q || chapterHit || a.textContent.toLowerCase().indexOf(q) >= 0;
+            a.hidden = !hit;
+            if (hit) { hits++; }
+          });
+          c.hidden = q && !chapterHit && hits === 0;
+          c.classList.toggle('searching', !!q);
+          if (!c.hidden) { any = true; }
+        });
+        var none = toc.querySelector('.toc-none');
+        if (!any) {
+          if (!none) { none = document.createElement('p'); none.className = 'toc-none'; toc.appendChild(none); }
+          none.textContent = WORDS[lang].nothing;
+        } else if (none) { none.remove(); }
+      });
+
+      // ---- loading -------------------------------------------------------------------------------
+      function sources(file) {
+        var local = location.protocol === 'file:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        return local ? ['../' + file, REPO + file] : [REPO + file];
+      }
+
+      function fetchFirst(urls) {
+        return fetch(urls[0]).then(function (r) {
+          if (!r.ok) { throw new Error(r.status); }
+          return r.text();
+        }).catch(function (e) {
+          if (urls.length > 1) { return fetchFirst(urls.slice(1)); }
+          throw e;
+        });
+      }
+
+      function load() {
+        words();
+        var file = FILES[lang];
+        article.innerHTML = '<p class="manual-status">' + WORDS[lang].loading + '</p>';
+        fetchFirst(sources(file)).then(function (md) {
+          used = {};
+          article.innerHTML = marked.parse(md);
+          // the list of chapters at the top of the file: the column on the left already is that
+          var first = article.querySelector('h2');
+          if (first && /^(contents|índice|indice|contenido)$/i.test(first.textContent.replace(/^#/, '').trim())) {
+            var n = first.nextElementSibling;
+            while (n && n.tagName !== 'H2') { var next = n.nextElementSibling; n.remove(); n = next; }
+            first.remove();
+          }
+          article.querySelectorAll('.md-copy').forEach(function (b) {
+            b.addEventListener('click', function () {
+              var text = b.parentElement.querySelector('code').textContent;
+              try { navigator.clipboard.writeText(text).then(function () { b.textContent = '✓'; setTimeout(function () { b.textContent = WORDS[lang].copy; }, 1500); }); } catch (e) { }
+            });
+          });
+          article.querySelectorAll('table').forEach(function (t) {
+            var box = document.createElement('div');
+            box.className = 'table-box';
+            t.parentNode.insertBefore(box, t);
+            box.appendChild(t);
+          });
+          buildToc();
+          spy();
+          search.dispatchEvent(new Event('input'));
+          if (location.hash) {
+            var target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+            if (target) { target.scrollIntoView(); }
+          } else {
+            window.scrollTo(0, 0);
+          }
+        }).catch(function () {
+          article.innerHTML = '<p class="manual-status">' + WORDS[lang].failed +
+            '<a href="https://github.com/zerh/larimar/blob/main/' + file + '">' + file + '</a></p>';
+        });
+      }
+
+      document.querySelector('.lang-toggle').addEventListener('click', function () {
+        lang = lang === 'es' ? 'en' : 'es';
+        try { localStorage.setItem(KEY, lang); } catch (e) { }
+        history.replaceState(null, '', location.pathname);
+        load();
+      });
+      document.querySelector('.toc-toggle').addEventListener('click', function (e) {
+        var open = document.body.classList.toggle('toc-open');
+        e.currentTarget.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+
+      lang = chosen();
+      if (new URLSearchParams(location.search).get('lang')) { try { localStorage.setItem(KEY, lang); } catch (e) { } }
+      load();
+    })();
+  </script>
+</body>
+</html>
