@@ -4,6 +4,21 @@ Este manual explica cómo escribir programas en Larimar, de lo más simple a lo 
 Todos los ejemplos completos (los que tienen `function main`) se compilan y se ejecutan tal cual, y
 su salida es la que se muestra.
 
+**No hace falta saber Larimar, C ni ninguna herramienta para leerlo.** Ayuda haber escrito algo de
+código en otro lenguaje (saber qué es una variable o una función), pero cada término de Larimar se
+explica la primera vez que aparece. Léelo en orden: cada capítulo usa solo lo que explicaron los
+anteriores, y los últimos (memoria, hilos, C, proyectos) se apoyan en los primeros.
+
+Algunas palabras aparecen desde el principio:
+
+| Palabra | Qué significa aquí |
+|---|---|
+| **programa** | un archivo que tu computadora puede ejecutar, como cualquier aplicación (en Windows, un `.exe`) |
+| **compilador** | un programa que convierte el texto que escribes en un programa que se puede ejecutar |
+| **C** | un lenguaje de programación antiguo y muy extendido; todos los sistemas tienen compiladores para él. Larimar escribe el C por ti: nunca tienes que escribirlo ni leerlo |
+| **`larimar`** | la herramienta que escribes en una terminal: revisa tu código, lo convierte en C, lo compila y lo ejecuta |
+| **terminal** | la ventana donde se escriben comandos (Terminal en macOS, PowerShell en Windows) |
+
 Los nombres del lenguaje, de la herramienta y de los ejemplos están en inglés; las explicaciones, en español.
 [Read in English](MANUAL.md).
 
@@ -44,36 +59,42 @@ Los nombres del lenguaje, de la herramienta y de los ejemplos están en inglés;
 
 ## 1. Primeros pasos
 
-Larimar se traduce a un único archivo C99, que luego se compila con cualquier compilador de C para
-obtener un ejecutable. La herramienta `larimar` hace los dos pasos:
+### Cómo nace un programa en Larimar
+
+Escribes tu programa como texto, en archivos que terminan en `.lar`. Luego la herramienta `larimar`
+hace tres cosas por ti, en un solo comando:
+
+1. **Revisa tu código.** Si algo está mal (un nombre mal escrito, un número donde se esperaba un
+   texto), lista cada error con su archivo y su línea, y se detiene ahí.
+2. **Lo traduce a C.** Larimar escribe un archivo C equivalente a tu programa. No necesitas mirarlo.
+3. **Compila ese C a un programa y lo ejecuta.** Un compilador de C convierte el C en un programa que
+   tu computadora ejecuta directamente, tan rápido como los programas escritos en C.
+
+### Instalarlo
+
+En una terminal, en macOS o Linux:
 
 ```sh
-curl -fsSL https://zerh.github.io/larimar/install.sh | sh     # macOS, Linux (Windows: install.ps1)
-
-larimar hola.lar                 # un archivo: lo compila y lo ejecuta
-larimar new hello                # un proyecto: hello/larimar.toml y hello/src/main.lar
-cd hello
-larimar run                      # traduce a C, lo compila y lo ejecuta
+curl -fsSL https://zerh.github.io/larimar/install.sh | sh
 ```
 
-Larimar necesita un compilador de C. En Linux y Windows trae uno, **tcc**, en
-`$LARIMAR_HOME/toolchain/tcc`; en macOS usa el de Apple (`xcode-select --install`, una vez). Cuál
-compila un programa:
+En Windows, en PowerShell:
 
-- `larimar archivo.lar` (un archivo, ejecutado al momento) usa primero el tcc incluido: compila en un
-  instante.
-- Un proyecto (`larimar run`, `build`, `test`) usa el compilador del sistema (cc, gcc o clang), que
-  optimiza; el tcc incluido solo cuando no hay ninguno, con una nota que lo dice.
-- `--cc <programa>`, `CC` o `compiler = "..."` en `[c]` eligen otro (`tcc`: el incluido).
-- Un programa que usa TLS (https) necesita el compilador del sistema: el tcc incluido no puede
-  compilarlo, y Larimar dice qué instalar. Las pruebas compiladas con tcc corren sin AddressSanitizer.
+```sh
+powershell -c "irm https://zerh.github.io/larimar/install.ps1 | iex"
+```
 
-`larimar archivo.lar` le pasa al programa los argumentos que van después del archivo (después de `--`
-cuando parecen opciones de larimar), solo imprime lo que imprime el programa y termina con su código de
-salida: sirve para scripts y tuberías. El [apartado 26](#26-proyectos-larimartoml-y-larimar-build)
-explica el archivo de proyecto.
+Se instala en la carpeta `.larimar` de tu usuario, sin permisos de administrador, y añade `larimar` a
+los comandos de la terminal (abre una terminal nueva después). En Linux y Windows, Larimar trae su
+propio compilador de C, así que no hace falta nada más. En macOS usa el de Apple: si falta, el
+instalador te dice que ejecutes `xcode-select --install` una vez.
 
-El primer programa (`src/main.lar`):
+Para comprobarlo, `larimar --version` muestra la versión.
+
+### Tu primer programa
+
+Crea un archivo llamado `hola.lar` con este texto (sirve cualquier editor de texto; VS Code con la
+extensión de Larimar además lo colorea y muestra los errores mientras escribes):
 
 ```ts
 function main(): int32 {
@@ -82,22 +103,92 @@ function main(): int32 {
 }
 ```
 
+Y ejecútalo desde la terminal, en la carpeta del archivo:
+
+```sh
+larimar hola.lar
+```
+
 Salida: `Hello, world`
 
-`main` es el punto de entrada. Devuelve `int32` (el código de salida del programa) o `void`.
+Línea por línea:
 
-Si el programa tiene errores, Larimar los lista todos, con el archivo y la línea, y no genera C:
+- `function main(): int32 {` declara una **función** llamada `main`. Una función es un trozo de código
+  con nombre; `main` es especial: es donde empieza todo programa. `(): int32` significa que no recibe
+  nada y devuelve un número entero (`int32` es el tipo de los enteros, explicado en el
+  [capítulo 4](#4-tipos-básicos)). Las llaves `{ }` encierran lo que hace la función.
+- `println("Hello, world");` escribe el texto entre comillas y pasa a la línea siguiente. Cada
+  instrucción termina con `;`.
+- `return 0;` termina `main` y devuelve `0`. Ese número es el **código de salida** del programa: `0`
+  significa que todo fue bien, y cualquier otro número que algo falló. Un `main` que no tiene nada que
+  informar se puede declarar `function main(): void` (o solo `function main()`) y no llevar `return`.
+
+### Cuando algo está mal
+
+Si el programa tiene errores, Larimar los lista todos y no ejecuta nada. Por ejemplo, al darle un
+texto a una variable declarada como número:
 
 ```
-Semantic Error [src/main.lar:2]: Initializer of 'x': expected int32 but got String.
+Semantic Error [hola.lar:2]: Initializer of 'x': expected int32 but got String.
 ```
+
+El mensaje dice **dónde** (el archivo y la línea, `hola.lar:2`) y **qué** (esperaba un `int32` y
+recibió un `String`). Los mensajes de error intentan decir también cómo arreglar el problema. Están
+en inglés, como los nombres del lenguaje.
+
+### Proyectos
+
+Un solo archivo `.lar` basta para programas pequeños y scripts. Cuando un programa crece a varios
+archivos, o necesita bibliotecas de C, pasa a ser un **proyecto**: una carpeta con un archivo llamado
+`larimar.toml` que dice cómo se llama el programa y cómo construirlo.
+
+```sh
+larimar new hello        # crea la carpeta hello con un proyecto dentro
+cd hello
+larimar run              # construye el programa y lo ejecuta
+```
+
+`larimar new` crea tres archivos:
+
+- `larimar.toml`, la descripción del proyecto. Está escrito en **TOML**, un formato de texto sencillo
+  de líneas `clave = valor` agrupadas bajo títulos entre corchetes (`[project]`). El
+  [capítulo 26](#26-proyectos-larimartoml-y-larimar-build) explica cada clave.
+- `src/main.lar`, el archivo principal, con un `main` como el de arriba.
+- `.gitignore`, para que git no guarde la carpeta `build/`, donde queda el programa construido.
+
+`larimar build` construye el programa sin ejecutarlo: queda en `build/hello` (`build\hello.exe` en
+Windows), y se puede copiar y ejecutar en otra computadora del mismo sistema sin instalar nada.
+
+### Qué compilador de C lo construye
+
+Puedes saltarte esto hasta que te importe. Larimar necesita un compilador de C para terminar el programa:
+
+- En Linux y Windows trae uno, **tcc**, en `$LARIMAR_HOME/toolchain/tcc` (`LARIMAR_HOME` es la carpeta
+  donde está instalado Larimar). En macOS usa el de Apple.
+- `larimar archivo.lar` (un archivo, ejecutado al momento) usa primero el tcc incluido: compila en un instante.
+- Un proyecto (`larimar run`, `build`, `test`) usa el compilador del sistema (cc, gcc o clang) cuando
+  hay uno, porque hace programas más rápidos; el tcc incluido solo cuando no hay ninguno, con una nota que lo dice.
+- `--cc <programa>`, la variable `CC` o `compiler = "..."` en el `larimar.toml` eligen otro (`tcc`: el incluido).
+- Un programa que usa TLS (direcciones `https://`) necesita el compilador del sistema: el tcc incluido no
+  puede compilarlo, y Larimar dice qué instalar. Las pruebas compiladas con tcc corren sin
+  AddressSanitizer (un detector de errores de memoria en C).
+
+`larimar archivo.lar` le pasa al programa los argumentos que van después del archivo (después de `--`
+cuando parecen opciones de larimar), solo imprime lo que imprime el programa y termina con su código de
+salida: sirve para scripts y tuberías.
 
 ---
 
 ## 2. Estructura de un programa
 
-Un archivo es una lista de **declaraciones**. A nivel superior solo puede haber declaraciones,
-no instrucciones sueltas:
+Dos palabras describen las partes de un programa:
+
+- Una **declaración** le da nombre a algo: una función, una constante, un tipo de datos.
+- Una **instrucción** es una orden que hace algo cuando el programa se ejecuta: `println(...)`,
+  `return 0;`, darle un valor a una variable.
+
+Las instrucciones van dentro de funciones. Fuera de toda función, en lo que se llama el **nivel
+superior** del archivo, solo puede haber declaraciones:
 
 | Declaración | Ejemplo |
 |---|---|
@@ -111,6 +202,7 @@ no instrucciones sueltas:
 | Enum | `enum Color { Red, Green }` |
 | Código C | `c_include "<math.h>";`, `extern function ...`, `extern type ...` |
 
+Un programa puede repartirse en varios archivos; cada uno es un **módulo** ([capítulo 24](#24-módulos)).
 Cualquier declaración puede llevar `public` delante para que otros módulos la usen.
 
 El orden de las declaraciones no importa: una función puede usar otra que esté más abajo.
@@ -124,6 +216,10 @@ Cada instrucción termina en `;`, y los bloques van entre `{ }`.
 ---
 
 ## 3. Variables y constantes
+
+Una **variable** es un nombre que guarda un valor, que puede cambiar mientras el programa se ejecuta.
+Se declara con `let`, su nombre, su **tipo** (qué clase de valor guarda: un número, un texto…) y su
+primer valor:
 
 ```ts
 let age: int32 = 30;
@@ -555,6 +651,10 @@ Salida: `16`
 
 ## 8. Funciones
 
+Una función es un trozo de código con nombre, que se puede usar (**llamar**) desde otros sitios.
+Recibe valores (sus **parámetros**, cada uno con su tipo), y puede devolver uno con `return` (el tipo
+después de los `:` dice cuál; `void` significa que no devuelve nada):
+
 ```ts
 function add(a: int32, b: int32): int32 {
     return a + b;
@@ -573,8 +673,8 @@ function bye() {               // ": void" se puede omitir
 - Si la función no devuelve `void`, **todos los caminos** deben terminar en `return` (o `throw`).
   Un `while (true)` sin `break` cuenta como un camino que nunca termina.
 - Las funciones se declaran a nivel superior o dentro de clases y structs. Dentro de un cuerpo se usan lambdas.
-- Las funciones no son valores; para pasar una, envuélvela en una lambda:
-  `(x) -> { return add(x, 1); }`.
+- Para pasar una función donde se espera una función, escribe `::add` (ver [Referencias a funciones](#referencias-a-funciones-))
+  o una lambda ([capítulo 18](#18-lambdas-y-closures)): `(x) -> { return add(x, 1); }`.
 
 ### `main` y los argumentos del programa
 
@@ -1208,6 +1308,19 @@ error: `User has no natural order: give sort() a comparator ...`.
 
 ## 16. Memoria
 
+Mientras se ejecuta, un programa guarda sus datos (textos, listas, objetos) en la memoria de la
+computadora (la RAM). Cuando un dato ya no hace falta, hay que devolver su espacio, o el programa
+crecería hasta llenar la memoria. Los lenguajes lo resuelven de tres formas:
+
+- En **C**, el programador libera cada cosa a mano. Es rápido, pero un error (liberar antes de tiempo,
+  o nunca) rompe el programa.
+- En **Java, Go, Python o JavaScript**, un **recolector de basura** busca de vez en cuando los datos que
+  ya no se usan y los libera. Es cómodo, pero gasta memoria y hace pequeñas pausas.
+- **Larimar** no hace ninguna de las dos: agrupa los datos en **memorias**, y una memoria se libera
+  entera, de golpe, en un momento que se ve en el código (normalmente, cuando termina el bloque `{ }`
+  donde se crearon los datos). El compilador decide dónde va cada cosa, y comprueba que nada se use
+  después de liberada su memoria ([capítulo 17](#17-la-regla-de-vida-y-clone)).
+
 Larimar **no tiene recolector de basura**, y casi nunca hay que pensar en la memoria: el compilador la
 organiza en **memorias** que se liberan enteras, en momentos que se ven en el código.
 
@@ -1395,6 +1508,10 @@ function jugar(): void {
 ---
 
 ## 17. La regla de vida y `clone()`
+
+Si un valor vivía en una memoria que se libera, y algo lo siguiera usando, el programa leería basura
+o se caería: en C es uno de los errores más comunes y peligrosos. En Larimar no puede pasar, porque el
+compilador lo comprueba antes de que el programa exista.
 
 El compilador garantiza que **nada apunte a memoria ya liberada**, con una regla:
 
@@ -1608,7 +1725,12 @@ lanzan errores).
 
 ## 19. Errores: `throw`, `try` y `catch`
 
-Los errores esperables (un archivo que no existe, una lectura inválida) se representan con enums:
+Algunas operaciones pueden fallar por razones que el programa no controla: un archivo que no existe,
+una conexión que se corta. Una función que puede fallar lo dice en su declaración con `throws`, y quien
+la llama tiene que atender el fallo (con `try` y `catch`) o pasarlo hacia arriba. El compilador
+comprueba que ningún fallo se olvide.
+
+Los errores esperables (un archivo que no existe, una lectura inválida) se representan con enums ([capítulo 12](#12-enums)):
 
 ```ts
 enum FileError {
@@ -2142,6 +2264,11 @@ Windows en Windows. `larimar build` añade lo necesario para compilar.
 
 ## 23. Llamar a C
 
+Hay miles de bibliotecas escritas en C, para casi cualquier cosa: gráficos, sonido, bases de datos,
+compresión. Larimar puede usarlas directamente. Como Larimar se convierte en C, llamar a una función
+de C no cuesta nada: solo la **declaras** (su nombre, qué recibe y qué devuelve) con `extern
+function`, y luego la usas como cualquier otra función.
+
 ```ts
 c_include "<stdio.h>";
 c_include "<math.h>";
@@ -2157,8 +2284,10 @@ function main(): int32 {
 
 Salida: `square root of 2 = 1.414214`
 
-Con `<math.h>`, en algunos sistemas hay que enlazar la biblioteca matemática: `libraries = ["m"]`
-en el `larimar.toml`.
+`c_include` trae el archivo de C que declara esas funciones (un **header**), y `extern function` le
+dice a Larimar cómo se llama cada una. Con `<math.h>`, en algunos sistemas hay que **enlazar** (unir
+al programa cuando se construye) la biblioteca matemática: `libraries = ["m"]` en el `larimar.toml`
+de un proyecto ([capítulo 26](#26-proyectos-larimartoml-y-larimar-build)).
 
 Una biblioteca propia se declara igual. Por ejemplo, para una de ventanas:
 
@@ -3742,7 +3871,23 @@ Un decodificador da `null` cuando el texto no es válido, en lugar de lanzar: qu
 
 ## 26. Proyectos: `larimar.toml` y `larimar build`
 
-Un proyecto es una carpeta con un archivo `larimar.toml`:
+Un proyecto es una carpeta con un archivo `larimar.toml`. **TOML** es un formato de texto para
+configuraciones: cada línea es `clave = valor` (los textos entre comillas, las listas entre `[ ]`), las
+líneas que siguen a un título entre corchetes como `[project]` pertenecen a esa **sección**, y `#`
+empieza un comentario. El que crea `larimar new` basta para empezar:
+
+```toml
+[project]
+name = "hello"
+version = "0.1.0"
+main = "src/main.lar"
+
+[c]
+flags = ["-O2"]
+libraries = []
+```
+
+`[project]` dice cómo se llama el programa y dónde empieza; `[c]` dice cómo se compila el C. Todas las claves:
 
 ```toml
 [project]
@@ -3752,7 +3897,7 @@ main = "src/main.lar"        # por defecto; su carpeta es la raíz de los módul
 output = "dist/melody"       # por defecto build/<name> (build/<name>.exe en Windows)
 
 [c]
-compiler = "gcc"             # por defecto la variable CC, o cc (gcc en Windows)
+compiler = "gcc"             # por defecto el del sistema (cc, gcc, clang) o el tcc incluido
 flags = ["-O2", "-Wall"]     # por defecto ["-O2"]
 sources = ["csrc/helpers.c"] # archivos C propios que se compilan junto al programa
 include_paths = ["include"]  # carpetas de cabeceras (-I)
@@ -4199,6 +4344,9 @@ Las reglas:
 ---
 
 ## 27. Qué genera el transpilador
+
+Un **transpilador** es un compilador que escribe código en otro lenguaje en lugar de un programa:
+Larimar escribe C. Este capítulo es para los curiosos, y para quien quiera compilar el C a mano.
 
 El resultado es **un único archivo C99** (`build/<name>.c`) que contiene el runtime y todo el programa,
 con todos sus módulos, sin dependencias más allá de la biblioteca estándar de C. `larimar build` lo
