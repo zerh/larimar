@@ -32,12 +32,15 @@ import std.io.files as Files;
 import std.io { IoError };
 import syntax.ast { Program, FunctionDecl, TK };
 import syntax.parser { parseProgram, parseError };
-import project.cc { windows, quote, commandLine, systemLibraries, selfPath };
+import project.cc { windows, quote, commandLine, systemLibraries, selfPath, installHint };
+import std.io.console as Console;
 import std.encoding.json as Json;
 
 /** How the tests are compiled: the project's [c] settings, or the defaults when there is no project. */
 public class TestSettings {
     let compiler: String;
+    let first: String[*] = [];   // arguments right after the compiler (the bundled tcc's)
+    let bundled: bool = false;   // the tcc of $LARIMAR_HOME/toolchain: no sanitizers, no TLS
     let libraries: String[*];
     let libraryPaths: String[*];
     let includePaths: String[*];
@@ -172,6 +175,10 @@ public function runTests(args: String[*], s: TestSettings in default): int32 {
             paths.push(args[i]);
         }
         i += 1;
+    }
+    if (s.bundled && sanitize) {           // tcc has no AddressSanitizer
+        sanitize = false;
+        if (!json) { Console.printError("note: the bundled tcc builds the tests, without AddressSanitizer. To have it: ${installHint()}"); }
     }
     if (paths.length == 0) { paths.push("tests"); }
     let files: String[*] = [];
@@ -389,7 +396,13 @@ function head(text: String, count: int32): String {
 function compileC(cFile: String, exe: String): String {
     let s: TestSettings = settings!;
     let c: String = read(cFile);
-    let cmd: String[*] = [s.compiler, "-std=c99", "-g"];
+    if (s.bundled && c.contains("#define LM_NET_TLS")) {
+        return "it uses TLS (https), which the bundled tcc cannot build. Install a C compiler: ${installHint()}";
+    }
+    let cmd: String[*] = [s.compiler];
+    for (a in s.first) { cmd.push(a); }
+    cmd.push("-std=c99");
+    cmd.push("-g");
     if (sanitize) {
         let flags: String[] = ["-O1", "-fno-omit-frame-pointer", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"];
         for (f in flags) { cmd.push(f); }

@@ -21,6 +21,18 @@ public const RUNTIME: String = raw"""
 #define NOMINMAX
 #endif
 #include <windows.h>
+#if defined(__TINYC__) && !defined(CONDITION_VARIABLE_INIT)
+/* the windows.h of tcc predates Vista: what the runtime uses of it */
+typedef struct { void* Ptr; } CONDITION_VARIABLE, *PCONDITION_VARIABLE;
+typedef struct { void* Ptr; } SRWLOCK, *PSRWLOCK;
+#define CONDITION_VARIABLE_INIT {0}
+#define SRWLOCK_INIT {0}
+WINBASEAPI VOID WINAPI InitializeConditionVariable(PCONDITION_VARIABLE c);
+WINBASEAPI BOOL WINAPI SleepConditionVariableCS(PCONDITION_VARIABLE c, PCRITICAL_SECTION m, DWORD ms);
+WINBASEAPI VOID WINAPI WakeAllConditionVariable(PCONDITION_VARIABLE c);
+WINBASEAPI VOID WINAPI AcquireSRWLockExclusive(PSRWLOCK l);
+WINBASEAPI VOID WINAPI ReleaseSRWLockExclusive(PSRWLOCK l);
+#endif
 typedef CRITICAL_SECTION RtMutex;                 /* recursive */
 typedef CONDITION_VARIABLE RtCond;
 typedef HANDLE RtThreadHandle;
@@ -590,8 +602,9 @@ static int rt_fmt_float(char* t, size_t size, double v, bool single) {
     snprintf(e, sizeof e, "%.*e", digits - 1, v);
     int exponent = atoi(strchr(e, 'e') + 1);
     int n;
-    if (exponent < -4 || exponent >= 15) {
-        n = snprintf(t, size, "%s", e);
+    if (exponent < -4 || exponent >= 15) {        /* the exponent with at least two digits everywhere (msvcrt writes three) */
+        int mantissa = (int)(strchr(e, 'e') - e);
+        n = snprintf(t, size, "%.*se%c%02d", mantissa, e, exponent < 0 ? '-' : '+', exponent < 0 ? -exponent : exponent);
     } else {
         int decimals = digits - 1 - exponent;
         n = snprintf(t, size, "%.*f", decimals < 0 ? 0 : decimals, v);

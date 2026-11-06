@@ -129,6 +129,29 @@ case "plugins-deps" in *"$FILTER"*)
     ;;
 esac
 
+# larimar new makes a project that builds; larimar file.lar runs a file with its arguments and its exit code
+case "scripts-new" in *"$FILTER"*)
+    T="$(mktemp -d)"
+    missing=""
+    out="$(cd "$T" && "$LARIMARC" new hello > /dev/null && cd hello && CC="$CC" "$LARIMARC" run 2>&1)"
+    printf "%s\n" "$out" | grep -qF "Hello from hello!" || missing="$missing\n  a new project does not run: $out"
+    printf 'import std.os;\nfunction main(args: String[]): int32 {\n    println("args: ${args.join(",")}");\n    return 5;\n}\n' > "$T/s.lar"
+    out="$(CC="$CC" "$LARIMARC" "$T/s.lar" a b 2>&1)"; code=$?
+    [ "$out" = "args: a,b" ] || missing="$missing\n  the script printed: $out"
+    [ $code -eq 5 ] || missing="$missing\n  exit $code (the script's is 5)"
+    rm -rf "$T"
+    if [ -z "$missing" ]; then
+        pass=$((pass + 1))
+        echo "  ok    scripts-new (larimar new; larimar file.lar with arguments)"
+    else
+        fail=$((fail + 1))
+        failed="$failed scripts-new"
+        echo "  FAIL  scripts-new"
+        printf "%b\n" "$missing" | sed "s/^/        /"
+    fi
+    ;;
+esac
+
 # every file of std, opened alone (as the editor does), has no errors
 case "std-check" in *"$FILTER"*)
     bad=""

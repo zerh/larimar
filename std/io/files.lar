@@ -205,7 +205,8 @@ function makeDirectory(path: String): int32 {
 public function createDirectories(path: String): void throws IoError {
     let text: String = path.replace("\\", "/");
     for (i, b in text) {
-        if (b == '/' && i > 0 && !isDirectory(text.substring(0, i))) { raise(makeDirectory(text.substring(0, i)), path); }
+        // not "C:" (a drive, on Windows): it is not a folder to create
+        if (b == '/' && i > 0 && text[i - 1] != ':' && !isDirectory(text.substring(0, i))) { raise(makeDirectory(text.substring(0, i)), path); }
     }
     raise(makeDirectory(text), path);
 }

@@ -53,7 +53,41 @@ jobs:
           
           .\build-bootstrap.ps1 -verify
 
-      # 3. Empaquetar el contenido de ../out/larimar
+      # 3. El tcc incluido (Linux y Windows): toolchain/tcc dentro de ../out/larimar
+      - name: Bundled tcc (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-dev
+          sh toolchain/build-tcc.sh ../out/larimar
+
+      - name: Bundled tcc (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:Path += ";C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
+          .\toolchain\build-tcc.ps1 ..\out\larimar
+
+      # 4. Lo instalado funciona: un archivo suelto (con el tcc incluido en Linux y Windows) y un programa con hilos
+      - name: Smoke test (Unix)
+        if: matrix.script_type == 'sh'
+        run: |
+          expected="$(grep '^// output: ' tests/language/float_text.lar | sed 's#^// output: ##')"
+          out="$(../out/larimar/bin/larimar tests/language/float_text.lar)"
+          [ "$out" = "$expected" ] || { printf 'expected:\n%s\ngot:\n%s\n' "$expected" "$out"; exit 1; }
+          ../out/larimar/bin/larimar tests/language/sync_wait_until.lar
+
+      - name: Smoke test (Windows)
+        if: matrix.script_type == 'pwsh'
+        shell: pwsh
+        run: |
+          $expected = (Get-Content tests\language\float_text.lar | Where-Object { $_.StartsWith('// output: ') } | ForEach-Object { $_.Substring(11) }) -join "`n"
+          $out = (& ..\out\larimar\bin\larimar.cmd tests\language\float_text.lar) -join "`n"
+          if ($LASTEXITCODE -ne 0 -or $out -ne $expected) { throw "expected:`n$expected`ngot:`n$out" }
+          & ..\out\larimar\bin\larimar.cmd tests\language\sync_wait_until.lar
+          if ($LASTEXITCODE -ne 0) { throw "sync_wait_until failed" }
+
+      # 5. Empaquetar el contenido de ../out/larimar
       - name: Package Larimar Directory (Unix)
         if: matrix.script_type == 'sh'
         run: |
@@ -65,7 +99,7 @@ jobs:
         run: |
           Compress-Archive -Path "..\out\larimar" -DestinationPath "${{ matrix.artifact_name }}" -Force
 
-      # 4. Subir artefacto para el job de release
+      # 6. Subir artefacto para el job de release
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:

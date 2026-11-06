@@ -108,6 +108,7 @@ elif ! command -v cc > /dev/null && ! command -v gcc > /dev/null && ! command -v
         *) cmd="the gcc or clang package of your system" ;;
     esac
     say ""
-    say "To build programs, Larimar needs a C compiler. Install one with:"
+    say "Larimar comes with tcc, so it already builds and runs programs. For optimized builds and"
+    say "https (TLS), install the system's C compiler too:"
     say "    $cmd"
 fi

@@ -27,12 +27,12 @@ import editor.lsp { serve, worker };
 import editor.dap { serveDebugger };
 import codegen.gen { generate, generatorErrors, debugLines, spreadLines };
 import codegen.debugmap { debugMap };
-import project.cc { windows, quote, commandLine, systemLibraries, selfPath };
+import project.cc { windows, quote, commandLine, systemLibraries, selfPath, CCompiler, chooseCompiler, installHint };
 import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 import std.os.process { Process, ProcessError };
 
-const VERSION: String = "1.0.0";
+const VERSION: String = "1.1.0";
 
 /** The version of the language this compiler implements (SPEC.md). */
 const LANGUAGE: String = "1.0";
@@ -133,7 +133,14 @@ function command(args: String[]): int32 {
         usage();
         return 0;
     }
-    if (cmd.endsWith(".lar")) { return compileTo(args); }
+    if (cmd.endsWith(".lar")) {
+        // larimar file.lar -o out.c: its C; larimar file.lar [args]: build it and run it
+        if (args.contains("-o")) { return compileTo(args); }
+        let scriptArgs: String[*] = [];
+        for (a in rest) { scriptArgs.push(a); }
+        for (a in programArgs) { scriptArgs.push(a); }
+        return runScript(cmd, scriptArgs);
+    }
     let problems: String[*] = [];
     let found: Plugin[*] = plugins(problems);
     for (m in problems) { Console.printError("larimar: ${m}"); }
@@ -155,9 +162,11 @@ function usage(): void {
     println("                                --list, --json, --no-sanitize)");
     println("  larimar lsp                   language server for editors (speaks LSP on stdin/stdout)");
     println("  larimar dap [--backend <lldb-dap>]  debugger for editors (DAP on stdin/stdout, over lldb-dap)");
+    println("  larimar <file.lar> [args]     build one file and run it (with the bundled tcc when there is one:");
+    println("                                it starts fast); its own arguments after '--' when they look like ours");
     println("  larimar c <file.lar>          print the generated C of a file");
     println("  larimar <file.lar> -o <out.c> write the generated C of a file");
-    println("  larimar build --cc <program>  build with that C compiler instead of the project's");
+    println("  larimar build --cc <program>  build with that C compiler instead of the project's ('tcc': the bundled one)");
     let problems: String[*] = [];
     let found: Plugin[*] = plugins(problems);
     if (found.length > 0) {
@@ -327,15 +336,23 @@ function compileFile(main: String, shownFrom: String): String {
 // larimar test (testing.lar runs them; test-main is what it calls for each file of test functions)
 // =========================================================================
 
+/** The C compiler for the tests (a test file that uses TLS needs the system's: compileC says so). */
+function testCompiler(wanted: String): CCompiler? {
+    let problem: String[*] = [];
+    let cc: CCompiler? = chooseCompiler(larimarHome(), wanted, false, false, problem);
+    if (cc == null) { toolError = problem[0].clone() in default; }
+    return cc;
+}
+
 /** The project's [c] settings for the tests, or the defaults when there is no larimar.toml here. */
 function testSettings(): TestSettings? {
     let here: String = Paths.absolute(".");
     if (!Files.isFile("larimar.toml")) {
-        let cc: String = os.env("CC") ?? "";
-        if (cc.isBlank()) { cc = windows() ? "gcc" : "cc"; }
+        let cc: CCompiler? = testCompiler((os.env("CC") ?? "").trim());
+        if (cc == null) { return null; }
         return TestSettings {
-            compiler: cc, libraries: [], libraryPaths: [], includePaths: [], sources: [], root: "",
-            outDir: Paths.join(here, "build/test")
+            compiler: cc.program, first: cc.first, bundled: cc.bundled, libraries: [], libraryPaths: [], includePaths: [],
+            sources: [], root: "", outDir: Paths.join(here, "build/test")
         };
     }
     let p: Project? = load(here);
@@ -346,8 +363,10 @@ function testSettings(): TestSettings? {
     for (x in p.includePaths) { includes.push(resolve(here, x).clone()); }
     let libPaths: String[*] = [];
     for (x in p.libraryPaths) { libPaths.push(resolve(here, x).clone()); }
+    let cc: CCompiler? = testCompiler(compilerOverride != "" ? compilerOverride : p.compiler);
+    if (cc == null) { return null; }
     return TestSettings {
-        compiler: p.compiler, libraries: p.libraries, libraryPaths: libPaths, includePaths: includes, sources,
+        compiler: cc.program, first: cc.first, bundled: cc.bundled, libraries: p.libraries, libraryPaths: libPaths, includePaths: includes, sources,
         root: Paths.parent(resolve(here, p.main)), outDir: Paths.join(resolve(here, p.buildDir), "test")
     };
 }
@@ -462,7 +481,8 @@ function project(dir: String, config: Any): Project? {
         }
         let allowed: String = sectionName == "project" ? PROJECT_KEYS : C_KEYS;
         for (key, value in section.fields) {
-            if (sectionName == "c" && isSection(value)) {               // [c.linux], [c.macos], [c.windows], [c.unix]
+            // [c.linux], [c.macos], [c.windows], [c.unix]: a table with names (an empty [] is a list, as in libraries = [])
+            if (sectionName == "c" && isSection(value) && (isPlatform(key) || hasNames(value))) {
                 if (!isPlatform(key)) {
                     problems.push("unknown section [c.${key}] (platforms: [c.linux], [c.macos], [c.windows], [c.unix])");
                     continue;
@@ -488,11 +508,7 @@ function project(dir: String, config: Any): Project? {
     let buildDir: String = text(p, "build_dir", "build");
     let exeSuffix: String = windows() ? ".exe" : "";
     let output: String = text(p, "output", "${buildDir}/${name}${exeSuffix}");
-    let cc: String = os.env("CC") ?? "";
-    if (cc.isBlank()) {
-        cc = "cc";
-        if (windows()) { cc = "gcc"; }
-    }
+    let cc: String = (os.env("CC") ?? "").trim();     // what was asked for; "" chooses (chooseCompiler)
     // [c] for every platform, then [c.unix] (Linux and macOS) and [c.<this platform>]: their lists are added
     // to [c]'s, and a compiler there replaces [c]'s
     let unix: Any = windows() ? null : c.unix;
@@ -552,6 +568,12 @@ function isPlatform(name: String): bool {
 }
 
 /** A [section] of larimar.toml: a table with named entries (a list has positions). */
+/** Whether a table has entries with a name (a section does; a list does not). */
+function hasNames(value: Any): bool {
+    for (k, v in value.fields) { return true; }
+    return false;
+}
+
 function isSection(value: Any): bool {
     return switch (value) {
         case Any table -> table.length == 0;
@@ -629,7 +651,16 @@ function build(p: Project, debug: bool): String {
         toolError = "cannot write ${cFile}" in default;
         return "";
     }
-    let cmd: String[*] = [compilerOverride != "" ? compilerOverride : p.compiler, "-std=c99"];
+    let problem: String[*] = [];
+    let chosen: CCompiler? = chooseCompiler(larimarHome(), compilerOverride != "" ? compilerOverride : p.compiler, false, generated.contains("#define LM_NET_TLS"), problem);
+    if (chosen == null) {
+        toolError = problem[0].clone() in default;
+        return "";
+    }
+    let cc: CCompiler = chosen;
+    let cmd: String[*] = [cc.program];
+    for (a in cc.first) { cmd.push(a); }
+    cmd.push("-std=c99");
     for (f in p.flags) {
         if (!debug || !(f.startsWith("-O") || f == "-s")) { cmd.push(f); }     // --debug: no optimizing
     }
@@ -652,15 +683,65 @@ function build(p: Project, debug: bool): String {
     for (l in systemLibraries(c)) { cmd.push(l.clone()); }
     let code: int32 = os.run(commandLine(cmd));
     if (code == 127) {
-        toolError = "cannot run the C compiler '${p.compiler}'. Install gcc or clang, or set compiler = \"...\" in [c]." in default;
+        toolError = "cannot run the C compiler '${cc.program}'. Install one (${installHint()}), or set compiler = \"...\" in [c]." in default;
         return "";
     }
     if (code != 0) {
         toolError = "the C compiler failed (exit ${code}). Command: ${cmd.join(" ")}\nThe generated C is in ${Paths.relative(dir, cFile)}" in default;
         return "";
     }
+    if (cc.fallback) {
+        Console.printError("note: no C compiler found, so the bundled tcc built it (fast to build, not optimized). For faster programs: ${installHint()}");
+    }
     Console.printError(debug ? "built ${Paths.relative(dir, exe)} (debug)" : "built ${Paths.relative(dir, exe)}");
     return exe;
+}
+
+/**
+ * larimar file.lar [args]: the file is built in a folder of the system's temporary files (the bundled tcc
+ * first: it starts fast) and run with the arguments; its exit code is larimar's. Nothing is printed but
+ * what the program prints, so scripts can be piped.
+ */
+function runScript(file: String, args: String[*]): int32 {
+    let generated: String = compileFile(file, ".");
+    if (compileErrors.length > 0) { return 1; }
+    let problem: String[*] = [];
+    let wanted: String = compilerOverride != "" ? compilerOverride : (os.env("CC") ?? "").trim();
+    let chosen: CCompiler? = chooseCompiler(larimarHome(), wanted, true, generated.contains("#define LM_NET_TLS"), problem);
+    if (chosen == null) { return fail(problem[0].clone() in default); }
+    let cc: CCompiler = chosen;
+    let temp: String = os.env(windows() ? "TEMP" : "TMPDIR") ?? "";
+    if (temp.isBlank()) { temp = windows() ? "." : "/tmp"; }
+    let dir: String = Paths.join(temp, "larimar");
+    let name: String = Paths.fileName(file);
+    let base: String = Paths.join(dir, "${name.substring(0, name.length - 4)}-${os.processId()}");
+    let cFile: String = "${base}.c";
+    let exe: String = windows() ? "${base}.exe" : base;
+    try {
+        Files.createDirectories(dir);
+        Files.writeString(cFile, generated);
+    } catch (IoError e) {
+        return fail("cannot write ${cFile}".clone() in default);
+    }
+    let cmd: String[*] = [cc.program];
+    for (a in cc.first) { cmd.push(a); }
+    let rest: String[] = ["-std=c99", "-O1", "-o", exe, cFile];
+    for (a in rest) { cmd.push(a); }
+    if (!windows()) { cmd.push("-lm"); }
+    for (l in systemLibraries(generated)) { cmd.push(l.clone()); }
+    let log: String = "${base}.txt";
+    let code: int32 = os.run("${commandLine(cmd)} > ${quote(log)} 2>&1");
+    if (code != 0) {
+        let said: String = "";
+        try { said = Files.readString(log); } catch (IoError e) {}
+        return fail("the C compiler failed (exit ${code}): ${said.trim()}\nThe generated C is in ${cFile}".clone() in default);
+    }
+    let result: int32 = execute(exe, args);
+    let made: String[] = [cFile, exe, log];
+    for (f in made) {
+        try { Files.delete(f); } catch (IoError e) {}
+    }
+    return result;
 }
 
 function execute(exe: String, args: String[*]): int32 {

@@ -33,6 +33,10 @@ c_code {
 #include <poll.h>
 #include <fcntl.h>
 #endif
+#if defined(_WIN32) && defined(__TINYC__)   /* the windows.h of tcc predates Vista: what this uses of it */
+ULONGLONG WINAPI GetTickCount64(void);
+LPCH WINAPI GetEnvironmentStringsA(void);     /* tcc: a macro for GetEnvironmentStrings */
+#endif
 
 typedef struct LmProcess {
     char** args;            /* program and arguments, NULL at the end */

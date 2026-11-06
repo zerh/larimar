@@ -68,7 +68,8 @@ try {
     $cc = @('gcc', 'clang', 'cc') | Where-Object { Get-Command $_ -ErrorAction SilentlyContinue } | Select-Object -First 1
     if (-not $cc) {
         Write-Host ''
-        Write-Host 'To build programs, Larimar needs a C compiler. Install one with:'
+        Write-Host 'Larimar comes with tcc, so it already builds and runs programs. For optimized builds and'
+        Write-Host 'https (TLS), install a C compiler too:'
         Write-Host '    winget install LLVM.LLVM'
     }
 } finally {
