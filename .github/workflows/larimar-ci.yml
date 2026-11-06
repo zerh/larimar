@@ -59,14 +59,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-dev
-          sh toolchain/build-tcc.sh ../out/larimar
+          sh tools/build-tcc.sh ../out/larimar
 
       - name: Bundled tcc (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $env:Path += ";C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
-          .\toolchain\build-tcc.ps1 ..\out\larimar
+          .\tools\build-tcc.ps1 ..\out\larimar
 
       # 4. Lo instalado funciona: un archivo suelto (con el tcc incluido en Linux y Windows) y un programa con hilos
       - name: Smoke test (Unix)

@@ -23,7 +23,7 @@ larimar-compiler/
 ├── MANUAL.md                # Language manual (English)
 ├── MANUAL_ES.md             # Language manual (Spanish)
 ├── SPEC.md                  # Language specification (version 1.0)
-├── toolchain/               # build-tcc.sh / build-tcc.ps1: the tcc that the releases bring (Linux, Windows)
+├── tools/                   # build-tcc.sh / build-tcc.ps1: build the tcc that the releases bring (Linux, Windows)
 ├── larimarc_bootstrap.c     # C bootstrap
 ├── build-bootstrap.sh       # Build from the C bootstrap and install
 ├── larimar.toml             # Project configuration
@@ -39,14 +39,14 @@ larimar/
 ├── bin/larimar              # wrapper that sets LARIMAR_HOME
 ├── debug/                   # copy of debug/ (lldb and gdb formatters)
 ├── std/                     # copy of std/
-├── toolchain/tcc/           # the releases for Linux and Windows: tcc (and musl on Linux), see toolchain/
+├── toolchain/tcc/           # the releases for Linux and Windows: tcc (and musl on Linux), see tools/
 └── MANUAL.md                # copy of MANUAL.md
 ```
 
 The releases for Linux and Windows bring **tcc** in `toolchain/tcc`, so `larimar file.lar` runs a file
 at once and nothing else is needed to start. Projects use the system's compiler (cc, gcc, clang) when
-there is one; programs with TLS need it. GitHub Actions builds tcc with `toolchain/build-tcc.sh` and
-`toolchain/build-tcc.ps1`.
+there is one; programs with TLS need it. GitHub Actions builds tcc with `tools/build-tcc.sh` and
+`tools/build-tcc.ps1`.
 
 ## Calling C
 
