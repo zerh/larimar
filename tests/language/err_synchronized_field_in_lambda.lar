@@ -1,0 +1,10 @@
+// expect: error 'self.n' of a synchronized class cannot be used inside a lambda: the lambda could run later, without the lock
+synchronized class Box {
+    let n: int32 = 0;
+    function later(): void {
+        let f: () -> void = () -> { self.n += 1; };
+        f();
+    }
+}
+
+function main(): int32 { return 0; }

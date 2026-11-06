@@ -2096,9 +2096,29 @@ The rules of a `synchronized` class:
 - Its fields are only used inside its methods, through `self`.
 - Its methods receive and return values or `synchronized` objects, never lists, plain objects or `Any`:
   so its data does not leave without the lock.
-- It does not inherit and is not inherited, and inside its methods `self` is not used in lambdas
-  (they could run without the lock).
+- It inherits only from another `synchronized` class, and only a `synchronized` class inherits from it.
+  The object has a single lock, and every method takes it, the inherited ones too.
+- Inside a lambda of its methods, `self` is only used to call its methods (`self.run()` or `self::run`),
+  which take the lock; not its fields, because the lambda could run later, without the lock.
 - A method can call another one of the same object: the lock can be taken several times.
+
+```ts
+synchronized class Queue {
+    let items: int32[*] = [];
+    function put(x: int32): void { self.items.push(x); }
+    function size(): int32 { return self.items.length; }
+}
+
+synchronized class LimitedQueue extends Queue {      // the same lock for put, size and full
+    let limit: int32 = 100;
+    override function put(x: int32): void {
+        if (self.size() < self.limit) { super.put(x); }
+    }
+    function later(): () -> void thread safe {
+        return () -> { self.put(0); };                // fine: put takes the lock
+    }
+}
+```
 
 ### Waiting for something to happen: `wait until`
 
@@ -4609,7 +4629,7 @@ What Larimar does not have, and will not have, with what is used instead:
 
 - There is no `defer`.
 - An `Any` does not keep `[*]` lists, lambdas or interfaces.
-- A `synchronized` class cannot inherit, and `wait until` has no time limit (it waits until the condition holds).
+- `wait until` has no time limit (it waits until the condition holds).
 - The standard library is small: files, console, paths, environment, other programs, time, hashes and
   random bytes, regular expressions, JSON, TOML, base64, hex and URLs, TCP and UDP with their servers
   (plain or https), and an HTTP and HTTPS client. The network does not have an HTTP server (that is for a

@@ -347,6 +347,15 @@ function topLevelDeclaration(): Node {
         error(start.line, "'override' is only valid inside a class");
         return BlockStmt { line: start.line } in default;
     }
+    if (start.kind == TT.Ident && (next().kind == TT.Assign || next().kind == TT.OpAssign)) {
+        let op: String = next().kind == TT.OpAssign ? "${next().text}=" : "=";
+        error(start.line, "'${start.text} ${op} ...' is a statement: at top level only declarations are allowed. Move it into a function (main), or give the value where '${start.text}' is declared: let ${start.text}: T = ...;");
+        return BlockStmt { line: start.line } in default;
+    }
+    if (start.kind == TT.Ident && (next().kind == TT.LParen || next().kind == TT.Dot)) {
+        error(start.line, "'${start.text}${next().text}...' is a statement: at top level only declarations are allowed. Move it into a function (main).");
+        return BlockStmt { line: start.line } in default;
+    }
     error(start.line, "Only declarations (let, const, function, struct, class, interface, enum, extern, c_include, #when) are allowed at top level (got '${start.text}')");
     return BlockStmt { line: start.line } in default;
 }
