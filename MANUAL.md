@@ -2055,7 +2055,20 @@ Two threads that change the same thing at the same time corrupt the data. That i
 only use** two kinds of things from outside, and the compiler checks it:
 
 1. **Values**, which the thread receives copied: numbers, `bool`, `String`, and structs, enums and `T[N]` made of them.
-2. **Objects of a `synchronized class`.**
+2. **Objects of a `synchronized class`**, and **objects of a class without fields**: with nothing inside
+   that can change, several threads can use them at once (a set of routes, a way of doing something).
+
+```ts
+class Pages {                                     // no fields: shareable
+    function routes(r: Router in self): void {
+        r.get("/", self::index);                  // where a 'thread safe' function is expected: fine
+    }
+    function index(req: Request, res: Response): void { ... }
+}
+```
+
+If the class, or a class that extends it, has a field, it is not shareable, and the error names it:
+`'self::index' is given where a 'thread safe' function is expected, but it keeps self (Pages), which has fields ('visits') that other threads could change at the same time.`
 
 A `synchronized` class protects its data with a lock. Each method takes it when it starts and lets it
 go when it leaves, by any path, so two threads are never inside the same object at the same time:
@@ -2236,7 +2249,7 @@ Semantic Error [src/main.lar:9]: This 'thread safe' lambda uses 'names' (String[
 ```
 
 - **A lambda given where a `thread safe` function is expected is checked like the `run` of a `Thread`**:
-  it only uses values, objects of `synchronized` classes and other `thread safe` functions, and the
+  it only uses values, objects of `synchronized` classes or of classes without fields and other `thread safe` functions, and the
   functions it calls do not change globals. Its captures do not change (as in every lambda), so
   several threads can run it at the same time.
 - **A `thread safe` value can be shared between threads**: a `Thread` can use it and a `synchronized`

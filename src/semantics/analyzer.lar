@@ -2880,7 +2880,33 @@ function sendableIn(t: Type in default, visiting: Any): bool {
         }
         return true;
     }
-    return t.nk == NamedK.Class ? classOf(t.name)!.sync : false;
+    return t.nk == NamedK.Class ? classOf(t.name)!.sync || stateFields(t.name) == "" : false;
+}
+
+/**
+ * The fields that make objects of class `name` changeable, as text ('a', 'b'), or "" when they have none:
+ * an object with no fields, in its class or in any class that extends it, has no state that two threads
+ * could change, so it is shared like a value (a set of routes, a strategy). A Thread or a StringBuilder
+ * keeps state of its own.
+ */
+public function stateFields(name: String in default): String {
+    for (c in classes) {
+        if (!isSubclass(c.name, name)) { continue; }
+        if (c.thread || c.builder) { return "the state of ${c.thread ? "a Thread" : "a StringBuilder"}"; }
+        if (c.fields.length > 0) {
+            let names: String[*] = [] in default;
+            for (f in c.fields) { names.push("'${f.name}'"); }
+            return c.name == name ? names.join(", ") : "${names.join(", ")} of its subclass '${c.name}'";
+        }
+    }
+    return "";
+}
+
+/** For the message of a value that cannot be shared: what an ordinary object has that could change. */
+function changeable(t: Type in default): String {
+    if (t.kind != TyK.Named || t.nk != NamedK.Class || classOf(t.name)!.sync) { return ", which"; }
+    let fields: String = stateFields(t.name);
+    return fields == "" ? ", which" : ", which has fields (${fields}) that";
 }
 
 function checkSynchronizedClasses(): void {
@@ -2943,11 +2969,12 @@ function checkThreads(): void {
         for (s in tr.lambda.captures) {
             if (sendable(s.type)) { continue; }
             let what: String = s.kind == SymK.Self ? "self" : "'${s.name}'";
+            let which: String = changeable(s.type);
             error(tr.line, ref != null
-                ? "${given} keeps ${what} (${s.type.text}), which other threads could change at the same time. It can use only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes and 'thread safe' functions."
+                ? "${given} keeps ${what} (${s.type.text})${which} other threads could change at the same time. It can use only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes or of classes without fields, and 'thread safe' functions."
                 : tr.safe
-                ? "This 'thread safe' lambda uses ${what} (${s.type.text}), which other threads could change at the same time. It can use only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes and 'thread safe' functions."
-                : "This thread uses ${what} (${s.type.text}), which could change while the thread runs. A thread can share only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes and 'thread safe' functions.");
+                ? "This 'thread safe' lambda uses ${what} (${s.type.text})${which} other threads could change at the same time. It can use only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes or of classes without fields, and 'thread safe' functions."
+                : "This thread uses ${what} (${s.type.text})${which} could change while the thread runs. A thread can share only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes or of classes without fields, and 'thread safe' functions.");
         }
         markRound += 1;
         let todo: Owner[*] = [tr.lambda.owner] in default;

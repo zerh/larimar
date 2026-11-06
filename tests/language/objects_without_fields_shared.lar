@@ -1,0 +1,39 @@
+// An object of a class without fields has no state that two threads could change: it is shared like a
+// value. Its methods can go where a 'thread safe' function is expected (self::m), and a thread can use it.
+interface Routes {
+    function routes(r: Router in self): void;
+}
+
+class Router {
+    let handlers: ((int32) -> int32 thread safe)[*] = [];
+    function get(h: (int32) -> int32 thread safe in self): void { self.handlers.push(h); }
+}
+
+synchronized class Total {
+    let n: int32 = 0;
+    function add(k: int32): void { self.n += k; }
+    function value(): int32 { return self.n; }
+}
+
+let total: Total = {};
+
+class Pages implements Routes {
+    function routes(r: Router in self): void {
+        r.get(self::index);
+        r.get(self::twice);
+    }
+    function index(x: int32): int32 { total.add(x); return x; }
+    function twice(x: int32): int32 { return self.index(x) * 2; }
+}
+
+function main(): int32 {
+    let pages: Pages = {};
+    let r: Router = {};
+    pages.routes(r);
+    let h: (int32) -> int32 thread safe = r.handlers[1];
+    let t: Thread = { run: () -> { h(5); pages.index(1); } };
+    t.start();
+    t.join();
+    println("${total.value()}");
+    return total.value() == 6 ? 0 : 1;
+}

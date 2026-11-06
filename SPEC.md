@@ -1372,7 +1372,8 @@ The `run` lambda of a thread, and a `thread safe` lambda, can use from outside o
 
 1. values, which they receive copied: numbers, `bool`, `String`, and structs, enums and `T[N]` made of
    them;
-2. objects of synchronized classes;
+2. objects of synchronized classes, and objects of classes without fields (neither the class nor a class
+   that extends it has fields, and it is not a `Thread` or a `StringBuilder`): they have no state to change;
 3. `thread safe` functions.
 
 The check follows every function they call, at any depth: if one modifies a global variable or uses a

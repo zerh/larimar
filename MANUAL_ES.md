@@ -2054,7 +2054,20 @@ Dos hilos que cambian lo mismo a la vez corrompen los datos. Por eso un hilo **s
 fuera dos clases de cosas, y el compilador lo comprueba:
 
 1. **Valores**, que el hilo recibe copiados: números, `bool`, `String`, y structs, enums y `T[N]` hechos de eso.
-2. **Objetos de una `synchronized class`.**
+2. **Objetos de una `synchronized class`**, y **objetos de una clase sin campos**: como no tienen nada
+   que pueda cambiar, varios hilos pueden usarlos a la vez (un conjunto de rutas, una forma de hacer algo).
+
+```ts
+class Pages {                                     // sin campos: se puede compartir
+    function routes(r: Router in self): void {
+        r.get("/", self::index);                  // donde se espera una función 'thread safe': bien
+    }
+    function index(req: Request, res: Response): void { ... }
+}
+```
+
+Si la clase, o una clase que la extiende, tiene un campo, no se puede compartir, y el error lo nombra:
+`'self::index' is given where a 'thread safe' function is expected, but it keeps self (Pages), which has fields ('visits') that other threads could change at the same time.`
 
 Una clase `synchronized` protege sus datos con un candado. Cada método lo toma al empezar y lo suelta al
 salir, por cualquier camino, así que dos hilos nunca están dentro del mismo objeto a la vez:
@@ -2235,7 +2248,7 @@ Semantic Error [src/main.lar:9]: This 'thread safe' lambda uses 'names' (String[
 ```
 
 - **Una lambda dada donde se espera una función `thread safe` se comprueba como el `run` de un `Thread`**:
-  solo usa valores, objetos de clases `synchronized` y otras funciones `thread safe`, y las funciones que
+  solo usa valores, objetos de clases `synchronized` o de clases sin campos y otras funciones `thread safe`, y las funciones que
   llama no cambian globales. Sus capturas no cambian (como en toda lambda), así que varios hilos pueden
   ejecutarla a la vez.
 - **Un valor `thread safe` se puede compartir entre hilos**: un `Thread` lo puede usar y un método
