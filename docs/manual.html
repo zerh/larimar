@@ -418,6 +418,26 @@
 
     .manual-body { flex: 1; min-width: 0; max-width: 52rem; padding: 2.5rem 3rem 6rem; color: #c9ced6; line-height: 1.7; font-size: 0.975rem; }
     .manual-status { color: var(--text-muted); padding: 3rem 0; }
+
+    /* while the manual arrives: the shape of the page, shimmering */
+    .sk-line, .sk-block {
+      border-radius: 0.375rem; margin: 0.85rem 0; height: 0.85rem;
+      background: linear-gradient(90deg, rgba(56, 62, 72, 0.35) 0%, rgba(114, 226, 221, 0.10) 50%, rgba(56, 62, 72, 0.35) 100%);
+      background-size: 200% 100%; animation: sk-shine 1.4s ease-in-out infinite;
+    }
+    .sk-title { height: 2.6rem; width: 55%; margin-bottom: 1.6rem; }
+    .sk-h2 { height: 1.6rem; width: 40%; margin-top: 2.6rem; }
+    .sk-short { width: 45%; }
+    .sk-mid { width: 75%; }
+    .sk-block { height: 9rem; border-radius: 1rem; margin: 1.4rem 0; }
+    .sk-toc .sk-line { height: 0.75rem; margin: 0.9rem 0.5rem; width: 80%; }
+    .sk-toc .sk-short { width: 55%; }
+    @keyframes sk-shine { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+    @media (prefers-reduced-motion: reduce) { .sk-line, .sk-block { animation: none; } }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .manual-body { opacity: 1; }
+    .manual-body.shown { animation: md-in 0.25s ease-out; }
+    @keyframes md-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
     .manual-status a { color: var(--larimar-light); }
     .manual-body h1 { font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 700; color: var(--text-main); letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1rem; }
     .manual-body h2 { font-size: 1.75rem; font-weight: 700; color: var(--text-main); margin: 3.5rem 0 1rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color); letter-spacing: -0.01em; }
@@ -503,10 +523,11 @@
   <div class="manual-layout">
     <aside class="manual-toc" aria-label="Contents">
       <input type="search" class="toc-search" data-t-placeholder="search" placeholder="Search the manual">
-      <nav id="toc"></nav>
+      <nav id="toc"><div class="sk sk-toc" aria-hidden="true"><div class="sk-line"></div><div class="sk-line"></div><div class="sk-line sk-short"></div><div class="sk-line"></div><div class="sk-line"></div><div class="sk-line sk-short"></div><div class="sk-line"></div><div class="sk-line"></div><div class="sk-line sk-short"></div><div class="sk-line"></div><div class="sk-line"></div><div class="sk-line sk-short"></div><div class="sk-line"></div><div class="sk-line"></div></div></nav>
     </aside>
     <article id="manual" class="manual-body">
-      <p class="manual-status" data-t="loading">Loading the manual…</p>
+      <div class="sk" aria-hidden="true"><div class="sk-line sk-title"></div><div class="sk-line"></div><div class="sk-line"></div><div class="sk-line sk-short"></div><div class="sk-line sk-h2"></div><div class="sk-line"></div><div class="sk-line sk-mid"></div><div class="sk-block"></div><div class="sk-line"></div><div class="sk-line sk-short"></div><div class="sk-line sk-h2"></div><div class="sk-line"></div><div class="sk-line"></div><div class="sk-line sk-mid"></div></div>
+      <p class="sr-only" data-t="loading">Loading the manual…</p>
     </article>
   </div>
 
@@ -527,6 +548,7 @@
               failed: 'No se pudo cargar el manual. Léelo en GitHub: ', copy: 'Copiar', nothing: 'No se encontró nada' }
       };
       var article = document.getElementById('manual');
+      var SKELETON = article.innerHTML;
       var toc = document.getElementById('toc');
       var search = document.querySelector('.toc-search');
       var lang = 'en';
@@ -727,7 +749,8 @@
       function load() {
         words();
         var file = FILES[lang];
-        article.innerHTML = '<p class="manual-status">' + WORDS[lang].loading + '</p>';
+        article.innerHTML = SKELETON;           // the shape of the page while the manual arrives
+        article.classList.remove('shown');
         fetchFirst(sources(file)).then(function (md) {
           used = {};
           article.innerHTML = marked.parse(md);
@@ -752,6 +775,7 @@
           });
           buildToc();
           spy();
+          requestAnimationFrame(function () { article.classList.add('shown'); });
           search.dispatchEvent(new Event('input'));
           if (location.hash) {
             var target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
