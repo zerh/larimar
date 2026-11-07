@@ -1,7 +1,0 @@
-// expect: error User has no natural order: give sort() a comparator
-class User { let name: String; }
-function main(): int32 {
-    let users: User[*] = [User { name: "a" }];
-    users.sort();
-    return 0;
-}

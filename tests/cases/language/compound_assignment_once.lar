@@ -1,0 +1,27 @@
+// a[i()] += v reads and writes the same place: its object and its index are computed once.
+class Box {
+    let n: int32 = 0;
+    let items: int32[*] = [];
+}
+
+let box: Box = {};
+
+function i(): int32 {
+    println("i");
+    return 0;
+}
+
+function b(): Box {
+    println("b");
+    return box;
+}
+
+function main(): int32 {
+    let xs: int32[*] = [1, 2];
+    xs[i()] += 5;
+    b().n += 2;
+    box.items.push(7);
+    b().items[i()] *= 3;
+    println("${xs[0]} ${box.n} ${box.items[0]}");
+    return 0;
+}

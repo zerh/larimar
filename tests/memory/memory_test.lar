@@ -1,0 +1,108 @@
+// The compiler's tests of memory: memory (the programs that run are in tests/cases/memory/).
+import tests.support.compiler { runs };
+
+// Un Any con valores creados anidados.
+test function anyNested(): void {
+    runs("tests/cases/memory/any_nested.lar", [
+        "8080 x-1 3"
+    ]);
+}
+
+// Una excepción a mitad de una instrucción con temporales vivos: se liberan al salir.
+test function exceptionMidStatement(): void {
+    runs("tests/cases/memory/exception_mid_statement.lar", [
+        "error 3",
+        "ok 4",
+        "done 2"
+    ]);
+}
+
+// Regresión: el valor por defecto de un campo que llama a una función que crea su resultado
+// recibía memoria NULL (se analizaba antes de saber qué funciones crean).
+test function fieldDefaultCallsFunction(): void {
+    runs("tests/cases/memory/field_default_calls_function.lar", [
+        "16 0"
+    ]);
+}
+
+// Guardar en una lista global desde una función: con 'in default' vive todo el programa.
+test function inDefaultFromFunction(): void {
+    runs("tests/cases/memory/in_default_from_function.lar", [
+        "3 log-2"
+    ]);
+}
+
+// Regresión: un texto interpolado copia sus partes, así que no "lleva" la vida de ellas
+// (se rechazaba código correcto con un error de vida falso).
+test function interpolatedParts(): void {
+    runs("tests/cases/memory/interpolated_parts.lar", [
+        "counter 0 | counter 10 | counter 20"
+    ]);
+}
+
+// Temporales de cada vuelta (interpolación, mayúsculas, recortes) mueren en cada ';'.
+test function loopTemporaries(): void {
+    runs("tests/cases/memory/loop_temporaries.lar", [
+        "4950 100"
+    ]);
+}
+
+// map y filter crean sus resultados donde vive la lista resultante.
+test function mapFilter(): void {
+    runs("tests/cases/memory/map_filter.lar", [
+        "X2,X4,X6"
+    ]);
+}
+
+// Un objeto con campos de texto creados: viven en la memoria del objeto.
+test function objectStringFields(): void {
+    runs("tests/cases/memory/object_string_fields.lar", [
+        "Ana (3) Ana!"
+    ]);
+}
+
+// Una memoria propia: lo creado ahí sobrevive al bloque donde se creó.
+test function ownMemory(): void {
+    runs("tests/cases/memory/own_memory.lar", [
+        "2 uno-1 dos-2 true"
+    ]);
+}
+
+// Lo que se crea directamente al añadirlo a una lista vive en la memoria de la lista.
+test function pushInLoop(): void {
+    runs("tests/cases/memory/push_in_loop.lar", [
+        "1000 item-999 item-0"
+    ]);
+}
+
+// What closes itself (a File here; a socket too) closes when a byte[N] memory on the stack is freed, as
+// with any other memory: the text is in the file (flushed) right after the block, without close().
+test function stackMemoryCloses(): void {
+    runs("tests/cases/memory/stack_memory_closes.lar", [
+        "closed: uno dos"
+    ]);
+}
+
+// Funciones estáticas que crean su resultado.
+test function staticMethods(): void {
+    runs("tests/cases/memory/static_methods.lar", [
+        "3,0 Green counter 20"
+    ]);
+}
+
+// Regresión: Reader y copy usaban un byte[4096] de longitud 0 y no leían nada.
+test function streamReaderBuffer(): void {
+    runs("tests/cases/memory/stream_reader_buffer.lar", [
+        "<uno>",
+        "<dos>",
+        "<tres>",
+        "copiado"
+    ]);
+}
+
+// StringBuilder que crece dentro de un bucle.
+test function stringBuilderLoop(): void {
+    runs("tests/cases/memory/string_builder_loop.lar", [
+        "0,1,2,3,4,5,6,7,8,9 19"
+    ]);
+}

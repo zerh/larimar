@@ -1,9 +1,0 @@
-// expect: error C keeps the function given to 'set_busy' (in default), so what it uses must live as long as the whole program
-native type BusyFn = (Context, int32) -> int32;
-native function set_busy(f: BusyFn in default, data: Context): void;
-class Limit { let count: int32 = 5; }
-function main(): int32 {
-    let limit: Limit = {};
-    set_busy((tries) -> { return tries < limit.count ? 1 : 0; });
-    return 0;
-}

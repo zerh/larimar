@@ -1,8 +1,0 @@
-// expect: error 'pepito::run()' calls a reference: for the reference write 'pepito::run' (without parentheses); to call the function, pepito.run(...)
-class Pepito { function run(): void { } }
-
-function main(): int32 {
-    let pepito: Pepito = {};
-    let f: () -> void = pepito::run();
-    return 0;
-}

@@ -1,0 +1,184 @@
+// The compiler's tests of language: threads (the programs that run are in tests/cases/language/).
+import tests.support.compiler { failsWith, runs };
+
+test function methodReferenceThreadSafe(): void {
+    failsWith(raw"""
+        class Box { let n: int32 = 0; function get(x: int32): void { self.n = x; } }
+        function take(f: (int32) -> void thread safe): void { f(1); }
+
+        function main(): int32 {
+            let b: Box = {};
+            take(b::get);
+            return 0;
+        }
+        """, "'b::get' is given where a 'thread safe' function is expected, but it keeps 'b' (Box)");
+}
+
+test function methodReferenceThreadSafeGlobal(): void {
+    failsWith(raw"""
+        let hits: int32 = 0;
+        function bump(x: int32): void { hits += 1; }
+        function take(f: (int32) -> void thread safe): void { f(1); }
+
+        function main(): int32 {
+            take(::bump);
+            return 0;
+        }
+        """, "'::bump' is given where a 'thread safe' function is expected, but it can reach global 'hits'");
+}
+
+test function plainExtendsSynchronized(): void {
+    failsWith(raw"""
+        synchronized class Safe { let n: int32 = 0; }
+        class Plain extends Safe { }
+
+        function main(): int32 { return 0; }
+        """, "Class 'Plain' cannot extend synchronized class 'Safe': declare it 'synchronized class Plain'");
+}
+
+test function sharedObjectSubclassFields(): void {
+    failsWith(raw"""
+        class Base { function step(x: int32): void { } }
+        class Counting extends Base {
+            let count: int32 = 0;
+            override function step(x: int32): void { self.count += x; }
+        }
+
+        function main(): int32 {
+            let b: Base = Counting {};
+            let f: (int32) -> void thread safe = b::step;
+            return 0;
+        }
+        """, "keeps 'b' (Base), which has fields ('count' of its subclass 'Counting') that other threads could change");
+}
+
+test function sharedObjectWithFields(): void {
+    failsWith(raw"""
+        class Pages {
+            let visits: int32 = 0;
+            function routes(): void {
+                let f: (int32) -> void thread safe = self::index;
+            }
+            function index(x: int32): void { self.visits += x; }
+        }
+
+        function main(): int32 { return 0; }
+        """, "'self::index' is given where a 'thread safe' function is expected, but it keeps self (Pages), which has fields ('visits') that other threads could change at the same time");
+}
+
+test function synchronizedExtendsPlain(): void {
+    failsWith(raw"""
+        class Plain { let n: int32 = 0; }
+        synchronized class Safe extends Plain { }
+
+        function main(): int32 { return 0; }
+        """, "Synchronized class 'Safe' can only extend another synchronized class");
+}
+
+test function synchronizedFieldInLambda(): void {
+    failsWith(raw"""
+        synchronized class Box {
+            let n: int32 = 0;
+            function later(): void {
+                let f: () -> void = () -> { self.n += 1; };
+                f();
+            }
+        }
+
+        function main(): int32 { return 0; }
+        """, "'self.n' of a synchronized class cannot be used inside a lambda: the lambda could run later, without the lock");
+}
+
+test function threadSafeCapture(): void {
+    failsWith(raw"""
+        function main(): int32 {
+            let names: String[*] = [];
+            let f: (int32) -> void thread safe = (x: int32) -> { names.push("a"); };
+            return 0;
+        }
+        """, "This 'thread safe' lambda uses 'names' (String[*]), which other threads could change at the same time");
+}
+
+test function threadSafeFromPlain(): void {
+    failsWith(raw"""
+        function main(): int32 {
+            let g: (int32) -> void = (x: int32) -> {};
+            let h: (int32) -> void thread safe = g;
+            return 0;
+        }
+        """, "expected (int32) -> void thread safe but got (int32) -> void");
+}
+
+test function threadSafeGlobal(): void {
+    failsWith(raw"""
+        let count: int32 = 0;
+        function bump(): void { count += 1; }
+        function main(): int32 {
+            let f: () -> void thread safe = () -> { bump(); };
+            f();
+            return 0;
+        }
+        """, "This 'thread safe' lambda can reach global 'count'");
+}
+
+test function waitRemoved(): void {
+    failsWith(raw"""
+        synchronized class Box {
+            let full: bool = false;
+            function take(): void {
+                while (!self.full) { self.wait(); }
+            }
+        }
+        function main(): void {}
+        """, "There is no wait(): put 'wait until (condition)' on the method");
+}
+
+test function waitUntilNotBool(): void {
+    failsWith(raw"""
+        synchronized class Box {
+            let n: int32 = 0;
+            function take(): void wait until (self.n) {}
+        }
+        function main(): void {}
+        """, "The condition of 'wait until' must be bool, got int32");
+}
+
+test function waitUntilOneWord(): void {
+    failsWith(raw"""
+        synchronized class Box {
+            let full: bool = false;
+            function take(): void wait_until (self.full) {}
+        }
+        function main(): void {}
+        """, "Write 'wait until' (two words)");
+}
+
+test function waitUntilPlainClass(): void {
+    failsWith(raw"""
+        class Box {
+            let full: bool = false;
+            function take(): void wait until (self.full) {}
+        }
+        function main(): void {}
+        """, "'wait until' goes on a method of a synchronized class");
+}
+
+// wait until on a method of a synchronized class: whoever calls it waits there until the condition
+// holds; when any method of the object ends, the waiters look at their condition again.
+test function syncWaitUntil(): void {
+    runs("tests/cases/language/sync_wait_until.lar", [
+        "sum 55",
+        "bounded: 10100 in 200 items, never above 4",
+        "ticket 3 served"
+    ]);
+}
+
+// 'thread safe' function types: a lambda checked like the run of a Thread, shared between threads,
+// given where a plain function is expected, in parameters, optionals and with T[] parameters.
+test function threadSafe(): void {
+    runs("tests/cases/language/thread_safe.lar", [
+        "1998000",
+        "2497500",
+        "3"
+    ]);
+}

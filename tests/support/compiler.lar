@@ -1,0 +1,248 @@
+// tests.support.compiler: what the compiler's own tests need. A test gives a Larimar program (the text of
+// one with errors, or a file in tests/cases/) and says what must happen:
+//
+//   failsWith(raw"""...""", "text")        the compiler rejects it, with an error that contains the text
+//   runs("tests/cases/c/x.lar", [...])     it compiles, runs without memory errors, ends with 0 and prints those lines
+//   panics("tests/cases/...", "text")      it compiles, and stops when it runs (panic) with that text
+//   memoryError("tests/cases/...")         it compiles, and the sanitizers find a memory error when it runs
+//   generatedC("tests/cases/...")          the C the compiler writes for it (to check what is there)
+//   caseFile("x.lar", raw"""...""")       a program written by the test (one that larimar test would take
+//                                         for a file of tests, because it has test functions): its path
+//
+// The compiler: $LARIMARC (tests/run-tests.sh sets it), else larimarc from the PATH. The C compiler: $CC,
+// else cc, with AddressSanitizer and UBSan (not on Windows, not with tcc, not with LARIMAR_TEST_SANITIZE=0).
+// What each one writes goes to build/test/cases/, and stays there when a test fails.
+
+import std.os;
+import std.io.path as Paths;
+import std.io.files as Files;
+import std.io { IoError };
+import std.test { check, fail, skip };
+import std.os.process { findProgram };
+import std.encoding.json as Json;
+import std.encoding.json { JsonError };
+
+/** The compiler under test. */
+public function compiler(): String {
+    let fromEnvironment: String = os.env("LARIMARC") ?? "";
+    if (fromEnvironment != "") { return Paths.absolute(fromEnvironment); }
+    return findProgram("larimarc") ?? "larimarc";
+}
+
+/** The source must not compile: one of its errors contains `wanted` (larimar check --json gives them). */
+public function failsWith(source: String, wanted: String): void {
+    let file: String = place("fails.lar");
+    if (!write(file, source)) { return; }
+    let out: String = place("fails.json");
+    let code: int32 = os.run("${quote(compiler())} check --json ${quote(file)} > ${quote(out)} 2>&1");
+    let text: String = read(out);
+    if (code == 0) {
+        fail("expected a compile error containing: ${wanted} (${file})");
+        return;
+    }
+    let messages: String[*] = [];
+    try {
+        let errors: Any = Json.parse(text);
+        for (e in errors) { messages.push((e.message as String ?? "").clone()); }
+    } catch (JsonError e) {
+        messages.push(text.clone());                    // a syntax error the JSON did not take: the plain text
+    }
+    for (m in messages) {
+        if (m.contains(wanted)) { return; }
+    }
+    fail("the errors do not contain: ${wanted}\n  ${messages.join("\n  ")}\n(${file})");
+}
+
+/** A program the test writes (build/test/cases/...): its path, for runs, panics or generatedC. */
+public function caseFile(name: String, source: String): String {
+    let file: String = place(name);
+    write(file, source);
+    return file;
+}
+
+/** The program compiles, runs without memory errors, ends with 0 and prints exactly these lines. */
+public function runs(file: String, output: String[]): void { runsWith(file, [], output); }
+
+/** The same, with arguments for the program. */
+public function runsWith(file: String, args: String[], output: String[]): void {
+    let r: Ran? = run(file, args);
+    if (r == null) { return; }
+    if (r!.memory) {
+        fail("memory error at run time:\n${head(r!.err, 20)}");
+        return;
+    }
+    if (r!.code != 0) {
+        fail("exit ${r!.code}:\n${head(r!.err, 10)}");
+        return;
+    }
+    let got: String[*] = r!.out == "" ? [] : r!.out.endsWith("\n") ? r!.out.substring(0, r!.out.length - 1).split("\n") : r!.out.split("\n");
+    let i: int32 = 0;
+    while (i < output.length || i < got.length) {
+        let w: String = i < output.length ? output[i] : "(nothing)";
+        let g: String = i < got.length ? got[i] : "(nothing)";
+        if (w != g) {
+            fail("wrong output, line ${i + 1}:\n  expected: ${w}\n  got:      ${g}");
+            return;
+        }
+        i += 1;
+    }
+}
+
+/** The program compiles, and stops when it runs (a panic: exit 101) with a message that contains `wanted`. */
+public function panics(file: String, wanted: String): void {
+    let r: Ran? = run(file, []);
+    if (r == null) { return; }
+    if (r!.code != 101 || !r!.err.contains(wanted)) {
+        fail("expected a panic containing: ${wanted} (exit ${r!.code})\n${head(r!.err, 5)}");
+    }
+}
+
+/** The program compiles, and the sanitizers find a memory error when it runs. */
+public function memoryError(file: String): void {
+    if (!sanitizing()) {
+        skip("needs the sanitizers");
+        return;
+    }
+    let r: Ran? = run(file, []);
+    if (r == null) { return; }
+    check(r!.memory, "expected the sanitizers to report a memory error (exit ${r!.code})");
+}
+
+/** The C the compiler writes for the program ("" when it does not compile: then the test fails). */
+public function generatedC(file: String): String {
+    let c: String = place("${Paths.stem(file)}.c");
+    let log: String = place("${Paths.stem(file)}.compile.txt");
+    if (os.run("${quote(compiler())} ${quote(file)} -o ${quote(c)} > ${quote(log)} 2>&1") != 0) {
+        fail("did not compile:\n${head(read(log), 20)}");
+        return "";
+    }
+    return read(c);
+}
+
+/** Whether `word` is in the C as a whole identifier. */
+public function hasWord(text: String, word: String): bool {
+    let from: int32 = 0;
+    while (true) {
+        let at: int32? = text.indexOf(word, from);
+        if (at == null) { return false; }
+        let end: int32 = at! + word.length;
+        let left: bool = at! == 0 || !identifierPart(text[at! - 1]);
+        let right: bool = end >= text.length || !identifierPart(text[end]);
+        if (left && right) { return true; }
+        from = at! + 1;
+    }
+    return false;
+}
+
+// ---- running a program ----------------------------------------------------------------------------
+
+/** What a program did: its exit code, its output, its error output, and whether that was a memory error. */
+class Ran {
+    let code: int32;
+    let out: String;
+    let err: String;
+    let memory: bool;
+}
+
+/** Compiles the program (Larimar, then C) and runs it; null when it does not compile (the test failed). */
+function run(file: String, args: String[]): Ran? {
+    let c: String = generatedC(file);
+    if (c == "") { return null; }
+    let stem: String = Paths.stem(file);
+    let exe: String = place(windows() ? "${stem}.exe" : stem);
+    let log: String = place("${stem}.cc.txt");
+    let cFile: String = place("${stem}.c");
+    if (os.run("${cCommand(c, cFile, exe)} > ${quote(log)} 2>&1") != 0) {
+        fail("the C compiler failed:\n${head(read(log), 20)}");
+        return null;
+    }
+    let outFile: String = place("${stem}.out");
+    let errFile: String = place("${stem}.err");
+    let quoted: String[*] = [quote(exe)];
+    for (a in args) { quoted.push(quote(a)); }
+    let code: int32 = os.run("${quoted.join(" ")} > ${quote(outFile)} 2> ${quote(errFile)}");
+    let err: String = read(errFile);
+    return Ran { code, out: read(outFile), err, memory: err.contains("ERROR: AddressSanitizer") || err.contains("runtime error:") };
+}
+
+/** The C compiler's command line for a program: its C, the system libraries it needs, the sanitizers. */
+function cCommand(c: String, cFile: String, exe: String): String {
+    let cmd: String[*] = [quote(cc()), "-std=c99", "-g"];
+    if (sanitizing()) {
+        let flags: String[] = ["-O1", "-fno-omit-frame-pointer", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"];
+        for (f in flags) { cmd.push(f); }
+    } else {
+        cmd.push("-O0");
+    }
+    cmd.push("-o");
+    cmd.push(quote(exe));
+    cmd.push(quote(cFile));
+    if (!windows()) { cmd.push("-lm"); }
+    if (c.contains("#define RT_THREADS") && !windows()) { cmd.push("-pthread"); }
+    if (c.contains("#define LM_NET_SOCKETS") && windows()) { cmd.push("-lws2_32"); }
+    if (c.contains("#define LM_NET_TLS")) {
+        if (windows()) {
+            cmd.push("-lsecur32");
+        } else if (os.platform() == "macos") {
+            let frameworks: String[] = ["-framework", "Network", "-framework", "Security"];
+            for (f in frameworks) { cmd.push(f); }
+        } else {
+            cmd.push("-ldl");
+        }
+    }
+    return cmd.join(" ");
+}
+
+function cc(): String {
+    let given: String = (os.env("CC") ?? "").trim();
+    return given != "" ? given : "cc";
+}
+
+/** With AddressSanitizer and UBSan: everywhere but Windows and tcc, unless LARIMAR_TEST_SANITIZE=0. */
+function sanitizing(): bool {
+    return !windows() && !cc().contains("tcc") && (os.env("LARIMAR_TEST_SANITIZE") ?? "1") != "0";
+}
+
+// ---- files ----------------------------------------------------------------------------------------
+
+/** build/test/cases/<this process>-<name>: tests run each in their own process, maybe at the same time. */
+function place(name: String): String {
+    let dir: String = Paths.absolute("build/test/cases");
+    try { Files.createDirectories(dir); } catch (IoError e) { }
+    return Paths.join(dir, "${os.processId()}-${name}");
+}
+
+function write(file: String, text: String): bool {
+    try {
+        Files.writeString(file, text);
+        return true;
+    } catch (IoError e) {
+        fail("cannot write ${file}");
+        return false;
+    }
+}
+
+function read(file: String): String {
+    try { return Files.readString(file); } catch (IoError e) { return ""; }
+}
+
+function head(text: String, lines: int32): String {
+    let all: String[*] = text.lines();
+    let shown: String[*] = [];
+    for (i, l in all) {
+        if (i >= lines) { break; }
+        shown.push(l);
+    }
+    return shown.join("\n");
+}
+
+function quote(s: String): String {
+    if (windows()) { return "\"${s}\""; }
+    return "'${s.replace("'", "'\\''")}'";
+}
+
+function windows(): bool { return os.platform() == "windows"; }
+
+function identifierPart(c: byte): bool {
+    return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+}

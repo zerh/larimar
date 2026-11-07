@@ -1,3 +1,0 @@
-// expect: error the Larimar function it stands for cannot return a String to C
-native type F = (int32, Context) -> String;
-function main(): int32 { return 0; }

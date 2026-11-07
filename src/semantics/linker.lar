@@ -278,6 +278,10 @@ function moduleFile(path: String): String {
             found = candidate;
         }
     }
+    if (found == "" && testsKept != "none") {         // tests (and the editor): also from the project's folder (tests.support...)
+        let fromProject: String = Paths.join(Paths.parent(rootDir), relative);
+        if (Files.isFile(fromProject)) { return fromProject; }
+    }
     return found != "" ? found : own;
 }
 

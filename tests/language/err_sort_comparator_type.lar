@@ -1,6 +1,0 @@
-// expect: error Return value: expected int32 but got bool
-function main(): int32 {
-    let nums: int32[*] = [2, 1];
-    nums.sort((a: int32, b: int32) -> { return a < b; });
-    return 0;
-}

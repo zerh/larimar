@@ -1,5 +1,3 @@
-// expect: run
-// output: Larimar ñ 42 7 - 1 Rex 3 2 2 circle 1.5 2 3 tom
 // Also used by debug_test.lar: larimar --debug, a debugger stopping on .lar lines, Larimar's formatters.
 enum Shape { Circle(r: float64), Square(side: float64), Empty }
 struct Point { let x: int32; let y: int32; }

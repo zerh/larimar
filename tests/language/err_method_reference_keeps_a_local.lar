@@ -1,8 +1,0 @@
-// expect: error c::get keeps 'c', which lives in the memory of this block, but the array lives for the whole program
-class Counter { let n: int32 = 0; function get(): int32 { return self.n; } }
-let readers: (() -> int32)[*] = [] in default;
-function main(): int32 {
-    let c: Counter = {};
-    readers.push(c::get);
-    return 0;
-}

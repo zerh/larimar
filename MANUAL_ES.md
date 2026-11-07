@@ -4565,9 +4565,8 @@ larimar test --no-sanitize
 **Para los editores**, `--json` escribe un objeto JSON por línea en lugar del texto de arriba: con
 `--list`, un `{"event": "found", "file": ..., "path": ..., "name": ..., "line": ...}` por prueba; al
 ejecutarlas, un `{"event": "result", ..., "result": "passed" | "failed" | "skipped", "message": ...}`
-por prueba y al final `{"event": "summary", "passed": ..., "failed": ..., "skipped": ...}`. Un archivo
-que dice lo que espera es una prueba con el nombre `""`. Así la extensión de VS Code muestra las pruebas
-en su vista Testing.
+por prueba y al final `{"event": "summary", "passed": ..., "failed": ..., "skipped": ...}`. Así la
+extensión de VS Code muestra las pruebas en su vista Testing.
 
 Las reglas:
 
@@ -4578,6 +4577,9 @@ Las reglas:
 - En un proyecto, las pruebas importan desde la carpeta del `main` del proyecto (`src/`), así que
   `import geo.shapes` encuentra `src/geo/shapes.lar`; se compilan con las bibliotecas de `[c]`.
   Sin `larimar.toml`, importan desde su propia carpeta.
+- Las pruebas (y el editor) también encuentran módulos desde la carpeta del proyecto: lo que comparten
+  varias pruebas va en un módulo como `tests/support/files.lar`, y se importa con
+  `import tests.support.files { ... }`. `larimar build` no los ve.
 - Las comprobaciones se usan desde el hilo de la prueba (guardan cuántas fallaron en una variable global,
   que los lambdas de un `Thread` no pueden tocar).
 
@@ -4776,25 +4778,39 @@ que `std/` solo puede usar lo que ya entiende el compilador que lo compila. Si a
 ### Las pruebas
 
 `tests/run-tests.sh` ejecuta `larimarc test` sobre `tests/` y lo que necesita más de un programa (abajo).
-Algunas pruebas son `test function` ([sección 26](#pruebas-test-function-y-larimar-test)), como
-`tests/std/regex_test.lar`; la mayoría son programas que dicen en sus primeras líneas qué esperan, porque
-prueban al compilador mismo (un error que debe dar, el C que genera). `larimar test` ejecuta los dos
-tipos, con AddressSanitizer y UBSan:
+Todas son `test function` ([sección 26](#pruebas-test-function-y-larimar-test)), agrupadas por tema en un
+archivo por tema (`tests/c/callbacks_test.lar`, `tests/language/when_test.lar`...). Las que prueban al
+compilador mismo usan `tests/support/compiler.lar`, que compila un programa con el compilador que se
+prueba y dice qué debe pasar:
 
 ```ts
-// expect: run
-// output: hola 3
-function make(n: int32): String { return "hola ${n}"; }
-function main(): int32 { println(make(3)); return 0; }
+import tests.support.compiler { failsWith, runs };
+
+test function aNativeFunctionHasNoBody(): void {
+    failsWith(raw"""
+        native function hack(): void { }
+        function main(): int32 { return 0; }
+        """, "A native function has no body");
+}
+
+test function callbacksWithAContext(): void {
+    runs("tests/cases/c/native_callbacks_with_context.lar", ["-> 0 UNO", "-> 1 DOS", "-> 2 TRES", "count 3"]);
+}
 ```
 
-| Primera línea | La prueba pasa si... |
+| De `tests.support.compiler` | La prueba pasa si... |
 |---|---|
-| `// expect: run` | compila, se ejecuta sin errores de memoria, termina con 0 e imprime las líneas `// output:` |
-| `// expect: error texto` | el compilador lo rechaza con un mensaje que contiene `texto` |
-| `// expect: panic texto` | compila, y se detiene al ejecutar (`panic`) con `texto` |
-| `// expect: memory-error` | compila, y los detectores encuentran un error de memoria al ejecutar |
-| `// c-has: nombre`, `// c-lacks: nombre` | (además) el C generado contiene, o no, ese identificador |
+| `failsWith(fuente, texto)` | el compilador rechaza esa fuente con un error que contiene `texto` (con `larimar check --json`) |
+| `runs(archivo, líneas)` | compila, se ejecuta sin errores de memoria, termina con 0 e imprime esas líneas |
+| `panics(archivo, texto)` | compila, y se detiene al ejecutar (`panic`) con `texto` |
+| `memoryError(archivo)` | compila, y los detectores encuentran un error de memoria al ejecutar |
+| `generatedC(archivo)` | (da el C generado, para comprobar con `hasWord` qué contiene) |
+
+Los programas con errores van dentro de la prueba, en un `raw"""`: son cortos y se leen junto al error
+que deben dar. Los que se ejecutan son archivos normales en `tests/cases/<carpeta>/`, que el editor
+entiende y que se pueden correr solos (`larimar tests/cases/c/ffi_pointers.lar`) para depurarlos. Lo que
+el ayudante escribe y compila queda en `build/test/cases/`. Compila con `$CC` (o `cc`), con
+AddressSanitizer y UBSan salvo en Windows, con tcc o con `LARIMAR_TEST_SANITIZE=0`.
 
 ```sh
 ./build-bootstrap.sh --verify --test  # construir, comprobar que se compila a sí mismo, probar e instalar

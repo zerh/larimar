@@ -1,0 +1,45 @@
+// The compiler's tests of c: callbacks (the programs that run are in tests/cases/c/).
+import tests.support.compiler { failsWith, runs };
+
+test function nativeCallbackKept(): void {
+    failsWith(raw"""
+        native type BusyFn = (Context, int32) -> int32;
+        native function set_busy(f: BusyFn in default, data: Context): void;
+        class Limit { let count: int32 = 5; }
+        function main(): int32 {
+            let limit: Limit = {};
+            set_busy((tries) -> { return tries < limit.count ? 1 : 0; });
+            return 0;
+        }
+        """, "C keeps the function given to 'set_busy' (in default), so what it uses must live as long as the whole program");
+}
+
+test function nativeCallbackNoContext(): void {
+    failsWith(raw"""
+        native type G = (int32, Context) -> void;
+        native function take(f: G): void;
+        function main(): int32 { take((x) -> { println("${x}"); }); return 0; }
+        """, "'take' gives no Context to its callback (it has no parameter of type Context)");
+}
+
+test function nativeCallbackString(): void {
+    failsWith(raw"""
+        native type F = (int32, Context) -> String;
+        function main(): int32 { return 0; }
+        """, "the Larimar function it stands for cannot return a String to C");
+}
+
+// A callback with a Context: a Larimar function (with what it captures) goes to C, which gives the
+// Context back; an export function goes as it is; one that C keeps is declared 'in default'.
+test function nativeCallbacksWithContext(): void {
+    runs("tests/cases/c/native_callbacks_with_context.lar", [
+        "-> 0 UNO",
+        "-> 1 DOS",
+        "-> 2 TRES",
+        "count 3",
+        "export 0 uno",
+        "export 1 dos",
+        "export 2 tres",
+        "1 0"
+    ]);
+}

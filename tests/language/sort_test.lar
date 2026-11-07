@@ -1,0 +1,47 @@
+// The compiler's tests of language: sort (the programs that run are in tests/cases/language/).
+import tests.support.compiler { failsWith, runs };
+
+test function sortArguments(): void {
+    failsWith(raw"""
+        function main(): int32 {
+            let nums: int32[*] = [2, 1];
+            nums.sort((a: int32, b: int32) -> { return a - b; }, 3);
+            return 0;
+        }
+        """, "sort() takes nothing, or one comparator");
+}
+
+test function sortComparatorType(): void {
+    failsWith(raw"""
+        function main(): int32 {
+            let nums: int32[*] = [2, 1];
+            nums.sort((a: int32, b: int32) -> { return a < b; });
+            return 0;
+        }
+        """, "Return value: expected int32 but got bool");
+}
+
+test function sortNoOrder(): void {
+    failsWith(raw"""
+        class User { let name: String; }
+        function main(): int32 {
+            let users: User[*] = [User { name: "a" }];
+            users.sort();
+            return 0;
+        }
+        """, "User has no natural order: give sort() a comparator");
+}
+
+// list.sort(): numbers and Strings in their natural order; sort(compare) with a comparator, stable.
+test function sortLists(): void {
+    runs("tests/cases/language/sort_lists.lar", [
+        "1 2 3 5 8",
+        "ana eva luis luisa",
+        "1.5 2.5 9.0",
+        "Eva:30 Luis:30 Ana:25",
+        "Ana:25 Eva:30 Luis:30",
+        "3 2 1",
+        "z y x",
+        "0"
+    ]);
+}

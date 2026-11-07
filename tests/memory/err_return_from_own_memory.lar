@@ -1,7 +1,0 @@
-// expect: error 't' lives in memory 'scratch', which is freed when the function returns: return t.clone()
-function title(name: String): String {
-    let scratch: byte[*] = [] in heap;
-    let t: String = "hola ${name}" in scratch;
-    return t;
-}
-function main(): int32 { println(title("a")); return 0; }

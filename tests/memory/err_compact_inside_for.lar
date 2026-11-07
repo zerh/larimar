@@ -1,8 +1,0 @@
-// expect: error Memory.compact() cannot run inside a 'for' over a list, a table or a text
-import std.memory as Memory;
-function main(): int32 {
-    let world: byte[*] = [] in heap;
-    let names: String[*] = [] in world;
-    for (n in names) { Memory.compact(world); }
-    return 0;
-}

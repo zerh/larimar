@@ -122,10 +122,11 @@ tests/run-tests.sh memory     # only the tests whose path or name contains "memo
 bin/larimarc test tests/std   # only larimarc test, on one folder
 ```
 
-Tests are of two kinds, and `larimarc test` runs both (with AddressSanitizer and UBSan): `test function`s
-with `std.test` checks, like `tests/std/regex_test.lar` (MANUAL.md, section 26), and files that say what
-they expect in their first lines (`// expect: run` with `// output:` lines, `// expect: error <text>`,
-`// expect: panic <text>` or `// expect: memory-error`), which test the compiler itself (section 28).
+Tests are `test function`s with `std.test` checks (MANUAL.md, section 26), grouped one file per topic
+(`tests/c/callbacks_test.lar`, `tests/language/when_test.lar`...), run with AddressSanitizer and UBSan. The
+ones that test the compiler itself use `tests/support/compiler.lar`: `failsWith(raw"""...""", "error")` for a
+program the compiler must reject, and `runs("tests/cases/...", [lines])`, `panics(...)`, `memoryError(...)`
+for the programs in `tests/cases/` (section 28).
 Every bug found goes in as a test first.
 
 `tests/lsp/lsp_test.lar`, `tests/debug/debug_test.lar` and `tests/tls/tls_test.lar` start the compiler,
@@ -195,7 +196,7 @@ flags = ["-O2"]
 | editor/docstore.lar | The editor's open documents (freeable C memory) |
 | editor/dap.lar | Debugger: DAP adapter over lldb-dap, values shown as Larimar |
 | project/cc.lar | Calling the C compiler and other programs |
-| project/testing.lar | Test runner: larimar test, test functions and `// expect:` files |
+| project/testing.lar | Test runner: larimar test and test functions |
 
 ## Self-Hosting
 

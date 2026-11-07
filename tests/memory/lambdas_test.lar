@@ -1,0 +1,79 @@
+// The compiler's tests of memory: lambdas (the programs that run are in tests/cases/memory/).
+import tests.support.compiler { failsWith, runs };
+
+test function lambdaAsCPointer(): void {
+    failsWith(raw"""
+        native type Op = (int32, int32) -> int32;
+        native function apply(f: Op, a: int32, b: int32): int32;
+        function main(): int32 { return apply((a: int32, b: int32) -> { return a * b; }, 1, 2); }
+        """, "a lambda is not one");
+}
+
+test function lambdaCaptureLivesLess(): void {
+    failsWith(raw"""
+        class Button { let onClick: () -> void = () -> { }; }
+        let button: Button = {} in default;
+        function main(): int32 {
+            let title: String = "x".toUpperCase();
+            button.onClick = () -> { println(title); };
+            return 0;
+        }
+        """, "The lambda captures 'title', which lives in the memory of this block, but field 'onClick' lives for the whole program");
+}
+
+test function lambdaClonesTooLate(): void {
+    failsWith(raw"""
+        let actions: (() -> String)[*] = [] in default;
+        function main(): int32 {
+            let label: String = "x".toUpperCase();
+            actions.push(() -> { return label.clone(); });
+            return 0;
+        }
+        """, "label.clone() runs only when the lambda is called, by which time 'label' may no longer exist");
+}
+
+test function lambdaCopyInGlobalMemory(): void {
+    failsWith(raw"""
+        let mem: byte[*] = [] in heap;
+        let actions: (() -> String)[*] = [] in mem;
+
+        function main(): int32 {
+            let label: String = "x".toUpperCase();
+            actions.push(() -> { return label; });
+            return 0;
+        }
+        """, "the array lives for the whole program (in memory 'mem'). Capture a copy made in the memory where the array lives: let kept: String = label.clone() in mem;");
+}
+
+test function lambdaCopyInItsMemory(): void {
+    failsWith(raw"""
+        function main(): int32 {
+            let scratch: byte[*] = [] in heap;
+            let actions: (() -> String)[*] = [] in scratch;
+            {
+                let label: String = "x".toUpperCase();
+                actions.push(() -> { return label; });
+            }
+            return 0;
+        }
+        """, "Capture a copy made in the memory where the array lives: let kept: String = label.clone() in scratch;");
+}
+
+// Una lambda que vive todo el programa no puede capturar algo del bloque.
+test function lambdaOutlivesCapture(): void {
+    failsWith(raw"""
+        let actions: (() -> String)[*] = [] in default;
+        function main(): int32 {
+            let label: String = "x".toUpperCase();
+            actions.push(() -> { return label; });
+            return 0;
+        }
+        """, "but the array lives for the whole program");
+}
+
+// Lambdas que capturan y se guardan en una lista que vive todo el programa.
+test function lambdaCapturesStored(): void {
+    runs("tests/cases/memory/lambda_captures_stored.lar", [
+        "a:1 b:2 c:3"
+    ]);
+}

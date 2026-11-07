@@ -1,0 +1,43 @@
+// The compiler's tests of language: method references (the programs that run are in tests/cases/language/).
+import tests.support.compiler { failsWith, runs };
+
+test function methodReferenceCalled(): void {
+    failsWith(raw"""
+        class Pepito { function run(): void { } }
+
+        function main(): int32 {
+            let pepito: Pepito = {};
+            let f: () -> void = pepito::run();
+            return 0;
+        }
+        """, "'pepito::run()' calls a reference: for the reference write 'pepito::run' (without parentheses); to call the function, pepito.run(...)");
+}
+
+test function methodReferenceKeepsALocal(): void {
+    failsWith(raw"""
+        class Counter { let n: int32 = 0; function get(): int32 { return self.n; } }
+        let readers: (() -> int32)[*] = [] in default;
+        function main(): int32 {
+            let c: Counter = {};
+            readers.push(c::get);
+            return 0;
+        }
+        """, "c::get keeps 'c', which lives in the memory of this block, but the array lives for the whole program");
+}
+
+test function methodReferenceWithoutType(): void {
+    failsWith(raw"""
+        import std.encoding.hex as Hex;
+        function main(): int32 {
+            let f: Any = Hex::encode;
+            return 0;
+        }
+        """, "std.encoding.hex::encode is a reference to a function: use it where a function type is expected");
+}
+
+// Module::function, variable::method and self::method: a lambda that calls them.
+test function methodReferences(): void {
+    runs("tests/cases/language/method_references.lar", [
+        "42 hola! 8 3"
+    ]);
+}

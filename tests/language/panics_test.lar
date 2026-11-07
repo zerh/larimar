@@ -1,0 +1,14 @@
+// The compiler's tests of language: panics (the programs that run are in tests/cases/language/).
+import tests.support.compiler { runs, panics };
+
+// Una función puede terminar con panic(...) en lugar de return: el compilador sabe que no sigue.
+test function panicEndsFunction(): void {
+    runs("tests/cases/language/panic_ends_function.lar", [
+        "uno"
+    ]);
+}
+
+// panic("...") detiene el programa con ese mensaje y la línea donde se llamó.
+test function panicMessage(): void {
+    panics("tests/cases/language/panic_message.lar", "demasiado: 3");
+}

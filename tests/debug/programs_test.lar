@@ -1,0 +1,14 @@
+// The compiler's tests of debug: the programs debug_test.lar debugs, run as programs.
+import tests.support.compiler { runs, panics };
+
+// Also used by debug_test.lar: larimar dap stops on a panic and shows its message.
+test function panicProgram(): void {
+    panics("tests/debug/panic.lar", "index 3 out of range");
+}
+
+// Also used by debug_test.lar: larimar --debug, a debugger stopping on .lar lines, Larimar's formatters.
+test function values(): void {
+    runs("tests/debug/values.lar", [
+        "Larimar ñ 42 7 - 1 Rex 3 2 2 circle 1.5 2 3 tom"
+    ]);
+}

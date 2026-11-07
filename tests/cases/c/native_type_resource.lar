@@ -1,0 +1,54 @@
+// A resource with fields and methods: a method whose C function takes the memory of the call first
+// (its String is made there), a static function that makes the resource, a function that returns one
+// (it lives where the caller says), and a C struct with fields renamed and a Larimar method.
+c_code {
+    #include <ctype.h>
+    typedef struct Doc { int id; char title[32]; } Doc;
+    static int closed = 0;
+    static Doc* doc_open(int id) { if (id < 0) return NULL; Doc* d = (Doc*)calloc(1, sizeof(Doc)); d->id = id; strcpy(d->title, "untitled"); return d; }
+    static void doc_close(Doc* d) { closed++; free(d); }
+    static const char* doc_title(Doc* d) { return d->title; }
+    static const char* doc_shout(RtMem* m, Doc* d, const char* suffix) {
+        size_t n = strlen(d->title), k = strlen(suffix);
+        char* out = (char*)rt_mem_alloc(m, n + k + 1, 0);
+        for (size_t i = 0; i < n; i++) out[i] = (char)toupper((unsigned char)d->title[i]);
+        memcpy(out + n, suffix, k);
+        return out;
+    }
+    static int doc_closed(void) { return closed; }
+    typedef struct span_t { int from_; int to_; } span_t;
+}
+
+native type Doc = Doc* released by doc_close {
+    let id: int32;
+    native function title(): String = doc_title;
+    native function shout(m: byte[*], suffix: String): String = doc_shout;
+    static native function open(id: int32): Doc? = doc_open;
+}
+native function doc_close(d: Doc): void;
+native function doc_closed(): int32;
+
+native struct Span = span_t {
+    let from: int32 = from_;
+    let to: int32 = to_;
+    function length(): int32 { return self.to - self.from; }
+}
+
+function openDoc(id: int32): Doc? { return Doc.open(id); }
+
+function main(): int32 {
+    for (i in 0..3) {
+        let d: Doc? = Doc.open(i);
+        if (d == null) { return 1; }
+        d!.id += 100;
+        println("${d!.id} ${d!.title()} ${d!.shout("!")}");
+    }
+    println("closed ${doc_closed()}");
+    let missing: Doc? = Doc.open(-1);
+    println("missing ${missing == null}");
+    let s: Span = { from: 3, to: 10 };
+    println("span ${s.length()}");
+    let made: Doc? = openDoc(7);
+    println("made ${made != null}");
+    return 0;
+}

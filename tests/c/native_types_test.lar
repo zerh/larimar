@@ -1,0 +1,44 @@
+// The compiler's tests of c: native types (the programs that run are in tests/cases/c/).
+import tests.support.compiler { failsWith, runs };
+
+test function nativeFieldsNeedPointer(): void {
+    failsWith(raw"""
+        native type Point = point_t {
+            let x: int32;
+        }
+        function main(): int32 { return 0; }
+        """, "its C type must be a pointer to the struct");
+}
+
+// A macro with named arguments: "(name)" calls the function it hides, with a native struct literal; a
+// String? goes to C as NULL when it is null.
+test function nativeMacrosAndOptionalText(): void {
+    runs("tests/cases/c/native_macros_and_optional_text.lar", [
+        "3 4 7",
+        "hello, world",
+        "hello, nobody"
+    ]);
+}
+
+// A C type with members: its fields through its pointer (let), C functions that take it first
+// (native function ... = c_name), a native let, a Larimar method and a static native function.
+test function nativeTypeMembers(): void {
+    runs("tests/cases/c/native_type_members.lar", [
+        "clicks: 17 17 34 42 10"
+    ]);
+}
+
+// A resource with fields and methods: a method whose C function takes the memory of the call first
+// (its String is made there), a static function that makes the resource, a function that returns one
+// (it lives where the caller says), and a C struct with fields renamed and a Larimar method.
+test function nativeTypeResource(): void {
+    runs("tests/cases/c/native_type_resource.lar", [
+        "100 untitled UNTITLED!",
+        "101 untitled UNTITLED!",
+        "102 untitled UNTITLED!",
+        "closed 3",
+        "missing true",
+        "span 7",
+        "made true"
+    ]);
+}

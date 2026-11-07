@@ -1,5 +1,0 @@
-// expect: error Class 'Plain' cannot extend synchronized class 'Safe': declare it 'synchronized class Plain'
-synchronized class Safe { let n: int32 = 0; }
-class Plain extends Safe { }
-
-function main(): int32 { return 0; }

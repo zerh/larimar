@@ -1,0 +1,58 @@
+// The compiler's tests of std: std (the programs that run are in tests/cases/std/).
+import tests.support.compiler { runs };
+
+// Files.copy replaces the destination even when it is read-only (like cp -f): a library copied from
+// Homebrew keeps its r--r--r--, and the next build copies it again.
+test function filesCopyOverReadOnly(): void {
+    runs("tests/cases/std/files_copy_over_read_only.lar", [
+        "second"
+    ]);
+}
+
+// std.net.http: a client against a local server (in a thread) that answers with Content-Length, chunked,
+// a redirection, an echo of a POST, a 404, a body that ends when the connection closes, a big body.
+test function http(): void {
+    runs("tests/cases/std/http.lar", [
+        "200 OK text/plain | hola",
+        "chunked: hola mundo!!",
+        "redirect: 200 hola (http://127.0.0.1/hello)",
+        "post: Ana 31",
+        "404 Not Found ok=false",
+        "until close: sin longitud",
+        "big: 100000 bytes",
+        "head: 200 ''",
+        "https refused: network: connection refused",
+        "bad url: ftp://x",
+        "refused: network: connection refused"
+    ]);
+}
+
+// std.net: a server and a client (in a thread) on 127.0.0.1, lines both ways with Reader, a block with copy().
+test function net(): void {
+    runs("tests/cases/std/net.lar", [
+        "server got: hello",
+        "server got: ñandú 2",
+        "server got 5000 bytes",
+        "client got: HELLO | ñANDú 2 | 5000",
+        "refused: connection refused"
+    ]);
+}
+
+// std.net: TcpServer and UdpServer with threads, thread safe handlers and a StopSignal; clients in a thread.
+test function netServers(): void {
+    runs("tests/cases/std/net_servers.lar", [
+        "tcp served: 6",
+        "udp served: 3",
+        "client: echo: hi 0 | echo: hi 1 | echo: hi 2 | echo: hi 3 | echo: hi 4 | echo: hi 5 | pong 4 | pong 4 | pong 4"
+    ]);
+}
+
+// std.net: a TcpServer with OpenSslProvider (tests/tls/cert.pem, self-signed) and threads; a client with
+// SystemTls (verify: false), and one that does not speak TLS, which never reaches onConnect.
+test function tlsServer(): void {
+    runs("tests/cases/std/tls_server.lar", [
+        "bad key rejected: true",
+        "served: 3",
+        "client: hello 0 over tls | hello 1 over tls | hello 2 over tls | plain client dropped"
+    ]);
+}

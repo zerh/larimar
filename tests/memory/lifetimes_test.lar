@@ -1,0 +1,65 @@
+// The compiler's tests of memory: lifetimes (the programs that run are in tests/cases/memory/).
+import tests.support.compiler { failsWith };
+
+test function fieldGetsALocal(): void {
+    failsWith(raw"""
+        class Order { let customer: String; }
+        let orders: Order[*] = [] in default;
+        function main(): int32 {
+            let name: String = "ana".toUpperCase();
+            orders.push(Order { customer: name });
+            return 0;
+        }
+        """, "Field 'customer' gets 'name', which lives in the memory of this block, but the object lives for the whole program: customer: name.clone()");
+}
+
+// Una variable de la vuelta muere al final de cada vuelta: no puede guardarse en una lista de fuera.
+// (Correcto: items.push("item-${i}"), o items.push(tmp.clone()).)
+test function loopValueIntoOuterList(): void {
+    failsWith(raw"""
+        function main(): int32 {
+            let items: String[*] = [];
+            for (i in 0..10) {
+                let tmp: String = "item-${i}";
+                items.push(tmp);
+            }
+            return 0;
+        }
+        """, "on every turn of the loop");
+}
+
+// Un objeto de todo el programa no puede guardar un texto del bloque.
+test function objectFieldFromBlock(): void {
+    failsWith(raw"""
+        class Box { let text: String = ""; }
+        let box: Box = Box {} in default;
+        function main(): int32 {
+            let t: String = "y".toUpperCase();
+            box.text = t;
+            return 0;
+        }
+        """, "but field 'text' lives for the whole program");
+}
+
+// Guardar en una lista de todo el programa algo que muere al final del bloque.
+test function storeBlockValueGlobally(): void {
+    failsWith(raw"""
+        let names: String[*] = [] in default;
+        function main(): int32 {
+            let local: String = "x".toUpperCase();
+            names.push(local);
+            return 0;
+        }
+        """, "but the array lives for the whole program");
+}
+
+test function thrownErrorLocalData(): void {
+    failsWith(raw"""
+        enum ParseError { Bad(why: String) }
+        function parse(text: String): int32 throws ParseError {
+            let message: String = "bad: ${text}";
+            throw ParseError.Bad { why: message };
+        }
+        function main(): int32 { return 0; }
+        """, "An error can travel up to main, so 'message' must live the whole program: why: message.clone() in default");
+}

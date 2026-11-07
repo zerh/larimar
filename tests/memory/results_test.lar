@@ -1,0 +1,133 @@
+// The compiler's tests of memory: results (the programs that run are in tests/cases/memory/).
+import tests.support.compiler { failsWith, runs };
+
+// clone() copia un valor a la memoria donde se guarda.
+test function cloneEscapes(): void {
+    runs("tests/cases/memory/clone_escapes.lar", [
+        "guardado: ABC"
+    ]);
+}
+
+// clone() copia el valor a la memoria donde se guarda (la de la lista).
+test function cloneIntoOuterList(): void {
+    runs("tests/cases/memory/clone_into_outer_list.lar", [
+        "3 item-2"
+    ]);
+}
+
+test function returnFromOwnMemory(): void {
+    failsWith(raw"""
+        function title(name: String): String {
+            let scratch: byte[*] = [] in heap;
+            let t: String = "hola ${name}" in scratch;
+            return t;
+        }
+        function main(): int32 { println(title("a")); return 0; }
+        """, "'t' lives in memory 'scratch', which is freed when the function returns: return t.clone()");
+}
+
+// Devolver algo creado en una memoria propia que muere al salir de la función.
+test function returnOwnMemory(): void {
+    failsWith(raw"""
+        function make(): String {
+            let memory: byte[*] = [] in heap;
+            let s: String = "hola".toUpperCase() in memory;
+            return s;
+        }
+        function main(): int32 { println(make()); return 0; }
+        """, "which is freed when the function returns");
+}
+
+test function viewKeptTooLong(): void {
+    failsWith(raw"""
+        let names: String[*] = [] in default;
+        function main(): int32 {
+            let line: String = "  ana  ".toUpperCase();
+            names.push(line.trim());
+            return 0;
+        }
+        """, "trim() shares the bytes of 'line', which lives in the memory of this block");
+}
+
+// Una vista de algo creado en una memoria interior no puede salir de ella.
+test function viewOfDeadMemory(): void {
+    failsWith(raw"""
+        function main(): int32 {
+            let keep: String = "";
+            {
+                let memory: byte[*] = [] in heap;
+                let s: String = "abcdef".toUpperCase() in memory;
+                keep = s.substring(0, 2);
+            }
+            println(keep);
+            return 0;
+        }
+        """, "but 'keep' lives longer");
+}
+
+// name.length is a number: the result does not point to the parameter, so it is stored without clone().
+test function lengthOfParamIsNotAView(): void {
+    runs("tests/cases/memory/length_of_param_is_not_a_view.lar", [
+        "3 5"
+    ]);
+}
+
+// A result built from numbers read from self does not point to self: it is created where the caller
+// says (here, in a field of another object) without clone().
+test function numberFromSelfIsNotAView(): void {
+    runs("tests/cases/memory/number_from_self_is_not_a_view.lar", [
+        "2 3.0 2"
+    ]);
+}
+
+// Una función que devuelve un opcional creado.
+test function optionalCreated(): void {
+    runs("tests/cases/memory/optional_created.lar", [
+        "found-2 none"
+    ]);
+}
+
+// Recursión que construye texto: cada nivel crea en la memoria del que llama.
+test function recursionCreated(): void {
+    runs("tests/cases/memory/recursion_created.lar", [
+        "(((((x)))))"
+    ]);
+}
+
+// Llamadas anidadas: cada resultado intermedio vive en la memoria temporal de la instrucción.
+test function returnChain(): void {
+    runs("tests/cases/memory/return_chain.lar", [
+        "<<<a-b>>> 9"
+    ]);
+}
+
+// Lo que devuelve una función que crea su resultado vive en la memoria de quien llama.
+test function returnCreated(): void {
+    runs("tests/cases/memory/return_created.lar", [
+        "hola 3",
+        "[hola 1] [hola 2]"
+    ]);
+}
+
+// Una función que devuelve uno de sus argumentos (o algo nuevo): lo que devuelve vive en la llamada.
+test function returnOneOfArgs(): void {
+    runs("tests/cases/memory/return_one_of_args.lar", [
+        "largo",
+        "corto2"
+    ]);
+}
+
+// Una función que devuelve una vista de su parámetro: la vista vive lo que vive el original.
+test function returnViewOfParam(): void {
+    runs("tests/cases/memory/return_view_of_param.lar", [
+        "hol|mun",
+        "hola"
+    ]);
+}
+
+// Un switch como expresión que crea su resultado en cada rama.
+test function switchExpressionCreates(): void {
+    runs("tests/cases/memory/switch_expression_creates.lar", [
+        "uno! dos! otro-7!"
+    ]);
+}

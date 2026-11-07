@@ -1,0 +1,28 @@
+// Module::function, variable::method and self::method: a lambda that calls them.
+import std.encoding.hex as Hex;
+
+class Counter {
+    let n: int32 = 0;
+    function add(k: int32): void { self.n += k; }
+    function get(): int32 { return self.n; }
+    function adder(): (int32) -> void { return self::add; }
+}
+
+function twice(x: int32): int32 { return x * 2; }
+function shout(s: String): void { print("${s}! "); }
+function apply(f: (int32) -> int32, x: int32): int32 { return f(x); }
+function hexLength(f: (byte[]) -> String): int32 { return f([1, 2, 3]).length / 2; }
+
+function main(): int32 {
+    let c: Counter = {};
+    let add: (int32) -> void = c::add;
+    add(5);
+    let more: (int32) -> void = c.adder();
+    more(3);
+    let read: () -> int32 = c::get;
+    let say: (String) -> void = ::shout;
+    print("${apply(::twice, 21)} ");
+    say("hola");
+    println("${read()} ${hexLength(Hex::encode)}");
+    return 0;
+}

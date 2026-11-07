@@ -1,0 +1,22 @@
+// The compiler's tests of memory: threads (the programs that run are in tests/cases/memory/).
+import tests.support.compiler { failsWith, runs };
+
+// Un hilo no puede usar una variable global que puede cambiar.
+test function threadGlobal(): void {
+    failsWith(raw"""
+        let count: int32 = 0;
+        function main(): int32 {
+            let t: Thread = { run: () -> { count += 1; } };
+            t.start();
+            t.join();
+            return 0;
+        }
+        """, "This thread can reach global 'count'");
+}
+
+// Hilos que comparten un objeto synchronized; la memoria de los hilos espera a que terminen.
+test function threadsSynchronized(): void {
+    runs("tests/cases/memory/threads_synchronized.lar", [
+        "4000"
+    ]);
+}

@@ -1,0 +1,68 @@
+// The compiler's tests of strings: strings (the programs that run are in tests/cases/strings/).
+import tests.support.compiler { failsWith, runs, panics };
+
+// Todos los métodos de String, con sus casos límite. La salida es la del compilador anterior,
+// donde estos métodos estaban escritos en C: la versión en Larimar debe dar exactamente lo mismo.
+test function methods(): void {
+    runs("tests/cases/strings/methods.lar", [
+        "indexOf hola: 12",
+        "indexOf o 3: 9",
+        "indexOf neg: 0",
+        "indexOf past: null",
+        "indexOf empty: 4",
+        "indexOf at end: 16",
+        "indexOf none: null",
+        "lastIndexOf: 13",
+        "contains: true false",
+        "count: 3 0 2",
+        "compareTo: -1 0 1 -1 1 1",
+        "upper: HOLA MUNDO, HOLA lower: hola mundo, hola ñANDú",
+        "repeat: [ababab] [] []",
+        "replace: H0la Mund0, h0la | Hola Mundo,  | Hola Mundo, hola | ba",
+        "pad: [007] [7aba] [long] [x] [12312ab]",
+        "split ,: 5 <a><b><><c><>",
+        "split ab: 3 <x><y><z>",
+        "split empty sep: 3 <a><b><c>",
+        "split empty: 1 <>",
+        "split none: 1 <abc>",
+        "lines: 4 <uno><dos><><tres>",
+        "lines empty: 0 ",
+        "lines one: 1 <solo>",
+        "lines nl: 1 <>",
+        "toInt: 123 -7 5 255 10 1000",
+        "toInt bad: -1 -1 -1 -1 -1 -1",
+        "toInt limits: 9223372036854775807 -9223372036854775808 -1 -1",
+        "toFloat: 1.5 -2000.0 -1.0 -1.0 -1.0 3.0",
+        "toBool: true false true",
+        "codePointCount: 4 0",
+        "codePoints: 97 241 8364 128512",
+        "trim: [x y] [x] [x] true true",
+        "starts/ends: true true true false",
+        "equalsIgnoreCase: true false",
+        "kept: ABC Mundo 5"
+    ]);
+}
+
+// Regresión: un programa que nunca escribe la palabra "String" también tiene sus métodos de std.
+test function methodsWithoutNamingString(): void {
+    runs("tests/cases/strings/methods_without_naming_string.lar", [
+        "ababab HOLA 7 2"
+    ]);
+}
+
+test function repeatNegative(): void {
+    panics("tests/cases/strings/repeat_negative.lar", "repeat() needs a count of 0 or more");
+}
+
+test function substringRange(): void {
+    panics("tests/cases/strings/substring_range.lar", "substring(2, 9) is out of range (length 4)");
+}
+
+test function wrongArgumentCount(): void {
+    failsWith(raw"""
+        function main(): int32 {
+            println("7".padStart(3));
+            return 0;
+        }
+        """, "padStart() takes 2 argument(s)");
+}

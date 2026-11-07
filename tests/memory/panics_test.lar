@@ -1,0 +1,10 @@
+// The compiler's tests of memory: panics (the programs that run are in tests/cases/memory/).
+import tests.support.compiler { panics };
+
+test function panicIndex(): void {
+    panics("tests/cases/memory/panic_index.lar", "index 5 out of range (length 3)");
+}
+
+test function panicUnwrapNull(): void {
+    panics("tests/cases/memory/panic_unwrap_null.lar", "null");
+}

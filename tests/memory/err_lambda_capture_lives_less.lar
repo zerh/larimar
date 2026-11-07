@@ -1,8 +1,0 @@
-// expect: error The lambda captures 'title', which lives in the memory of this block, but field 'onClick' lives for the whole program
-class Button { let onClick: () -> void = () -> { }; }
-let button: Button = {} in default;
-function main(): int32 {
-    let title: String = "x".toUpperCase();
-    button.onClick = () -> { println(title); };
-    return 0;
-}

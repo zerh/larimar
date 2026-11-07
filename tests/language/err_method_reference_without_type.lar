@@ -1,6 +1,0 @@
-// expect: error std.encoding.hex::encode is a reference to a function: use it where a function type is expected
-import std.encoding.hex as Hex;
-function main(): int32 {
-    let f: Any = Hex::encode;
-    return 0;
-}

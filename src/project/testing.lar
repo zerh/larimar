@@ -8,19 +8,15 @@
 //   {"event": "result", "file": ..., "path": ..., "name": "adds", "line": 4, "result": "passed", "message": ""}
 //   {"event": "summary", "passed": 3, "failed": 1, "skipped": 0}
 //
-// "result" is passed, failed or skipped; a file that says what it expects is one test, with the name "".
+// "result" is passed, failed or skipped.
 //
 // A test passes (exit 0), fails (1: a check failed; 101: a panic; a memory error...) or is skipped (3:
 // std.test's skip(), when it cannot run here).
 //
-// It runs the .lar files under tests/ (or the ones given), which are of two kinds (a file that says what it
-// expects is of the second kind, even when it has test functions):
-//
-//   - Files with test functions (`test function name(): void { ... }`). For each file, `larimarc test-main`
-//     writes the file again with a main of its own (build/test/<file>.lar, to read), and compiles it.
-//     Each test then runs alone, in its own process: `program <test name>`.
-//   - Files that say what they expect in a first line, `// expect: run`, `// expect: error <text>`... (the
-//     compiler's own tests; MANUAL, chapter "Tests").
+// It runs the test functions (`test function name(): void { ... }`) of the .lar files under tests/ (or the
+// ones given). For each file, `larimarc test-main` writes the file again with a main of its own
+// (build/test/<file>.lar, to read), and compiles it. Each test then runs alone, in its own process:
+// `program <test name>`.
 //
 // Other .lar files (modules that the tests import) are not run. With AddressSanitizer and UBSan, except
 // on Windows or with --no-sanitize.
@@ -203,15 +199,12 @@ public function runTests(args: String[*], s: TestSettings in default): int32 {
         let source: String? = null;
         try { source = Files.readString(f); } catch (IoError e) { continue; }
         let shown: String = Paths.relative(os.cwd(), Paths.absolute(f));
-        let expects: bool = header(source!, "expect") != null;
-        if (!expects && !hasTestFunctions(source!)) { continue; }
+        if (!hasTestFunctions(source!)) { continue; }
         lines.clear();
-        let tests: TestFunction[*] = expects ? [] : testFunctions(source!.clone() in default);
+        let tests: TestFunction[*] = testFunctions(source!.clone() in default);
         for (t in tests) { lines[t.name] = t.line; }
         if (listing) {
-            list(shown, expects, tests);
-        } else if (expects) {
-            if (selected(shown, "")) { runExpectFile(f, shown, source!); }
+            list(shown, tests);
         } else {
             runTestFile(f, shown, source!);
         }
@@ -278,15 +271,6 @@ function hasTestFunctions(source: String): bool {
     return false;
 }
 
-/** The text after "// <key>:" on the first line that has it, or null. */
-function header(source: String, key: String): String? {
-    let start: String = "// ${key}:";
-    for (line in source.lines()) {
-        if (line.startsWith(start)) { return line.substring(start.length).trim().clone(); }
-    }
-    return null;
-}
-
 /** build/test/<the file's path, with '_' for the folders>: where the files of one test go. */
 function base(shown: String): String {
     let name: String = shown.replace("\\", "/").replace("../", "").replace("/", "_");
@@ -294,18 +278,14 @@ function base(shown: String): String {
     return Paths.join(settings!.outDir, name);
 }
 
-/** Whether a test runs: the names given with --test, else the ones --only matches (a file that expects: name ""). */
+/** Whether a test runs: the names given with --test, else the ones --only matches ("": the file itself). */
 function selected(shown: String, name: String): bool {
     if (exact.length > 0) { return name != "" && exact.contains(name); }
     return only == "" || shown.contains(only) || name != "" && name.contains(only);
 }
 
 /** --list: the tests of a file. */
-function list(shown: String, expects: bool, tests: TestFunction[*]): void {
-    if (expects) {
-        if (selected(shown, "")) { found(shown, "", 1); }
-        return;
-    }
+function list(shown: String, tests: TestFunction[*]): void {
     for (t in tests) {
         if (selected(shown, t.name)) { found(shown, t.name, t.line); }
     }
@@ -319,7 +299,7 @@ function found(shown: String, name: String, line: int32): void {
     }
 }
 
-/** The line of a test of the file that runs (1 for a file that expects). */
+/** The line of a test of the file that runs (1 for the file itself). */
 function lineOf(name: String): int32 {
     return name == "" ? 1 : lines[name] as int32 ?? 1;
 }
@@ -430,7 +410,8 @@ function compileC(cFile: String, exe: String): String {
 
 /** Runs a program, its output to <base>.out and <base>.err; gives its exit code. */
 function runProgram(exe: String, args: String[*], outFile: String, errFile: String): int32 {
-    let env: String = sanitize ? "ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 " : "";
+    // without the sanitizers, the programs a test builds (tests.support.compiler) go without them too
+    let env: String = sanitize ? "ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 " : windows() ? "" : "LARIMAR_TEST_SANITIZE=0 ";
     let all: String[*] = [exe];
     for (a in args) { all.push(a); }
     return os.run("${env}${commandLine(all)} > ${quote(outFile)} 2> ${quote(errFile)}");
@@ -504,123 +485,4 @@ function runTestFile(file: String, shown: String, source: String): void {
             failed(shown, name, "exit ${code}:\n${head(out, 10)}\n${head(err, 10)}");
         }
     }
-}
-
-/** The lines after "// <key>:", in order (// output:, // c-has:, // c-lacks:). */
-function headers(source: String, key: String): String[*] {
-    let start: String = "// ${key}:";
-    let out: String[*] = [];
-    for (line in source.lines()) {
-        if (line.startsWith(start)) {
-            let rest: String = line.substring(start.length);
-            out.push((rest.startsWith(" ") ? rest.substring(1) : rest).clone());
-        }
-    }
-    return out;
-}
-
-/** Whether `word` appears in the text as a whole identifier. */
-function hasWord(text: String, word: String): bool {
-    let from: int32 = 0;
-    while (true) {
-        let at: int32? = text.indexOf(word, from);
-        if (at == null) { return false; }
-        let end: int32 = at! + word.length;
-        let left: bool = at! == 0 || !isIdentifierPart(text[at! - 1]);
-        let right: bool = end >= text.length || !isIdentifierPart(text[end]);
-        if (left && right) { return true; }
-        from = at! + 1;
-    }
-    return false;
-}
-
-/** A file that says what it expects: `// expect: run | error <text> | panic <text> | memory-error`. */
-function runExpectFile(file: String, shown: String, source: String): void {
-    let expect: String = header(source, "expect")!;
-    let space: int32? = expect.indexOf(" ");
-    let kind: String = space != null ? expect.substring(0, space!) : expect;
-    let want: String = space != null ? expect.substring(space! + 1).trim() : "";
-    let b: String = base(shown);
-    let cFile: String = "${b}.c";
-    let exe: String = exeName(b);
-    let log: String = "${b}.compile.txt";
-    let compiled: bool = os.run("${commandLine([selfPath(), file, "-o", cFile])} > ${quote(log)} 2>&1") == 0;
-    let compileOut: String = read(log);
-    if (kind == "error") {
-        if (compiled) {
-            failed(shown, "", "expected a compile error containing: ${want}");
-        } else if (!compileOut.contains(want)) {
-            failed(shown, "", "the error does not contain: ${want}\n${head(compileOut, 10)}");
-        } else {
-            pass(shown, "");
-        }
-        return;
-    }
-    if (kind != "run" && kind != "panic" && kind != "memory-error") {
-        failed(shown, "", "unknown '// expect: ${kind}' (run, error, panic or memory-error)");
-        return;
-    }
-    if (kind == "memory-error" && !sanitize) {
-        skip(shown, "", "needs the sanitizers");
-        return;
-    }
-    if (!compiled) {
-        failed(shown, "", "did not compile:\n${head(compileOut, 20)}");
-        return;
-    }
-    let c: String = read(cFile);
-    let missing: String[*] = [];
-    for (n in headers(source, "c-has")) { if (!hasWord(c, n.trim())) { missing.push(n.trim().clone()); } }
-    if (missing.length > 0) {
-        failed(shown, "", "the generated C should contain: ${missing.join(" ")}");
-        return;
-    }
-    let extra: String[*] = [];
-    for (n in headers(source, "c-lacks")) { if (hasWord(c, n.trim())) { extra.push(n.trim().clone()); } }
-    if (extra.length > 0) {
-        failed(shown, "", "the generated C should not contain: ${extra.join(" ")}");
-        return;
-    }
-    let problem: String = compileC(cFile, exe);
-    if (problem != "") {
-        failed(shown, "", problem);
-        return;
-    }
-    let outFile: String = "${b}.out";
-    let errFile: String = "${b}.err";
-    let code: int32 = runProgram(exe, [], outFile, errFile);
-    let out: String = read(outFile);
-    let err: String = read(errFile);
-    if (kind == "memory-error") {
-        if (memoryError(err)) { pass(shown, ""); } else { failed(shown, "", "expected the sanitizers to report a memory error (exit ${code})"); }
-        return;
-    }
-    if (memoryError(err)) {
-        failed(shown, "", "memory error at run time:\n${memoryReport(err)}");
-        return;
-    }
-    if (kind == "run" && code != 0) {
-        failed(shown, "", "exit ${code}:\n${head(err, 10)}");
-        return;
-    }
-    if (kind == "panic" && (code != 101 || !err.contains(want))) {
-        failed(shown, "", "expected a panic containing: ${want} (exit ${code})\n${head(err, 5)}");
-        return;
-    }
-    let wanted: String[*] = headers(source, "output");
-    if (wanted.length > 0) {
-        let got: String[*] = out.endsWith("\n") ? out.substring(0, out.length - 1).split("\n") : out.split("\n");
-        if (out == "") { got = []; }
-        let i: int32 = 0;
-        while (i < wanted.length || i < got.length) {
-            let w: String = i < wanted.length ? wanted[i] : "(nothing)";
-            let g: String = i < got.length ? got[i] : "(nothing)";
-            if (w != g) {
-                failed(shown, "", "wrong output, line ${i + 1}:\n  expected: ${w}\n  got:      ${g}");
-                return;
-            }
-            i += 1;
-        }
-    }
-    pass(shown, "");
 }

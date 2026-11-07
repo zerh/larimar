@@ -1,0 +1,49 @@
+// The compiler's tests of language: test functions (the programs that run are in tests/cases/language/).
+import tests.support.compiler { failsWith, runs, caseFile, generatedC, hasWord };
+import std.test { check };
+
+test function testPublic(): void {
+    failsWith(raw"""
+        public test function adds(): void { }
+        function main(): int32 { return 0; }
+        """, "A test function cannot be 'public'");
+}
+
+test function testReturns(): void {
+    failsWith(raw"""
+        test function adds(): int32 { return 1; }
+        function main(): int32 { return 0; }
+        """, "A test function returns nothing");
+}
+
+test function testTwoParams(): void {
+    failsWith(raw"""
+        test function adds(a: int32, b: int32): void { }
+        function main(): int32 { return 0; }
+        """, "A test function takes nothing, or one setup");
+}
+
+// larimar build leaves test functions out: they are not checked against main, and not in the C.
+test function testFunctionsNotBuilt(): void {
+    let file: String = caseFile("test_functions_not_built.lar", raw"""
+        // larimar build leaves test functions out: they are not checked against main, and not in the C.
+        import std.test { checkInt };
+
+        function twice(n: int32): int32 { return n * 2; }
+
+        test function onlyInTests(): void {
+            checkInt(4, twice(2));
+        }
+
+        function main(): int32 {
+            println("built without its tests");
+            return 0;
+        }
+
+        """);
+    runs(file, [
+        "built without its tests"
+    ]);
+    let c: String = generatedC(file);
+    check(!hasWord(c, "onlyInTests"), "the generated C should not contain onlyInTests");
+}

@@ -1,0 +1,66 @@
+// The compiler's tests of c: resources (the programs that run are in tests/cases/c/).
+import tests.support.compiler { failsWith, runs, panics };
+
+test function releasedByOneWord(): void {
+    failsWith(raw"""
+        native type CFile = FILE* released_by fclose;
+        native function fclose(f: CFile): int32;
+        function main(): void {}
+        """, "Write 'released by' (two words)");
+}
+
+test function ffiReleaseDirectly(): void {
+    failsWith(raw"""
+        c_code { static void close_thing(int t) { (void)t; } static int open_thing(void) { return 1; } }
+        native type Thing = int released by close_thing;
+        native function open_thing(): Thing?;
+        native function close_thing(t: Thing): void;
+        function main(): int32 {
+            let t: Thing? = open_thing();
+            close_thing(t!);
+            return 0;
+        }
+        """, "'close_thing' releases Thing: call release(x) instead");
+}
+
+test function ffiReleasedUse(): void {
+    panics("tests/cases/c/ffi_released_use.lar", "a released Thing was used");
+}
+
+test function ffiResourceClone(): void {
+    failsWith(raw"""
+        c_code { static void close_thing(int t) { (void)t; } static int open_thing(void) { return 1; } }
+        native type Thing = int released by close_thing;
+        native function open_thing(): Thing?;
+        native function close_thing(t: Thing): void;
+        class Holder { let thing: Thing? = null; }
+        function main(): int32 {
+            let h: Holder = {};
+            let copy: Holder = h.clone();
+            return 0;
+        }
+        """, "holds a Thing (a resource, released when its memory is freed): it cannot be cloned");
+}
+
+test function ffiResourceMayFail(): void {
+    failsWith(raw"""
+        c_code { static void close_thing(int t) { (void)t; } static int open_thing(void) { return 1; } }
+        native type Thing = int released by close_thing;
+        native function open_thing(): Thing;
+        native function close_thing(t: Thing): void;
+        function main(): int32 { return 0; }
+        """, "'open_thing' makes a Thing, and C may fail: declare it as returning 'Thing?'");
+}
+
+// A resource (native type released by f): released when the memory it lives in is freed, or before with
+// release(x) (only once); a C function that fails gives null.
+test function ffiResources(): void {
+    runs("tests/cases/c/ffi_resources.lar", [
+        "opened 3, closed 3 (at the end of each turn)",
+        "release: closed 4",
+        "twice: closed 4",
+        "failed: null",
+        "in an object: closed 5 after its memory",
+        "memory scratch: closed 6"
+    ]);
+}

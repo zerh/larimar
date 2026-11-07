@@ -1,0 +1,36 @@
+// The compiler's tests of memory: c memory (the programs that run are in tests/cases/memory/).
+import tests.support.compiler { failsWith, runs, memoryError };
+
+// C que crea texto en la memoria de la llamada (su primer parámetro).
+test function cCreatesInCallMemory(): void {
+    runs("tests/cases/memory/c_creates_in_call_memory.lar", [
+        "HELLO! KEPT!"
+    ]);
+}
+
+// C que escribe un byte de más dentro de una memoria: las comprobaciones de memoria lo detectan.
+// (Sin ellas, el byte pisaba en silencio lo siguiente de la memoria.)
+test function cOverflowDetected(): void {
+    memoryError("tests/cases/memory/c_overflow_detected.lar");
+}
+
+// Structs de C por valor en listas y punteros a función.
+test function cStructsAndPointers(): void {
+    runs("tests/cases/memory/c_structs_and_pointers.lar", [
+        "42.0 7 15"
+    ]);
+}
+
+test function exportReturnsString(): void {
+    failsWith(raw"""
+        export function name(n: int32): String { return "x"; }
+        function main(): int32 { return 0; }
+        """, "C would not know when to free a String");
+}
+
+// Una export function llamada miles de veces desde C: cada llamada libera lo que crea.
+test function exportCalledFromC(): void {
+    runs("tests/cases/memory/export_called_from_c.lar", [
+        "3000"
+    ]);
+}

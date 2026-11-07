@@ -1,6 +1,0 @@
-// expect: error lar"nope" in c_code: 'nope' is not a function, type or global of Larimar seen here
-c_code {
-    static int32_t both(int32_t a) { return lar"nope"(a); }
-}
-native function both(a: int32): int32;
-function main(): int32 { return both(1); }

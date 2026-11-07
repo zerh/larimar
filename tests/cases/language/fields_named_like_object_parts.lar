@@ -1,0 +1,4 @@
+// Fields may be called like the parts the C of an object has (_h, _super): the generator renames them.
+class Holder { let _h: int32 = 4; let _super: int32 = 5; }
+class Sub extends Holder { let _sb: int32 = 6; }
+function main(): int32 { let s: Sub = {}; println("${s._h} ${s._super} ${s._sb}"); return 0; }

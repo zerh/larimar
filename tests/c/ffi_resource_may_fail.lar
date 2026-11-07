@@ -1,6 +1,0 @@
-// expect: error 'open_thing' makes a Thing, and C may fail: declare it as returning 'Thing?'
-c_code { static void close_thing(int t) { (void)t; } static int open_thing(void) { return 1; } }
-native type Thing = int released by close_thing;
-native function open_thing(): Thing;
-native function close_thing(t: Thing): void;
-function main(): int32 { return 0; }

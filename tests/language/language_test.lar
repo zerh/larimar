@@ -1,0 +1,138 @@
+// The compiler's tests of language: language (the programs that run are in tests/cases/language/).
+import tests.support.compiler { failsWith, runs };
+
+// After `as T`, a '?' followed by '??' (or ')', ';', ',', ...) is still part of the type: T?.
+test function castOptionalType(): void {
+    failsWith(raw"""
+        function main(): int32 {
+            let data: Any = { a: 7 };
+            let a: int64 = data.a as int64? ?? 0;
+            println("${a}");
+            return 0;
+        }
+        """, "got int64?");
+}
+
+// After `as T`, a '?' followed by the start of an expression is the ternary's, not T? (the type).
+test function castTernary(): void {
+    runs("tests/cases/language/cast_ternary.lar", [
+        "big small",
+        "7 0 yes",
+        "3 small"
+    ]);
+}
+
+// a[i()] += v reads and writes the same place: its object and its index are computed once.
+test function compoundAssignmentOnce(): void {
+    runs("tests/cases/language/compound_assignment_once.lar", [
+        "i",
+        "b",
+        "b",
+        "i",
+        "6 2 21"
+    ]);
+}
+
+// A global gets its value in order: what its initial value calls cannot use a later one.
+test function globalUsedBeforeItsValue(): void {
+    failsWith(raw"""
+        class Box { let n: int32 = 5; }
+
+        let total: int32 = count();
+        let box: Box = {};
+
+        function count(): int32 { return box.n; }
+
+        function main(): int32 { return total; }
+        """, "The initial value of 'total' calls code that uses global 'box'");
+}
+
+test function lambdaKeptWithoutIn(): void {
+    failsWith(raw"""
+        class Route { let handler: (int32) -> void; }
+        let routes: Route[*] = [] in default;
+        function add(handler: (int32) -> void): void { routes.push(Route { handler: handler }); }
+        function main(): int32 { return 0; }
+        """, "A function cannot be copied with clone(): make 'handler' live there (declare the parameter as 'handler: (int32) -> void in default')");
+}
+
+test function lengthParentheses(): void {
+    failsWith(raw"""
+        function main(): int32 {
+            let sb: StringBuilder = {};
+            sb.add("hola");
+            return sb.length();
+        }
+        """, "'length' is read without parentheses: sb.length");
+}
+
+test function privateNotNeeded(): void {
+    failsWith(raw"""
+        private function square(x: int32): int32 { return x * x; }
+        function main(): int32 { return square(2) - 4; }
+        """, "'private' is not needed");
+}
+
+test function statementAtTopLevel(): void {
+    failsWith(raw"""
+        let tarea: int32 = 0;
+        tarea = 3;
+
+        function main(): int32 { return 0; }
+        """, "'tarea = ...' is a statement: at top level only declarations are allowed");
+}
+
+// Left to right, whatever the C compiler: arguments, operands, the fields of a literal as they are
+// written, the elements of an array, and a place before its value.
+test function evaluationOrder(): void {
+    runs("tests/cases/language/evaluation_order.lar", [
+        "ab -1",
+        "ab -1",
+        "ba 1 2",
+        "ba 1 2",
+        "ba 1",
+        "ba 2 1",
+        "ab 2",
+        "a 6 8"
+    ]);
+}
+
+// Fields may be called like the parts the C of an object has (_h, _super): the generator renames them.
+test function fieldsNamedLikeObjectParts(): void {
+    runs("tests/cases/language/fields_named_like_object_parts.lar", [
+        "4 5 6"
+    ]);
+}
+
+// A decimal is written with the fewest digits that read back as the same value.
+test function floatText(): void {
+    runs("tests/cases/language/float_text.lar", [
+        "0.1 0.30000000000000004 2.0 100.0 1234567.0 1e+20 1e-05 0.0001 -0.0",
+        "0.3333333333333333 nan inf -inf 1.5 true"
+    ]);
+}
+
+// The levels of the binary operators, loosest to tightest: || && comparisons | ^ & << >> + - * / %.
+test function operatorPrecedence(): void {
+    runs("tests/cases/language/operator_precedence.lar", [
+        "7 true 1 6 true 5 false 2"
+    ]);
+}
+
+// A program may declare names that std.lang uses for its own private helpers (isSpace, padded...):
+// those helpers are std.lang's, and do not clash with the program's.
+test function ownNamesLikeLangHelpers(): void {
+    runs("tests/cases/language/own_names_like_lang_helpers.lar", [
+        "true hola|007 [5]"
+    ]);
+}
+
+// raw"""...""": el texto tal como se escribe. Sin escapes (\n son dos caracteres) y sin ${...}.
+// Si contiene tres comillas seguidas, se abre con más y se cierra con las mismas.
+test function rawText(): void {
+    runs("tests/cases/language/raw_text.lar", [
+        "printf(\"hola\\n\"); /* \${no se interpola} */ '\\\\'",
+        "tres comillas: \"\"\" dentro",
+        "10 4"
+    ]);
+}

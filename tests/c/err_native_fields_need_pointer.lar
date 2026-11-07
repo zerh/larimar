@@ -1,5 +1,0 @@
-// expect: error its C type must be a pointer to the struct
-native type Point = point_t {
-    let x: int32;
-}
-function main(): int32 { return 0; }

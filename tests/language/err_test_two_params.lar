@@ -1,3 +1,0 @@
-// expect: error A test function takes nothing, or one setup
-test function adds(a: int32, b: int32): void { }
-function main(): int32 { return 0; }
