@@ -56244,7 +56244,7 @@ int32_t command(Slice_s args) {
         return ret_8667;
     }
     if (rt_str_eq(cmd, rt_str("version", 7)) || rt_str_eq(cmd, rt_str("--version", 9))) {
-        printf("larimar %.*s (language %.*s)\n", (int)(rt_str("1.1.0", 5)).len, (rt_str("1.1.0", 5)).ptr, (int)(rt_str("1.0", 3)).len, (rt_str("1.0", 3)).ptr);
+        printf("larimar %.*s (language %.*s)\n", (int)(rt_str("1.2.0", 5)).len, (rt_str("1.2.0", 5)).ptr, (int)(rt_str("1.0", 3)).len, (rt_str("1.0", 3)).ptr);
         int32_t ret_8668 = 0;
         rt_mem_free(&mem_329);
         return ret_8668;
@@ -56325,7 +56325,7 @@ int32_t command(Slice_s args) {
 
 void usage(void) {
     RtMem mem_334 = rt_mem_growable();
-    printf("larimar %.*s (language %.*s)\n", (int)(rt_str("1.1.0", 5)).len, (rt_str("1.1.0", 5)).ptr, (int)(rt_str("1.0", 3)).len, (rt_str("1.0", 3)).ptr);
+    printf("larimar %.*s (language %.*s)\n", (int)(rt_str("1.2.0", 5)).len, (rt_str("1.2.0", 5)).ptr, (int)(rt_str("1.0", 3)).len, (rt_str("1.0", 3)).ptr);
     fputs("\n", stdout);
     fputs("  larimar new <name>            create a project in a new folder\n", stdout);
     fputs("  larimar build [folder]        compile the project (larimar.toml) to an executable\n", stdout);

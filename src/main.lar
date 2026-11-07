@@ -32,7 +32,7 @@ import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 import std.os.process { Process, ProcessError };
 
-const VERSION: String = "1.1.0";
+const VERSION: String = "1.2.0";
 
 /** The version of the language this compiler implements (SPEC.md). */
 const LANGUAGE: String = "1.0";
