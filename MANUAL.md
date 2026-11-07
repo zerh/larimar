@@ -200,7 +200,7 @@ file, there can only be declarations:
 | Class | `class Animal { ... }`, `synchronized class Counter { ... }` (see [Threads](#22-threads)) |
 | Interface | `interface Drawable { ... }` |
 | Enum | `enum Color { Red, Green }` |
-| C code | `c_include "<math.h>";`, `extern function ...`, `extern type ...` |
+| C code | `c_include "<math.h>";`, `native function ...`, `native type ...` |
 
 A program can be split into several files; each one is a **module** ([chapter 24](#24-modules)).
 Any declaration can have `public` in front so that other modules can use it.
@@ -854,7 +854,8 @@ function main(): int32 {
 ```
 
 - They work in `struct`, `class`, `enum` and `native type`. Interfaces have no static functions.
-- In a `native type` you can also write `static native function name(...) = c_function(...);`.
+- In a `native type` you can also write `static native function name(...) = c_function;`, which calls that
+  C function ([C types with members](#c-types-with-members)).
 - `function Type.name` can only be written in the module that declares the type.
 - They are always called as `Type.name(...)` (or `module.Type.name(...)`); not from an object.
 - They do not use `self`, do not go in the virtual table and are not redefined with `override`.
@@ -1630,7 +1631,7 @@ And when the `in` is missing, the error message suggests it: `... or declare the
 
 - `in` only makes sense in parameters that point to memory (objects, lists, texts).
 - A method that redefines another (`override`) or implements an interface must repeat the same `in`.
-- `extern` functions do not use it.
+- `native` functions do not use it, except `in default` on a callback that C keeps ([chapter 23](#callbacks-with-a-context-context)).
 
 ---
 
@@ -2302,15 +2303,15 @@ API on Windows. `larimar build` adds what is needed to compile.
 
 There are thousands of libraries written in C, for almost anything: graphics, sound, databases,
 compression. Larimar can use them directly. Since Larimar becomes C, calling a C function costs
-nothing: you only **declare** it (its name, what it receives and what it gives back) with `extern
-function`, and then use it like any other function.
+nothing: you only **declare** it with `native function` (its name, what it receives and what it gives
+back), and then use it like any other function.
 
 ```ts
 c_include "<stdio.h>";
 c_include "<math.h>";
 
-extern function printf(format: String, ...): int32;
-extern function sqrt(x: float64): float64;
+native function printf(format: String, ...): int32;
+native function sqrt(x: float64): float64;
 
 function main(): int32 {
     printf("square root of 2 = %f\n", sqrt(2.0));
@@ -2320,30 +2321,43 @@ function main(): int32 {
 
 Output: `square root of 2 = 1.414214`
 
-`c_include` brings in the C file that declares those functions (a **header**), and `extern function`
+`c_include` brings in the C file that declares those functions (a **header**), and `native function`
 says to Larimar how each one is called. With `<math.h>`, on some systems the math library has to be
 **linked** (joined to the program when it is built): `libraries = ["m"]` in the `larimar.toml` of a
 project ([chapter 26](#26-projects-larimartoml-and-larimar-build)).
+
+Everything that comes from C is declared with **`native`**, and every declaration follows the same rule:
+**the Larimar name goes on the left; after `=`, the C name**. Without `=`, the name is the same.
+
+| Declaration | What it is |
+|---|---|
+| `native function f(...): T;` | a C function ([below](#23-calling-c)) |
+| `native type X;`, `native type X = FILE*;` | a C type ([C types](#c-types-native-type)) |
+| `native type X = T* { ... }` | a C type with fields and methods ([C types with members](#c-types-with-members)) |
+| `native type F = (int32) -> void;` | a pointer to a C function ([Pointers to C functions](#pointers-to-c-functions)) |
+| `native struct P { ... }` | a C struct, by value ([C structs](#c-structs-native-struct)) |
+| `native const N: int32;`, `native let errno: int32;` | a C constant, macro or variable ([Constants and variables](#c-constants-and-variables-native-const-native-let)) |
 
 A library of your own is declared the same way. For example, for one of windows:
 
 ```ts
 c_include "windows_lib.h";
 
-extern type Window;                                      // an opaque C pointer
-extern function create_window(title: String): Window;
-extern function close_window(w: Window): void;
+native type Window;                                      // an opaque C pointer
+native function create_window(title: String): Window;
+native function close_window(w: Window): void;
 ```
 
 - `c_include` adds an `#include` to the generated C (inside `#when unix` ... `#end`, only on that
   system: see [Each system its own: `#when`](#each-system-its-own-when)).
-- `extern function` declares a C function. Its parameters can only be numbers, `bool`, `String`
-  (it arrives as `const char*`), `extern` types (optional ones too, `T?`, which in C are a pointer that
-  can be `NULL`), C structs and C pointers (`T*`, see [C pointers](#c-pointers-t-and-)). `...` allows
-  variable arguments, as in `printf`.
+- The parameters of a `native function` can only be numbers, `bool`, `String` (it arrives as
+  `const char*`), `String?` (`null` arrives as `NULL`), `native` types (optional ones too, `T?`, which in C
+  are a pointer that can be `NULL`), C structs and C pointers (`T*`, see [C pointers](#c-pointers-t-and-)).
+  `...` allows variable arguments, as in `printf`.
 - A C function can return `String?`: `NULL` arrives as `null` (`getenv`).
-- If the C name clashes with a Larimar one, the function is declared with another name and the C one
-  is given: `extern function cExit(code: int32): void = c "exit";`.
+- **When the C name is another one**, it goes after `=`: `native function cExit(code: int32): void = exit;`.
+  When it is not a plain name (a cast, a macro in parentheses), it goes in quotes, exactly as in C:
+  `= "(fio_start)"`, `= "(const char*)sqlite3_column_text"`.
 - A **`T[]` of numbers or `bool`** (`byte[]`, `int32[]`, `float64[]`...) arrives in C as **two
   arguments**: a pointer to the elements and how many there are. C can read them and write to them, so
   it is the way for C to fill a Larimar buffer (reading from a file or a socket) without copying anything:
@@ -2352,37 +2366,50 @@ extern function close_window(w: Window): void;
   c_code {
       static int32_t fill(uint8_t* items, int32_t length) { /* writes to items[0..length) */ return length; }
   }
-  extern function fill(buffer: byte[]): int32;      // in C: fill(uint8_t* items, int32_t length)
+  native function fill(buffer: byte[]): int32;      // in C: fill(uint8_t* items, int32_t length)
 
   let buf: byte[*] = buffer(4096);
   let n: int32 = fill(buf);                          // a list, a T[N] or a T[] work
   ```
-- If the file has no `c_include`, the transpiler writes the C prototype of each `extern function`
-  itself. That is what is needed for functions of your own written in a separate `.c` (see `sources`
-  in [section 26](#26-projects-larimartoml-and-larimar-build)). If the function comes from a header,
-  include the header.
-- An external function that returns `String` must return a zero-terminated text that keeps existing:
-  a static one, or one created in a memory it receives (see below).
-- `extern type` declares a type that comes from C: opaque, a concrete C type, a C struct or a pointer
-  to a function (see [C types](#c-types-extern-type) below).
-- In `std.lang`, `native type` declares methods of a primitive type of the language. A `native function`
-  without a body declares an intrinsic operation; with `= expression;` it defines the method using a
-  Larimar expression, often an `extern` call. In a class you can also write `native function ... = expression;`.
-- `native let name: T;` declares a value read without parentheses (`s.length`), which the compiler gives;
-  in a class, `native let name: T = expression;` gives it with that expression (`StringBuilder.length`).
-  It is never assigned.
-- `native operator []` declares the intrinsic indexing. `in self` in the return says that the returned
-  value is a view tied to the life of the receiver. The initializers of class fields are evaluated for
-  each object, inside the memory of that object.
-- In a module, the C name does not change: `public extern function Beep(...)` in the module `win` is
+- If the file has no `c_include` and no `c_code`, the transpiler writes the C prototype of each
+  `native function` itself. That is what is needed for functions of your own written in a separate `.c`
+  (see `sources` in [section 26](#26-projects-larimartoml-and-larimar-build)). If the function comes from
+  a header, include the header.
+- A C function that returns `String` must return a zero-terminated text that keeps existing: a static
+  one, or one created in a memory it receives (see below).
+- A `native function` has no body: it is a function of C. To write one in Larimar, write a plain function.
+- In a module, the C name does not change: `public native function Beep(...)` in the module `win` is
   used as `win.Beep(...)` and calls C's `Beep`.
+
+**A macro with named arguments.** Some libraries imitate named arguments with a macro that builds a
+struct (`fio_start(.threads = 1, .workers = 2)` in facil.io). The macro hides a real function with the
+same name, which takes the struct; in parentheses, C calls the function and not the macro:
+
+```ts
+c_code {
+    #include <stdio.h>
+    struct sum_args { int a; int b; };
+    static int sum(struct sum_args s) { return s.a + s.b; }
+    #define sum(...) sum((struct sum_args){__VA_ARGS__})     /* sum(.a = 1, .b = 2) in C */
+}
+
+native struct SumArgs = "struct sum_args" { let a: int32; let b: int32; }
+native function sum(args: SumArgs): int32 = "(sum)";       // the function, not the macro
+
+function main(): int32 {
+    println("${sum({ a: 3, b: 4 })}");                      // the fields not given are zero
+    return 0;
+}
+```
+
+Output: `7`
 
 ### C in the same file: `c_code`
 
-Almost everything from C is used directly, with declarations: functions, constants, variables,
-structs, pointers and resources (the following sections). For what is still better written in C (an
-algorithm, a library with callbacks, an Apple block), a C function is written inside the file itself
-and declared with `extern function`:
+Almost everything from C is used directly, with declarations: functions, types, structs, constants,
+variables, pointers and resources (next sections). For what is still better written in C (an algorithm,
+an Apple block, code between `fork` and `exec`), you write it in C inside the file itself and declare it
+with `native function`:
 
 ```ts
 c_code {
@@ -2396,7 +2423,7 @@ c_code {
     }
 }
 
-extern function sum_digits(v: int64): int32;
+native function sum_digits(v: int64): int32;
 
 function main(): int32 {
     println("${sum_digits(98765)}");
@@ -2406,7 +2433,36 @@ function main(): int32 {
 
 Output: `35`
 
-For example, the API of a primitive type can mix intrinsics, methods implemented in Larimar and C calls:
+Inside a `c_code`, **`lar"name"`** is the C name of a Larimar function, type or global variable
+(`lar"module.name"` for one of another module). That way the C does not depend on how the compiler
+names things:
+
+```ts
+c_code {
+    static int32_t both(int32_t a) { return lar"twice"(a) + lar"area"(a, 3); }
+}
+
+function twice(x: int32): int32 { return x * 2; }
+function area(w: int32, h: int32): int32 { return w * h; }
+native function both(a: int32): int32;
+
+function main(): int32 {
+    println("${both(5)}");
+    return 0;
+}
+```
+
+Output: `25`
+
+- A name that does not exist is a compile error: *lar"nope" in c_code: 'nope' is not a function, type or
+  global of Larimar seen here*.
+- The prototypes of the functions named this way are written before the `c_code` when their types are
+  numbers, `bool`, `String` or `void`. A function that returns data also receives the memory of the call
+  (as [chapter 27](#27-what-the-transpiler-generates) shows); for C to call Larimar with a plain C
+  signature there is [`export function`](#c-calling-larimar-export-function).
+
+In the standard library, `native type` also declares the methods of the types the compiler knows, and
+mixes intrinsics, methods written in Larimar and calls to C:
 
 ```ts
 public native type String {
@@ -2417,7 +2473,7 @@ public native type String {
 }
 ```
 
-A native function with an implementation delegates to a Larimar expression; that expression can call a C function:
+A native function of a class delegates to a Larimar expression, which can call a C function:
 
 ```ts
 public class StringBuilder {
@@ -2427,30 +2483,28 @@ public class StringBuilder {
 }
 ```
 
-`native type` can only name primitive types the compiler already knows. From the `c_code` blocks of the
-standard library only what is used reaches the C: each C function, type or variable stays if something
-the program uses names it. The program's own `c_code`, on the other hand, is copied whole.
+Of the `c_code` blocks of the standard library only what is used reaches the C: each C function, type
+or variable stays if something the program uses names it. The `c_code` of the program itself, instead,
+is copied whole.
 
-That is how `String` is written: the compiler only knows its core (`length`, `[]`, `substring`,
-`bytes`, `split` and `lines`, which are views of the text), and everything else (`indexOf`, `replace`,
+That is how `String` is written: the compiler only knows its core (`length`, `[]`, `substring`, `bytes`,
+`split` and `lines`, which are views of the text), and everything else (`indexOf`, `replace`,
 `toUpperCase`, `padStart`, `toInt`, `codePoints`...) is written in Larimar in `std/lang.lar`, with a
 small `c_code` only for what needs C (`strtod`, for `toFloat`).
 
-- The content is copied as it is to the generated C, after the headers and before the program.
-- **The doors between the two languages are `extern function` (from C to Larimar) and `export function`
-  (from Larimar to C)**, with their types checked. The C must not use the variables or the types that
-  Larimar generates, because their names can change.
-- Inside `c_code` there are no guarantees: the C can do anything. It is best kept small and simple.
-- If the file has `c_code`, Larimar writes no prototypes for its `extern function`s: the block is
-  assumed to define or include them.
+- The content is copied as it is into the generated C, after the headers and before the program.
+- **The doors between the two languages are `native` (from C to Larimar), `export function` (from
+  Larimar to C) and `lar"..."` (inside a `c_code`)**, with their types checked. The C must not use the
+  variables and types that Larimar generates in any other way, because their names may change.
+- Inside `c_code` there are no guarantees: the C can do anything. It is better to keep it small and simple.
 
 ### Passing a memory to C
 
 A C function can receive a Larimar memory (`m: byte[*]` in the declaration) and create things in it.
 When **the memory is its first parameter**, the call does not write it: C receives the memory of the
-call, the same one a Larimar function would receive, so what it returns lives where the caller says
-(its block, the list it is added to, or the memory written with `in`). It is the right way for C to
-return text:
+call, the same one a Larimar function would receive, so what it returns lives where the caller says (its
+block, the list it is added to, or the memory written with `in`). It is the right way for C to return
+text:
 
 ```ts
 c_code {
@@ -2465,7 +2519,7 @@ c_code {
     }
 }
 
-extern function shout(m: byte[*], text: String): String;
+native function shout(m: byte[*], text: String): String;
 
 function main(): int32 {
     println(shout("hello larimar"));                      // in the temporary memory of the statement
@@ -2483,11 +2537,11 @@ KEPT!
 ```
 
 In C, a memory arrives as `RtMem*`, and `rt_mem_alloc(m, bytes, 0)` reserves space inside it (with the
-bytes set to zero). That is the whole interface the C needs to know. The rule is one: **the C uses the
-memory only during the call**. If it kept the pointer for later, the memory could be freed before.
-A memory in another parameter (not the first) is passed written, like any argument.
+bytes zeroed). That is the whole interface the C needs to know. The rule is one: **the C uses the memory
+only during the call**. If it kept the pointer for later, the memory could be freed before. A memory in
+another parameter (not the first) is passed written, like any argument.
 
-This is how the Windows example that used to need a separate `.c` file looks:
+This is the Windows example that used to need a separate `.c` file:
 
 ```ts
 c_code {
@@ -2500,19 +2554,19 @@ c_code {
     }
 }
 
-extern function computer_name(m: byte[*]): String;
+native function computer_name(m: byte[*]): String;
 ```
 
-### C types: `extern type`
+### C types: `native type`
 
-Everything that comes from C is declared with `extern type`. After the `=` goes its form:
+A type that comes from C is declared with `native type`. After `=` goes its type in C:
 
 | Declaration | What it is | In C |
 |---|---|---|
-| `extern type Handle;` | an opaque pointer: it is received, kept and passed, without looking inside | `void*` |
-| `extern type File = c "FILE*";` | a concrete C type, written as it is | `FILE*` |
-| `extern type Point = struct { ... };` | a C struct, by value, with the fields that are used | the C struct |
-| `extern type Op = (int32, int32) -> int32;` | a pointer to a C function | `int32_t (*)(int32_t, int32_t)` |
+| `native type Handle;` | an opaque pointer: received, kept and passed, without looking inside | `void*` |
+| `native type File = FILE*;` | a concrete C type | `FILE*` |
+| `native type Tm = "struct tm*";` | a C type that is not a plain name, in quotes | `struct tm*` |
+| `native type Op = (int32, int32) -> int32;` | a pointer to a C function | `int32_t (*)(int32_t, int32_t)` |
 
 ```ts
 c_code {
@@ -2528,54 +2582,134 @@ c_code {
     static void log_line(FILE* f, const char* text) { fprintf(f, "%s\n", text); }
 }
 
-extern type File = c "FILE*";                                      // a concrete C type
-extern type Point = struct { let x: float32; let y: float32; };    // a C struct, by value
+native type File = FILE*;                                    // a concrete C type
+native struct Point { let x: float32; let y: float32; }      // a C struct, by value
 
-extern function point_mid(a: Point, b: Point): Point;
-extern function log_file(): File;
-extern function log_line(f: File, text: String): void;
+native function point_mid(a: Point, b: Point): Point;
+native function log_file(): File;
+native function log_line(f: File, text: String): void;
 
 function main(): int32 {
     let a: Point = { x: 0, y: 0 };
     let b: Point = Point { x: 4, y: 2 };
     let m: Point = point_mid(a, b);
     println("(${m.x}, ${m.y})");
-    log_line(log_file(), "listo");
+    log_line(log_file(), "done");
     return 0;
 }
 ```
 
-Output: `(2.0, 1.0)`, and `listo` on the error output.
+Output: `(2.0, 1.0)`, and `done` on the error output.
 
-- **Each `extern type` is a different type in Larimar**, even if in C they are the same: a `File`
+- **Each `native type` is a distinct type in Larimar**, even when they are the same in C: a `File`
   cannot be passed where a `Handle` is expected.
-- **`c "..."`** is the exact C type. That way the C compiler also checks the types: with `void*` it
-  would not notice that a `FILE*` is passed where the library expects a `sqlite3*`.
-- **A C struct** is used like any Larimar struct: literals (`{ x: 1, y: 2 }` or `Point { x: 1 }`),
-  fields with a default value, field access, copy by value, lists (`Point[*]`).
-  - C provides the definition (the `.h` or the `c_code`); Larimar does not write it. That way the order
-    and the alignment of the fields are always C's.
-  - It is enough to declare the fields that are used: if the C struct has ten and you care about three,
-    you declare three.
-  - Its fields can only be numbers, `bool`, `extern` types, pointers (`T*`), other C structs and
-    `String`. A `String` field is a C text (`char*` or `char[N]`) that **is read, not assigned**, and it
-    is a view of the C text: if C changes it or frees it, the view does too. To keep it, `.clone()`.
-  - The fields not given in a literal are zero, as in C: `{ ai_socktype: 1 }`.
-  - It has no methods or operators.
-  - If the name in C is different, it is written after `struct`: `extern type Rect = struct "struct rect_t" { ... };`.
+- **The exact C type** (`= FILE*`) makes the C compiler check the types too: with `void*` it would not
+  notice that a `FILE*` is passed where the library expects a `sqlite3*`.
 
-### C constants and variables: `extern const`, `extern let`
+### C types with members
 
-C constants, macros and global variables are used by their name, declaring them with their type:
+A C library usually turns around a pointer (`sqlite3*`, `SDL_Window*`, `http_s*`) and the functions that
+take it first. A `native type` can declare all that between braces, and then it is used like an object:
+
+```ts
+c_code {
+    typedef struct Counter { int value; const char* name; } Counter;
+    static Counter* counter_new(const char* name) { Counter* c = (Counter*)calloc(1, sizeof(Counter)); c->name = name; return c; }
+    static void counter_free(Counter* c) { free(c); }
+    static void counter_add(Counter* c, int n) { c->value += n; }
+    static int counter_get(Counter* c) { return c->value; }
+}
+
+native type Counter = Counter* {
+    let value: int32;                                  // a field of the struct it points to
+    let label: String = name;                          // with another name in C
+    native function add(n: int32): void = counter_add; // counter_add(self, n)
+    native let current: int32 = counter_get;           // read without parentheses: counter_get(self)
+    function addTwice(n: int32): void {                // a method written in Larimar
+        self.add(n);
+        self.add(n);
+    }
+    static native function make(name: String): Counter = counter_new;
+}
+native function counter_free(c: Counter): void;
+
+function main(): int32 {
+    let c: Counter = Counter.make("clicks");
+    c.add(3);
+    c.addTwice(2);
+    c.value += 10;
+    println("${c.label}: ${c.value} ${c.current}");
+    counter_free(c);
+    return 0;
+}
+```
+
+Output: `clicks: 17 17`
+
+- **`let`** is a field of the C struct the type points to, read and written with `x.field` (in C,
+  `x->field`). After `=` goes its C name when it is another. A type with fields must be a pointer:
+  `= Counter*`.
+- **`native function m(...) = c_m;`** calls that C function with `self` first and then the arguments.
+  If its first parameter is a memory (`m: byte[*]`), it goes before `self` and is not written in the
+  call, as in [Passing a memory to C](#passing-a-memory-to-c).
+- **`native let x: T = c_x;`** is the same with no arguments, and it is read without parentheses.
+- With any other expression after `=`, the method is that Larimar expression, as in a class:
+  `native function ok(text: String): void = reply(self, 200, text);`.
+- **`function`** is a method written in Larimar, and **`static native function`** calls a C function
+  without `self` (`Counter.make(...)`). `static function` works too.
+- A type with members is declared outside `#when`; inside each `#when` goes, if it changes, its C type.
+
+### C structs: `native struct`
+
+A C struct passed **by value** is declared with `native struct`, with the fields that are used:
+
+```ts
+c_code {
+    typedef struct span_t { int from_; int to_; } span_t;
+    static span_t widen(span_t s) { s.from_ -= 1; s.to_ += 1; return s; }
+}
+
+native struct Span = span_t {
+    let from: int32 = from_;                  // the C name, when it is another
+    let to: int32 = to_;
+    function length(): int32 { return self.to - self.from; }
+}
+native function widen(s: Span): Span;
+
+function main(): int32 {
+    let s: Span = widen({ from: 3, to: 10 });
+    println("${s.from} ${s.to} ${s.length()}");
+    return 0;
+}
+```
+
+Output: `2 11 9`
+
+- It is used like any Larimar struct: literals (`{ x: 1, y: 2 }` or `Point { x: 1 }`), field access,
+  copies by value, lists (`Point[*]`) and methods written in Larimar.
+- C gives the definition (the `.h` or the `c_code`); Larimar does not write it. So the order and the
+  alignment of the fields are always C's.
+- It is enough to declare the fields that are used: if the C struct has ten and you care about three,
+  you declare three.
+- Its fields can only be numbers, `bool`, `native` types, pointers (`T*`), other C structs and `String`. A
+  `String` field is a C text (`char*` or `char[N]`) that **is read, not assigned**, and it is a view of
+  the C text: if C changes or frees it, so does the view. To keep it, `.clone()`.
+- The fields not given in a literal are zero, as in C: `{ ai_socktype: 1 }`.
+- When the C name is another, it goes after `=`: `native struct Rect = rect_t { ... }`, or in quotes when
+  it is not a plain name: `native struct AddrInfo = "struct addrinfo" { ... }`.
+
+### C constants and variables: `native const`, `native let`
+
+The constants, macros and global variables of C are used by their name, declaring them with their type:
 
 ```ts
 c_include "<errno.h>";
 c_include "<limits.h>";
 
-extern const INT_MAX: int32;                                       // a C macro
-extern const ENOENT: int32;
-extern const POINTER_SIZE: int32 = c "(int)sizeof(void*)";         // a C expression
-extern let errno: int32;                                           // a C variable
+native const INT_MAX: int32;                                       // a C macro
+native const ENOENT: int32;
+native const POINTER_SIZE: int32 = "(int)sizeof(void*)";           // a C expression
+native let errno: int32;                                           // a C variable
 
 function main(): int32 {
     println("${INT_MAX} ${POINTER_SIZE} ${errno == ENOENT}");
@@ -2583,17 +2717,18 @@ function main(): int32 {
 }
 ```
 
-- **`extern const`** does not change; **`extern let`** can be read and assigned (`errno = 0;`).
-- Larimar writes the name as it is in the C, so macros, `enum` constants and variables work, and also
-  macros that expand into something more complex (`errno`, `stdout`).
-- **`= c "..."`** gives a C expression for what has no name: `sizeof`, a cast, a macro with arguments.
-- An `extern const` can be a `String` (a text macro); an `extern let` cannot.
+- **`native const`** does not change; **`native let`** can be read and assigned (`errno = 0;`).
+- Larimar writes the name as it is in the C, so macros, `enum` constants and variables all work, and
+  also macros that expand into something more complex (`errno`, `stdout`).
+- After `=` goes its C name when it is another (`native const MAX: int32 = INT_MAX;`), or, in quotes, a C
+  expression for what has no name: `sizeof`, a cast, a macro with arguments.
+- A `native const` can be a `String` (a text macro); a `native let` cannot.
 
 ### C pointers: `T*` and `&`
 
 Many C functions ask for or return pointers: a linked list (`getaddrinfo`), a result written into a
-variable (`accept(fd, &addr, &len)`), a buffer. **`T*`** is a C pointer to a number, to `bool`, to a C
-struct, to an `extern` type or to another pointer:
+variable (`accept(fd, &addr, &len)`), a buffer. **`T*`** is a C pointer to a number, a `bool`, a C
+struct, a `native` type or another pointer:
 
 ```ts
 c_code {
@@ -2604,14 +2739,14 @@ c_code {
     static int sum_bytes(const unsigned char* p, int n) { int s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }
 }
 
-extern type Node = struct "Node" {
+native struct Node {
     let value: int32;
     let next: Node*;
     let name: String;                       // a C text: it is read
-};
-extern function first_node(): Node*;
-extern function two_results(a: int32*, b: int32*): void;
-extern function sum_bytes(p: byte*, n: int32): int32;
+}
+native function first_node(): Node*;
+native function two_results(a: int32*, b: int32*): void;
+native function sum_bytes(p: byte*, n: int32): int32;
 
 function main(): int32 {
     let sum: int32 = 0;
@@ -2622,7 +2757,7 @@ function main(): int32 {
     }
     let a: int32 = 0;
     let b: int32 = 0;
-    two_results(&a, &b);                    // C writes to a and to b
+    two_results(&a, &b);                    // C writes into a and b
     let bytes: byte[4] = [1, 2, 3, 4];
     println("${sum} ${a} ${b} ${sum_bytes(bytes, bytes.length)}");
     return 0;
@@ -2633,28 +2768,28 @@ Output: `60 7 42 10`
 
 - **`p.field`** reads or writes the field of the struct it points to (`p->field` in C). If `p` is
   `null`, the program stops with an error on that line, instead of failing in C.
-- **`&x`** gives the address of a variable for C to read or write. **It is only allowed as an argument
-  of a C function** (`f(&x)`), so the pointer never lives longer than the call; `x` is a variable whose
-  type allows pointers. `&x as Other*` also works there (C sometimes asks for another pointer type).
+- **`&x`** gives the address of a variable so that C reads or writes it. **It is only allowed as an
+  argument of a C function** (`f(&x)`), so the pointer never lives longer than the call; `x` is a variable
+  whose type allows pointers. `&x as Other*` is also allowed there (C sometimes asks for another pointer type).
 - **An array where C asks for `T*`** arrives as the pointer to its elements: `fread(buffer, 1, buffer.length, f)`.
 - **`as`** converts between pointers (a `sockaddr_in*` as a `sockaddr*`), and between a pointer and an
-  opaque `extern` type (`void*`).
-- A pointer does not point to Larimar memory (`&x` only exists during the call), so it is not part of
-  the lifetime rule: what is on the other side belongs to C, and C says how long it lasts.
+  opaque `native` type (`void*`).
+- A pointer does not point to Larimar memory (`&x` only exists during the call), so it is not part of the
+  lifetime rule: what is on the other side belongs to C, and C says how long it lasts.
 
 ### Resources: `released by`
 
-Some things from C have to be let go: a file (`fclose`), a socket (`close`), a window
-(`SDL_DestroyWindow`), a database (`sqlite3_close`). It is declared once, in its `extern type`, with
-the function that lets it go:
+Some things from C have to be released: a file (`fclose`), a socket (`close`), a window
+(`SDL_DestroyWindow`), a database (`sqlite3_close`). It is declared once, in its `native type`, with the
+function that releases it:
 
 ```ts
 c_include "<stdio.h>";
 
-extern type CFile = c "FILE*" released by fclose;
-extern function fopen(path: String, mode: String): CFile?;
-extern function fputs(text: String, f: CFile): int32;
-extern function fclose(f: CFile): int32;
+native type CFile = FILE* released by fclose;
+native function fopen(path: String, mode: String): CFile?;
+native function fputs(text: String, f: CFile): int32;
+native function fclose(f: CFile): int32;
 
 function main(): int32 {
     for (i in 0..1000) {
@@ -2663,28 +2798,33 @@ function main(): int32 {
         fputs("a line\n", f!);
     }   // each turn: its memory is freed, and with it the file (fclose)
     let g: CFile? = fopen("log.txt", "a");
-    release(g);                            // ahead of time, if needed
+    release(g);                            // earlier, when needed
     return 0;
 }
 ```
 
-- **A resource lives in a memory, like any data**: where what the C function returns is kept (the block
-  of a `let`, the object of a field, `in scratch`...). **When that memory is freed, it is let go.** What
-  is seen in the code is where it lives, just like with a `String`.
-- **`release(x)`** lets it go now. Letting it go twice does nothing; using it afterwards stops the
+- **A resource lives in a memory, like any data**: where what the C function returns is stored (the
+  block of a `let`, the object of a field, `in scratch`...). **When that memory is freed, it is
+  released.** What the code shows is where it lives, just like with a `String`.
+- **`release(x)`** releases it now. Releasing it twice does nothing; using it afterwards stops the
   program with `a released CFile was used`.
 - **The C function that creates it returns `T?`**, because it can fail: a `NULL` pointer (or `-1`, like
   `INVALID_HANDLE_VALUE`) or a negative number (a `-1` descriptor) arrives as `null`.
-- **The function that lets it go receives exactly one `T`**, and only `release()` can call it: calling
-  it by hand would let it go twice. It can be a C function or a Larimar one (to let go in several steps).
-- An object that keeps a resource **cannot be cloned** (it would be let go twice).
-- If the function that lets it go exists on a single system (`closedir` on Unix), the resource only exists there.
+- **A Larimar function can return what such a function creates** (`function open(path: String): CFile? { return fopen(path, "r"); }`):
+  the resource is created where its caller says, like any result.
+- **The function that releases it takes exactly one `T`**, and only `release()` can call it: calling it
+  by hand would release it twice. It can be a C function or a Larimar one (to release in several steps).
+- An object that holds a resource **cannot be cloned** (it would be released twice).
+- If the function that releases it exists on one system only (`closedir` on Unix), the resource only
+  exists there.
+- A resource can also have [members](#c-types-with-members):
+  `native type Db = sqlite3* released by sqlite3_close { native function errmsg(): String = sqlite3_errmsg; ... }`.
 
 ### Each system its own: `#when`
 
 What changes between systems is written between **`#when`** and **`#end`**, which choose when the C is
-compiled (`#if`), not when it runs. They start with `#` so that they look different from the logic of
-the program:
+compiled (`#if`), not when it runs. They start with `#` so they look different from the logic of the
+program:
 
 ```ts
 c_include "<errno.h>";
@@ -2696,13 +2836,13 @@ c_include "<errno.h>";
 #end
 
 #when unix
-    extern type Socket = c "int" released by close;
-    extern function close(s: Socket): int32;
-    extern let errno: int32;
+    native type Socket = int released by close;
+    native function close(s: Socket): int32;
+    native let errno: int32;
 #when windows
-    extern type Socket = c "SOCKET" released by closesocket;
-    extern function closesocket(s: Socket): int32;
-    extern function WSAGetLastError(): int32;
+    native type Socket = SOCKET released by closesocket;
+    native function closesocket(s: Socket): int32;
+    native function WSAGetLastError(): int32;
 #end
 
 function lastError(): int32 {
@@ -2716,11 +2856,11 @@ function lastError(): int32 {
 
 - The systems are **`windows`**, **`macos`**, **`linux`** and **`unix`** (all but Windows).
 - **Each directive goes alone on its line**: `#when <system>`, `#else` and `#end` (only a comment fits
-  after them). One `#when` after another is the next option, like C's `#elif`.
+  after it). A `#when` after another is the next option, like C's `#elif`.
 - **No braces and no block.** What is inside belongs to the surrounding block, like the lines of a C
   `#if`. Indentation is not required, but it helps to read it.
-- **The `#when`, `#else` and `#end` of the same choice start in the same column.** A `#when` with more
-  indentation is nested inside a branch:
+- **The `#when`, `#else` and `#end` of one choice start in the same column.** A `#when` indented further
+  is nested inside a branch:
 
   ```ts
   #when windows
@@ -2729,13 +2869,13 @@ function lastError(): int32 {
       #when macos
           let what: String = "mac";
       #else
-          let what: String = "other unix";
+          let what: String = "another unix";
       #end
       return what;
   #end
   ```
 
-- **What every branch declares, with the same type, keeps existing after `#end`**:
+- **What every branch declares, with the same type, still exists after `#end`**:
 
   ```ts
   #when windows
@@ -2746,22 +2886,22 @@ function lastError(): int32 {
   println(sep);              // sep exists here
   ```
 
-  What a single branch declares belongs only to that branch. If the branches do not cover every system
-  (without `#else`), nothing they declare remains afterwards: some system would not have it.
-- **Outside functions**, inside `#when` only `c_include` and `extern` declarations go, and `#else`
-  only follows `#when windows` or `#when unix` (the rest is then the other one).
-- **The compiler checks every branch**, so an error in the Windows code is also seen when compiling on
-  a Mac. A branch that would never be chosen (`#when macos` after `#when unix`) is an error.
-- **What only exists on one system is used inside its `#when`**: calling `closesocket` outside
-  `#when windows` is a compiler error (*'closesocket' exists only on windows*).
+  What only one branch declares belongs to that branch. If the branches do not cover every system
+  (without `#else`), nothing they declare is left afterwards: some system would not have it.
+- **Outside functions**, inside `#when` go only `c_include` and `native` declarations (without members),
+  and `#else` only follows `#when windows` or `#when unix` (the rest is then the other one).
+- **The compiler checks every branch**, so an error in the Windows code also shows when compiling on a
+  Mac. A branch that would never be chosen (`#when macos` after `#when unix`) is an error.
+- **What exists on only one system is used inside its `#when`**: calling `closesocket` outside
+  `#when windows` is a compile error (*'closesocket' exists only on windows*).
 - **A type can be declared once per system** (`Socket` above), as long as it covers all of them.
 
-That is how the network of the standard library (`std/net.lar`) is written: Unix and Windows sockets,
-in plain Larimar. So are the files (`std.io.files`, `std.io.files`), the console and `std.os`.
+That is how the networking of the standard library is written (`std/net.lar`): Unix and Windows sockets,
+without a line of `c_code`. Files (`std.io.files`), the console and `std.os` too.
 
 ### Pointers to C functions
 
-`extern type Op = (A, B) -> R;` declares the type of a pointer to a C function. A value of that type is
+`native type Op = (A, B) -> R;` declares the type of a pointer to a C function. A value of that type is
 passed to C, kept and **called like a function**:
 
 ```ts
@@ -2772,10 +2912,10 @@ c_code {
     static int32_t apply(op_fn f, int32_t a, int32_t b) { return f(a, b); }
 }
 
-extern type Operation = (int32, int32) -> int32;
+native type Operation = (int32, int32) -> int32;
 
-extern function add(a: int32, b: int32): int32;
-extern function apply(f: Operation, a: int32, b: int32): int32;
+native function add(a: int32, b: int32): int32;
+native function apply(f: Operation, a: int32, b: int32): int32;
 
 export function subtract(a: int32, b: int32): int32 {
     return a - b;
@@ -2797,19 +2937,85 @@ Output:
 15
 ```
 
-- Where an `Operation` is expected, **a function that exists in C with that exact signature** works:
-  an `extern function` or an `export function`.
-- **A lambda does not work**, because it is not a C function: it carries captures, and C would not know
-  what to do with them. If C needs context, almost every library also receives a `void* data`, which is
-  declared as an optional extern type (see the next example).
+- Where an `Operation` is expected, **a function that exists in C with that exact signature** works: a
+  `native function` or an `export function`.
+- **A lambda does not work here**, because it is not a C function: it carries captures, and C would not
+  know what to do with them. When the library gives a `void*` of context, it does: see the next section.
 - A plain Larimar function does not work either: the compiler asks to mark it `export`.
 - They can also come from C: a C function that returns an `Operation`, or a field of a C struct.
-- The allowed types are the ones of `extern function`. A `String` arrives in C as `const char*`, and one
-  that C returns is read just like in an `extern function`.
+- The allowed types are the ones of `native function`. A `String` arrives in C as `const char*`, and one
+  that C returns is read just like in a `native function`.
+
+### Callbacks with a context: `Context`
+
+Almost every C library that takes a callback also takes a **`void*` of context**, which it gives back in
+every call (`user_data`, `arg`, `udata`). Larimar calls it **`Context`**. When the callback type and the
+function that takes it declare that `Context`, **any Larimar function works, a lambda with what it
+captures too**:
+
+```ts
+c_code {
+    typedef void (*item_fn)(int32_t index, const char* name, void* data);
+    static void for_each_name(item_fn f, void* data) {
+        const char* names[] = { "one", "two", "three" };
+        for (int32_t i = 0; i < 3; i++) f(i, names[i], data);
+    }
+}
+
+native type ItemFn = (int32, String, Context) -> void;
+native function for_each_name(f: ItemFn, data: Context): void;
+
+class Totals { let count: int32 = 0; }
+
+function main(): int32 {
+    let prefix: String = "->";
+    let totals: Totals = {};
+    for_each_name((i, name) -> {             // an (int32, String) -> void: the Context is not written
+        totals.count += 1;
+        println("${prefix} ${i} ${name.toUpperCase()}");
+    });
+    println("count ${totals.count}");
+    return 0;
+}
+```
+
+Output:
+```
+-> 0 ONE
+-> 1 TWO
+-> 2 THREE
+count 3
+```
+
+- **The `Context` is not written**, neither in the lambda nor in the call: C receives a C function the
+  compiler makes, and as the context, the Larimar function with its captures.
+- **An `export function` or a `native function` of the exact type work too**, and go as they are (with
+  `NULL` as the context).
+- **If C keeps the callback for later** (a handler, a timer), the parameter says so with
+  **`in default`**, and then what it captures must live as long as the whole program:
+
+  ```ts
+  native type BusyFn = (Context, int32) -> int32;
+  native function set_busy(f: BusyFn in default, data: Context): void;
+
+  let limit: Limit = Limit { count: 5 } in default;
+  set_busy((tries) -> { return tries < limit.count ? 1 : 0; });
+  ```
+
+  If `limit` lived in the block, the error says so: *C keeps the function given to 'set_busy' (in
+  default), so what it uses must live as long as the whole program*.
+- **A member of a C type takes it too**: `native function onBusy(handler: BusyFn in default, data: Context): int32 = sqlite3_busy_handler;`
+  is called as `db.onBusy((n) -> { return n < 5 ? 1 : 0; })`.
+- The Larimar function cannot return a `String` to C (C would not know when to free it), and the callback
+  cannot receive resources.
+- If the library calls the callback from another thread, Larimar's thread rules do not protect it, just
+  like with an `export function`.
+- If the library gives no context (facil.io, for example, keeps its `udata` elsewhere), the callback is
+  an `export function`, and what it needs it looks up in a global variable.
 
 ### C calling Larimar: `export function`
 
-`export function` is the opposite of `extern function`: **it brings a Larimar function to C**. The
+`export function` is the opposite of `native function`: **it brings a Larimar function to C**. The
 compiler generates it in C with that same name and with C types, so C can call it, keep it in a pointer
 or receive it as a callback:
 
@@ -2823,17 +3029,16 @@ c_code {
     }
 }
 
-extern type Data;
-extern type ItemHandler = (int32, String, Data?) -> void;
+native type ItemHandler = (int32, String, Context) -> void;
 
-extern function for_each_name(f: ItemHandler, data: Data?): void;
+native function for_each_name(f: ItemHandler, data: Context): void;
 
-export function show_item(index: int32, name: String, data: Data?): void {
+export function show_item(index: int32, name: String, data: Context): void {
     println("${index}: ${name.toUpperCase()}");
 }
 
 function main(): int32 {
-    for_each_name(show_item, null);
+    for_each_name(show_item);
     return 0;
 }
 ```
@@ -2847,27 +3052,27 @@ Output:
 
 What `export function` guarantees:
 
-- **The name in C is exactly its own**, also inside a module: `public export function lm_double(...)`
-  in the module `gfx.shapes` is still called `lm_double` in C.
-- **A clean C signature**: without hidden parameters. Numbers and `bool` as they are, `String` arrives
-  as `const char*` (it is converted to Larimar text on the way in), extern types as their C type and C
-  structs by value.
-- **Each call from C has its own memory**, which is born on the way in and dies on the way back, like
-  any function. What the function creates is not left hanging in C.
+- **The name in C is exactly its own**, inside a module too: `public export function lm_double(...)` in
+  the module `gfx.shapes` is still called `lm_double` in C.
+- **A clean C signature**: no hidden parameters. Numbers and `bool` as they are, `String` arrives as
+  `const char*` (it becomes Larimar text when it enters), `native` types as their C type and C structs by
+  value.
+- **Each call from C has its own memory**, born when it enters and dying when it returns, like any
+  function. What the function creates is not left hanging in C.
 - **A `c_code` can use it directly**. If its signature only has numbers, `bool`, `String` and opaque
-  extern types, the compiler writes its prototype before the `c_code`s. If it uses C structs or
-  `c "..."` types, which the `c_code` itself might define, the prototype goes after, and the `c_code`
-  that calls it must declare it itself.
+  `native` types, the compiler writes its prototype before the `c_code` blocks. If it uses C structs or
+  concrete C types, which the `c_code` itself may define, the prototype goes after, and the `c_code` that
+  calls it must declare it itself.
 
 And what it does not allow, because C could not handle it:
 
-- returning `String` (C would not know when to free it); return a number, an extern type or a C struct;
+- returning `String` (C would not know when to free it); return a number, a `native` type or a C struct;
 - `throws`: an error cannot cross C code, so it is caught inside;
-- `in` in the parameters, memories (`byte[*]`), classes, lists or `Any`;
+- `in` on the parameters, memories (`byte[*]`), classes, lists or `Any`;
 - `main`.
 
 If the library calls the function from another thread, the compiler cannot know it: Larimar's thread
-rules do not protect it, just as happens inside a `c_code`.
+rules do not protect it, just as inside a `c_code`.
 
 ---
 
@@ -2886,7 +3091,7 @@ src/
 ### `public`
 
 What a module declares is **private** unless it has `public` in front. Any declaration with a name can
-be marked: functions, constants, global variables, structs, classes, interfaces, enums and `extern`
+be marked: functions, constants, global variables, structs, classes, interfaces, enums and `native`
 declarations.
 
 ```ts
@@ -3694,13 +3899,13 @@ c_code {
     static const char* mbed_error_text(MbedConn* c) { return c->text; }
 }
 
-extern type MbedHandle released by mbed_free;
-extern function mbed_open(s: Socket, host: String, caFile: String, verify: bool): MbedHandle?;
-extern function mbed_free(c: MbedHandle): void;
-extern function mbed_read(c: MbedHandle, buffer: byte[]): int32;
-extern function mbed_write(c: MbedHandle, bytes: byte[]): int32;
-extern function mbed_error(c: MbedHandle): int32;
-extern function mbed_error_text(c: MbedHandle): String;
+native type MbedHandle released by mbed_free;
+native function mbed_open(s: Socket, host: String, caFile: String, verify: bool): MbedHandle?;
+native function mbed_free(c: MbedHandle): void;
+native function mbed_read(c: MbedHandle, buffer: byte[]): int32;
+native function mbed_write(c: MbedHandle, bytes: byte[]): int32;
+native function mbed_error(c: MbedHandle): int32;
+native function mbed_error_text(c: MbedHandle): String;
 
 /** https:// with mbedTLS. caFile: the trusted certificates, in PEM. */
 public class MbedTls implements TlsProvider {
@@ -3996,8 +4201,8 @@ libraries = ["SDL3", "ws2_32"]
 
 ### C libraries: static, dynamic and source code
 
-A Larimar program can use any C library. Its functions are declared with `extern function` (and its
-types with `extern type`) and the `larimar.toml` tells the C compiler where it is. There are four ways
+A Larimar program can use any C library. Its functions are declared with `native function` (and its
+types with `native type`) and the `larimar.toml` tells the C compiler where it is. There are four ways
 to bring in a library, depending on how it comes:
 
 | How it comes | In `[c]` | Result |
@@ -4021,10 +4226,10 @@ libraries = ["mylib", "tone", "m"]           # libmylib.a (static), libtone.so (
 c_include "vendor.h";
 c_include "<math.h>";
 
-extern function mylib_triple(x: int32): int32;     // from libmylib.a
-extern function tone_play(hz: int32): void;        // from libtone.so
-extern function embedded_add(a: int32, b: int32): int32;   // from embedded.c
-extern function sqrt(x: float64): float64;         // from libm
+native function mylib_triple(x: int32): int32;     // from libmylib.a
+native function tone_play(hz: int32): void;        // from libtone.so
+native function embedded_add(a: int32, b: int32): int32;   // from embedded.c
+native function sqrt(x: float64): float64;         // from libm
 ```
 
 **How static or dynamic is chosen.** `libraries = ["x"]` becomes `-lx`, and the linker looks for
@@ -4064,9 +4269,9 @@ a single file, the library is linked statically or compiled as source code.
 // src/win.lar: the module that talks to Windows
 c_include "<windows.h>";
 
-public extern type HWND;
-public extern function GetConsoleWindow(): HWND;
-public extern function MessageBoxA(owner: HWND, text: String, caption: String, kind: uint32): int32;
+public native type HWND;
+public native function GetConsoleWindow(): HWND;
+public native function MessageBoxA(owner: HWND, text: String, caption: String, kind: uint32): int32;
 
 public const MB_YESNO: uint32 = 0x04;
 public const IDYES: int32 = 6;
@@ -4086,7 +4291,7 @@ function main(): int32 {
 ```
 
 with `libraries = ["user32"]` in `[c]`. Declaring everything about Windows in a `win` module avoids
-repeating the `extern` declarations: each `extern type` is a different type in each module that
+repeating the `native` declarations: each `native type` is a different type in each module that
 declares it, so the `HWND` must come from a single place.
 
 ### The editor: `larimar check` and `larimar lsp`
@@ -4444,9 +4649,11 @@ And it is readable:
 | what a function returns | a first parameter `RtMem* rt_dest`: the memory of the call (`NULL` if the function does not create its result) |
 | `geo.shapes.area` | `geo__shapes__area` (the main file keeps its names) |
 | `main` | `user_main`, called from C's `main` |
-| `extern type X;` / `= c "T";` | `typedef void* Ext_X;` / `typedef T Ext_X;` |
-| `extern type X = (A) -> R;` | `typedef R (*Ext_X)(A);` |
-| `extern type X = struct { ... };` | the C struct, with its name; Larimar does not define it |
+| `native type X;` / `= T;` | `typedef void* Ext_X;` / `typedef T Ext_X;` |
+| `native type X = (A) -> R;` | `typedef R (*Ext_X)(A);` |
+| `native struct X { ... }` | the C struct, with its name; Larimar does not define it |
+| `native type X = T* { native function m() = c_m; }` | `x.m()` is `c_m(x)`: a `static` function that calls it |
+| a callback with `Context` | a C function (`lm_ctx_...`) that calls the Larimar one the context carries |
 | `export function f` | the Larimar function (`larimar_f`) and a function `f` with C types that calls it |
 | `Any` | `RtAny`: `{ kind; union of values }`; a table is an `RtTable*` with a hash index; a struct goes in a copy |
 | `Thread`, `synchronized` | system threads (`pthread` or Windows); a recursive lock per object |
@@ -4650,8 +4857,8 @@ What Larimar does not have, and will not have, with what is used instead:
   while it waits. The TLS server is not available on Windows yet. The client TLS of macOS and Windows is
   written and compiles, but its tests have only run on Linux.
 - Some operations of `String` and `Any` are still intrinsics of the compiler; lists are not declared in `std.lang` yet.
-- Only C functions (`extern` or `export`) can be passed to C, not lambdas with captures; the context
-  travels in the library's `void* data`. A C struct cannot have array fields (except a text,
+- A lambda with captures goes to C only when the library gives a `void*` of context as a parameter
+  (`Context`); if it keeps it elsewhere, the callback is an `export function`. A C struct cannot have array fields (except a text,
   `char name[32]`, which is read as a `String`) or unions; they are read with a function in `c_code`.
 - A C pointer (`T*`) is not indexed (`p[i]`) or added to; for a C array, a function in `c_code`.
   `&x` only works as an argument of a C function.
@@ -4726,15 +4933,22 @@ let k: String = q > 0 ? "pos" : "neg";
 
 // C
 c_include "<stdio.h>";
-extern function puts(text: String): int32;
-extern function cExit(code: int32): void = c "exit";           // another name in C
-extern const EOF: int32;
-extern const SIZE: int32 = c "(int)sizeof(long)";
-extern let errno: int32;
-extern type CFile = c "FILE*" released by fclose;               // a resource: let go with its memory
-extern function fopen(path: String, mode: String): CFile?;
-extern function fclose(f: CFile): int32;
-extern type Node = struct "struct node" { let next: Node*; let name: String; };
+native function puts(text: String): int32;
+native function cExit(code: int32): void = exit;           // another name in C
+native const EOF: int32;
+native const SIZE: int32 = "(int)sizeof(long)";
+native let errno: int32;
+native type CFile = FILE* released by fclose;               // a resource: let go with its memory
+native function fopen(path: String, mode: String): CFile?;
+native function fclose(f: CFile): int32;
+native struct Node = "struct node" { let next: Node*; let name: String; }
+native type Doc = Doc* released by doc_close {                  // a C type with members
+    let id: int32;                                              // a field: d.id is d->id
+    native function title(): String = doc_title;                // d.title() is doc_title(d)
+}
+native type ItemFn = (int32, Context) -> void;                  // a callback with a context:
+native function each(f: ItemFn, data: Context): void;           // each((i) -> { ... }) takes lambdas
+c_code { static int twice_all(int x) { return lar"twice"(x); } }   // lar"..." names Larimar from C
 two_results(&a, &b);                                            // & only as an argument of C
 release(file);                                                  // let it go earlier
 #when windows                                                   // chosen when compiling the C; each directive
@@ -4782,10 +4996,10 @@ panic("should not happen: ${x}");                    // it stops with the messag
 
 // C
 c_include "<math.h>";
-extern function sqrt(x: float64): float64;
-extern type Handle;                                   // void*
-extern type File = c "FILE*";                         // a concrete C type
-extern type Point = struct { let x: float32; let y: float32; };   // a C struct
-extern type Op = (int32, int32) -> int32;             // a pointer to a C function
+native function sqrt(x: float64): float64;
+native type Handle;                                   // void*
+native type File = FILE*;                             // a concrete C type
+native struct Point { let x: float32; let y: float32; }    // a C struct
+native type Op = (int32, int32) -> int32;             // a pointer to a C function
 export function subtract(a: int32, b: int32): int32 { return a - b; }   // C can call it
 ```

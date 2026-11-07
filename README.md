@@ -16,7 +16,7 @@ larimar-compiler/
 ├── std/                     # Standard library source (edit it here): io.lar and io/ (files, path, console), os.lar and os/process.lar,
 │                            # time.lar, crypto.lar, memory.lar, encoding/ (json, toml, base64, hex, url), net.lar (TCP, UDP, servers with TLS),
 │                            # net/tls.lar (client TLS), net/http.lar (HTTP client), text.lar and text/regex.lar, test.lar
-│                            # (net, io and os are written in Larimar over the system's C functions: extern, #when, T*, released by)
+│                            # (net, io and os are written in Larimar over the system's C functions: native, #when, T*, released by)
 ├── tests/                   # Tests (larimarc test, tests/run-tests.sh; tests/lsp for check and lsp)
 ├── debug/                   # lldb and gdb formatters for Larimar values (installed in larimar/debug)
 ├── bin/larimar              # Wrapper installed as larimar/bin/larimar
@@ -50,11 +50,13 @@ there is one; programs with TLS need it. GitHub Actions builds tcc with `tools/b
 
 ## Calling C
 
-C functions, constants, macros, globals, structs, pointers and resources are declared, not wrapped:
-`extern function`, `extern const` / `extern let`, `T*` and `&x` (in calls), `extern type X = c "FILE*"
-released by fclose` (released when the memory it lives in is freed, or with `release(x)`), and `#when windows`
-... `#else` ... `#end` for what changes between platforms (compiled as `#if`, every branch checked). See chapter 23
-of `MANUAL.md`.
+C functions, constants, macros, globals, structs, pointers and resources are declared, not wrapped, with
+`native`: the Larimar name on the left, the C name after `=`. `native function`, `native const` / `native let`,
+`native struct`, `T*` and `&x` (in calls), `native type X = FILE* released by fclose` (released when the memory
+it lives in is freed, or with `release(x)`), C types with fields and methods
+(`native type Db = sqlite3* { native function errmsg(): String = sqlite3_errmsg; }`), callbacks that take
+lambdas when C passes a `Context`, `lar"name"` inside `c_code`, and `#when windows` ... `#else` ... `#end` for
+what changes between platforms (compiled as `#if`, every branch checked). See chapter 23 of `MANUAL.md`.
 
 ## Building from C Bootstrap
 

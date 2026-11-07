@@ -200,7 +200,7 @@ superior** del archivo, solo puede haber declaraciones:
 | Clase | `class Animal { ... }`, `synchronized class Counter { ... }` (ver [Hilos](#22-hilos)) |
 | Interfaz | `interface Drawable { ... }` |
 | Enum | `enum Color { Red, Green }` |
-| Código C | `c_include "<math.h>";`, `extern function ...`, `extern type ...` |
+| Código C | `c_include "<math.h>";`, `native function ...`, `native type ...` |
 
 Un programa puede repartirse en varios archivos; cada uno es un **módulo** ([capítulo 24](#24-módulos)).
 Cualquier declaración puede llevar `public` delante para que otros módulos la usen.
@@ -853,7 +853,8 @@ function main(): int32 {
 ```
 
 - Valen en `struct`, `class`, `enum` y `native type`. Las interfaces no tienen funciones estáticas.
-- En un `native type` también se puede escribir `static native function nombre(...) = funcion_c(...);`.
+- En un `native type` también se puede escribir `static native function nombre(...) = funcion_c;`, que llama
+  a esa función de C ([Tipos de C con miembros](#tipos-de-c-con-miembros)).
 - `function Tipo.nombre` solo se puede escribir en el módulo que declara el tipo.
 - Se llaman siempre como `Tipo.nombre(...)` (o `modulo.Tipo.nombre(...)`); no desde un objeto.
 - No usan `self`, no entran en la tabla virtual y no se redefinen con `override`.
@@ -1629,7 +1630,7 @@ Y cuando falta el `in`, el mensaje de error lo sugiere: `... or declare the para
 
 - `in` solo tiene sentido en parámetros que apuntan a memoria (objetos, listas, textos).
 - Un método que redefine a otro (`override`) o implementa una interfaz debe repetir los mismos `in`.
-- Las funciones `extern` no lo usan.
+- Las funciones `native` no lo usan, salvo `in default` en un callback que C guarda ([capítulo 23](#callbacks-con-contexto-context)).
 
 ---
 
@@ -2300,15 +2301,15 @@ Windows en Windows. `larimar build` añade lo necesario para compilar.
 
 Hay miles de bibliotecas escritas en C, para casi cualquier cosa: gráficos, sonido, bases de datos,
 compresión. Larimar puede usarlas directamente. Como Larimar se convierte en C, llamar a una función
-de C no cuesta nada: solo la **declaras** (su nombre, qué recibe y qué devuelve) con `extern
-function`, y luego la usas como cualquier otra función.
+de C no cuesta nada: solo la **declaras** con `native function` (su nombre, qué recibe y qué devuelve),
+y luego la usas como cualquier otra función.
 
 ```ts
 c_include "<stdio.h>";
 c_include "<math.h>";
 
-extern function printf(format: String, ...): int32;
-extern function sqrt(x: float64): float64;
+native function printf(format: String, ...): int32;
+native function sqrt(x: float64): float64;
 
 function main(): int32 {
     printf("square root of 2 = %f\n", sqrt(2.0));
@@ -2318,30 +2319,43 @@ function main(): int32 {
 
 Salida: `square root of 2 = 1.414214`
 
-`c_include` trae el archivo de C que declara esas funciones (un **header**), y `extern function` le
+`c_include` trae el archivo de C que declara esas funciones (un **header**), y `native function` le
 dice a Larimar cómo se llama cada una. Con `<math.h>`, en algunos sistemas hay que **enlazar** (unir
 al programa cuando se construye) la biblioteca matemática: `libraries = ["m"]` en el `larimar.toml`
 de un proyecto ([capítulo 26](#26-proyectos-larimartoml-y-larimar-build)).
+
+Todo lo que viene de C se declara con **`native`**, y todas las declaraciones siguen la misma regla:
+**a la izquierda va el nombre en Larimar; después del `=`, el nombre en C**. Sin `=`, se llama igual.
+
+| Declaración | Qué es |
+|---|---|
+| `native function f(...): T;` | una función de C ([abajo](#23-llamar-a-c)) |
+| `native type X;`, `native type X = FILE*;` | un tipo de C ([Tipos de C](#tipos-de-c-native-type)) |
+| `native type X = T* { ... }` | un tipo de C con campos y métodos ([Tipos de C con miembros](#tipos-de-c-con-miembros)) |
+| `native type F = (int32) -> void;` | un puntero a una función de C ([Punteros a funciones de C](#punteros-a-funciones-de-c)) |
+| `native struct P { ... }` | un struct de C, por valor ([Structs de C](#structs-de-c-native-struct)) |
+| `native const N: int32;`, `native let errno: int32;` | una constante, una macro o una variable de C ([Constantes y variables](#constantes-y-variables-de-c-native-const-native-let)) |
 
 Una biblioteca propia se declara igual. Por ejemplo, para una de ventanas:
 
 ```ts
 c_include "windows_lib.h";
 
-extern type Window;                                      // un puntero opaco de C
-extern function create_window(title: String): Window;
-extern function close_window(w: Window): void;
+native type Window;                                      // un puntero opaco de C
+native function create_window(title: String): Window;
+native function close_window(w: Window): void;
 ```
 
 - `c_include` añade un `#include` al C generado (dentro de `#when unix` ... `#end`, solo en ese sistema:
   ver [Cada sistema lo suyo: `#when`](#cada-sistema-lo-suyo-when)).
-- `extern function` declara una función de C. Sus parámetros solo pueden ser números, `bool`, `String`
-  (llega como `const char*`), tipos `extern` (también opcionales, `T?`, que en C son un puntero que puede
-  ser `NULL`), structs de C y punteros de C (`T*`, ver [Punteros de C](#punteros-de-c-t-y-)). `...` permite
-  argumentos variables, como en `printf`.
+- Los parámetros de una `native function` solo pueden ser números, `bool`, `String` (llega como
+  `const char*`), `String?` (`null` llega como `NULL`), tipos `native` (también opcionales, `T?`, que en C
+  son un puntero que puede ser `NULL`), structs de C y punteros de C (`T*`, ver
+  [Punteros de C](#punteros-de-c-t-y-)). `...` permite argumentos variables, como en `printf`.
 - Una función de C puede devolver `String?`: `NULL` llega como `null` (`getenv`).
-- Si el nombre de C choca con uno de Larimar, la función se declara con otro y se dice el de C:
-  `extern function cExit(code: int32): void = c "exit";`.
+- **Si el nombre de C es otro**, se escribe después del `=`: `native function cExit(code: int32): void = exit;`.
+  Si no es un nombre simple (un cast, una macro entre paréntesis), va entre comillas, tal cual en C:
+  `= "(fio_start)"`, `= "(const char*)sqlite3_column_text"`.
 - Un **`T[]` de números o `bool`** (`byte[]`, `int32[]`, `float64[]`...) llega a C como **dos argumentos**:
   un puntero a los elementos y cuántos son. C puede leerlos y escribir en ellos, así que es la forma de que
   C llene un búfer de Larimar (leer de un archivo o de un socket) sin copiar nada:
@@ -2350,37 +2364,51 @@ extern function close_window(w: Window): void;
   c_code {
       static int32_t fill(uint8_t* items, int32_t length) { /* escribe en items[0..length) */ return length; }
   }
-  extern function fill(buffer: byte[]): int32;      // en C: fill(uint8_t* items, int32_t length)
+  native function fill(buffer: byte[]): int32;      // en C: fill(uint8_t* items, int32_t length)
 
   let buf: byte[*] = buffer(4096);
   let n: int32 = fill(buf);                          // una lista, un T[N] o un T[] valen
   ```
-- Si el archivo no tiene ningún `c_include`, el transpilador escribe él mismo el prototipo de C de cada
-  `extern function`. Es lo que hace falta para funciones propias escritas en un `.c` aparte (ver `sources`
-  en el [apartado 26](#26-proyectos-larimartoml-y-larimar-build)). Si la función viene de una cabecera,
-  incluye la cabecera.
-- Una función externa que devuelve `String` debe devolver un texto terminado en cero que siga existiendo:
+- Si el archivo no tiene ningún `c_include` ni `c_code`, el transpilador escribe él mismo el prototipo de C
+  de cada `native function`. Es lo que hace falta para funciones propias escritas en un `.c` aparte (ver
+  `sources` en el [apartado 26](#26-proyectos-larimartoml-y-larimar-build)). Si la función viene de una
+  cabecera, incluye la cabecera.
+- Una función de C que devuelve `String` debe devolver un texto terminado en cero que siga existiendo:
   uno estático, o uno creado en una memoria que recibe (ver más abajo).
-- `extern type` declara un tipo que viene de C: opaco, un tipo de C concreto, un struct de C o un puntero a
-  función (ver [Tipos de C](#tipos-de-c-extern-type) más abajo).
-- En `std.lang`, `native type` declara métodos de un tipo primitivo del lenguaje. Un `native function` sin cuerpo
-    declara una operación intrínseca; con `= expresión;` define el método usando una expresión Larimar, a menudo
-    una llamada `extern`. En una clase también se puede escribir `native function ... = expresión;`.
-- `native let nombre: T;` declara un valor que se lee sin paréntesis (`s.length`) y que da el
-  compilador; en una clase, `native let nombre: T = expresión;` lo da con esa expresión
-  (`StringBuilder.length`). Nunca se asigna.
-- `native operator []` declara la indexación intrínseca. `in self` en el retorno indica que el valor devuelto
-    es una vista ligada a la vida del receptor. Los inicializadores de campos de clase se evalúan por cada objeto,
-    dentro de la memoria de ese objeto.
-- En un módulo, el nombre de C no cambia: `public extern function Beep(...)` en el módulo `win` se usa
+- Una `native function` no tiene cuerpo: es una función de C. Para escribir una en Larimar, se escribe una
+  función normal.
+- En un módulo, el nombre de C no cambia: `public native function Beep(...)` en el módulo `win` se usa
   como `win.Beep(...)` y llama a `Beep` de C.
+
+**Una macro con argumentos con nombre.** Algunas bibliotecas simulan argumentos con nombre con una macro
+que arma un struct (`fio_start(.threads = 1, .workers = 2)` en facil.io). La macro esconde una función de
+verdad con el mismo nombre, que recibe el struct; entre paréntesis, C llama a la función y no a la macro:
+
+```ts
+c_code {
+    #include <stdio.h>
+    struct sum_args { int a; int b; };
+    static int sum(struct sum_args s) { return s.a + s.b; }
+    #define sum(...) sum((struct sum_args){__VA_ARGS__})     /* sum(.a = 1, .b = 2) en C */
+}
+
+native struct SumArgs = "struct sum_args" { let a: int32; let b: int32; }
+native function sum(args: SumArgs): int32 = "(sum)";       // la función, no la macro
+
+function main(): int32 {
+    println("${sum({ a: 3, b: 4 })}");                      // los campos que no se dan valen cero
+    return 0;
+}
+```
+
+Salida: `7`
 
 ### C en el mismo archivo: `c_code`
 
-Casi todo lo de C se usa directamente, con declaraciones: funciones, constantes, variables, structs,
-punteros y recursos (secciones siguientes). Para lo que aun así conviene escribir en C (un algoritmo, una
-biblioteca con callbacks, un bloque de Apple), se escribe una función en C dentro del propio archivo y se
-declara con `extern function`:
+Casi todo lo de C se usa directamente, con declaraciones: funciones, tipos, structs, constantes,
+variables, punteros y recursos (secciones siguientes). Para lo que aun así conviene escribir en C (un
+algoritmo, un bloque de Apple, código entre `fork` y `exec`), se escribe en C dentro del propio archivo y
+se declara con `native function`:
 
 ```ts
 c_code {
@@ -2394,7 +2422,7 @@ c_code {
     }
 }
 
-extern function sum_digits(v: int64): int32;
+native function sum_digits(v: int64): int32;
 
 function main(): int32 {
     println("${sum_digits(98765)}");
@@ -2404,7 +2432,36 @@ function main(): int32 {
 
 Salida: `35`
 
-Por ejemplo, una API de tipo primitivo puede mezclar intrínsecos, métodos implementados en Larimar y llamadas C:
+Dentro de un `c_code`, **`lar"nombre"`** es el nombre en C de una función, un tipo o una variable global
+de Larimar (`lar"modulo.nombre"` para la de otro módulo). Así el C no depende de cómo nombra las cosas el
+compilador:
+
+```ts
+c_code {
+    static int32_t both(int32_t a) { return lar"twice"(a) + lar"area"(a, 3); }
+}
+
+function twice(x: int32): int32 { return x * 2; }
+function area(w: int32, h: int32): int32 { return w * h; }
+native function both(a: int32): int32;
+
+function main(): int32 {
+    println("${both(5)}");
+    return 0;
+}
+```
+
+Salida: `25`
+
+- Un nombre que no existe es un error del compilador: *lar"nope" in c_code: 'nope' is not a function, type
+  or global of Larimar seen here*.
+- Los prototipos de las funciones nombradas así se escriben antes del `c_code` cuando sus tipos son
+  números, `bool`, `String` o `void`. Una función que devuelve datos recibe además la memoria de la
+  llamada (como en C las ve el [capítulo 27](#27-qué-genera-el-transpilador)); para que C llame a Larimar
+  con una firma de C limpia está [`export function`](#que-c-llame-a-larimar-export-function).
+
+En la biblioteca estándar, `native type` también declara los métodos de los tipos que el compilador
+conoce, y mezcla intrínsecos, métodos escritos en Larimar y llamadas a C:
 
 ```ts
 public native type String {
@@ -2415,7 +2472,7 @@ public native type String {
 }
 ```
 
-Una función nativa con implementación delega en una expresión Larimar; esa expresión puede llamar a una función C:
+Una función nativa de una clase delega en una expresión Larimar, que puede llamar a una función de C:
 
 ```ts
 public class StringBuilder {
@@ -2425,9 +2482,9 @@ public class StringBuilder {
 }
 ```
 
-`native type` solo puede nombrar tipos primitivos ya conocidos por el compilador. De los bloques `c_code`
-de la biblioteca estándar solo llega al C lo que se usa: cada función, tipo o variable de C se queda si algo
-que el programa usa la nombra. El `c_code` del propio programa, en cambio, se copia entero.
+De los bloques `c_code` de la biblioteca estándar solo llega al C lo que se usa: cada función, tipo o
+variable de C se queda si algo que el programa usa la nombra. El `c_code` del propio programa, en cambio,
+se copia entero.
 
 Así está escrito `String`: el compilador solo conoce su núcleo (`length`, `[]`, `substring`, `bytes`,
 `split` y `lines`, que son vistas del texto), y todo lo demás (`indexOf`, `replace`, `toUpperCase`,
@@ -2435,12 +2492,10 @@ Así está escrito `String`: el compilador solo conoce su núcleo (`length`, `[]
 solo para lo que necesita C (`strtod`, para `toFloat`).
 
 - El contenido se copia tal cual al C generado, después de las cabeceras y antes del programa.
-- **Las puertas entre los dos lenguajes son `extern function` (de C a Larimar) y `export function` (de
-  Larimar a C)**, con sus tipos comprobados. El C no debe usar las variables ni los tipos que genera
-  Larimar, porque sus nombres pueden cambiar.
+- **Las puertas entre los dos lenguajes son `native` (de C a Larimar), `export function` (de Larimar a C)
+  y `lar"..."` (dentro de un `c_code`)**, con sus tipos comprobados. El C no debe usar de otra forma las
+  variables ni los tipos que genera Larimar, porque sus nombres pueden cambiar.
 - Dentro de `c_code` no hay garantías: el C puede hacer cualquier cosa. Conviene que sea poco y simple.
-- Si el archivo tiene `c_code`, Larimar no escribe prototipos para sus `extern function`: se supone que
-  el bloque los define o incluye.
 
 ### Pasar una memoria a C
 
@@ -2463,7 +2518,7 @@ c_code {
     }
 }
 
-extern function shout(m: byte[*], text: String): String;
+native function shout(m: byte[*], text: String): String;
 
 function main(): int32 {
     println(shout("hello larimar"));                      // en la memoria temporal de la instrucción
@@ -2498,19 +2553,19 @@ c_code {
     }
 }
 
-extern function computer_name(m: byte[*]): String;
+native function computer_name(m: byte[*]): String;
 ```
 
-### Tipos de C: `extern type`
+### Tipos de C: `native type`
 
-Todo lo que viene de C se declara con `extern type`. Después del `=` va su forma:
+Un tipo que viene de C se declara con `native type`. Después del `=` va su tipo en C:
 
 | Declaración | Qué es | En C |
 |---|---|---|
-| `extern type Handle;` | un puntero opaco: se recibe, se guarda y se pasa, sin mirar dentro | `void*` |
-| `extern type File = c "FILE*";` | un tipo de C concreto, escrito tal cual | `FILE*` |
-| `extern type Point = struct { ... };` | un struct de C, por valor, con los campos que se usan | el struct de C |
-| `extern type Op = (int32, int32) -> int32;` | un puntero a una función de C | `int32_t (*)(int32_t, int32_t)` |
+| `native type Handle;` | un puntero opaco: se recibe, se guarda y se pasa, sin mirar dentro | `void*` |
+| `native type File = FILE*;` | un tipo de C concreto | `FILE*` |
+| `native type Tm = "struct tm*";` | un tipo de C que no es un nombre simple, entre comillas | `struct tm*` |
+| `native type Op = (int32, int32) -> int32;` | un puntero a una función de C | `int32_t (*)(int32_t, int32_t)` |
 
 ```ts
 c_code {
@@ -2526,12 +2581,12 @@ c_code {
     static void log_line(FILE* f, const char* text) { fprintf(f, "%s\n", text); }
 }
 
-extern type File = c "FILE*";                                      // un tipo de C concreto
-extern type Point = struct { let x: float32; let y: float32; };    // un struct de C, por valor
+native type File = FILE*;                                    // un tipo de C concreto
+native struct Point { let x: float32; let y: float32; }      // un struct de C, por valor
 
-extern function point_mid(a: Point, b: Point): Point;
-extern function log_file(): File;
-extern function log_line(f: File, text: String): void;
+native function point_mid(a: Point, b: Point): Point;
+native function log_file(): File;
+native function log_line(f: File, text: String): void;
 
 function main(): int32 {
     let a: Point = { x: 0, y: 0 };
@@ -2545,23 +2600,104 @@ function main(): int32 {
 
 Salida: `(2.0, 1.0)`, y `listo` en la salida de errores.
 
-- **Cada `extern type` es un tipo distinto en Larimar**, aunque en C sean lo mismo: no se puede pasar un
+- **Cada `native type` es un tipo distinto en Larimar**, aunque en C sean lo mismo: no se puede pasar un
   `File` donde se espera un `Handle`.
-- **`c "..."`** es el tipo exacto de C. Así el compilador de C también comprueba los tipos: con `void*`
+- **El tipo exacto de C** (`= FILE*`) hace que el compilador de C también compruebe los tipos: con `void*`
   no notaría que se pasa un `FILE*` donde la biblioteca espera un `sqlite3*`.
-- **Un struct de C** se usa como cualquier struct de Larimar: literales (`{ x: 1, y: 2 }` o
-  `Point { x: 1 }`), campos con valor por defecto, acceso a campos, copia por valor, listas (`Point[*]`).
-  - La definición la pone C (el `.h` o el `c_code`); Larimar no la escribe. Así el orden y la alineación
-    de los campos siempre son los de C.
-  - Basta con declarar los campos que se usan: si el struct de C tiene diez y te interesan tres, declaras tres.
-  - Sus campos solo pueden ser números, `bool`, tipos `extern`, punteros (`T*`), otros structs de C y
-    `String`. Un campo `String` es un texto de C (`char*` o `char[N]`) que **se lee, no se asigna**, y es
-    una vista del texto de C: si C lo cambia o lo libera, la vista también. Para guardarlo, `.clone()`.
-  - Los campos que no se dan en un literal valen cero, como en C: `{ ai_socktype: 1 }`.
-  - No tiene métodos ni operadores.
-  - Si el nombre en C es otro, se escribe tras `struct`: `extern type Rect = struct "struct rect_t" { ... };`.
 
-### Constantes y variables de C: `extern const`, `extern let`
+### Tipos de C con miembros
+
+Una biblioteca de C suele girar alrededor de un puntero (`sqlite3*`, `SDL_Window*`, `http_s*`) y de las
+funciones que lo reciben primero. Un `native type` puede declarar todo eso entre llaves, y entonces se usa
+como un objeto:
+
+```ts
+c_code {
+    typedef struct Counter { int value; const char* name; } Counter;
+    static Counter* counter_new(const char* name) { Counter* c = (Counter*)calloc(1, sizeof(Counter)); c->name = name; return c; }
+    static void counter_free(Counter* c) { free(c); }
+    static void counter_add(Counter* c, int n) { c->value += n; }
+    static int counter_get(Counter* c) { return c->value; }
+}
+
+native type Counter = Counter* {
+    let value: int32;                                  // un campo del struct al que apunta
+    let label: String = name;                          // con otro nombre en C
+    native function add(n: int32): void = counter_add; // counter_add(self, n)
+    native let current: int32 = counter_get;           // se lee sin paréntesis: counter_get(self)
+    function addTwice(n: int32): void {                // un método escrito en Larimar
+        self.add(n);
+        self.add(n);
+    }
+    static native function make(name: String): Counter = counter_new;
+}
+native function counter_free(c: Counter): void;
+
+function main(): int32 {
+    let c: Counter = Counter.make("clicks");
+    c.add(3);
+    c.addTwice(2);
+    c.value += 10;
+    println("${c.label}: ${c.value} ${c.current}");
+    counter_free(c);
+    return 0;
+}
+```
+
+Salida: `clicks: 17 17`
+
+- **`let`** es un campo del struct de C al que apunta el tipo, que se lee y se escribe con `x.campo` (en C,
+  `x->campo`). Después del `=` va su nombre en C cuando es otro. Un tipo con campos tiene que ser un
+  puntero: `= Counter*`.
+- **`native function m(...) = c_m;`** llama a esa función de C con `self` primero y después los argumentos.
+  Si su primer parámetro es una memoria (`m: byte[*]`), esa va antes de `self` y no se escribe en la
+  llamada, como en [Pasar una memoria a C](#pasar-una-memoria-a-c).
+- **`native let x: T = c_x;`** es lo mismo sin argumentos, y se lee sin paréntesis.
+- Con cualquier otra expresión después del `=`, el método es esa expresión de Larimar, como en una clase:
+  `native function ok(text: String): void = reply(self, 200, text);`.
+- **`function`** es un método escrito en Larimar, y **`static native function`** llama a una función de C
+  sin `self` (`Counter.make(...)`). También vale `static function`.
+- Un tipo con miembros se declara fuera de `#when`; dentro de cada `#when` va, si cambia, su tipo de C.
+
+### Structs de C: `native struct`
+
+Un struct de C que se pasa **por valor** se declara con `native struct`, con los campos que se usan:
+
+```ts
+c_code {
+    typedef struct span_t { int from_; int to_; } span_t;
+    static span_t widen(span_t s) { s.from_ -= 1; s.to_ += 1; return s; }
+}
+
+native struct Span = span_t {
+    let from: int32 = from_;                  // el nombre en C, cuando es otro
+    let to: int32 = to_;
+    function length(): int32 { return self.to - self.from; }
+}
+native function widen(s: Span): Span;
+
+function main(): int32 {
+    let s: Span = widen({ from: 3, to: 10 });
+    println("${s.from} ${s.to} ${s.length()}");
+    return 0;
+}
+```
+
+Salida: `2 11 9`
+
+- Se usa como cualquier struct de Larimar: literales (`{ x: 1, y: 2 }` o `Point { x: 1 }`), acceso a
+  campos, copia por valor, listas (`Point[*]`) y métodos escritos en Larimar.
+- La definición la pone C (el `.h` o el `c_code`); Larimar no la escribe. Así el orden y la alineación
+  de los campos siempre son los de C.
+- Basta con declarar los campos que se usan: si el struct de C tiene diez y te interesan tres, declaras tres.
+- Sus campos solo pueden ser números, `bool`, tipos `native`, punteros (`T*`), otros structs de C y
+  `String`. Un campo `String` es un texto de C (`char*` o `char[N]`) que **se lee, no se asigna**, y es
+  una vista del texto de C: si C lo cambia o lo libera, la vista también. Para guardarlo, `.clone()`.
+- Los campos que no se dan en un literal valen cero, como en C: `{ ai_socktype: 1 }`.
+- Si el nombre en C es otro, va después del `=`: `native struct Rect = rect_t { ... }`, o entre comillas si
+  no es un nombre simple: `native struct AddrInfo = "struct addrinfo" { ... }`.
+
+### Constantes y variables de C: `native const`, `native let`
 
 Las constantes, las macros y las variables globales de C se usan por su nombre, declarándolas con su tipo:
 
@@ -2569,10 +2705,10 @@ Las constantes, las macros y las variables globales de C se usan por su nombre, 
 c_include "<errno.h>";
 c_include "<limits.h>";
 
-extern const INT_MAX: int32;                                       // una macro de C
-extern const ENOENT: int32;
-extern const POINTER_SIZE: int32 = c "(int)sizeof(void*)";         // una expresión de C
-extern let errno: int32;                                           // una variable de C
+native const INT_MAX: int32;                                       // una macro de C
+native const ENOENT: int32;
+native const POINTER_SIZE: int32 = "(int)sizeof(void*)";           // una expresión de C
+native let errno: int32;                                           // una variable de C
 
 function main(): int32 {
     println("${INT_MAX} ${POINTER_SIZE} ${errno == ENOENT}");
@@ -2580,18 +2716,18 @@ function main(): int32 {
 }
 ```
 
-- **`extern const`** no cambia; **`extern let`** se puede leer y asignar (`errno = 0;`).
+- **`native const`** no cambia; **`native let`** se puede leer y asignar (`errno = 0;`).
 - Larimar escribe en el C el nombre tal cual, así que valen macros, constantes de `enum` y variables, y
   también macros que se expanden en algo más complejo (`errno`, `stdout`).
-- **`= c "..."`** da una expresión de C para lo que no tiene nombre: `sizeof`, un cast, una macro con
-  argumentos.
-- Una `extern const` puede ser un `String` (una macro de texto); una `extern let`, no.
+- Después del `=` va su nombre en C cuando es otro (`native const MAX: int32 = INT_MAX;`), o, entre
+  comillas, una expresión de C para lo que no tiene nombre: `sizeof`, un cast, una macro con argumentos.
+- Una `native const` puede ser un `String` (una macro de texto); una `native let`, no.
 
 ### Punteros de C: `T*` y `&`
 
 Muchas funciones de C piden o devuelven punteros: una lista enlazada (`getaddrinfo`), un resultado que se
 escribe en una variable (`accept(fd, &addr, &len)`), un búfer. **`T*`** es un puntero de C a un número, a
-`bool`, a un struct de C, a un tipo `extern` o a otro puntero:
+`bool`, a un struct de C, a un tipo `native` o a otro puntero:
 
 ```ts
 c_code {
@@ -2602,14 +2738,14 @@ c_code {
     static int sum_bytes(const unsigned char* p, int n) { int s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }
 }
 
-extern type Node = struct "Node" {
+native struct Node {
     let value: int32;
     let next: Node*;
     let name: String;                       // un texto de C: se lee
-};
-extern function first_node(): Node*;
-extern function two_results(a: int32*, b: int32*): void;
-extern function sum_bytes(p: byte*, n: int32): int32;
+}
+native function first_node(): Node*;
+native function two_results(a: int32*, b: int32*): void;
+native function sum_bytes(p: byte*, n: int32): int32;
 
 function main(): int32 {
     let sum: int32 = 0;
@@ -2636,23 +2772,23 @@ Salida: `60 7 42 10`
   admite punteros. `&x as Otro*` también vale ahí (C pide a veces otro tipo de puntero).
 - **Un arreglo donde C pide `T*`** llega como el puntero a sus elementos: `fread(buffer, 1, buffer.length, f)`.
 - **`as`** convierte entre punteros (un `sockaddr_in*` como `sockaddr*`), y entre un puntero y un tipo
-  `extern` opaco (`void*`).
+  `native` opaco (`void*`).
 - Un puntero no apunta a memoria de Larimar (`&x` solo existe durante la llamada), así que no entra en la
   regla de vida: lo que hay al otro lado es de C, y C dice cuánto dura.
 
 ### Recursos: `released by`
 
 Algunas cosas de C hay que soltarlas: un archivo (`fclose`), un socket (`close`), una ventana
-(`SDL_DestroyWindow`), una base de datos (`sqlite3_close`). Se declara una vez, en su `extern type`, con
+(`SDL_DestroyWindow`), una base de datos (`sqlite3_close`). Se declara una vez, en su `native type`, con
 qué función se suelta:
 
 ```ts
 c_include "<stdio.h>";
 
-extern type CFile = c "FILE*" released by fclose;
-extern function fopen(path: String, mode: String): CFile?;
-extern function fputs(text: String, f: CFile): int32;
-extern function fclose(f: CFile): int32;
+native type CFile = FILE* released by fclose;
+native function fopen(path: String, mode: String): CFile?;
+native function fputs(text: String, f: CFile): int32;
+native function fclose(f: CFile): int32;
 
 function main(): int32 {
     for (i in 0..1000) {
@@ -2673,10 +2809,14 @@ function main(): int32 {
   `a released CFile was used`.
 - **La función de C que lo crea devuelve `T?`**, porque puede fallar: un puntero `NULL` (o `-1`, como
   `INVALID_HANDLE_VALUE`) o un número negativo (un descriptor `-1`) llega como `null`.
+- **Una función de Larimar puede devolver lo que crea una así** (`function open(path: String): CFile? { return fopen(path, "r"); }`):
+  el recurso se crea donde diga quien la llama, como cualquier resultado.
 - **La función que lo suelta recibe exactamente un `T`**, y solo `release()` puede llamarla: llamarla a mano
   lo soltaría dos veces. Puede ser una función de C o una de Larimar (para soltar en varios pasos).
 - Un objeto que guarda un recurso **no se puede clonar** (se soltaría dos veces).
 - Si la función que lo suelta existe en un solo sistema (`closedir` en Unix), el recurso solo existe allí.
+- Un recurso también puede tener [miembros](#tipos-de-c-con-miembros):
+  `native type Db = sqlite3* released by sqlite3_close { native function errmsg(): String = sqlite3_errmsg; ... }`.
 
 ### Cada sistema lo suyo: `#when`
 
@@ -2693,13 +2833,13 @@ c_include "<errno.h>";
 #end
 
 #when unix
-    extern type Socket = c "int" released by close;
-    extern function close(s: Socket): int32;
-    extern let errno: int32;
+    native type Socket = int released by close;
+    native function close(s: Socket): int32;
+    native let errno: int32;
 #when windows
-    extern type Socket = c "SOCKET" released by closesocket;
-    extern function closesocket(s: Socket): int32;
-    extern function WSAGetLastError(): int32;
+    native type Socket = SOCKET released by closesocket;
+    native function closesocket(s: Socket): int32;
+    native function WSAGetLastError(): int32;
 #end
 
 function lastError(): int32 {
@@ -2745,8 +2885,8 @@ function lastError(): int32 {
 
   Lo que declara una rama sola es solo de esa rama. Si las ramas no cubren todos los sistemas (sin
   `#else`), nada de lo que declaran queda después: algún sistema no lo tendría.
-- **Fuera de las funciones**, dentro de `#when` solo van `c_include` y declaraciones `extern`, y `#else`
-  solo sigue a `#when windows` o a `#when unix` (el resto es entonces el otro).
+- **Fuera de las funciones**, dentro de `#when` solo van `c_include` y declaraciones `native` (sin
+  miembros), y `#else` solo sigue a `#when windows` o a `#when unix` (el resto es entonces el otro).
 - **El compilador comprueba todas las ramas**, así que un error del código de Windows se ve también
   compilando en un Mac. Una rama que nunca se elegiría (`#when macos` tras `#when unix`) es un error.
 - **Lo que solo existe en un sistema se usa dentro de su `#when`**: llamar a `closesocket` fuera de
@@ -2754,11 +2894,11 @@ function lastError(): int32 {
 - **Un tipo puede declararse una vez por sistema** (`Socket` arriba), siempre que cubra todos.
 
 Así está escrita la red de la biblioteca estándar (`std/net.lar`): sockets de Unix y de Windows, sin una
-línea de `c_code`. También los archivos (`std.io.files`, `std.io.files`), la consola y `std.os`.
+línea de `c_code`. También los archivos (`std.io.files`), la consola y `std.os`.
 
 ### Punteros a funciones de C
 
-`extern type Op = (A, B) -> R;` declara el tipo de un puntero a función de C. Un valor de ese tipo se
+`native type Op = (A, B) -> R;` declara el tipo de un puntero a función de C. Un valor de ese tipo se
 pasa a C, se guarda y **se llama como una función**:
 
 ```ts
@@ -2769,10 +2909,10 @@ c_code {
     static int32_t apply(op_fn f, int32_t a, int32_t b) { return f(a, b); }
 }
 
-extern type Operation = (int32, int32) -> int32;
+native type Operation = (int32, int32) -> int32;
 
-extern function sumar(a: int32, b: int32): int32;
-extern function apply(f: Operation, a: int32, b: int32): int32;
+native function sumar(a: int32, b: int32): int32;
+native function apply(f: Operation, a: int32, b: int32): int32;
 
 export function restar(a: int32, b: int32): int32 {
     return a - b;
@@ -2795,18 +2935,84 @@ Salida:
 ```
 
 - Donde se espera un `Operation` vale **una función que exista en C con esa firma exacta**: una
-  `extern function` o una `export function`.
-- **Una lambda no vale**, porque no es una función de C: lleva capturas, y C no sabría qué hacer con ellas.
-  Si C necesita contexto, casi todas las bibliotecas reciben además un `void* data`, que se declara como un
-  tipo extern opcional (ver el ejemplo siguiente).
+  `native function` o una `export function`.
+- **Una lambda no vale aquí**, porque no es una función de C: lleva capturas, y C no sabría qué hacer con
+  ellas. Cuando la biblioteca da un `void*` de contexto, sí vale: ver la sección siguiente.
 - Una función de Larimar normal tampoco vale: el compilador pide marcarla `export`.
 - También pueden venir de C: una función de C que devuelve un `Operation`, o un campo de un struct de C.
-- Los tipos permitidos son los de `extern function`. Un `String` llega a C como `const char*`, y uno que
-  devuelve C se lee igual que en una `extern function`.
+- Los tipos permitidos son los de `native function`. Un `String` llega a C como `const char*`, y uno que
+  devuelve C se lee igual que en una `native function`.
+
+### Callbacks con contexto: `Context`
+
+Casi todas las bibliotecas de C que reciben un callback reciben también un **`void*` de contexto**, que le
+devuelven en cada llamada (`user_data`, `arg`, `udata`). Larimar lo llama **`Context`**. Si el tipo del
+callback y la función que lo recibe declaran ese `Context`, **cualquier función de Larimar vale, también
+una lambda con lo que captura**:
+
+```ts
+c_code {
+    typedef void (*item_fn)(int32_t index, const char* name, void* data);
+    static void for_each_name(item_fn f, void* data) {
+        const char* names[] = { "uno", "dos", "tres" };
+        for (int32_t i = 0; i < 3; i++) f(i, names[i], data);
+    }
+}
+
+native type ItemFn = (int32, String, Context) -> void;
+native function for_each_name(f: ItemFn, data: Context): void;
+
+class Totals { let count: int32 = 0; }
+
+function main(): int32 {
+    let prefix: String = "->";
+    let totals: Totals = {};
+    for_each_name((i, name) -> {             // un (int32, String) -> void: el Context no se escribe
+        totals.count += 1;
+        println("${prefix} ${i} ${name.toUpperCase()}");
+    });
+    println("count ${totals.count}");
+    return 0;
+}
+```
+
+Salida:
+```
+-> 0 UNO
+-> 1 DOS
+-> 2 TRES
+count 3
+```
+
+- **El `Context` no se escribe**, ni en la lambda ni en la llamada: C recibe una función de C que hace el
+  compilador, y como contexto, la función de Larimar con sus capturas.
+- **Una `export function` o una `native function` del tipo exacto también valen**, y van tal cual (con
+  `NULL` como contexto).
+- **Si C guarda el callback para después** (un manejador, un temporizador), el parámetro lo dice con
+  **`in default`**, y entonces lo que captura debe vivir todo el programa:
+
+  ```ts
+  native type BusyFn = (Context, int32) -> int32;
+  native function set_busy(f: BusyFn in default, data: Context): void;
+
+  let limit: Limit = Limit { count: 5 } in default;
+  set_busy((tries) -> { return tries < limit.count ? 1 : 0; });
+  ```
+
+  Si `limit` viviera en el bloque, el error lo dice: *C keeps the function given to 'set_busy' (in
+  default), so what it uses must live as long as the whole program*.
+- **Un miembro de un tipo de C también lo acepta**: `native function onBusy(handler: BusyFn in default, data: Context): int32 = sqlite3_busy_handler;`
+  se llama como `db.onBusy((n) -> { return n < 5 ? 1 : 0; })`.
+- La función de Larimar no puede devolver un `String` a C (C no sabría cuándo liberarlo), y el callback no
+  puede recibir recursos.
+- Si la biblioteca llama al callback desde otro hilo, las reglas de hilos de Larimar no la protegen, igual
+  que con una `export function`.
+- Si la biblioteca no da contexto (facil.io, por ejemplo, guarda su `udata` en otro lado), el callback es
+  una `export function`, y lo que necesita lo busca en una variable global.
 
 ### Que C llame a Larimar: `export function`
 
-`export function` es lo contrario de `extern function`: **lleva una función de Larimar a C**. El
+`export function` es lo contrario de `native function`: **lleva una función de Larimar a C**. El
 compilador la genera en C con ese mismo nombre y con tipos de C, así que C puede llamarla, guardarla en un
 puntero o recibirla como callback:
 
@@ -2820,17 +3026,16 @@ c_code {
     }
 }
 
-extern type Data;
-extern type ItemHandler = (int32, String, Data?) -> void;
+native type ItemHandler = (int32, String, Context) -> void;
 
-extern function for_each_name(f: ItemHandler, data: Data?): void;
+native function for_each_name(f: ItemHandler, data: Context): void;
 
-export function show_item(index: int32, name: String, data: Data?): void {
+export function show_item(index: int32, name: String, data: Context): void {
     println("${index}: ${name.toUpperCase()}");
 }
 
 function main(): int32 {
-    for_each_name(show_item, null);
+    for_each_name(show_item);
     return 0;
 }
 ```
@@ -2847,17 +3052,18 @@ Lo que garantiza `export function`:
 - **El nombre en C es exactamente el suyo**, también dentro de un módulo: `public export function
   lm_double(...)` en el módulo `gfx.shapes` sigue llamándose `lm_double` en C.
 - **Firma de C limpia**: sin parámetros ocultos. Números y `bool` tal cual, `String` llega como
-  `const char*` (se convierte a texto de Larimar al entrar), tipos extern como su tipo de C y structs de C
-  por valor.
+  `const char*` (se convierte a texto de Larimar al entrar), tipos `native` como su tipo de C y structs de
+  C por valor.
 - **Cada llamada desde C tiene su propia memoria**, que nace al entrar y muere al volver, como cualquier
   función. Lo que la función crea no se queda colgando en C.
-- **Un `c_code` puede usarla directamente**. Si su firma solo tiene números, `bool`, `String` y tipos extern
-  opacos, el compilador escribe su prototipo antes de los `c_code`. Si usa structs de C o tipos `c "..."`,
-  que quizá define el propio `c_code`, el prototipo va después, y el `c_code` que la llame debe declararla él mismo.
+- **Un `c_code` puede usarla directamente**. Si su firma solo tiene números, `bool`, `String` y tipos
+  `native` opacos, el compilador escribe su prototipo antes de los `c_code`. Si usa structs de C o tipos de
+  C concretos, que quizá define el propio `c_code`, el prototipo va después, y el `c_code` que la llame
+  debe declararla él mismo.
 
 Y lo que no admite, porque C no podría manejarlo:
 
-- devolver `String` (C no sabría cuándo liberarlo); se devuelve un número, un tipo extern o un struct de C;
+- devolver `String` (C no sabría cuándo liberarlo); se devuelve un número, un tipo `native` o un struct de C;
 - `throws`: un error no puede atravesar código C, así que se captura dentro;
 - `in` en los parámetros, memorias (`byte[*]`), clases, listas o `Any`;
 - `main`.
@@ -2883,7 +3089,7 @@ src/
 
 Lo que declara un módulo es **privado** salvo que lleve `public` delante. Se puede marcar cualquier
 declaración con nombre: funciones, constantes, variables globales, structs, clases, interfaces, enums y
-declaraciones `extern`.
+declaraciones `native`.
 
 ```ts
 // src/geo/shapes.lar
@@ -3689,13 +3895,13 @@ c_code {
     static const char* mbed_error_text(MbedConn* c) { return c->text; }
 }
 
-extern type MbedHandle released by mbed_free;
-extern function mbed_open(s: Socket, host: String, caFile: String, verify: bool): MbedHandle?;
-extern function mbed_free(c: MbedHandle): void;
-extern function mbed_read(c: MbedHandle, buffer: byte[]): int32;
-extern function mbed_write(c: MbedHandle, bytes: byte[]): int32;
-extern function mbed_error(c: MbedHandle): int32;
-extern function mbed_error_text(c: MbedHandle): String;
+native type MbedHandle released by mbed_free;
+native function mbed_open(s: Socket, host: String, caFile: String, verify: bool): MbedHandle?;
+native function mbed_free(c: MbedHandle): void;
+native function mbed_read(c: MbedHandle, buffer: byte[]): int32;
+native function mbed_write(c: MbedHandle, bytes: byte[]): int32;
+native function mbed_error(c: MbedHandle): int32;
+native function mbed_error_text(c: MbedHandle): String;
 
 /** https:// with mbedTLS. caFile: the trusted certificates, in PEM. */
 public class MbedTls implements TlsProvider {
@@ -3993,7 +4199,7 @@ libraries = ["SDL3", "ws2_32"]
 ### Bibliotecas de C: estáticas, dinámicas y código fuente
 
 Un programa de Larimar puede usar cualquier biblioteca de C. Se declaran sus funciones con
-`extern function` (y sus tipos con `extern type`) y el `larimar.toml` le dice al compilador de C dónde
+`native function` (y sus tipos con `native type`) y el `larimar.toml` le dice al compilador de C dónde
 está. Hay cuatro formas de traer una biblioteca, según cómo venga:
 
 | Cómo viene | En `[c]` | Resultado |
@@ -4017,10 +4223,10 @@ libraries = ["mylib", "tone", "m"]           # libmylib.a (estática), libtone.s
 c_include "vendor.h";
 c_include "<math.h>";
 
-extern function mylib_triple(x: int32): int32;     // de libmylib.a
-extern function tone_play(hz: int32): void;        // de libtone.so
-extern function embedded_add(a: int32, b: int32): int32;   // de embedded.c
-extern function sqrt(x: float64): float64;         // de libm
+native function mylib_triple(x: int32): int32;     // de libmylib.a
+native function tone_play(hz: int32): void;        // de libtone.so
+native function embedded_add(a: int32, b: int32): int32;   // de embedded.c
+native function sqrt(x: float64): float64;         // de libm
 ```
 
 **Cómo se elige entre estática y dinámica.** `libraries = ["x"]` se convierte en `-lx`, y el enlazador
@@ -4060,9 +4266,9 @@ archivo, la biblioteca se enlaza de forma estática o se compila como código fu
 // src/win.lar: el módulo que habla con Windows
 c_include "<windows.h>";
 
-public extern type HWND;
-public extern function GetConsoleWindow(): HWND;
-public extern function MessageBoxA(owner: HWND, text: String, caption: String, kind: uint32): int32;
+public native type HWND;
+public native function GetConsoleWindow(): HWND;
+public native function MessageBoxA(owner: HWND, text: String, caption: String, kind: uint32): int32;
 
 public const MB_YESNO: uint32 = 0x04;
 public const IDYES: int32 = 6;
@@ -4082,7 +4288,7 @@ function main(): int32 {
 ```
 
 con `libraries = ["user32"]` en `[c]`. Declarar todo lo de Windows en un módulo `win` evita repetir
-las declaraciones `extern`: cada `extern type` es un tipo distinto en cada módulo que lo declara, así
+las declaraciones `native`: cada `native type` es un tipo distinto en cada módulo que lo declara, así
 que el `HWND` debe venir de un solo sitio.
 
 ### El editor: `larimar check` y `larimar lsp`
@@ -4442,9 +4648,11 @@ Y es legible:
 | lo que devuelve una función | un primer parámetro `RtMem* rt_dest`: la memoria de la llamada (`NULL` si la función no crea su resultado) |
 | `geo.shapes.area` | `geo__shapes__area` (el archivo principal conserva sus nombres) |
 | `main` | `user_main`, llamada desde el `main` de C |
-| `extern type X;` / `= c "T";` | `typedef void* Ext_X;` / `typedef T Ext_X;` |
-| `extern type X = (A) -> R;` | `typedef R (*Ext_X)(A);` |
-| `extern type X = struct { ... };` | el struct de C, con su nombre; Larimar no lo define |
+| `native type X;` / `= T;` | `typedef void* Ext_X;` / `typedef T Ext_X;` |
+| `native type X = (A) -> R;` | `typedef R (*Ext_X)(A);` |
+| `native struct X { ... }` | el struct de C, con su nombre; Larimar no lo define |
+| `native type X = T* { native function m() = c_m; }` | `x.m()` es `c_m(x)`: una función `static` que la llama |
+| un callback con `Context` | una función de C (`lm_ctx_...`) que llama a la de Larimar que lleva el contexto |
 | `export function f` | la función de Larimar (`larimar_f`) y una función `f` con tipos de C que la llama |
 | `Any` | `RtAny`: `{ kind; union de valores }`; una tabla es un `RtTable*` con índice hash; un struct va en una copia |
 | `Thread`, `synchronized` | hilos del sistema (`pthread` o Windows); un candado recursivo por objeto |
@@ -4646,8 +4854,8 @@ Lo que Larimar no tiene, ni va a tener, con lo que se usa en su lugar:
   hilo mientras espera. El servidor TLS aún no está en Windows. El TLS de cliente de macOS y Windows está
   escrito y compila, pero sus pruebas solo se han ejecutado en Linux.
 - Algunas operaciones de `String` y `Any` siguen siendo intrínsecas del compilador; las listas aún no se declaran en `std.lang`.
-- A C solo se le pueden pasar funciones de C (`extern` o `export`), no lambdas con capturas; el contexto
-  viaja por el `void* data` de la biblioteca. Un struct de C no puede tener campos arreglo (salvo un texto,
+- Una lambda con capturas solo va a C cuando la biblioteca da un `void*` de contexto como parámetro
+  (`Context`); si lo guarda en otro lado, el callback es una `export function`. Un struct de C no puede tener campos arreglo (salvo un texto,
   `char name[32]`, que se lee como `String`) ni uniones; se leen con una función en `c_code`.
 - Un puntero de C (`T*`) no se indexa (`p[i]`) ni se le suma; para un arreglo de C, una función en `c_code`.
   `&x` solo vale como argumento de una función de C.
@@ -4722,15 +4930,22 @@ let k: String = q > 0 ? "pos" : "neg";
 
 // C
 c_include "<stdio.h>";
-extern function puts(text: String): int32;
-extern function cExit(code: int32): void = c "exit";           // otro nombre en C
-extern const EOF: int32;
-extern const SIZE: int32 = c "(int)sizeof(long)";
-extern let errno: int32;
-extern type CFile = c "FILE*" released by fclose;               // un recurso: se suelta con su memoria
-extern function fopen(path: String, mode: String): CFile?;
-extern function fclose(f: CFile): int32;
-extern type Node = struct "struct node" { let next: Node*; let name: String; };
+native function puts(text: String): int32;
+native function cExit(code: int32): void = exit;           // otro nombre en C
+native const EOF: int32;
+native const SIZE: int32 = "(int)sizeof(long)";
+native let errno: int32;
+native type CFile = FILE* released by fclose;               // un recurso: se suelta con su memoria
+native function fopen(path: String, mode: String): CFile?;
+native function fclose(f: CFile): int32;
+native struct Node = "struct node" { let next: Node*; let name: String; }
+native type Doc = Doc* released by doc_close {                  // un tipo de C con miembros
+    let id: int32;                                              // un campo: d.id es d->id
+    native function title(): String = doc_title;                // d.title() es doc_title(d)
+}
+native type ItemFn = (int32, Context) -> void;                  // un callback con contexto:
+native function each(f: ItemFn, data: Context): void;           // each((i) -> { ... }) acepta lambdas
+c_code { static int twice_all(int x) { return lar"twice"(x); } }   // lar"..." nombra a Larimar desde C
 two_results(&a, &b);                                            // & solo como argumento de C
 release(file);                                                  // soltarlo antes
 #when windows                                                   // elegido al compilar el C; cada directiva
@@ -4778,10 +4993,10 @@ panic("no debería pasar: ${x}");                     // se detiene con el mensa
 
 // C
 c_include "<math.h>";
-extern function sqrt(x: float64): float64;
-extern type Handle;                                   // void*
-extern type File = c "FILE*";                         // un tipo de C concreto
-extern type Point = struct { let x: float32; let y: float32; };   // un struct de C
-extern type Op = (int32, int32) -> int32;             // un puntero a función de C
+native function sqrt(x: float64): float64;
+native type Handle;                                   // void*
+native type File = FILE*;                             // un tipo de C concreto
+native struct Point { let x: float32; let y: float32; }    // un struct de C
+native type Op = (int32, int32) -> int32;             // un puntero a función de C
 export function restar(a: int32, b: int32): int32 { return a - b; }   // C puede llamarla
 ```

@@ -881,8 +881,8 @@ server.<span class="tok-fn">run</span>();</pre>
               <pre><span class="tok-kw">c_include</span> <span class="tok-str">"&lt;stdio.h&gt;"</span>;
 <span class="tok-kw">c_include</span> <span class="tok-str">"&lt;math.h&gt;"</span>;
 
-<span class="tok-kw">extern</span> <span class="tok-kw">function</span> <span class="tok-fn">printf</span>(format: <span class="tok-type">String</span>, ...): <span class="tok-type">int32</span>;
-<span class="tok-kw">extern</span> <span class="tok-kw">function</span> <span class="tok-fn">sqrt</span>(x: <span class="tok-type">float64</span>): <span class="tok-type">float64</span>;
+<span class="tok-kw">native</span> <span class="tok-kw">function</span> <span class="tok-fn">printf</span>(format: <span class="tok-type">String</span>, ...): <span class="tok-type">int32</span>;
+<span class="tok-kw">native</span> <span class="tok-kw">function</span> <span class="tok-fn">sqrt</span>(x: <span class="tok-type">float64</span>): <span class="tok-type">float64</span>;
 
 <span class="tok-kw">function</span> <span class="tok-fn">main</span>(): <span class="tok-type">int32</span> {
     <span class="tok-fn">printf</span>(<span class="tok-str">"sqrt(2) = %f\n"</span>, <span class="tok-fn">sqrt</span>(<span class="tok-num">2.0</span>));
@@ -891,8 +891,8 @@ server.<span class="tok-fn">run</span>();</pre>
             </div>
             <div class="pairs">
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">c_include</div><div class="pair-v" data-i18n="i1">Adds a C #include.</div></div>
-              <div class="card" style="padding: 0.75rem;"><div class="pair-k">extern function</div><div class="pair-v" data-i18n="i2">Declares a C function.</div></div>
-              <div class="card" style="padding: 0.75rem;"><div class="pair-k">extern type</div><div class="pair-v" data-i18n="i3">An opaque pointer, a C type or a C struct.</div></div>
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">native function</div><div class="pair-v" data-i18n="i2">Declares a C function.</div></div>
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">native type</div><div class="pair-v" data-i18n="i3">An opaque pointer, a C type or a C struct.</div></div>
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">export function</div><div class="pair-v" data-i18n="i4">Makes a function callable from C.</div></div>
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">released by</div><div class="pair-v" data-i18n="i5">A C resource (FILE*, a socket) is released with its memory.</div></div>
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">#when windows</div><div class="pair-v" data-i18n="i6">What each system needs, chosen at compile time; every branch is checked.</div></div>

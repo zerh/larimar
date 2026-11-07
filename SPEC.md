@@ -51,7 +51,7 @@ might not foresee:
 - **Nothing is hidden.** No garbage collector, no hidden threads, no hidden control flow, no implicit
   conversions, no constructors, no overloading. What a program does can be read in its text.
 - **No undefined behavior.** Every operation of the language either has a defined result or stops the
-  program with a message ([§16.3](#163-panics)). Only code written in C (`c_code`, external functions)
+  program with a message ([§16.3](#163-panics)). Only code written in C (`c_code`, native functions)
   is outside this guarantee.
 - **Memory without a collector and without dangling references.** Every value that needs storage lives
   in a *memory* that is freed whole at a point that can be seen in the code ([§14](#14-memory)), and the
@@ -134,15 +134,15 @@ These words are reserved and cannot be identifiers:
 
 ```
 as        break     case      catch     class     const     continue  default
-else      enum      extends   extern    false     for       function  heap
-if        implements import   in        interface is        let       native
+else      enum      extends   false     for       function  heap      if
+implements import   in        interface is        let       native
 new       null      operator  override  private   public    return    self
 static    struct    super     switch    synchronized          throw     throws
 true      try       when      while     yield     c_include c_code
 ```
 
 Also part of the language, but not reserved: `wait until`, `thread safe`, `released by`, `test`,
-`export`, `type`, `c` and `raw` (see the table below).
+`export`, `type`, `lar` (only inside `c_code`) and `raw` (see the table below).
 
 `new` and `private` are reserved but have no meaning: `new` is an error (objects are created with
 literals), and `private` is an error that says it is not needed (what is not `public` is private).
@@ -153,10 +153,10 @@ These words have a meaning only in one place, and are identifiers everywhere els
 |---|---|
 | `test` | before `function` at the top level ([§22](#22-tests)) |
 | `export` | before `function` at the top level ([§19.9](#199-export-functions)) |
-| `type` | after `extern` and `native` |
+| `type` | after `native` |
 | `c` | before a string in `= c "..."` ([§19](#19-c-interoperability)) |
 | `raw` | immediately before `"""` ([§4.9](#49-raw-text-blocks)) |
-| `released by` | at the end of an `extern type` ([§19.7](#197-resources)) |
+| `released by` | in a `native type` ([§19.7](#197-resources)) |
 | `wait until` | at the end of a method signature ([§18.3](#183-wait-until)) |
 | `thread safe` | after a function type ([§18.4](#184-thread-safe-functions)) |
 
@@ -311,13 +311,13 @@ when it is used after `in` ([§14.5](#145-memories-of-your-own)).
 
 ### 5.9 C types
 
-`extern type` declares a type that comes from C ([§19.4](#194-extern-types)); `T*` is a pointer to C
+`native type` declares a type that comes from C ([§19.4](#194-native-types)); `T*` is a pointer to C
 data ([§19.6](#196-pointers)). They exist only for C interoperability.
 
 ### 5.10 Type identity and assignability
 
 Two types are identical when they are written with the same declaration and the same suffixes. Each
-declared type is distinct, even when two declarations are equal; each `extern type` is distinct, even
+declared type is distinct, even when two declarations are equal; each `native type` is distinct, even
 when the C types are the same.
 
 A value of type `V` is **assignable** to a place of type `T` when:
@@ -346,8 +346,8 @@ program = import* ( [ public ] declaration | #when block )*
 
 A file is a list of imports followed by declarations. At the top level there are only declarations:
 `const`, `let`, `function`, `test function`, `export function`, `struct`, `class`,
-`synchronized class`, `interface`, `enum`, `native type`, `c_include`, `c_code` and the `extern`
-declarations. Statements go only inside functions.
+`synchronized class`, `interface`, `enum`, `c_include`, `c_code` and the `native` declarations
+([§19](#19-c-interoperability)). Statements go only inside functions.
 
 Statements end with `;`. Blocks are written between `{` and `}`.
 
@@ -420,7 +420,7 @@ lives     = default | self | NAME
 - Functions are declared at the top level and inside types. Inside a body, functions are lambdas
   ([§10.13](#1013-lambdas)).
 - A function is not a value. To pass one, it is wrapped in a lambda: `(x) -> { return add(x, 1); }`.
-  The exception is a C function pointer ([§19.8](#198-c-function-pointers)).
+  The exception is a C function pointer ([§19.8](#198-c-function-pointers-and-callbacks)).
 - `in` on a parameter says where its data lives ([§15.3](#157-saying-where-a-parameter-lives-in)). `in`
   after the result type is allowed only in `native function`s and says the result is a view tied to the
   receiver (`in self`).
@@ -525,20 +525,17 @@ An enum value is one of its variants; a variant can carry fields. Enums are valu
 
 ### 9.6 Native types
 
-`native type NAME { ... }` declares the methods of a type that the compiler already knows (`String`,
-`Any`). It is used by the standard library ([§23](#23-predeclared-names)):
+`native type NAME { ... }` (without `=`) declares the methods of a type that the compiler already knows
+(`String`, `Any`). It is used by the standard library ([§23](#23-predeclared-names)); the native types
+of C are in [§19.4](#194-native-types):
 
 - `native function f(...);` without a body declares an operation the compiler implements;
-- `native function f(...) = expression;` defines the method as that expression, usually a call to an
-  external function;
+- `native function f(...) = expression;` defines the method as that expression, usually a call to a
+  native function;
 - `native let name: T;` declares a value read without parentheses, which the compiler implements
   (`length`);
 - `native operator [](i: int32): T;` declares indexing;
 - ordinary `function`s and `static` functions can also appear.
-
-A module of the standard library can also declare `native function f(...);` at the top level: a
-function the compiler implements, written in place at every call (`Memory.compact`, `Memory.limit`).
-Outside the functions the compiler knows it is an error.
 
 `native function ... = expression;` can also be written in a class, and so can
 `native let name: T = expression;`: a value read without parentheses (`sb.length`), computed by that
@@ -611,7 +608,7 @@ alone is short for `NAME: NAME`.
 - For an interface: an interface literal ([§9.4](#94-interfaces)).
 - For an enum variant: `E.V { ... }` ([§9.5](#95-enums)).
 - For `Any`: a table ([§17](#17-any)); entries without a name go by position.
-- For a C struct: [§19.4](#194-extern-types).
+- For a C struct: [§19.5](#195-native-structs-constants-and-variables).
 
 There is no `new` and there are no constructors: a literal creates the value; when something must be
 validated, a function does it and returns the literal.
@@ -686,7 +683,7 @@ be `null` ([§12](#12-optionals-and-narrowing)), `!` is allowed and does nothing
 | a floating type | an integer | truncated toward zero; a value beyond the limits gives the nearest limit; NaN gives 0 |
 | `float64` | `float32` and back | IEEE 754 conversion |
 | `Any` | any type an `Any` holds | an optional: [§17.3](#173-reading-a-value-as) |
-| a pointer | another pointer, or an opaque `extern type` | the same address ([§19.6](#196-pointers)) |
+| a pointer | another pointer, or an opaque `native type` | the same address ([§19.6](#196-pointers)) |
 
 `as` between other types is an error. There are no implicit conversions.
 
@@ -1157,7 +1154,7 @@ Fixed answers:
 
 - a method of an interface: flows from every argument and from `self`, and creates (any class may
   implement it);
-- an external function: when its first parameter is a memory ([§19.3](#193-external-functions)), it
+- a native function: when its first parameter is a memory ([§19.3](#193-native-functions)), it
   creates and its result flows from nothing; otherwise it does not create, and its result may flow from
   every argument (C may return a pointer into one of them);
 - a `native function` with `in self` in its result flows from `self`.
@@ -1182,7 +1179,7 @@ What they decide:
 
 `in q` follows `q`'s own `in`: in `a: T in b, b: T in default`, `a` is static. Parameters that live in each
 other in a circle are an error. `in` applies only to parameters whose type needs memory; it is not allowed
-on a memory parameter, on external functions or on export functions. A method that overrides another, or
+on a memory parameter, on native functions (except `in default` on a callback, [§19.8](#198-c-function-pointers-and-callbacks)) or on export functions. A method that overrides another, or
 implements an interface, repeats the same `in`.
 
 ### 15.8 `clone()`
@@ -1397,61 +1394,94 @@ c_code { C text }
 ```
 
 The C text is copied to the generated C, after the headers and before the program. Braces inside C
-strings, characters and comments do not count toward the closing brace. The C must use only what Larimar
-declares as its doors: `extern` declarations (C seen from Larimar) and `export function`s (Larimar seen
-from C); the names the compiler generates for everything else are not part of the language. Code in
+strings, characters and comments do not count toward the closing brace. Inside it, **`lar"NAME"`** (or
+`lar"module.NAME"`) is replaced by the C name of that Larimar function, type or global variable; a name
+that does not exist is a compile error. The prototypes of the functions named this way whose types are
+numbers, `bool`, `String` or `void` are written before the `c_code`. Otherwise the C must use only the
+doors of §19: `native` declarations (C seen from Larimar), `export function`s (Larimar seen from C) and
+`lar"..."`; the names the compiler generates for everything else are not part of the language. Code in
 `c_code` is outside every guarantee of this document.
 
-### 19.3 External functions
+### 19.3 Native functions
 
 ```
-extern function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = c "C NAME" ] ;
+native function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] ;
+C = NAME | "C TEXT"
 ```
 
-- Parameter and result types: numbers, `bool`, `String` (a `const char*`), external types and their
-  optionals, C structs, pointers, `T[]` of numbers or `bool`, and `byte[*]` memories. `...` allows
-  variable arguments.
+A `native` declaration names something of C. The name on the left is the Larimar one; after `=` comes
+the C one: a name, or C text in quotes when it is not a plain name (`"(fio_start)"`, a cast). Without
+`=`, the C name is the same.
+
+- Parameter and result types: numbers, `bool`, `String` (a `const char*`), `String?` parameters (`null`
+  is `NULL`), native types and their optionals, C structs, pointers, `T[]` of numbers or `bool`, and
+  `byte[*]` memories. `...` allows variable arguments.
 - A `T[]` of numbers or `bool` is passed as two C arguments: a pointer to the elements and their count.
 - A result of type `String` must be a zero-terminated text that keeps existing (static, or created in a
   memory the function receives). `String?` turns `NULL` into `null`.
-- `= c "name"` gives the C name when it differs from the Larimar one. A `public extern function` keeps
-  its C name inside a module.
+- A `public native function` keeps its C name inside a module.
 - A memory as the **first** parameter is not written in the call: the function receives the memory of
   the call, so its result lives where the caller says ([§14.7](#147-results-of-functions)). In C it is an
   `RtMem*`, and `rt_mem_alloc(m, bytes, 0)` reserves zeroed bytes in it. The C may use the memory only
   during the call. A memory in another position is passed explicitly.
+- A parameter of type `Context` is not written in the call either: it carries the function given in the
+  callback parameter ([§19.8](#198-c-function-pointers-and-callbacks)).
+- When the module has no `c_include` and no `c_code`, the compiler writes the C prototype of each native
+  function whose C is a plain name.
+- A native function has no body. In the standard library, `std.memory` declares `limit` and `compact` as
+  native functions that the compiler writes itself.
 
-### 19.4 External types
-
-```
-extern type NAME [ released by NAME ] ;                     an opaque pointer (void*)
-extern type NAME = c "C TYPE" [ released by NAME ] ;        a concrete C type
-extern type NAME = struct [ "C NAME" ] { field* } ;         a C struct, by value
-extern type NAME = ( Type , ... ) -> Type ;                 a pointer to a C function
-```
-
-A C struct declares only the fields the program uses; the C definition (from a header or `c_code`) gives
-the layout. Its fields are numbers, `bool`, external types, pointers, C structs and `String`. A `String`
-field is a C text, read-only, and a view of the C storage. A C struct is used like a Larimar struct
-(literals, field access, copies, lists), fields not given in a literal are zero, and it has no methods
-or operators.
-
-### 19.5 External constants and variables
+### 19.4 Native types
 
 ```
-extern const NAME : Type [ = c "C EXPRESSION" ] ;
-extern let NAME : Type ;
+native type NAME [ released by NAME ] ;                                   an opaque pointer (void*)
+native type NAME = CTYPE [ released by NAME ] ( ; | { member* } )         a C type
+native type NAME = ( Type , ... ) -> Type ;                               a pointer to a C function (§19.8)
+CTYPE  = NAME *...  |  "C TYPE"
+member = let NAME : Type [ = NAME ] ;
+       | native function NAME parameters [ : Type ] [ in lives ] [ throws Type ] = ( C | expression ) ;
+       | native let NAME : Type = ( C | expression ) ;
+       | function ...  |  static function ...  |  static native function ... = C ;
 ```
 
-`extern const` names a C constant or macro (or a C expression), read-only; it can be a `String`.
-`extern let` names a C variable that can be read and assigned; it cannot be a `String`.
+Each native type is distinct, even when two declarations are equal. The members of a C type:
+
+- **`let`** declares a field of the C struct the type points to, read and written with `x.f` (C's `x->f`);
+  after `=` comes its C name when it is another. A type with fields must be a pointer (`= c_struct*`).
+- **`native function m(...) = C;`** calls that C function with `self` as its first argument, then the
+  arguments; before `self` goes only the memory of the call, when the first parameter is one. A parameter
+  of type `Context` is not part of the method. Any other expression after `=` is Larimar, as in a class.
+- **`native let x: T = C;`** is the same with no arguments, read without parentheses.
+- **`function`** is a method written in Larimar; `self` is the C value.
+- **`static native function f(...) = C;`** calls that C function without `self`; `static function` is
+  written in Larimar. Both are called as `NAME.f(...)`.
+
+A native type with members is declared outside `#when`. The methods of a type the compiler knows
+(`native type String { ... }`, without `=`) are declared only in the standard library ([§9.6](#96-native-types)).
+
+### 19.5 Native structs, constants and variables
+
+```
+native struct NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static function ... )* }
+native const NAME : Type [ = C ] ;
+native let NAME : Type [ = NAME ] ;
+```
+
+A native struct is a C struct, by value. It declares only the fields the program uses; the C definition
+(from a header or `c_code`) gives the layout. Its fields are numbers, `bool`, native types, pointers, C
+structs and `String`; after `=` comes a field's C name when it is another. A `String` field is a C text,
+read-only, and a view of the C storage. A native struct is used like a Larimar struct (literals, field
+access, copies, lists, methods written in Larimar); fields not given in a literal are zero.
+
+`native const` names a C constant, a macro or a C expression (`= "sizeof(struct stat)"`), read-only; it
+can be a `String`. `native let` names a C variable that can be read and assigned; it cannot be a `String`.
 
 ### 19.6 Pointers
 
-`T*` is a pointer to C data: a number, `bool`, a C struct, an external type or another pointer.
+`T*` is a pointer to C data: a number, `bool`, a C struct, a native type or another pointer.
 
 - `p.f` reads or writes a field of the struct `p` points to; on a `null` pointer it is a panic.
-- `&x` is the address of a local variable and is allowed **only** as an argument of an external function
+- `&x` is the address of a local variable and is allowed **only** as an argument of a native function
   (also as `&x as U*`). So the address never outlives the call.
 - An array passed where C asks for a `T*` is passed as a pointer to its elements.
 - Pointers can be compared with `null` and converted with `as` ([§10.10](#1010-conversions-as)). They
@@ -1460,28 +1490,42 @@ extern let NAME : Type ;
 
 ### 19.7 Resources
 
-`extern type T ... released by f` declares a **resource**: a C value that `f` releases.
+`native type T ... released by f` declares a **resource**: a C value that `f` releases.
 
 - A resource lives in a memory like any value; when the memory is freed, `f` is called on it.
 - `release(x)` releases it now. Releasing twice does nothing; using a released resource is a panic.
 - The functions that create it return `T?`: a `NULL` pointer, `-1` (also `INVALID_HANDLE_VALUE`) or a
-  negative descriptor arrives as `null`.
+  negative descriptor arrives as `null`. A Larimar function that returns what such a function makes
+  creates it where its caller says.
 - `f` takes exactly one `T`, and only `release` and the freeing of memories can call it.
 - An object that holds a resource cannot be cloned.
 - If `f` exists only on some platforms, so does the resource.
 
-### 19.8 C function pointers
+### 19.8 C function pointers and callbacks
 
-A value of an `extern type F = (A) -> R` is a C function: an `extern function` or an `export function`
+A value of a `native type F = (A) -> R` is a C function: a `native function` or an `export function`
 with exactly that signature, or a value that C returns. It can be passed, stored and called like a
-function. A lambda is not a C function and cannot be used as one.
+function.
+
+`Context` (declared by `std.lang`) is C's `void*` that a C function gives back to its callback. When `F`
+has one parameter of type `Context`, a native function that takes an `F` and a `Context` also takes
+**any Larimar function** of the same signature without the `Context`, lambdas included, with what they
+capture:
+
+- the C function receives a function of C made by the compiler, and the Larimar function as the Context;
+- an `export function` or a `native function` of type `F` goes as it is, with `NULL` as the Context;
+- without `in`, C may call it only during the call; with **`in default`** on the parameter, C may keep it,
+  and what it captures must live as long as the whole program;
+- the Larimar function cannot return `String`, and `F` cannot carry resources.
+
+A member of a native type that calls a C function taking such a callback takes the Larimar function.
 
 ### 19.9 Export functions
 
 `export function NAME(...)` makes a Larimar function callable from C, with exactly its own name (also
 inside a module) and a plain C signature.
 
-- Parameters and results: numbers, `bool`, `String` parameters (a `const char*`), external types and C
+- Parameters and results: numbers, `bool`, `String` parameters (a `const char*`), native types and C
   structs. It cannot return `String`, declare `throws`, use `in`, take memories, classes, lists or `Any`,
   or be `main`.
 - Each call from C has its own temporary memory, freed when it returns.
@@ -1504,7 +1548,7 @@ A directive chooses code when the C is compiled (C's `#if`), not when the progra
 - A later `#when` is the next alternative (C's `#elif`). A branch that an earlier one already covers is
   an error (`#when macos` after `#when unix`).
 - The body is a list of statements of the surrounding block, without braces. At the top level, the body
-  contains only `c_include` and `extern` declarations, and `#else` follows only `#when windows` or
+  contains only `c_include` and `native` declarations (without members), and `#else` follows only `#when windows` or
   `#when unix`.
 - The compiler checks every branch, whatever the platform it runs on.
 - A name declared in every branch, with the same type, exists after `#end`. A name declared in only some
@@ -1590,7 +1634,8 @@ the compiler); their meaning is part of the language.
 
 ### 23.2 Types
 
-`String`, `StringBuilder`, `Any`, `Thread` and `Runnable` (`interface Runnable { function run(): void; }`).
+`String`, `StringBuilder`, `Any`, `Thread`, `Runnable` (`interface Runnable { function run(): void; }`) and
+`Context` (C's `void*` given back to a callback, [§19.8](#198-c-function-pointers-and-callbacks)).
 
 ### 23.3 Methods of `String`
 
@@ -1663,7 +1708,6 @@ topLevel             = const NAME : Type = expression ;
                      | function
                      | test function
                      | export function
-                     | native nativeFunction
                      | struct NAME { ( field | static staticMember | function | operator )* }
                      | [ synchronized ] class NAME [ extends qualifiedName ] [ implements qualifiedName ( , qualifiedName )* ]
                            { ( field | static staticMember | [ override ] function | native ( nativeFunction | nativeLet ) | operator )* }
@@ -1672,7 +1716,7 @@ topLevel             = const NAME : Type = expression ;
                      | native type NAME { ( static staticMember | native ( nativeFunction | nativeLet | nativeOperator ) | function )* }
                      | c_include "TEXT" ;
                      | c_code { C TEXT }
-                     | extern externDeclaration
+                     | native cDeclaration
 
 function             = function [ NAME . ] NAME parameters [ : Type ] [ in lives ] [ throws Type ]
                            [ wait until ( expression ) ] ( block | ; )
@@ -1687,13 +1731,21 @@ nativeFunction       = function NAME parameters [ : Type ] [ in lives ] [ throws
 nativeOperator       = operator ( [ ] | SYMBOL ) parameters : Type ;
 nativeLet            = let NAME : Type [ = expression ] ;
 
-externDeclaration    = function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = c "TEXT" ] ;
+cDeclaration         = function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] ;
                      | type NAME [ released by NAME ] ;
-                     | type NAME = c "TEXT" [ released by NAME ] ;
-                     | type NAME = struct [ "TEXT" ] { field* } ;
+                     | type NAME = CTYPE [ released by NAME ] ( ; | { cMember* } )
                      | type NAME = ( [ Type ( , Type )* ] ) -> Type ;
-                     | const NAME : Type [ = c "TEXT" ] ;
-                     | let NAME : Type ;
+                     | struct NAME [ = C ] { ( cField | function | static staticMember )* }
+                     | const NAME : Type [ = C ] ;
+                     | let NAME : Type [ = NAME ] ;
+cMember              = cField
+                     | native function NAME parameters [ : Type ] [ in lives ] [ throws Type ] = ( C | expression ) ;
+                     | native let NAME : Type = ( C | expression ) ;
+                     | function
+                     | static ( function | native function NAME parameters [ : Type ] = C ; )
+cField               = let NAME : Type [ = NAME ] ;
+C                    = NAME | "TEXT"
+CTYPE                = NAME *... | "TEXT"
 
 platformDeclarations = #when PLATFORM topLevel* ( #when PLATFORM topLevel* )* [ #else topLevel* ] #end
 
@@ -1769,5 +1821,5 @@ These belong to the tools and the library, which have their own versions and doc
 - the commands `larimar build`, `run`, `check`, `test`, `lsp`, `dap`, the plugins, and the file
   `larimar.toml` (with `[dependencies]` and `deps/`);
 - the names and the shape of the generated C, other than what [§19](#19-c-interoperability) defines
-  (`RtMem*`, `rt_mem_alloc`, the names of external and export functions);
+  (`RtMem*`, `rt_mem_alloc`, `lar"..."`, the names of native and export functions);
 - the text of compile errors.
