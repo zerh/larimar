@@ -1169,6 +1169,14 @@ function call(c: Call in default): String {
         if (f.isExtern && isOpt(fr) && isResource(fr.elem!)) {     // C makes a resource: its cell, in the memory of the call
             return "${fr.elem!.name}__new(${callMem(c)}, ${f.cName}(${asg.join(", ")}), ${c.line})";
         }
+        if (f.isExtern && f.textReleaser != null) {     // a text C made: copied into the memory of the call, then released
+            let p: String = hoist("char*", "(char*)(${f.cName}(${asg.join(", ")}))");
+            let s: String = hoist("RtString", "rt_str_clone(rt_str_c(${p}), ${callMem(c)}, ${c.line})");
+            line("if (${p}) ${f.textReleaser!.cName}((void*)${p});");
+            if (fr == T_STRING) { return s; }
+            let o: String = cType(fr);
+            return "(${p} ? ((${o}){ .has = true, .value = ${s} }) : ((${o}){ .has = false }))";
+        }
         if (c.place != null || !f.isExtern && returnsData(f.sig!.elem!)) { asg = first(callMem(c), asg); }   // the memory of the call
         throwsErr = f.throwsType != null;
         if (throwsErr) { asg.push("&err"); }

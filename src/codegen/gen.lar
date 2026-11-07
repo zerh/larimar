@@ -24,12 +24,13 @@ import semantics.types {
     hasCapture, cSuffix, isMemParam, PatternInfo, PatK, SwitchInfo, ForInfo, CatchInfo, CallInfo, CallK, MemberInfo, MbK,
     includes, usesAny, usesThreads, cCode, files, structs, nativeMethods, classes, interfaces, enums, externTypes, functions, globals,
     lambdaList, funcTypes, typeOrder, structOf, classOf, interfaceOf, enumOf, parentOf, syncField, chain, findMethod, allFields, classDepth, primByName,
-    externInfos, externInfoOf, ExternTypeInfo, cCodeStd, includeWhens, isResource, platformCondition, nativeOwner
+    externInfos, externInfoOf, ExternTypeInfo, cCodeStd, includeWhens, isResource, platformCondition, nativeOwner,
+    optT, buildingLibrary, libraryPrefix
 };
 import std.text { isIdentifierPart, isDigit };
 import codegen.runtimeselect { selectRuntime };
 import codegen.prune { prune, braceDelta };
-import semantics.linker { filePaths, FILE_LINES };
+import semantics.linker { filePaths, fileSources, FILE_LINES };
 import semantics.expressions { hasRefs };
 import codegen.expressions {
     expr, value, hoist, strip, lazyPre, lazy, zero, stringLiteral, addrOf, discard, patternTest, bindPattern,
@@ -255,11 +256,7 @@ public function generate(): String {
     }
     for (f in functions) {                      // export: the C function C code calls
         if (f.isExtern || f.exportName == "") { continue; }
-        functionsOut.add("${exportHeader(f, false)} {\n");
-        let xs: String[*] = [] in default;
-        for (i, p in f.sig!.params) { xs.push(p == T_STRING ? "rt_str_c(${exportParam(f, i)})" : exportParam(f, i)); }
-        let callx: String = "${f.cName}(${xs.join(", ")})";
-        functionsOut.add(f.sig!.elem! == T_VOID ? "    ${callx};\n}\n\n" : "    return ${callx};\n}\n\n");
+        functionsOut.add(exportBody(f));
     }
     let methods: StringBuilder = {} in default;
     for (s in structs) {
@@ -320,7 +317,7 @@ public function generate(): String {
         methods.add("}\n\n");
     }
     let init: String = initGlobals();
-    let main: String = mainWrapper();
+    let main: String = buildingLibrary ? "" : mainWrapper();
     for (c in classes) {
         if (!c.sync && !c.thread) {
             for (f in c.fields) { requireClone(f.type); }
@@ -443,7 +440,7 @@ public function generate(): String {
     if (enums.length > 0) {
         section(out, "Enum names");
         for (e in enums) {
-            out.add("const char* const ${e.name}__names[] = { ");
+            out.add("${internal()}const char* const ${e.name}__names[] = { ");
             for (i, v in e.variants) {
                 if (i > 0) { out.add(", "); }
                 out.add("\"${v.name}\"");
@@ -456,9 +453,9 @@ public function generate(): String {
         section(out, "Class information, vtables and dispatch");
         for (c in classesByDepth()) {
             let parent: String = c.superName != "" ? "&rtclass_${c.superName}" : "NULL";
-            out.add("const RtClass rtclass_${c.name} = { \"${c.name}\", ${parent} };\n");
+            out.add("${internal()}const RtClass rtclass_${c.name} = { \"${c.name}\", ${parent} };\n");
         }
-        for (c in classesByDepth()) { out.add("const ${c.name}_VTable vtable_${c.name} = { ${vtableInit(c, c)} };\n"); }
+        for (c in classesByDepth()) { out.add("${internal()}const ${c.name}_VTable vtable_${c.name} = { ${vtableInit(c, c)} };\n"); }
         for (c in classesByDepth()) {
             for (m in c.methods) {
                 if (m.introducer == c.name) { dispatchHelper(out, c, m); }
@@ -492,15 +489,16 @@ public function generate(): String {
                 let n: int64 = s.type.size;
                 if (n < 1) { n = 1; }
                 out.add("static uint8_t ${s.cName}__buf[${n}];\n");
-                out.add("RtMem ${s.cName};\n");
+                out.add("${internal()}RtMem ${s.cName};\n");
             } else if (isMemory(s)) {
-                out.add("RtMem ${s.cName};\n");
+                out.add("${internal()}RtMem ${s.cName};\n");
             } else {
-                out.add("${cType(s.type)} ${s.cName};\n");
+                out.add("${internal()}${cType(s.type)} ${s.cName};\n");
             }
         }
     }
 
+    if (exports().length > 0) { exportHelpers(out); }
     section(out, "Functions");
     out.add(functionsOut.toString());
     let anyBuilder: bool = false;
@@ -536,6 +534,7 @@ public function generate(): String {
     section(out, "Entry point");
     out.add(init);
     out.add(main);
+    if (buildingLibrary) { libraryGlue(out); }
 
     let roots: String[*] = ["main"] in default;
     for (f in functions) {
@@ -563,6 +562,67 @@ public function generate(): String {
     head.add(runtime);
     head.add(program);
     return head.toString();
+}
+
+/** In a library everything but its export functions stays inside it: two libraries (and the program) do not clash. */
+function internal(): String { return buildingLibrary ? "static " : ""; }
+
+/** What export functions use to give C its texts and the handles of a library's objects (cut when unused). */
+function exportHelpers(out: StringBuilder): void {
+    section(out, "Export helpers");
+    if (buildingLibrary) { out.add("static void lm_library_init(void);\n"); }
+    out.add("typedef struct RtHandle { void* object; RtMem mem; } RtHandle;\n\n");
+    out.add("static RtHandle* rt_handle_new(void) {\n    RtHandle* h = (RtHandle*)calloc(1, sizeof(RtHandle));\n");
+    out.add("    if (!h) rt_panic(\"out of memory\", 0);\n    h->mem = rt_mem_growable();\n    return h;\n}\n\n");
+    out.add("static void rt_handle_release(void* p) {\n    RtHandle* h = (RtHandle*)p;\n    if (!h) return;\n");
+    out.add("    rt_mem_free(&h->mem);\n    free(h);\n}\n\n");
+    out.add("static void* rt_handle_object(void* p, const char* fn, const char* param) {\n");
+    out.add("    if (!p) {\n        char msg[256];\n");
+    out.add("        snprintf(msg, sizeof msg, \"%s: '%s' is NULL\", fn, param);\n        rt_panic(msg, 0);\n    }\n");
+    out.add("    return ((RtHandle*)p)->object;\n}\n\n");
+    out.add("static void* rt_handle_object_or_null(void* p) { return p ? ((RtHandle*)p)->object : NULL; }\n\n");
+    out.add("static char* rt_export_text(RtString s) {\n    char* out = (char*)malloc((size_t)s.len + 1);\n");
+    out.add("    if (!out) rt_panic(\"out of memory\", 0);\n    if (s.len > 0) memcpy(out, s.ptr, (size_t)s.len);\n");
+    out.add("    out[s.len] = 0;\n    return out;\n}\n");
+}
+
+/**
+ * What a library gives C besides its export functions: <prefix>_free for its texts, <prefix>_<Class>_release
+ * for its handles, <prefix>_interface, and the start: the globals are made before the first call (when the
+ * library is loaded, where the C compiler allows it).
+ */
+function libraryGlue(out: StringBuilder): void {
+    section(out, "Library");
+    let p: String = libraryPrefix != "" ? "${libraryPrefix}_" : "";
+    out.add("static int lm_library_ready = 0;\n");
+    out.add("static void lm_library_init(void) {\n    if (lm_library_ready) return;\n    lm_library_ready = 1;\n");
+    if (hasInit) { out.add("    init_globals();\n"); }
+    out.add("}\n");
+    out.add("#if defined(__GNUC__) || defined(__clang__) || defined(__TINYC__)\n");
+    out.add("__attribute__((constructor)) static void lm_library_load(void) { lm_library_init(); }\n#endif\n");
+    out.add("void ${p}free(void* text) { free(text); }\n");
+    for (c in handleClasses()) { out.add("void ${p}${c}_release(void* handle) { rt_handle_release(handle); }\n"); }
+    out.add("const char ${p}larimar_interface[] = \"larimar-interface:${INTERFACE_MARK}\";\n");
+    out.add("const char* ${p}interface(void) { return ${p}larimar_interface + 18; }\n");
+}
+
+/** Where the interface hash goes in a library's C: larimar build writes it once the .lar is written. */
+public const INTERFACE_MARK: String = "@INTERFACE@";
+
+/** The classes the export functions of a library take or return, in order: C knows them as handles. */
+function handleClasses(): String[*] {
+    let out: String[*] = [] in default;
+    for (f in functions) {
+        if (f.isExtern || f.exportName == "" || f.sig == null) { continue; }
+        let ts: Type[*] = [f.sig!.elem!] in default;
+        for (t in f.sig!.params) { ts.push(t); }
+        for (t in ts) {
+            if (!isHandle(t)) { continue; }
+            let n: String = plainName((isOpt(t) ? t.elem! : t).name);
+            if (!out.contains(n)) { out.push(n); }
+        }
+    }
+    return out;
 }
 
 /** An extern type's declarations: the one for every platform, or one per platform. */
@@ -684,7 +744,7 @@ function externPrototype(f: FunctionInfo in default): String {
             ps.push("${cType(p.elem!)}*");             // T[]: the elements and their count
             ps.push("int32_t");
         } else {
-            ps.push(externCType(p));
+            ps.push(f.releases == "String" ? "void*" : externCType(p));     // it releases texts: free(void*), sqlite3_free(void*)
         }
     }
     if (f.varargs) { ps.push("..."); }
@@ -771,23 +831,81 @@ function exportHeader(f: FunctionInfo, early: bool): String {
     let ps: String[*] = [] in default;
     for (i, p in f.sig!.params) { ps.push("${abiType(p, early)} ${exportParam(f, i)}"); }
     if (ps.length == 0) { ps.push("void"); }
-    return "${abiType(f.sig!.elem!, early)} ${f.exportName}(${ps.join(", ")})";
+    let r: Type = f.sig!.elem!;
+    let ret: String = r == T_STRING || r == optT(T_STRING) ? "char*" : abiType(r, early);
+    return "${ret} ${f.exportName}(${ps.join(", ")})";
 }
+
+/** A class of a library, as C sees it: a handle (its object, and the memory a result of C's lives in). */
+function isHandle(t: Type): bool { return isClass(t) || (isOpt(t) && isClass(t.elem!)); }
+
+/**
+ * The body of an export function: C's values become Larimar's, the Larimar function runs, and its
+ * result goes to C: a text as a copy that C frees (malloc), an object of a library as a new handle.
+ */
+function exportBody(f: FunctionInfo): String {
+    let sb: StringBuilder = {} in default;
+    sb.add("${exportHeader(f, false)} {\n");
+    if (buildingLibrary) { sb.add("    lm_library_init();\n"); }
+    let xs: String[*] = [];
+    for (i, p in f.sig!.params) {
+        let x: String = exportParam(f, i);
+        if (p == T_STRING) {
+            xs.push("rt_str_c(${x})");
+        } else if (p == optT(T_STRING)) {
+            let o: String = cType(p);
+            xs.push("(${x} ? ((${o}){ .has = true, .value = rt_str_c(${x}) }) : ((${o}){ .has = false }))");
+        } else if (isHandle(p)) {
+            let c: String = cType(isOpt(p) ? p.elem! : p);
+            xs.push(isOpt(p) ? "(${c})rt_handle_object_or_null(${x})" : "(${c})rt_handle_object(${x}, \"${f.exportName}\", \"${f.params[i].name}\")");
+        } else {
+            xs.push(x.clone());
+        }
+    }
+    let r: Type = f.sig!.elem!;
+    if (returnsData(r)) {
+        if (isHandle(r)) {                      // a new handle: the result lives in its memory
+            sb.add("    RtHandle* h = rt_handle_new();\n");
+            sb.add("    h->object = ${f.cName}(&h->mem${xs.length > 0 ? ", " : ""}${xs.join(", ")});\n");
+            if (isOpt(r)) { sb.add("    if (!h->object) { rt_handle_release(h); return NULL; }\n"); }
+            sb.add("    return h;\n}\n\n");
+            return sb.toString();
+        }
+        sb.add("    RtMem mem = rt_mem_growable();\n");
+        sb.add("    ${cType(r)} r = ${f.cName}(&mem${xs.length > 0 ? ", " : ""}${xs.join(", ")});\n");
+        if (r == T_STRING) {
+            sb.add("    char* out = rt_export_text(r);\n");
+        } else if (r == optT(T_STRING)) {
+            sb.add("    char* out = r.has ? rt_export_text(r.value) : NULL;\n");
+        } else {
+            sb.add("    ${abiType(r, false)} out = r;\n");
+        }
+        sb.add("    rt_mem_free(&mem);\n    return out;\n}\n\n");
+        return sb.toString();
+    }
+    let callx: String = "${f.cName}(${xs.join(", ")})";
+    sb.add(r == T_VOID ? "    ${callx};\n}\n\n" : "    return ${callx};\n}\n\n");
+    return sb.toString();
+}
+
+
 
 function exportParam(f: FunctionInfo, i: int32): String { return "${escapeName(f.params[i].name)}_c"; }
 
 /** A type as C code sees it. Early (before the c_code): an opaque extern type is still void*. */
 function abiType(t: Type, early: bool): String {
     if (early && isExternT(t)) { return "void*"; }
+    if (isHandle(t)) { return "void*"; }                 // a handle of a library (its C type is in the .h)
     return externCType(t);
 }
 
 /** Its prototype can go before the c_code: numbers, bool, const char* and opaque extern types only. */
 function earlyExport(f: FunctionInfo): bool {
     for (p in f.sig!.params) {
-        if (!plainC(p)) { return false; }
+        if (!plainC(p) && p != optT(T_STRING) && !isHandle(p)) { return false; }
     }
-    return plainC(f.sig!.elem!);
+    let r: Type = f.sig!.elem!;
+    return plainC(r) || r == optT(T_STRING) || isHandle(r);
 }
 
 function plainC(t: Type): bool {
@@ -931,7 +1049,7 @@ public function functionHeader(f: FunctionInfo): String {
     if (f.throwsType != null) { err = ps.isEmpty() ? "RtError* err_out" : ", RtError* err_out"; }
     let all: String = "${ps}${err}";
     if (all.isEmpty()) { all = "void"; }
-    let st: String = f.cName == "user_main" ? "static " : "";
+    let st: String = f.cName == "user_main" ? "static " : internal();
     return "${st}${cType(f.sig!.elem!)} ${f.cName}(${all})";
 }
 
@@ -954,7 +1072,7 @@ function methodHeader(m: MethodInfo, isStructMethod: bool): String {
         let so: StructInfo? = structOf(m.owner);
         recv = so != null && so!.decl.cName != "" ? "${so!.decl.cName}* self" : "${tname(m.owner)}* self";   // a native struct: C's own
     }
-    let st: String = isStructMethod ? "" : "static ";
+    let st: String = isStructMethod ? internal() : "static ";
     let rest: String = !ps.isEmpty() ? ", ${ps}" : "";
     return "${st}${cType(m.sig!.elem!)} ${methodName(m)}(${recv}${rest}${errParam(m.throwsType != null)})";
 }
@@ -963,7 +1081,7 @@ function nativeMethodHeader(m: MethodInfo): String {
     let ps: String = params(m.paramSymbols, m.memParams);
     if (returnsData(m.sig!.elem!)) { ps = ps.isEmpty() ? "RtMem* rt_dest" : "RtMem* rt_dest, ${ps}"; }
     let rest: String = !ps.isEmpty() ? ", ${ps}" : "";
-    return "${cType(m.sig!.elem!)} ${methodName(m)}(${cType(nativeOwner(m.owner))} self${rest}${errParam(m.throwsType != null)})";
+    return "${internal()}${cType(m.sig!.elem!)} ${methodName(m)}(${cType(nativeOwner(m.owner))} self${rest}${errParam(m.throwsType != null)})";
 }
 
 public function lambdaHeader(l: LambdaInfo): String {
@@ -1864,4 +1982,191 @@ function classClone(out: StringBuilder, c: ClassInfo in default): void {
         out.add("    ${path} = ${cloneOf(f.type, path)};\n");
     }
     out.add("    return n;\n}\n\n");
+}
+
+// =====================================================================================
+// A library's interface: its .h (C) and its .lar (Larimar), from its export functions
+// =====================================================================================
+
+/** The name a class or function has in Larimar's own code, without its module (the linker's a__b). */
+function plainName(n: String): String {
+    let at: int32? = n.lastIndexOf("__");
+    return at != null ? n.substring(at + 2) : n;
+}
+
+/** The export functions of the library, in the order they are declared. */
+function exports(): FunctionInfo[*] {
+    let out: FunctionInfo[*] = [] in default;
+    for (f in functions) {
+        if (!f.isExtern && f.exportName != "" && f.sig != null) { out.push(f); }
+    }
+    return out;
+}
+
+/** What is wrong with the library's interface (two exports or classes with the same name): one message each. */
+public function libraryProblems(): String[*] {
+    let out: String[*] = [] in default;
+    let seen: Any = {} in default;
+    for (f in exports()) {
+        let n: String = plainName(f.name);
+        if (seen.contains(n)) { out.push("two export functions are called '${n}': the library's .lar would have both (give one another name)"); }
+        seen[n] = true;
+    }
+    for (c in handleClasses()) {
+        if (seen.contains(c)) { out.push("'${c}' is the name of a class and of an export function of the library: rename one"); }
+        seen[c] = true;
+    }
+    if (exports().length == 0) { out.push("the library has no export functions: mark the functions C calls with 'export function'"); }
+    return out;
+}
+
+/** The doc comment (a doc block or // lines) right above a declaration, one line each. */
+function docAbove(encoded: int32): String[*] {
+    let out: String[*] = [];
+    let index: int32 = encoded / FILE_LINES;
+    if (index < 0 || index >= fileSources.length) { return out; }
+    let lines: String[*] = fileSources[index].split("\n");
+    let l: int32 = encoded % FILE_LINES - 2;
+    let found: String[*] = [];
+    while (l >= 0) {
+        let t: String = lines[l].trim();
+        if (!(t.startsWith("//") || t.startsWith("*") || t.startsWith("/*"))) { break; }
+        let clean: String = t;
+        if (clean.startsWith("/**")) { clean = clean.substring(3); }
+        else if (clean.startsWith("/*")) { clean = clean.substring(2); }
+        else if (clean.startsWith("//")) { clean = clean.substring(2); }
+        else if (clean.startsWith("*") && !clean.startsWith("*/")) { clean = clean.substring(1); }
+        if (clean.endsWith("*/")) { clean = clean.substring(0, clean.length - 2); }
+        if (clean.startsWith("*/")) { clean = ""; }
+        found.push(clean.trim().clone());
+        l -= 1;
+    }
+    let i: int32 = found.length - 1;
+    while (i >= 0) {
+        if (found[i] != "" || out.length > 0) { out.push(found[i].clone()); }
+        i -= 1;
+    }
+    while (out.length > 0 && out[out.length - 1] == "") { out.pop(); }
+    return out;
+}
+
+/** A doc comment for the .h or the .lar ("" when there is none). */
+function docBlock(lines: String[*], indent: String): String {
+    if (lines.length == 0) { return ""; }
+    if (lines.length == 1) { return "${indent}/** ${lines[0]} */\n"; }
+    let sb: StringBuilder = {} in default;
+    sb.add("${indent}/**\n");
+    for (l in lines) { sb.add(l == "" ? "${indent} *\n" : "${indent} * ${l}\n"); }
+    sb.add("${indent} */\n");
+    return sb.toString();
+}
+
+/** A type of an export function in the library's .h. */
+function headerType(t: Type, result: bool): String {
+    if (t == T_STRING || t == optT(T_STRING)) { return result ? "char*" : "const char*"; }
+    if (isHandle(t)) { return "${libraryPrefix != "" ? "${libraryPrefix}_" : ""}${plainName((isOpt(t) ? t.elem! : t).name)}*"; }
+    return t == T_VOID ? "void" : cType(t);
+}
+
+/** The C prototype of an export function in the .h. */
+function headerPrototype(f: FunctionInfo): String {
+    let ps: String[*] = [] in default;
+    for (i, p in f.sig!.params) { ps.push("${headerType(p, false)} ${escapeName(f.params[i].name)}"); }
+    if (ps.length == 0) { ps.push("void"); }
+    return "${headerType(f.sig!.elem!, true)} ${f.exportName}(${ps.join(", ")})";
+}
+
+/** What the .h says a result is, after its doc comment. */
+function resultNote(f: FunctionInfo): String {
+    let p: String = libraryPrefix != "" ? "${libraryPrefix}_" : "";
+    let r: Type = f.sig!.elem!;
+    if (r == T_STRING) { return "The text is yours: free it with ${p}free."; }
+    if (r == optT(T_STRING)) { return "NULL, or a text that is yours: free it with ${p}free."; }
+    if (isHandle(r)) {
+        let c: String = plainName((isOpt(r) ? r.elem! : r).name);
+        return isOpt(r) ? "NULL, or a new ${c} that is yours: give it back with ${p}${c}_release." : "A new ${c} that is yours: give it back with ${p}${c}_release.";
+    }
+    return "";
+}
+
+/** The library's header for C: its handles, its export functions, how to free what they give. */
+public function libraryHeader(name: String, version: String, kind: String, hash: String, made: String): String {
+    let p: String = libraryPrefix != "" ? "${libraryPrefix}_" : "";
+    let guard: String = "${name.toUpperCase()}_H";
+    let sb: StringBuilder = {} in default;
+    sb.add("/*\n * ${name}.h: ${name} ${version}, a ${kind} library written in Larimar (${made}).\n");
+    sb.add(" * Written by larimar build from the export functions: do not edit it.\n *\n");
+    sb.add(" * - A text it returns (char*) is yours: free it with ${p}free.\n");
+    let hs: String[*] = handleClasses();
+    if (hs.length > 0) { sb.add(" * - A handle (${p}${hs[0]}*...) is an object of the library: give it back with its _release.\n"); }
+    sb.add(" * - The texts it receives are copied when it keeps them; NULL is an error, except for a String? (may be NULL).\n");
+    sb.add(" * - A panic inside the library (a bug: an index out of range, a NULL handle) prints it and ends the program.\n */\n");
+    sb.add("#ifndef ${guard}\n#define ${guard}\n\n#include <stdint.h>\n#include <stdbool.h>\n\n");
+    sb.add("/* The interface it was built with: ${p}interface() gives the one of the library linked. */\n");
+    sb.add("#define ${name.toUpperCase()}_INTERFACE \"${hash}\"\n\n");
+    sb.add("#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
+    for (c in hs) { sb.add("typedef struct ${p}${c} ${p}${c};\n"); }
+    if (hs.length > 0) { sb.add("\n"); }
+    for (f in exports()) {
+        let doc: String[*] = docAbove(f.line);
+        let note: String = resultNote(f);
+        if (note != "") {
+            if (doc.length > 0) { doc.push(""); }
+            doc.push(note);
+        }
+        sb.add(docBlock(doc, ""));
+        sb.add("${headerPrototype(f)};\n\n");
+    }
+    for (c in hs) { sb.add("/** Gives back a ${c} (NULL does nothing). */\nvoid ${p}${c}_release(${p}${c}* handle);\n\n"); }
+    sb.add("/** Frees a text the library returned (NULL does nothing). */\nvoid ${p}free(void* text);\n\n");
+    sb.add("/** The interface hash of the library (as in ${name}.interface): compare it with ${name.toUpperCase()}_INTERFACE. */\n");
+    sb.add("const char* ${p}interface(void);\n\n");
+    sb.add("#ifdef __cplusplus\n}\n#endif\n\n#endif\n");
+    return sb.toString();
+}
+
+/** A type of an export function in the library's .lar. */
+function bindingType(t: Type): String {
+    if (isHandle(t)) { return isOpt(t) ? "${plainName(t.elem!.name)}?" : plainName(t.name); }
+    return t.text;
+}
+
+/**
+ * The library's module for Larimar: native declarations of its export functions, with the C names of
+ * the .h. A text is copied into the caller's memory and freed; a class is a resource that gives the handle back.
+ */
+public function libraryModule(name: String, version: String, kind: String, made: String): String {
+    let p: String = libraryPrefix != "" ? "${libraryPrefix}_" : "";
+    let sb: StringBuilder = {} in default;
+    sb.add("// ${name} ${version}: a ${kind} library written in Larimar (${made}).\n");
+    sb.add("// Written by larimar build from the export functions: do not edit it. ${name}.interface has the hash\n");
+    sb.add("// of this file, and so does the library inside: a program builds only when they agree.\n\n");
+    sb.add("c_include \"${name}.h\";\n\n");
+    for (c in handleClasses()) { sb.add("public native type ${c} = ${p}${c}* released by ${p}${c}_release;\n"); }
+    if (handleClasses().length > 0) { sb.add("\n"); }
+    for (f in exports()) {
+        let ps: String[*] = [] in default;
+        let names: String[*] = [] in default;
+        for (i, t in f.sig!.params) {
+            ps.push("${f.params[i].name}: ${bindingType(t)}");
+            names.push(f.params[i].name);
+        }
+        let n: String = plainName(f.name);
+        let r: Type = f.sig!.elem!;
+        let ret: String = ": ${r == T_VOID ? "void" : bindingType(r)}";
+        let released: String = r == T_STRING || r == optT(T_STRING) ? " released by ${p}free" : "";
+        sb.add(docBlock(docAbove(f.line), ""));
+        if (isHandle(r) && !isOpt(r)) {         // C gives a handle that is never NULL: the same type as in the library
+            sb.add("public function ${n}(${ps.join(", ")}): ${bindingType(r)} { return ${n}_c(${names.join(", ")})!; }\n");
+            sb.add("native function ${n}_c(${ps.join(", ")}): ${bindingType(r)}? = ${f.exportName};\n\n");
+        } else if (isHandle(r)) {
+            sb.add("public native function ${n}(${ps.join(", ")})${ret} = ${f.exportName};\n\n");
+        } else {
+            sb.add("public native function ${n}(${ps.join(", ")})${ret} = ${f.exportName}${released};\n\n");
+        }
+    }
+    sb.add("// what gives back the texts and objects of the library (only the compiler calls them)\n");
+    sb.add("native function ${p}free(text: String): void = ${p}free;\n");
+    for (c in handleClasses()) { sb.add("native function ${p}${c}_release(handle: ${c}): void = ${p}${c}_release;\n"); }
+    return sb.toString();
 }

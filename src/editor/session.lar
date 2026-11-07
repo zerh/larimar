@@ -9,8 +9,9 @@ import std.io.files as Files;
 import std.encoding.json as Json;
 import std.io.console as Console;
 import syntax.ast { Program };
-import semantics.linker { link, linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES };
-import semantics.types { files };
+import semantics.linker { link, linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES, libraryRoots };
+import project.libraries { LarimarLibrary, larimarLibraries };
+import semantics.types { files, libraryRules, libraryPrefix };
 import semantics.analyzer { analyze, analysisErrors };
 import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
@@ -35,11 +36,41 @@ public function analyzeFile(main: String, shownFrom: String): bool {
     showFrom = Paths.absolute(shownFrom).clone() in default;
     let mainPath: String = Paths.normalize(Paths.absolute(main)).clone() in default;
     let root: String = sourceRoot != "" ? sourceRoot : Paths.parent(Paths.absolute(main));
+    findLibraryRoots(mainPath);
     program = link(mainName, source, root.clone() in default, stdDir(), mainPath);
     if (linkErrors.length > 0) { return false; }
     for (f in fileNames) { files.push(f); }
     analyze(program);
     return analysisErrors.length == 0;
+}
+
+/**
+ * The folders of the Larimar libraries the project of a file links (static_ and dynamic_libraries of its
+ * larimar.toml, with their .interface): `import textkit` finds textkit.lar there. larimar build checks them.
+ */
+function findLibraryRoots(main: String): void {
+    libraryRoots.clear();
+    libraryRules = false;
+    let dir: String = Paths.parent(main);
+    while (dir != "") {
+        let toml: String = Paths.join(dir, "larimar.toml");
+        if (Files.isFile(toml)) {
+            let source: String? = readSource(toml);
+            if (source == null) { return; }
+            try {
+                let config: Any = Toml.parse(source!);
+                // a library's code (its tests too): export functions named <prefix>_<name>, with its classes
+                libraryRules = (config.project.kind as String ?? "program") == "library";
+                libraryPrefix = (config.library.prefix as String ?? config.project.name as String ?? "").clone() in default;
+                let ignored: String[*] = [];
+                for (l in larimarLibraries(dir, config, false, ignored)) { libraryRoots.push(l.dir.clone() in default); }
+            } catch (TomlError e) {}
+            return;
+        }
+        let up: String = Paths.parent(dir);
+        if (up == dir) { break; }
+        dir = up;
+    }
 }
 
 /** Where std/ is: $LARIMAR_HOME/std, or next to the tool (bin/larimar -> std/). */

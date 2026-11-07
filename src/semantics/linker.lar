@@ -278,12 +278,21 @@ function moduleFile(path: String): String {
             found = candidate;
         }
     }
+    if (found == "") {                                // a library written in Larimar: its .lar, next to its .a or .so
+        for (d in libraryRoots) {
+            let candidate: String = Paths.join(d, relative);
+            if (Files.isFile(candidate)) { return candidate; }
+        }
+    }
     if (found == "" && testsKept != "none") {         // tests (and the editor): also from the project's folder (tests.support...)
         let fromProject: String = Paths.join(Paths.parent(rootDir), relative);
         if (Files.isFile(fromProject)) { return fromProject; }
     }
     return found != "" ? found : own;
 }
+
+/** The folders of the Larimar libraries the project links (static_ and dynamic_library_paths with a .interface). */
+public let libraryRoots: String[*] = [] in default;
 
 /** When a module is in two dependencies: both files ("" when not). */
 let moduleClash: String = "";
@@ -549,6 +558,10 @@ function rewriteDecl(m: Module in default, d: Node in default): void {
             params(f.params);
             typeRef(f.ret);
             f.prototype = !headers;
+            if (f.releasedBy != "") {            // what releases its text: a name of this module (or one it sees)
+                let v: String = rm.values[f.releasedBy] as String ?? "";
+                if (v != "") { f.releasedBy = v; }
+            }
         }
         default -> {}
     }

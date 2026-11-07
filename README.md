@@ -56,7 +56,19 @@ C functions, constants, macros, globals, structs, pointers and resources are dec
 it lives in is freed, or with `release(x)`), C types with fields and methods
 (`native type Db = sqlite3* { native function errmsg(): String = sqlite3_errmsg; }`), callbacks that take
 lambdas when C passes a `Context`, `lar"name"` inside `c_code`, and `#when windows` ... `#else` ... `#end` for
-what changes between platforms (compiled as `#if`, every branch checked). See chapter 23 of `MANUAL.md`.
+what changes between platforms (compiled as `#if`, every branch checked). A text that C makes with `malloc`
+is copied and freed (`native function strdup(s: String): String released by free`). See chapter 23 of `MANUAL.md`.
+
+## Libraries for C and for Larimar
+
+A project with `kind = "library"` builds a library instead of an executable, static by default
+(`[library] type = "dynamic"` or `larimar build --dynamic` for a `.so`/`.dylib`/`.dll`). `build/<name>/`
+gets four files: `lib<name>.a`, `<name>.h` for C, `<name>.lar` for Larimar (its `export function`s as
+`native` declarations) and `<name>.interface` with an 8-digit hash of the `.lar` that the library also has
+inside, so a program that links it (`static_libraries` or `dynamic_libraries` in `[c]`, then
+`import <name>`) builds only with files of one build. The library's classes go to C as handles, its texts
+as copies to free; everything else of its C is static, so libraries and programs do not clash. See
+"Libraries written in Larimar" in chapter 26 of `MANUAL.md`.
 
 ## Building from C Bootstrap
 
@@ -105,7 +117,7 @@ Test the compiler:
 
 ```bash
 ./larimarc --version
-# Should output: larimar 1.2.0 (language 1.0)
+# Should output: larimar 1.3.0 (language 1.0)
 
 # Compile a test program
 echo 'function main(): void { println("Hello!"); }' > test.lar
@@ -165,7 +177,7 @@ checks all of it.
 ```toml
 [project]
 name = "larimarc"
-version = "1.2.0"
+version = "1.3.0"
 main = "src/main.lar"
 
 [c]
@@ -197,6 +209,7 @@ flags = ["-O2"]
 | editor/dap.lar | Debugger: DAP adapter over lldb-dap, values shown as Larimar |
 | project/cc.lar | Calling the C compiler and other programs |
 | project/testing.lar | Test runner: larimar test and test functions |
+| project/libraries.lar | Libraries written in Larimar: their files, the interface hash and its checks |
 
 ## Self-Hosting
 

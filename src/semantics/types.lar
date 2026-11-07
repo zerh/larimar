@@ -30,6 +30,16 @@ public class Type {
 }
 
 let typeIndex: Any = {} in default;
+
+/**
+ * The code of a library ([project] kind = "library", also its tests and the editor): an export function is
+ * called <prefix>_<name> in C (unless it says = c_name), and it may take and return the library's classes.
+ */
+public let libraryRules: bool = false;
+public let libraryPrefix: String = "";
+
+/** larimar build of a library: no main, and only the export functions are seen from outside its C. */
+public let buildingLibrary: bool = false;
 public let allTypes: Type[*] = [] in default;
 
 function intern(t: Type in default): Type {
@@ -510,8 +520,10 @@ public class FunctionInfo {
     let creates: bool = false;
     /** export function: the name C calls it by ("" when not exported). */
     let exportName: String = "";
-    /** The resource type it releases (`released by` it): only release() may call it. */
+    /** The resource type it releases (`released by` it): only release() may call it. "String": the texts of C. */
     let releases: String = "";
+    /** native function f(): String = c_f released by r: the function that releases the text C gives. */
+    let textReleaser: FunctionInfo? = null;
     /** A C function that takes a callback and its Context: their parameters (declared order), and whether C keeps them. */
     let ctxParam: int32 = -1;
     let ctxCallback: int32 = -1;

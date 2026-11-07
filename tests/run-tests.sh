@@ -105,7 +105,7 @@ case "plugins-deps" in *"$FILTER"*)
     printf '[project]\nname = "app"\n\n[dependencies]\nsql = "github.com/zerh/sql@v1.0.0"\n' > "$T/app/larimar.toml"
     printf 'import sql.core;\nfunction main(): int32 { println(core.hello()); return 0; }\n' > "$T/app/src/main.lar"
     printf 'public function hello(): String { return "from deps"; }\n' > "$T/app/deps/sql/src/sql/core.lar"
-    printf '[project]\nname = "sql"\n\n[c]\nlibraries = ["m"]\n' > "$T/app/deps/sql/larimar.toml"
+    printf '[project]\nname = "sql"\n\n[c]\ndynamic_libraries = ["m"]\n' > "$T/app/deps/sql/larimar.toml"
     missing=""
     out="$(LARIMAR_HOME="$T/home" "$LARIMARC" add x@1 2>&1)"; code=$?
     printf "%s\n" "$out" | grep -qF "minero: add x@1" || missing="$missing\n  the plugin did not get its arguments: $out"

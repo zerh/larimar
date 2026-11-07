@@ -7,7 +7,7 @@ document says, and an implementation is correct when it does what this document 
 [Manual](MANUAL.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 1.2.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
+`larimar 1.3.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
@@ -156,7 +156,7 @@ These words have a meaning only in one place, and are identifiers everywhere els
 | `type` | after `native` |
 | `c` | before a string in `= c "..."` ([§19](#19-c-interoperability)) |
 | `raw` | immediately before `"""` ([§4.9](#49-raw-text-blocks)) |
-| `released by` | in a `native type` ([§19.7](#197-resources)) |
+| `released by` | in a `native type` ([§19.7](#197-resources)), and after a `native function` that returns a text ([§19.3](#193-native-functions)) |
 | `wait until` | at the end of a method signature ([§18.3](#183-wait-until)) |
 | `thread safe` | after a function type ([§18.4](#184-thread-safe-functions)) |
 
@@ -1405,7 +1405,7 @@ doors of §19: `native` declarations (C seen from Larimar), `export function`s (
 ### 19.3 Native functions
 
 ```
-native function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] ;
+native function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;
 C = NAME | "C TEXT"
 ```
 
@@ -1419,6 +1419,10 @@ the C one: a name, or C text in quotes when it is not a plain name (`"(fio_start
 - A `T[]` of numbers or `bool` is passed as two C arguments: a pointer to the elements and their count.
 - A result of type `String` must be a zero-terminated text that keeps existing (static, or created in a
   memory the function receives). `String?` turns `NULL` into `null`.
+- **`released by r`** after a result of type `String` or `String?`: the text belongs to the caller (C made
+  it with `malloc` or similar). It is copied into the memory where the call's result goes, and then `r` is
+  called on it; `NULL` is not released. `r` is a native function with exactly one `String` parameter
+  (written `void*` in C), and only the compiler calls it. `released by` on any other result is a compile error.
 - A `public native function` keeps its C name inside a module.
 - A memory as the **first** parameter is not written in the call: the function receives the memory of
   the call, so its result lives where the caller says ([§14.7](#147-results-of-functions)). In C it is an
@@ -1522,14 +1526,45 @@ A member of a native type that calls a C function taking such a callback takes t
 
 ### 19.9 Export functions
 
-`export function NAME(...)` makes a Larimar function callable from C, with exactly its own name (also
-inside a module) and a plain C signature.
+```
+export function NAME parameters [ : Type ] [ = NAME ] block
+```
 
-- Parameters and results: numbers, `bool`, `String` parameters (a `const char*`), native types and C
-  structs. It cannot return `String`, declare `throws`, use `in`, take memories, classes, lists or `Any`,
-  or be `main`.
+`export function` makes a Larimar function callable from C with a plain C signature. Its C name is the
+one after `=`, else its own name (also inside a module), else, in a library ([§19.10](#1910-libraries)),
+`<prefix>_NAME`.
+
+- Parameters: numbers, `bool`, `String` and `String?` (a `const char*`; `NULL` is `null`), native types and
+  C structs.
+- Results: `void`, numbers, `bool`, native types, C structs, and `String` or `String?`: a new
+  zero-terminated copy made with `malloc`, which belongs to C (`NULL` for `null`).
+- It cannot declare `throws`, use `in` (on parameters or the result), take memories, lists or `Any`, take
+  or return classes (except in a library), or be `main`.
 - Each call from C has its own temporary memory, freed when it returns.
 - If C calls it from another thread, the thread rules of [§18](#18-threads) do not apply to that call.
+
+### 19.10 Libraries
+
+A program can be built as a library (`kind = "library"` in its project file): it has no `main`, and C sees
+only its export functions, plus `<prefix>_free`, `<prefix>_<Class>_release` and `<prefix>_interface`.
+Everything else of its C has internal linkage, so libraries and programs do not clash. The prefix is
+given by the project (by default, its name; it may be empty). In a library:
+
+- An export function is called `<prefix>_NAME` in C, unless it says `= NAME`; the names above are not
+  available to it.
+- Its parameters and results may be only numbers, `bool`, `String`, `String?` and the library's classes and
+  their optionals.
+- A class is a **handle** in C (`<prefix>_<Class>*`). An object returned to C lives, with everything it
+  creates afterwards, in a memory of its own, freed by `<prefix>_<Class>_release`. A `NULL` handle passed
+  where a class is expected is a panic; where an optional is expected, it is `null`.
+- A `String` result is freed by C with `<prefix>_free`.
+- The globals are initialized before the first call.
+
+The compiler also writes the library's interface for C (a header) and for Larimar (a module of `native`
+declarations of the same functions, where a class is a resource released by `<prefix>_<Class>_release`
+and a text is `released by <prefix>_free`), and an interface hash: the first 8 hexadecimal digits of the
+SHA-256 of that module, which the library contains and returns from `<prefix>_interface`. A program that
+links the library compiles only if the module it imports, the hash and the library agree.
 
 ---
 
@@ -1707,7 +1742,7 @@ topLevel             = const NAME : Type = expression ;
                      | let NAME : Type = expression ;
                      | function
                      | test function
-                     | export function
+                     | export function NAME parameters [ : Type ] [ = NAME ] block
                      | struct NAME { ( field | static staticMember | function | operator )* }
                      | [ synchronized ] class NAME [ extends qualifiedName ] [ implements qualifiedName ( , qualifiedName )* ]
                            { ( field | static staticMember | [ override ] function | native ( nativeFunction | nativeLet ) | operator )* }
@@ -1731,7 +1766,7 @@ nativeFunction       = function NAME parameters [ : Type ] [ in lives ] [ throws
 nativeOperator       = operator ( [ ] | SYMBOL ) parameters : Type ;
 nativeLet            = let NAME : Type [ = expression ] ;
 
-cDeclaration         = function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] ;
+cDeclaration         = function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;
                      | type NAME [ released by NAME ] ;
                      | type NAME = CTYPE [ released by NAME ] ( ; | { cMember* } )
                      | type NAME = ( [ Type ( , Type )* ] ) -> Type ;

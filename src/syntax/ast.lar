@@ -115,6 +115,7 @@ public class ExternFunctionDecl extends Node {
     let cName: String;
     let prototype: bool = false;
     let platform: String = "";
+    let releasedBy: String = "";        // ...: String = c_f released by f: C's text is copied, then f releases it
 }
 
 /** native const NAME: T [= c_name | = "C"];  native let NAME: T [= c_name];  a C constant (or macro) or a C global variable. */
@@ -153,7 +154,8 @@ public class FunctionDecl extends Node {
     let returnLives: String = "";
     let isStatic: bool = false;         // static methods don't receive 'self'
     let typeName: String = "";          // for "function Type.method()" external syntax
-    let exportName: String = "";        // export function: its name in C (the linker does not rename it)
+    let exportName: String = "";        // export function: its Larimar name (the linker does not rename it)
+    let exportC: String = "";           // export function f(...) = c_name { ... }: the C name written for it
     let isTest: bool = false;           // test function: only in `larimar test` (and the editor)
     let isProperty: bool = false;       // native let: read without parentheses, never assigned
     let isNative: bool = false;         // native function of a module: the compiler writes every call to it

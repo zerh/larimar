@@ -29,7 +29,7 @@ import semantics.types {
     classOf, interfaceOf, enumOf, functionOf, isExternTypeName, structMethod, interfaceMethod, variantOf, parentOf,
     findField, findMethod, isSubclass, implementor, P_GLOBAL, P_RESULT, primByName, ExternTypeInfo, externInfos,
     isCValue, isExternStruct, cCodeStd, CallInfo, CallK, BK, includeWhens, isResource, externInfoOf, platformWithin, isPtr, nativeOwner,
-    isContextT, contextView
+    isContextT, contextView, buildingLibrary, libraryRules, libraryPrefix
 };
 import semantics.expressions {
     check, coerce, typeOf, regionOf, hasRefs, note, resolveType, resolveTop, resolveValue, evalConst, ConstVal,
@@ -316,7 +316,7 @@ function collect(program: Program in default): void {
                 if (f.typeName == "" && !functionNameTaken(f.name, f.line)) {
                     let c: String = (f.name == "main" ? "user_main" : escapeName(f.name)) in default;
                     if (f.exportName != "") { c = "larimar_${c}" in default; }     // the C name is the export's
-                    functions.push(FunctionInfo { name: f.name, params: f.params, isExtern: false, decl: f, line: f.line, cName: c, owner: newOwner(), exportName: f.exportName } in default);
+                    functions.push(FunctionInfo { name: f.name, params: f.params, isExtern: false, decl: f, line: f.line, cName: c, owner: newOwner(), exportName: exportCName(f) } in default);
                     functionIndex[f.name] = functions.length - 1;
                 }
             }
@@ -438,26 +438,48 @@ function externSignature(e: ExternTypeInfo in default): void {
 
 let exportNames: Any = {} in default;
 
+/** The C name of an export function: = c_name, else its name (in a library, <prefix>_<name>). */
+function exportCName(f: FunctionDecl in default): String {
+    if (f.exportName == "") { return ""; }
+    if (f.exportC != "") { return f.exportC; }
+    return libraryRules && libraryPrefix != "" ? "${libraryPrefix}_${f.exportName}" : f.exportName;
+}
+
+/** What an export function can take: what C can pass, a String? (NULL is null), and in a library its classes. */
+function exportable(t: Type): bool {
+    if (t == optT(T_STRING)) { return true; }
+    if (!libraryRules) { return isCValue(t); }
+    // a library describes its functions to C (.h) and to Larimar (.lar) by itself: no types of other headers
+    return t.kind == TyK.Prim && t != T_ANY || isClass(t) || (isOpt(t) && isClass(t.elem!));
+}
+
 /** export function: C calls it by its name, with C types. */
 function checkExport(f: FunctionInfo in default, fd: FunctionDecl in default): void {
     let n: String = f.exportName;
-    if (n == "main") { error(f.line, "'main' cannot be exported; export another function."); }
+    if (fd.name == "main") { error(f.line, "'main' cannot be exported; export another function."); }
     if (exportNames.contains(n)) { error(f.line, "Another function is already exported as '${n}'."); }
     exportNames[n] = true;
-    for (g in functions) {
-        if (g.isExtern && g.cName == n) { error(f.line, "'${n}' is already the name of an extern function: C would have two functions with that name."); }
+    if (libraryRules && (n == "${libraryPrefix}_free" || n == "${libraryPrefix}_interface" || n.endsWith("_release"))) {
+        error(f.line, "'${n}' is a name the library gives C itself (${libraryPrefix}_free, ${libraryPrefix}_interface, <Class>_release): export it with another name (= c_name).");
     }
+    for (g in functions) {
+        if (g.isExtern && g.cName == n) { error(f.line, "'${n}' is already the name of a native function: C would have two functions with that name."); }
+    }
+    let what: String = libraryRules ? "numbers, bool, String, String? and the library's classes" : "numbers, bool, String, String?, native types and C structs";
     for (i, p in fd.params) {
         let pt: Type = f.sig!.params[i];
         if (p.lives != "") { error(p.line, "'in ${p.lives}' is not allowed on the parameters of an export function: C gives plain values."); }
-        if (!isError(pt) && !isCValue(pt)) {
-            error(p.line, "Parameter '${p.name}' of export function '${n}': C can only pass numbers, bool, String, native types and C structs.");
+        if (!isError(pt) && !exportable(pt)) {
+            error(p.line, isClass(pt) ? "Parameter '${p.name}' of export function '${n}': a class goes to C only from a library ([project] kind = \"library\"), where C keeps it as a handle."
+                                      : "Parameter '${p.name}' of export function '${n}': C can only pass ${what}.");
         }
     }
     let ret: Type = f.sig!.elem!;
-    if (!isError(ret) && ret != T_VOID && (!isCValue(ret) || ret == T_STRING)) {
-        error(f.line, "Export function '${n}' can only return numbers, bool, void, native types or C structs (C would not know when to free a String).");
+    if (!isError(ret) && ret != T_VOID && !exportable(ret)) {
+        error(f.line, isClass(ret) ? "Export function '${n}' returns a class: only a library ([project] kind = \"library\") gives C its objects, as handles."
+                                   : "Export function '${n}' can only return void or ${what}.");
     }
+    if (fd.returnLives != "") { error(f.line, "Export function '${n}' cannot say where its result lives: C receives its own copy (a text) or a handle."); }
     if (f.throwsType != null) { error(f.line, "Export function '${n}' cannot throw: an error cannot cross into C. Catch it inside."); }
 }
 
@@ -697,7 +719,10 @@ function signatures(program: Program in default): void {
         externResource(e);
     }
     for (f in functions) {
-        if (f.isExtern && f.sig != null) { externResourceRules(f); }
+        if (f.isExtern && f.sig != null) {
+            externResourceRules(f);
+            textReleaser(f);
+        }
     }
 }
 
@@ -751,6 +776,28 @@ function externResource(e: ExternTypeInfo in default): void {
         fi.releases = e.name;
         e.releasers.push(fi);
     }
+}
+
+/** ...: String = c_f released by r: r is a native function that takes the text (one String); only the compiler calls it. */
+function textReleaser(f: FunctionInfo in default): void {
+    let e: ExternFunctionDecl? = f.ext;
+    if (e == null || e.releasedBy == "") { return; }
+    let ret: Type = f.sig!.elem!;
+    if (ret != T_STRING && ret != optT(T_STRING)) {
+        error(f.line, "'released by' after a native function goes on a text that C makes ('${f.name}' returns ${ret.text}): for a C value, declare a resource (native type X released by f).");
+        return;
+    }
+    let r: FunctionInfo? = functionOf(e.releasedBy);
+    if (r == null || r.sig == null || !r.isExtern) {
+        error(f.line, "'${e.releasedBy}' (that releases the text of '${f.name}') is not a native function: declare it, e.g. native function ${e.releasedBy}(text: String): void;");
+        return;
+    }
+    if (r.sig!.params.length != 1 || r.sig!.params[0] != T_STRING || r.varargs) {
+        error(f.line, "'${e.releasedBy}' releases the text of '${f.name}', so it must take exactly one String: ${e.releasedBy}(text: String).");
+    }
+    if (r.releases != "" && r.releases != "String") { error(f.line, "'${e.releasedBy}' already releases '${r.releases}'."); }
+    r.releases = "String";
+    f.textReleaser = r;
 }
 
 /** A C function that makes a resource returns X? (C fails: null). A resource goes to C as X, not X?. */
@@ -1058,6 +1105,10 @@ function isConstantExpr(e: Expr): bool {
 function checkMain(): void {
     let m: FunctionInfo? = functionOf("main");
     if (m == null || m.sig == null) { return; }
+    if (buildingLibrary && !m.isExtern) {
+        error(m.line, "A library has no main: C (or the program that uses it) calls its export functions. Remove main, or build a program ([project] kind = \"program\").");
+        return;
+    }
     let ps: Type[*] = m.sig!.params;
     let params: bool = ps.length == 0 || (ps.length == 1 && isArray(ps[0], ArrK.Slice) && ps[0].elem! == T_STRING);
     let r: Type = m.sig!.elem!;
@@ -1724,6 +1775,7 @@ public function callMemory(f: FunctionInfo): bool { return f.isExtern && f.memPa
 
 /** A C function that makes a resource (returns X?, X released by f): the resource lives where its result goes. */
 function makesResource(f: FunctionInfo): bool {
+    if (f.isExtern && f.ext != null && f.ext!.releasedBy != "") { return true; }     // a text of C: copied into the call's memory
     return f.isExtern && f.sig != null && isOpt(f.sig!.elem!) && isResource(f.sig!.elem!.elem!);
 }
 

@@ -2321,7 +2321,7 @@ Salida: `square root of 2 = 1.414214`
 
 `c_include` trae el archivo de C que declara esas funciones (un **header**), y `native function` le
 dice a Larimar cómo se llama cada una. Con `<math.h>`, en algunos sistemas hay que **enlazar** (unir
-al programa cuando se construye) la biblioteca matemática: `libraries = ["m"]` en el `larimar.toml`
+al programa cuando se construye) la biblioteca matemática: `dynamic_libraries = ["m"]` en el `larimar.toml`
 de un proyecto ([capítulo 26](#26-proyectos-larimartoml-y-larimar-build)).
 
 Todo lo que viene de C se declara con **`native`**, y todas las declaraciones siguen la misma regla:
@@ -2818,6 +2818,39 @@ function main(): int32 {
 - Un recurso también puede tener [miembros](#tipos-de-c-con-miembros):
   `native type Db = sqlite3* released by sqlite3_close { native function errmsg(): String = sqlite3_errmsg; ... }`.
 
+### Textos que hace C: `released by` en una función
+
+Algunas funciones de C devuelven un texto que ya es de quien llama, hecho con `malloc` (o con el
+asignador de la propia biblioteca): `strdup`, `realpath(path, NULL)`, `sqlite3_expanded_sql`. Después del
+resultado (y de su `= C`, si lo tiene) va **`released by`** con la función que lo libera:
+
+```ts
+c_include "<string.h>";
+c_include "<stdlib.h>";
+
+native function strdup(text: String): String released by free;
+native function free(text: String): void;
+
+function main(): int32 {
+    for (i in 0..1000) {
+        let copy: String = strdup("texto ${i}");
+        if (i == 999) { println(copy); }
+    }
+    return 0;
+}
+```
+
+Salida: `texto 999`
+
+- El texto se **copia** en la memoria donde va el resultado, como cualquier resultado (el bloque de un
+  `let`, un objeto, `in scratch`, un buffer), y el de C se libera en seguida: Larimar no se queda con el
+  puntero de C, así que nada se pierde y nada se libera dos veces.
+- Con `String?`, un `NULL` llega como `null` (y no hay nada que liberar).
+- La función después de `released by` es una `native function` que recibe un `String`, y solo el
+  compilador la llama. En C se declara con `void*`, como lo están `free(void*)` o `sqlite3_free(void*)`.
+- Un texto que C conserva (uno estático, o uno que pertenece a algo de C, como `sqlite3_errmsg`) no se
+  libera: se declara sin `released by`.
+
 ### Cada sistema lo suyo: `#when`
 
 Lo que cambia entre sistemas se escribe entre **`#when`** y **`#end`**, que eligen al compilar el C
@@ -3049,23 +3082,57 @@ Salida:
 
 Lo que garantiza `export function`:
 
-- **El nombre en C es exactamente el suyo**, también dentro de un módulo: `public export function
-  lm_double(...)` en el módulo `gfx.shapes` sigue llamándose `lm_double` en C.
+- **Su nombre en C es el suyo**, también dentro de un módulo: `public export function lm_double(...)` en
+  el módulo `gfx.shapes` sigue llamándose `lm_double` en C. **`= nombre_c`** después de la firma le da
+  otro: `export function double(x: int32): int32 = lm_double { ... }`. En una biblioteca es
+  `<prefijo>_<nombre>` salvo que diga `= nombre_c` (ver [Bibliotecas escritas en Larimar](#bibliotecas-escritas-en-larimar)).
 - **Firma de C limpia**: sin parámetros ocultos. Números y `bool` tal cual, `String` llega como
-  `const char*` (se convierte a texto de Larimar al entrar), tipos `native` como su tipo de C y structs de
-  C por valor.
+  `const char*` (se convierte a texto de Larimar al entrar), un `String?` también (`NULL` es `null`), tipos
+  `native` como su tipo de C y structs de C por valor.
+- **Un texto que devuelve es de C.** Un resultado `String` llega a C como un `char*` hecho con `malloc`,
+  una copia que C libera con `free` cuando termina con ella; un `String?` es eso, o `NULL` para `null`.
+  Larimar no se queda con nada de él.
 - **Cada llamada desde C tiene su propia memoria**, que nace al entrar y muere al volver, como cualquier
   función. Lo que la función crea no se queda colgando en C.
-- **Un `c_code` puede usarla directamente**. Si su firma solo tiene números, `bool`, `String` y tipos
-  `native` opacos, el compilador escribe su prototipo antes de los `c_code`. Si usa structs de C o tipos de
-  C concretos, que quizá define el propio `c_code`, el prototipo va después, y el `c_code` que la llame
-  debe declararla él mismo.
+- **Un `c_code` puede usarla directamente**. Si su firma solo tiene números, `bool`, `String`, `String?` y
+  tipos `native` opacos, el compilador escribe su prototipo antes de los `c_code`. Si usa structs de C o
+  tipos de C concretos, que quizá define el propio `c_code`, el prototipo va después, y el `c_code` que la
+  llame debe declararla él mismo.
+
+```ts
+export function greet(name: String?): String = lar_greet {
+    return "hola ${name ?? "nadie"}";
+}
+
+c_code {
+    #include <stdio.h>
+    #include <stdlib.h>
+
+    static void say_hi(void) {
+        char* a = lar_greet("Ana");
+        char* b = lar_greet(NULL);
+        printf("%s, %s\n", a, b);
+        free(a);
+        free(b);
+    }
+}
+
+native function say_hi(): void;
+
+function main(): int32 {
+    say_hi();
+    return 0;
+}
+```
+
+Salida: `hola Ana, hola nadie`
 
 Y lo que no admite, porque C no podría manejarlo:
 
-- devolver `String` (C no sabría cuándo liberarlo); se devuelve un número, un tipo `native` o un struct de C;
 - `throws`: un error no puede atravesar código C, así que se captura dentro;
-- `in` en los parámetros, memorias (`byte[*]`), clases, listas o `Any`;
+- `in` en los parámetros o en el resultado, memorias (`byte[*]`), listas o `Any`;
+- clases, salvo en una biblioteca, donde C guarda sus objetos como handles
+  ([Bibliotecas escritas en Larimar](#bibliotecas-escritas-en-larimar));
 - `main`.
 
 Si la biblioteca llama a la función desde otro hilo, el compilador no puede saberlo: las reglas de hilos
@@ -3785,8 +3852,8 @@ name = "secure"
 
 [c]
 include_paths = ["mbedtls/include"]
-library_paths = ["mbedtls/library"]
-libraries = ["mbedtls", "mbedx509", "mbedcrypto"]     # en este orden
+static_library_paths = ["mbedtls/library"]
+static_libraries = ["mbedtls", "mbedx509", "mbedcrypto"]     # en este orden
 ```
 
 `src/mbed.lar` tiene dos partes: el C que llama a mbedTLS (en un `c_code`) y las dos clases que implementan
@@ -4124,7 +4191,7 @@ main = "src/main.lar"
 
 [c]
 flags = ["-O2"]
-libraries = []
+dynamic_libraries = []
 ```
 
 `[project]` dice cómo se llama el programa y dónde empieza; `[c]` dice cómo se compila el C. Todas las claves:
@@ -4133,16 +4200,23 @@ libraries = []
 [project]
 name = "melody"              # obligatorio: nombre del ejecutable
 version = "0.1.0"
+kind = "program"             # por defecto; "library" construye una biblioteca (ver Bibliotecas escritas en Larimar)
 main = "src/main.lar"        # por defecto; su carpeta es la raíz de los módulos
-output = "dist/melody"       # por defecto build/<name> (build/<name>.exe en Windows)
+output = "dist/melody"       # por defecto build/<name> (build/<name>.exe en Windows; una biblioteca: la carpeta build/<name>)
+
+[library]                    # solo con kind = "library"
+type = "static"              # por defecto; o "dynamic"
+prefix = "mel"               # con qué empiezan sus nombres de C: mel_play (por defecto, el nombre)
 
 [c]
 compiler = "gcc"             # por defecto el del sistema (cc, gcc, clang) o el tcc incluido
 flags = ["-O2", "-Wall"]     # por defecto ["-O2"]
 sources = ["csrc/helpers.c"] # archivos C propios que se compilan junto al programa
 include_paths = ["include"]  # carpetas de cabeceras (-I)
-libraries = ["user32"]       # bibliotecas (-l): user32 -> user32.dll, tone -> libtone.so
-library_paths = ["libs"]     # dónde están (-L)
+static_libraries = ["tone"]          # lib<name>.a: dentro del ejecutable
+static_library_paths = ["vendor/lib"]    # dónde están
+dynamic_libraries = ["user32", "m"]  # -l<name>: user32.dll, libm.so; se cargan al arrancar
+dynamic_library_paths = ["libs"]     # dónde están (-L), y dónde las busca el ejecutable
 ```
 
 Las rutas son relativas a la carpeta del proyecto. Una clave o sección desconocida es un error, para
@@ -4160,8 +4234,8 @@ El compilador solo lee los nombres, y hace tres cosas con ellos:
 
 - **Un import busca también en las dependencias**: cuando `import sql.core;` no está en `src/`, se busca en
   `deps/*/src/` (`deps/sql/src/sql/core.lar`). Un módulo que está en dos dependencias es un error que nombra las dos.
-- **El C de cada dependencia se suma al del proyecto**: las `libraries`, `library_paths`, `include_paths` y
-  `sources` de `deps/<nombre>/larimar.toml` (su `[c]` y las secciones de su plataforma), con sus rutas
+- **El C de cada dependencia se suma al del proyecto**: las `static_libraries`, `dynamic_libraries`, sus
+  rutas, `include_paths` y `sources` de `deps/<nombre>/larimar.toml` (su `[c]` y las secciones de su plataforma), con sus rutas
   relativas a la carpeta de la dependencia.
 - **Una dependencia que no está en `deps/` es un error**: `'sql' is in [dependencies] but not in deps/: get it with 'larimar fetch' (Minero)`.
 
@@ -4174,16 +4248,18 @@ reemplaza al de `[c]`. Los nombres son los mismos que en `#when`.
 sources = ["c/common.c"]
 
 [c.linux]
-libraries = ["SDL3", "m"]
+dynamic_libraries = ["SDL3", "m"]
 
 [c.windows]
-libraries = ["SDL3", "ws2_32"]
+dynamic_libraries = ["SDL3", "ws2_32"]
 ```
 
 | Comando | Qué hace |
 |---|---|
 | `larimar new <name>` | crea la carpeta con `larimar.toml`, `src/main.lar` y `.gitignore` |
-| `larimar build [carpeta]` | escribe `build/<name>.c` y lo compila al ejecutable |
+| `larimar new <name> --library` | lo mismo para una biblioteca: `src/<name>.lar` con una export function, y su prueba |
+| `larimar build [carpeta]` | escribe `build/<name>.c` y lo compila al ejecutable (una biblioteca: `build/<name>/`) |
+| `larimar build --static`, `--dynamic` | una biblioteca de ese tipo, en lugar del de `[library]` |
 | `larimar build --debug` | lo mismo, para un depurador (ver [Depurar](#depurar-larimar-build---debug-y-larimar-dap)) |
 | `larimar run [carpeta] [-- args]` | compila y ejecuta, pasándole los argumentos |
 | `larimar build --cc <programa>` | compila con ese compilador de C en lugar del del proyecto (`tcc`: el incluido) |
@@ -4200,23 +4276,26 @@ libraries = ["SDL3", "ws2_32"]
 
 Un programa de Larimar puede usar cualquier biblioteca de C. Se declaran sus funciones con
 `native function` (y sus tipos con `native type`) y el `larimar.toml` le dice al compilador de C dónde
-está. Hay cuatro formas de traer una biblioteca, según cómo venga:
+está. Hay cinco formas de traer una biblioteca, según cómo venga:
 
 | Cómo viene | En `[c]` | Resultado |
 |---|---|---|
 | **Código fuente** (`.c`), como SQLite o raygui | `sources = ["vendor/sqlite3.c"]` | se compila junto al programa: queda dentro del ejecutable |
-| **Biblioteca estática** (`.a`, `.lib`) | `library_paths = ["vendor/lib"]` y `libraries = ["sqlite3"]`, o la ruta del `.a` en `sources` | queda dentro del ejecutable |
-| **Biblioteca dinámica propia** (`.so`, `.dylib`, `.dll`) | `library_paths = ["vendor/lib"]` y `libraries = ["tone"]` | el ejecutable la carga al arrancar, desde esa carpeta |
-| **Biblioteca del sistema** (`m`, `pthread`, `user32`, una instalada con el gestor de paquetes) | `libraries = ["m"]` y, si hace falta, `include_paths` / `library_paths` | el ejecutable la carga del sistema |
+| **Biblioteca estática** (`.a`) | `static_libraries = ["sqlite3"]` y `static_library_paths = ["vendor/lib"]` | queda dentro del ejecutable, aunque haya una dinámica al lado |
+| **Biblioteca dinámica propia** (`.so`, `.dylib`, `.dll`) | `dynamic_libraries = ["tone"]` y `dynamic_library_paths = ["vendor/lib"]` | el ejecutable la carga al arrancar, desde esa carpeta |
+| **Biblioteca del sistema** (`m`, `pthread`, `user32`, una instalada con el gestor de paquetes) | `dynamic_libraries = ["m"]` y, si hace falta, `include_paths` | el ejecutable la carga del sistema |
+| **Biblioteca escrita en Larimar** (con su `.interface`) | una de las dos de arriba, con su carpeta | ver [Bibliotecas escritas en Larimar](#bibliotecas-escritas-en-larimar) |
 
-Un ejemplo con las cuatro a la vez:
+Un ejemplo con cuatro a la vez:
 
 ```toml
 [c]
 include_paths = ["vendor/include"]           # los .h (-I)
 sources = ["vendor/src/embedded.c"]          # código fuente: va dentro del ejecutable
-library_paths = ["vendor/lib"]               # dónde buscar las bibliotecas (-L)
-libraries = ["mylib", "tone", "m"]           # libmylib.a (estática), libtone.so (dinámica), libm (sistema)
+static_libraries = ["mylib"]                 # vendor/lib/libmylib.a: dentro del ejecutable
+static_library_paths = ["vendor/lib"]
+dynamic_libraries = ["tone", "m"]            # vendor/lib/libtone.so, y la libm del sistema
+dynamic_library_paths = ["vendor/lib"]
 ```
 
 ```ts
@@ -4229,14 +4308,17 @@ native function embedded_add(a: int32, b: int32): int32;   // de embedded.c
 native function sqrt(x: float64): float64;         // de libm
 ```
 
-**Cómo se elige entre estática y dinámica.** `libraries = ["x"]` se convierte en `-lx`, y el enlazador
-busca `libx` en `library_paths` y en las carpetas del sistema. Si solo encuentra la estática (`libx.a`),
-la mete dentro del ejecutable; si encuentra la dinámica (`libx.so`, `.dylib`, `.dll`), la prefiere. Para
-**forzar la estática** aunque exista la dinámica, se pone la ruta del `.a` en `sources`:
+**La clave dice estática o dinámica.** Un nombre en `static_libraries` es el archivo `lib<name>.a` de una
+de las `static_library_paths`: el compilador le da al enlazador ese archivo, así que va dentro del
+ejecutable aunque haya una dinámica en la misma carpeta. Si no está en ninguna, en Linux se busca entre
+las del sistema (`-Wl,-Bstatic -l<name>`); en los demás es un error que lo dice. Un nombre en
+`dynamic_libraries` es `-l<name>`, que se busca en `dynamic_library_paths` (`-L`) y en las carpetas del
+sistema. Un nombre no puede estar en las dos.
 
-```toml
-sources = ["vendor/lib/libmylib.a"]
-```
+Antes de la 1.3 había una sola `libraries` (y `library_paths`), y elegía el enlazador: prefería la
+dinámica cuando encontraba las dos, así que lo que quedaba en el ejecutable dependía de lo que tuviera
+cada máquina. Ahora cada biblioteca es una cosa o la otra, y `libraries` o `library_paths` es un error que
+dice qué clave usar.
 
 Lo estático y el código fuente son lo más portátil: el ejecutable es un solo archivo, sin nada que copiar
 ni instalar.
@@ -4244,7 +4326,7 @@ ni instalar.
 **Cuándo se busca cada una.** Una biblioteca dinámica se busca dos veces, en momentos distintos:
 
 1. **Al compilar.** El compilador de C la busca en sus propias carpetas (MinGW trae las de Windows, como
-   `user32`) y en `library_paths` (`-L`).
+   `user32`) y en `dynamic_library_paths` (`-L`).
 2. **Al ejecutar.** El sistema operativo carga el archivo (`.dll`, `.so`, `.dylib`). Si no lo encuentra, el
    programa no arranca.
 
@@ -4252,13 +4334,255 @@ Por eso `larimar build` **no copia ninguna biblioteca dinámica**. Se quedan don
 
 - **Las del sistema** las busca el ejecutable en las rutas normales del sistema, y la máquina donde se
   ejecute debe tenerlas instaladas.
-- **Las de `library_paths`**: en Linux y macOS, el ejecutable se compila con la instrucción de buscarlas
-  en esas mismas carpetas (`-Wl,-rpath,...`), así que `larimar run` funciona sin copiar nada. En Windows,
-  una `.dll` se busca junto al `.exe` o en el `PATH`.
+- **Las de `dynamic_library_paths`**: en Linux y macOS, el ejecutable se compila con la instrucción de
+  buscarlas en esas mismas carpetas (`-Wl,-rpath,...`), así que `larimar run` funciona sin copiar nada. En
+  Windows, una `.dll` se busca junto al `.exe` o en el `PATH`.
 
 Llevar las dinámicas a otra máquina (un instalador, un paquete del sistema, una dependencia documentada)
 es decisión de quien distribuye el programa, y de sus licencias. Si el ejecutable debe ser un solo
 archivo, la biblioteca se enlaza de forma estática o se compila como código fuente.
+
+### Bibliotecas escritas en Larimar
+
+Un proyecto con `kind = "library"` se construye como **biblioteca**: un programa de C la usa como
+cualquier biblioteca de C, y un programa de Larimar la importa como un módulo. Por defecto es
+**estática** (va dentro del ejecutable que la usa); `type = "dynamic"` en `[library]`, o
+`larimar build --dynamic`, la hace dinámica (`--static` hace lo contrario).
+
+```toml
+[project]
+name = "textkit"
+version = "1.0.0"
+kind = "library"             # "program" (por defecto) o "library"
+main = "src/textkit.lar"
+
+[library]
+type = "static"              # "static" (por defecto) o "dynamic"
+prefix = "tk"                # sus nombres de C empiezan con él: tk_wordCount (por defecto, el nombre)
+```
+
+`larimar new textkit --library` crea una así, con una export function y una prueba de ella. El nombre de
+una biblioteca es también su módulo y sus archivos, así que solo lleva letras, dígitos y `_`.
+
+Lo que C (y Larimar) ve de una biblioteca son sus **export functions** ([Que C llame a Larimar](#que-c-llame-a-larimar-export-function)):
+
+```ts
+// src/textkit.lar
+
+/** Counts the words of a text. */
+public export function wordCount(text: String): int32 {
+    let n: int32 = 0;
+    for (w in text.split(" ")) {
+        if (w != "") { n += 1; }
+    }
+    return n;
+}
+
+/** The text with its first letter in upper case. */
+public export function title(text: String): String {
+    if (text == "") { return ""; }
+    return "${text.substring(0, 1).toUpperCase()}${text.substring(1)}";
+}
+
+/** Counts words as they come. */
+public class Counter {
+    let words: int32 = 0;
+}
+
+public export function newCounter(): Counter { return Counter {}; }
+
+public export function add(c: Counter, text: String): void { c.words += wordCount(text); }
+
+public export function total(c: Counter): int32 { return c.words; }
+```
+
+`larimar build` deja cuatro archivos en `build/textkit/`, que van juntos:
+
+| Archivo | Para | Qué tiene |
+|---|---|---|
+| `libtextkit.a` | los dos | la biblioteca (dinámica: `libtextkit.so`, `libtextkit.dylib` o `textkit.dll`) |
+| `textkit.h` | C | los prototipos, con sus comentarios de documentación, y cómo liberar lo que dan |
+| `textkit.lar` | Larimar | las mismas funciones como declaraciones `native` |
+| `textkit.interface` | el compilador | su nombre, versión, tipo, lo que necesita enlazado y el **hash de la interfaz** |
+
+**Desde C.** El `.h` lo dice todo (aquí sin su primer comentario; los textos de los comentarios son los
+de la biblioteca y los que escribe el compilador, en inglés):
+
+```c
+typedef struct tk_Counter tk_Counter;
+
+/** Counts the words of a text. */
+int32_t tk_wordCount(const char* text);
+
+/**
+ * The text with its first letter in upper case.
+ *
+ * The text is yours: free it with tk_free.
+ */
+char* tk_title(const char* text);
+
+/** A new Counter that is yours: give it back with tk_Counter_release. */
+tk_Counter* tk_newCounter(void);
+
+void tk_add(tk_Counter* c, const char* text);
+
+int32_t tk_total(tk_Counter* c);
+
+/** Gives back a Counter (NULL does nothing). */
+void tk_Counter_release(tk_Counter* handle);
+
+/** Frees a text the library returned (NULL does nothing). */
+void tk_free(void* text);
+
+/** The interface hash of the library (as in textkit.interface): compare it with TEXTKIT_INTERFACE. */
+const char* tk_interface(void);
+```
+
+```c
+#include <stdio.h>
+#include "textkit.h"
+
+int main(void) {
+    char* t = tk_title("larimar");
+    tk_Counter* c = tk_newCounter();
+    tk_add(c, "one two");
+    tk_add(c, "three");
+    printf("%s %d %d\n", t, tk_wordCount("a b c"), tk_total(c));
+    tk_free(t);
+    tk_Counter_release(c);
+    return 0;
+}
+```
+
+```sh
+cc -std=c99 -Ibuild/textkit main.c build/textkit/libtextkit.a -lm
+./a.out                                  # Larimar 3 3
+```
+
+Lo que una biblioteca estática necesita enlazado además está en `links` de su `.interface` (`-lm`,
+`-pthread` si usa hilos, las de TLS...).
+
+**Desde Larimar.** Los cuatro archivos se copian a una carpeta del programa (o se dejan donde están), y la
+biblioteca se nombra en `[c]` como cualquier otra:
+
+```toml
+[c]
+static_libraries = ["textkit"]
+static_library_paths = ["libs/textkit"]
+```
+
+```ts
+import textkit;
+import textkit { Counter };
+
+function main(): int32 {
+    let c: Counter = textkit.newCounter();
+    textkit.add(c, "one two");
+    println("${textkit.title("larimar")} ${textkit.total(c)}");
+    return 0;
+}
+```
+
+Salida: `Larimar 2`
+
+Como `textkit.interface` está en esa carpeta, el compilador sabe que es una biblioteca escrita en
+Larimar: `import textkit` encuentra ahí `textkit.lar` (también `larimar check` y el editor), se incluye su
+`.h` y se enlaza lo que necesita. El `.lar` que lee son declaraciones `native` normales:
+
+```ts
+c_include "textkit.h";
+
+public native type Counter = tk_Counter* released by tk_Counter_release;
+
+/** Counts the words of a text. */
+public native function wordCount(text: String): int32 = tk_wordCount;
+
+/** The text with its first letter in upper case. */
+public native function title(text: String): String = tk_title released by tk_free;
+
+public function newCounter(): Counter { return newCounter_c()!; }
+native function newCounter_c(): Counter? = tk_newCounter;
+
+public native function add(c: Counter, text: String): void = tk_add;
+
+public native function total(c: Counter): int32 = tk_total;
+
+// what gives back the texts and objects of the library (only the compiler calls them)
+native function tk_free(text: String): void = tk_free;
+native function tk_Counter_release(handle: Counter): void = tk_Counter_release;
+```
+
+Un texto de la biblioteca se copia en la memoria del programa y se libera en seguida
+([`released by` en una función](#textos-que-hace-c-released-by-en-una-función)); un `Counter` es un
+[recurso](#recursos-released-by): cuando se libera la memoria donde vive, `tk_Counter_release` lo
+devuelve. No se libera nada a mano, y las funciones tienen los mismos nombres y tipos que en la biblioteca.
+
+**El hash de la interfaz.** El `.interface` tiene ocho dígitos hexadecimales, el comienzo del SHA-256 del
+`.lar`; la biblioteca tiene los mismos dentro (`tk_interface()` los devuelve, y el `.h` los tiene en
+`TEXTKIT_INTERFACE`). Antes de construir un programa que la enlaza, `larimar build` comprueba que los tres
+coinciden, y se detiene con lo que está mal:
+
+- un `.lar` editado a mano: `textkit.lar does not match the library (its hash is ..., textkit.interface says ...)`;
+- una biblioteca de otro build junto a un `.lar` viejo: `libtextkit.a is from another build than textkit.lar and textkit.interface`;
+- una biblioteca estática en `dynamic_libraries` (o al revés): `textkit is a static library (...): put it in static_libraries`.
+
+Así un programa nunca llama a una biblioteca con declaraciones que no son las suyas. El hash cubre todo
+el `.lar`: las funciones, sus tipos y su documentación, la versión y el tipo. Una versión nueva son cuatro
+archivos nuevos que van juntos. Un programa de C puede comprobar lo mismo al arrancar:
+`strcmp(tk_interface(), TEXTKIT_INTERFACE) == 0`.
+
+**Las export functions de una biblioteca:**
+
+- **Sus nombres de C** son `<prefijo>_<nombre>` (`tk_wordCount`). `= nombre_c` después de la firma le da
+  uno propio (`export function answer(): int32 = tk_the_answer { ... }`), y `prefix = ""` deja los
+  nombres como están. La biblioteca misma da `<prefijo>_free`, `<prefijo>_<Clase>_release` y
+  `<prefijo>_interface`: una export function no puede tomar esos nombres.
+- **Sus tipos**: números, `bool`, `String` y `String?` (`const char*`; `NULL` es `null`), y las **clases**
+  de la biblioteca y sus opcionales. Los tipos native y los structs de C no van: son de cabeceras de C que
+  el programa también necesitaría.
+- **Un texto que devuelve** es una copia (`char*`) para quien llama: C la libera con `<prefijo>_free`.
+- **Un objeto que devuelve** es un **handle**: C lo guarda (`tk_Counter*`), lo pasa a otras export
+  functions y lo devuelve con `<prefijo>_<Clase>_release`. El handle tiene su propia memoria: lo que el
+  objeto crea después (una lista que crece, sus textos) vive ahí y se libera con él. Un `NULL` donde se
+  espera una clase detiene el programa con un pánico que nombra la función y el parámetro
+  (`tk_add: 'c' is NULL`); donde se espera `Counter?`, es `null`.
+- **Cada llamada tiene su propia memoria**, que se libera al volver. Las globales de la biblioteca se
+  crean al cargarla (o en su primera llamada) y viven lo que dura el programa.
+- **`export` no hace `public` a una función**: con las dos, las pruebas de la biblioteca (y sus otros
+  módulos) la pueden llamar desde Larimar.
+- **Sin main**: el programa que la usa tiene el suyo. Una biblioteca con `main` es un error.
+
+**Por dentro, todo es privado.** Todo el C menos las export functions y esas tres es `static`: el runtime
+de la biblioteca, sus clases, sus otras funciones. Así dos bibliotecas escritas en Larimar, y el programa
+de Larimar que las enlaza, no chocan: cada una tiene su propio runtime (unos pocos KB) y sus propias
+memorias, y de una a otra no pasa nada más que textos (copiados) y handles.
+
+**Sus pruebas.** `larimar test` en la carpeta de la biblioteca ejecuta sus pruebas como en cualquier
+proyecto: importan sus módulos (el código de Larimar, no el `.a`). `larimar check` y el editor también
+aplican a su código las reglas de una biblioteca.
+
+**Aclaraciones:**
+
+- **Por qué estática por defecto.** El ejecutable que la usa es un solo archivo, y no depende de que
+  donde se ejecute esté instalado un `.so` del build correcto. Una dinámica la comparten varios programas
+  y se puede reemplazar sin construirlos de nuevo.
+- **Dónde se busca una dinámica.** Como cualquier biblioteca dinámica: en Linux y macOS, en las
+  `dynamic_library_paths` del programa (rpath; en macOS la biblioteca es `@rpath/libtextkit.dylib`); en
+  Windows, junto al `.exe` o en el `PATH` (el enlazador usa `libtextkit.dll.a`, que se hace con ella).
+- **Lo que necesita una estática.** Las bibliotecas que necesita su C, y las que ella misma enlaza, están
+  en `links`: un programa de Larimar las agrega solo; uno de C las agrega a su comando. Las bibliotecas
+  estáticas que enlaza una biblioteca estática no se meten dentro de ella: el programa también las necesita.
+- **Pánicos.** Un pánico dentro de la biblioteca (un error de programación: un índice fuera de rango, un
+  handle `NULL`) lo imprime y termina el programa, como en un programa de Larimar.
+- **Hilos.** La biblioteca puede crear hilos por dentro. Las llamadas desde varios hilos de C a la vez son
+  cosa de quien llama, como con cualquier biblioteca de C (Larimar no las ve): un handle, o las globales,
+  en un hilo a la vez, salvo que sea una `synchronized class`.
+- **El hash no es una firma.** Descubre errores (archivos de builds distintos), no a alguien que cambia
+  una biblioteca a propósito.
+- **Los cuatro archivos se generan**: no se editan, no se guardan en el repositorio de la biblioteca
+  (están en `build/`) y se publican juntos.
+- **Todavía no**: las listas, los callbacks y los errores (`throws`) no cruzan una biblioteca; van como
+  textos, handles y números (un código de error), o se quedan dentro.
 
 ### Un ejemplo con Windows
 
@@ -4287,7 +4611,7 @@ function main(): int32 {
 }
 ```
 
-con `libraries = ["user32"]` en `[c]`. Declarar todo lo de Windows en un módulo `win` evita repetir
+con `dynamic_libraries = ["user32"]` en `[c]`. Declarar todo lo de Windows en un módulo `win` evita repetir
 las declaraciones `native`: cada `native type` es un tipo distinto en cada módulo que lo declara, así
 que el `HWND` debe venir de un solo sitio.
 
@@ -4877,6 +5201,8 @@ Lo que Larimar no tiene, ni va a tener, con lo que se usa en su lugar:
   `&x` solo vale como argumento de una función de C.
 - La función que suelta un recurso (`released by`) recibe solo el recurso: si necesita más contexto (una
   tabla de funciones cargada con `dlopen`, como OpenSSL en `std.net`), va en `c_code`.
+- Una biblioteca escrita en Larimar le da a C (y a los programas que la enlazan) números, `bool`, textos y
+  handles de sus clases: las listas, los callbacks y los errores todavía no la cruzan.
 - No se puede vaciar una memoria a mano (`clear()`); se libera al final de su bloque.
 - El compilador decide sin ejecutar si una función crea su resultado. Si a veces devuelve algo nuevo y a
   veces algo que ya existía, se la trata como si siempre creara: lo que devuelve vive en la memoria de
@@ -4954,6 +5280,7 @@ native let errno: int32;
 native type CFile = FILE* released by fclose;               // un recurso: se suelta con su memoria
 native function fopen(path: String, mode: String): CFile?;
 native function fclose(f: CFile): int32;
+native function strdup(text: String): String released by free;   // un texto de C: se copia y se libera
 native struct Node = "struct node" { let next: Node*; let name: String; }
 native type Doc = Doc* released by doc_close {                  // un tipo de C con miembros
     let id: int32;                                              // un campo: d.id es d->id
@@ -5015,4 +5342,9 @@ native type File = FILE*;                             // un tipo de C concreto
 native struct Point { let x: float32; let y: float32; }    // un struct de C
 native type Op = (int32, int32) -> int32;             // un puntero a función de C
 export function restar(a: int32, b: int32): int32 { return a - b; }   // C puede llamarla
+export function nombre(id: int32): String = lm_nombre { return "n${id}"; }  // su nombre en C; C libera el texto
+
+// larimar.toml de una biblioteca: build/<name>/ con lib<name>.a, <name>.h, <name>.lar, <name>.interface
+// [project] kind = "library"      [library] type = "static" (o "dynamic"), prefix = "tk"
+// [c] static_libraries / static_library_paths, dynamic_libraries / dynamic_library_paths
 ```

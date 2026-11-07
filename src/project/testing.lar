@@ -37,8 +37,7 @@ public class TestSettings {
     let compiler: String;
     let first: String[*] = [];   // arguments right after the compiler (the bundled tcc's)
     let bundled: bool = false;   // the tcc of $LARIMAR_HOME/toolchain: no sanitizers, no TLS
-    let libraries: String[*];
-    let libraryPaths: String[*];
+    let links: String[*];      // how the project links its libraries (static ones by their path, -L/-l, rpath)
     let includePaths: String[*];
     let sources: String[*];
     let root: String;          // where the tests' `import a.b` looks ("" = next to each file)
@@ -394,12 +393,8 @@ function compileC(cFile: String, exe: String): String {
     cmd.push(cFile);
     for (src in s.sources) { cmd.push(src); }
     for (ip in s.includePaths) { cmd.push("-I${ip}"); }
-    for (lp in s.libraryPaths) { cmd.push("-L${lp}"); }
-    for (l in s.libraries) { cmd.push("-l${l}"); }
-    if (!windows()) {
-        for (lp in s.libraryPaths) { cmd.push("-Wl,-rpath,${lp}"); }
-        cmd.push("-lm");
-    }
+    for (l in s.links) { cmd.push(l); }
+    if (!windows()) { cmd.push("-lm"); }
     for (l in systemLibraries(c)) { cmd.push(l.clone()); }
     let log: String = "${cFile}.cc.txt";
     let code: int32 = os.run("${commandLine(cmd)} > ${quote(log)} 2>&1");

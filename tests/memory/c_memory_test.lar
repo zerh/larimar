@@ -21,11 +21,11 @@ test function cStructsAndPointers(): void {
     ]);
 }
 
-test function exportReturnsString(): void {
+test function exportReturnsAList(): void {
     failsWith(raw"""
-        export function name(n: int32): String { return "x"; }
+        export function names(n: int32): String[*] { return ["x"]; }
         function main(): int32 { return 0; }
-        """, "C would not know when to free a String");
+        """, "Export function 'names' can only return void or numbers, bool, String, String?, native types and C structs.");
 }
 
 // Una export function llamada miles de veces desde C: cada llamada libera lo que crea.

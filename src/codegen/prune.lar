@@ -21,7 +21,7 @@ class Piece {
 
 /** Sections written by the program itself: they stay whole, and what they use is kept. */
 function rootSection(title: String): bool {
-    return title == "" || title == "c_code" || title == "Export functions" || title == "Entry point";
+    return title == "" || title == "c_code" || title == "Export functions" || title == "Entry point" || title == "Library";
 }
 
 /** The generated program without what it does not reach. roots: main and the export functions. */

@@ -1668,10 +1668,12 @@ function checkFunctionCall(c: Call in default, f: FunctionInfo in default, place
     if (ext != null && ext.platform != "" && !platformWithin(platformCtx, ext.platform)) {
         error(c.line, "'${f.name}' exists only on ${ext.platform}: call it between '#when ${ext.platform}' and '#end'.");
     }
-    if (f.releases != "") {
+    if (f.releases == "String") {
+        error(c.line, "'${f.name}' releases the texts that C gives: the compiler calls it once it has copied them.");
+    } else if (f.releases != "") {
         error(c.line, "'${f.name}' releases ${f.releases}: call release(x) instead (and if nobody does, the memory calls it when it is freed).");
     }
-    let makes: bool = f.isExtern && isOpt(f.sig!.elem!) && isResource(f.sig!.elem!.elem!);    // C makes a resource
+    let makes: bool = f.isExtern && (isOpt(f.sig!.elem!) && isResource(f.sig!.elem!.elem!) || ext != null && ext.releasedBy != "");    // C makes a resource, or a text to copy
     let given: bool = callMemory(f);           // C that creates in the memory of the call
     let ps: Type[*] = [] in default;
     let mps: bool[*] = [] in default;
@@ -1716,7 +1718,7 @@ function checkFunctionCall(c: Call in default, f: FunctionInfo in default, place
     }
     if (given || makes) { c.place = place; }
     if (makes) {                             // the resource lives where the call's result goes, and is released with it
-        if (place.kind == PlaceK.Stack) { error(c.line, "A resource lives in a memory: not in a temporary buffer (in byte[N])."); }
+        if (place.kind == PlaceK.Stack && (ext == null || ext!.releasedBy == "")) { error(c.line, "A resource lives in a memory: not in a temporary buffer (in byte[N])."); }
         setRegion(c, placeRegion(place));
         return f.sig!.elem!;
     }

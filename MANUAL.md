@@ -2323,7 +2323,7 @@ Output: `square root of 2 = 1.414214`
 
 `c_include` brings in the C file that declares those functions (a **header**), and `native function`
 says to Larimar how each one is called. With `<math.h>`, on some systems the math library has to be
-**linked** (joined to the program when it is built): `libraries = ["m"]` in the `larimar.toml` of a
+**linked** (joined to the program when it is built): `dynamic_libraries = ["m"]` in the `larimar.toml` of a
 project ([chapter 26](#26-projects-larimartoml-and-larimar-build)).
 
 Everything that comes from C is declared with **`native`**, and every declaration follows the same rule:
@@ -2820,6 +2820,39 @@ function main(): int32 {
 - A resource can also have [members](#c-types-with-members):
   `native type Db = sqlite3* released by sqlite3_close { native function errmsg(): String = sqlite3_errmsg; ... }`.
 
+### Texts that C makes: `released by` on a function
+
+Some C functions return a text that is now the caller's, made with `malloc` (or with the library's own
+allocator): `strdup`, `realpath(path, NULL)`, `sqlite3_expanded_sql`. After the result (and its `= C`, if
+there is one) comes **`released by`** with the function that frees it:
+
+```ts
+c_include "<string.h>";
+c_include "<stdlib.h>";
+
+native function strdup(text: String): String released by free;
+native function free(text: String): void;
+
+function main(): int32 {
+    for (i in 0..1000) {
+        let copy: String = strdup("text ${i}");
+        if (i == 999) { println(copy); }
+    }
+    return 0;
+}
+```
+
+Output: `text 999`
+
+- The text is **copied** into the memory where the result goes, like any result (the block of a `let`,
+  an object, `in scratch`, a buffer), and C's is freed right away: Larimar does not keep C's pointer, so
+  nothing leaks and nothing is freed twice.
+- With `String?`, a `NULL` arrives as `null` (and there is nothing to free).
+- The function after `released by` is a `native function` that takes one `String`, and only the compiler
+  calls it. In C it is declared with `void*`, as `free(void*)` or `sqlite3_free(void*)` are.
+- A text that C keeps (a static one, or one that belongs to something of C, like `sqlite3_errmsg`) is not
+  freed: it is declared without `released by`.
+
 ### Each system its own: `#when`
 
 What changes between systems is written between **`#when`** and **`#end`**, which choose when the C is
@@ -3052,23 +3085,57 @@ Output:
 
 What `export function` guarantees:
 
-- **The name in C is exactly its own**, inside a module too: `public export function lm_double(...)` in
-  the module `gfx.shapes` is still called `lm_double` in C.
+- **Its name in C is its own**, inside a module too: `public export function lm_double(...)` in the
+  module `gfx.shapes` is still called `lm_double` in C. **`= c_name`** after the signature gives it
+  another one: `export function double(x: int32): int32 = lm_double { ... }`. In a library it is
+  `<prefix>_<name>` unless it says `= c_name` (see [Libraries written in Larimar](#libraries-written-in-larimar)).
 - **A clean C signature**: no hidden parameters. Numbers and `bool` as they are, `String` arrives as
-  `const char*` (it becomes Larimar text when it enters), `native` types as their C type and C structs by
-  value.
+  `const char*` (it becomes Larimar text when it enters), a `String?` too (`NULL` is `null`), `native`
+  types as their C type and C structs by value.
+- **A text it returns belongs to C.** A `String` result goes to C as a `char*` made with `malloc`, a copy
+  that C frees with `free` when it is done with it; a `String?` is that, or `NULL` for `null`. Larimar
+  keeps nothing of it.
 - **Each call from C has its own memory**, born when it enters and dying when it returns, like any
   function. What the function creates is not left hanging in C.
-- **A `c_code` can use it directly**. If its signature only has numbers, `bool`, `String` and opaque
-  `native` types, the compiler writes its prototype before the `c_code` blocks. If it uses C structs or
-  concrete C types, which the `c_code` itself may define, the prototype goes after, and the `c_code` that
-  calls it must declare it itself.
+- **A `c_code` can use it directly**. If its signature only has numbers, `bool`, `String`, `String?` and
+  opaque `native` types, the compiler writes its prototype before the `c_code` blocks. If it uses C
+  structs or concrete C types, which the `c_code` itself may define, the prototype goes after, and the
+  `c_code` that calls it must declare it itself.
+
+```ts
+export function greet(name: String?): String = lar_greet {
+    return "hi ${name ?? "nobody"}";
+}
+
+c_code {
+    #include <stdio.h>
+    #include <stdlib.h>
+
+    static void say_hi(void) {
+        char* a = lar_greet("Ana");
+        char* b = lar_greet(NULL);
+        printf("%s, %s\n", a, b);
+        free(a);
+        free(b);
+    }
+}
+
+native function say_hi(): void;
+
+function main(): int32 {
+    say_hi();
+    return 0;
+}
+```
+
+Output: `hi Ana, hi nobody`
 
 And what it does not allow, because C could not handle it:
 
-- returning `String` (C would not know when to free it); return a number, a `native` type or a C struct;
 - `throws`: an error cannot cross C code, so it is caught inside;
-- `in` on the parameters, memories (`byte[*]`), classes, lists or `Any`;
+- `in` on the parameters or the result, memories (`byte[*]`), lists or `Any`;
+- classes, except in a library, where C keeps its objects as handles
+  ([Libraries written in Larimar](#libraries-written-in-larimar));
 - `main`.
 
 If the library calls the function from another thread, the compiler cannot know it: Larimar's thread
@@ -3789,8 +3856,8 @@ name = "secure"
 
 [c]
 include_paths = ["mbedtls/include"]
-library_paths = ["mbedtls/library"]
-libraries = ["mbedtls", "mbedx509", "mbedcrypto"]     # in this order
+static_library_paths = ["mbedtls/library"]
+static_libraries = ["mbedtls", "mbedx509", "mbedcrypto"]     # in this order
 ```
 
 `src/mbed.lar` has two parts: the C that calls mbedTLS (in a `c_code`) and the two classes that
@@ -4127,7 +4194,7 @@ main = "src/main.lar"
 
 [c]
 flags = ["-O2"]
-libraries = []
+dynamic_libraries = []
 ```
 
 `[project]` says what the program is called and where it starts; `[c]` says how the C is built. All the keys:
@@ -4136,16 +4203,23 @@ libraries = []
 [project]
 name = "melody"              # required: name of the executable
 version = "0.1.0"
+kind = "program"             # the default; "library" builds a library (see Libraries written in Larimar)
 main = "src/main.lar"        # the default; its folder is the root of the modules
-output = "dist/melody"       # by default build/<name> (build/<name>.exe on Windows)
+output = "dist/melody"       # by default build/<name> (build/<name>.exe on Windows; a library: the folder build/<name>)
+
+[library]                    # only with kind = "library"
+type = "static"              # the default; or "dynamic"
+prefix = "mel"               # what its C names start with: mel_play (by default, the name)
 
 [c]
 compiler = "gcc"             # by default the system's (cc, gcc, clang) or the bundled tcc
 flags = ["-O2", "-Wall"]     # by default ["-O2"]
 sources = ["csrc/helpers.c"] # your own C files, compiled together with the program
 include_paths = ["include"]  # header folders (-I)
-libraries = ["user32"]       # libraries (-l): user32 -> user32.dll, tone -> libtone.so
-library_paths = ["libs"]     # where they are (-L)
+static_libraries = ["tone"]          # lib<name>.a: inside the executable
+static_library_paths = ["vendor/lib"]    # where they are
+dynamic_libraries = ["user32", "m"]  # -l<name>: user32.dll, libm.so; loaded when it starts
+dynamic_library_paths = ["libs"]     # where they are (-L), and where the executable looks for them
 ```
 
 Paths are relative to the project folder. An unknown key or section is an error, so that a typo does
@@ -4163,8 +4237,8 @@ A dependency manager (Minero, with `larimar add` and `larimar fetch`) downloads 
 
 - **An import looks in the dependencies too**: when `import sql.core;` is not in `src/`, it is looked for
   in `deps/*/src/` (`deps/sql/src/sql/core.lar`). A module that is in two dependencies is an error that names both.
-- **The C of each dependency is added to the project's**: the `libraries`, `library_paths`, `include_paths`
-  and `sources` of `deps/<name>/larimar.toml` (its `[c]` and its platform's sections), with their paths
+- **The C of each dependency is added to the project's**: the `static_libraries`, `dynamic_libraries`,
+  their paths, `include_paths` and `sources` of `deps/<name>/larimar.toml` (its `[c]` and its platform's sections), with their paths
   relative to the dependency's folder.
 - **A dependency that is not in `deps/` is an error**: `'sql' is in [dependencies] but not in deps/: get it with 'larimar fetch' (Minero)`.
 
@@ -4177,16 +4251,18 @@ replaces `[c]`'s. The names are the same as in `#when`.
 sources = ["c/common.c"]
 
 [c.linux]
-libraries = ["SDL3", "m"]
+dynamic_libraries = ["SDL3", "m"]
 
 [c.windows]
-libraries = ["SDL3", "ws2_32"]
+dynamic_libraries = ["SDL3", "ws2_32"]
 ```
 
 | Command | What it does |
 |---|---|
 | `larimar new <name>` | creates the folder with `larimar.toml`, `src/main.lar` and `.gitignore` |
-| `larimar build [folder]` | writes `build/<name>.c` and compiles it to the executable |
+| `larimar new <name> --library` | the same for a library: `src/<name>.lar` with an export function, and its test |
+| `larimar build [folder]` | writes `build/<name>.c` and compiles it to the executable (a library: `build/<name>/`) |
+| `larimar build --static`, `--dynamic` | a library of that kind, instead of the one in `[library]` |
 | `larimar build --debug` | the same, for a debugger (see [Debugging](#debugging-larimar-build---debug-and-larimar-dap)) |
 | `larimar run [folder] [-- args]` | compiles and runs, passing it the arguments |
 | `larimar build --cc <program>` | builds with that C compiler instead of the project's (`tcc`: the bundled one) |
@@ -4202,24 +4278,27 @@ libraries = ["SDL3", "ws2_32"]
 ### C libraries: static, dynamic and source code
 
 A Larimar program can use any C library. Its functions are declared with `native function` (and its
-types with `native type`) and the `larimar.toml` tells the C compiler where it is. There are four ways
+types with `native type`) and the `larimar.toml` tells the C compiler where it is. There are five ways
 to bring in a library, depending on how it comes:
 
 | How it comes | In `[c]` | Result |
 |---|---|---|
 | **Source code** (`.c`), like SQLite or raygui | `sources = ["vendor/sqlite3.c"]` | it is compiled together with the program: it ends up inside the executable |
-| **Static library** (`.a`, `.lib`) | `library_paths = ["vendor/lib"]` and `libraries = ["sqlite3"]`, or the path of the `.a` in `sources` | it ends up inside the executable |
-| **Dynamic library of your own** (`.so`, `.dylib`, `.dll`) | `library_paths = ["vendor/lib"]` and `libraries = ["tone"]` | the executable loads it when it starts, from that folder |
-| **System library** (`m`, `pthread`, `user32`, one installed with the package manager) | `libraries = ["m"]` and, if needed, `include_paths` / `library_paths` | the executable loads it from the system |
+| **Static library** (`.a`) | `static_libraries = ["sqlite3"]` and `static_library_paths = ["vendor/lib"]` | it ends up inside the executable, even if a dynamic one is next to it |
+| **Dynamic library of your own** (`.so`, `.dylib`, `.dll`) | `dynamic_libraries = ["tone"]` and `dynamic_library_paths = ["vendor/lib"]` | the executable loads it when it starts, from that folder |
+| **System library** (`m`, `pthread`, `user32`, one installed with the package manager) | `dynamic_libraries = ["m"]` and, if needed, `include_paths` | the executable loads it from the system |
+| **Library written in Larimar** (with its `.interface`) | one of the two above, with its folder | see [Libraries written in Larimar](#libraries-written-in-larimar) |
 
-An example with all four at once:
+An example with four at once:
 
 ```toml
 [c]
 include_paths = ["vendor/include"]           # the .h files (-I)
 sources = ["vendor/src/embedded.c"]          # source code: it goes inside the executable
-library_paths = ["vendor/lib"]               # where to look for the libraries (-L)
-libraries = ["mylib", "tone", "m"]           # libmylib.a (static), libtone.so (dynamic), libm (system)
+static_libraries = ["mylib"]                 # vendor/lib/libmylib.a: inside the executable
+static_library_paths = ["vendor/lib"]
+dynamic_libraries = ["tone", "m"]            # vendor/lib/libtone.so, and libm of the system
+dynamic_library_paths = ["vendor/lib"]
 ```
 
 ```ts
@@ -4232,14 +4311,16 @@ native function embedded_add(a: int32, b: int32): int32;   // from embedded.c
 native function sqrt(x: float64): float64;         // from libm
 ```
 
-**How static or dynamic is chosen.** `libraries = ["x"]` becomes `-lx`, and the linker looks for
-`libx` in `library_paths` and in the system folders. If it only finds the static one (`libx.a`), it
-puts it inside the executable; if it finds the dynamic one (`libx.so`, `.dylib`, `.dll`), it prefers
-it. To **force the static one** even if the dynamic one exists, put the path of the `.a` in `sources`:
+**The key says static or dynamic.** A name in `static_libraries` is the file `lib<name>.a` of one of the
+`static_library_paths`: the compiler gives the linker that file, so it goes inside the executable even if
+a dynamic one is in the same folder. If it is in none of them, on Linux it is looked for among the
+system's (`-Wl,-Bstatic -l<name>`); elsewhere it is an error that says so. A name in `dynamic_libraries`
+is `-l<name>`, looked for in `dynamic_library_paths` (`-L`) and in the system folders. A name cannot be
+in both.
 
-```toml
-sources = ["vendor/lib/libmylib.a"]
-```
+Before 1.3 there was a single `libraries` (and `library_paths`), and the linker chose: it preferred the
+dynamic one when it found both, so what ended up in the executable depended on what each machine had.
+Now each library is one or the other, and `libraries` or `library_paths` is an error that says which key to use.
 
 Static libraries and source code are the most portable: the executable is a single file, with nothing
 to copy or install.
@@ -4247,7 +4328,7 @@ to copy or install.
 **When each one is looked for.** A dynamic library is looked for twice, at different moments:
 
 1. **When compiling.** The C compiler looks for it in its own folders (MinGW brings the Windows ones,
-   like `user32`) and in `library_paths` (`-L`).
+   like `user32`) and in `dynamic_library_paths` (`-L`).
 2. **When running.** The operating system loads the file (`.dll`, `.so`, `.dylib`). If it does not find
    it, the program does not start.
 
@@ -4255,13 +4336,254 @@ That is why `larimar build` **copies no dynamic library**. They stay where they 
 
 - **System libraries** are looked for by the executable in the usual system paths, and the machine
   where it runs must have them installed.
-- **The ones in `library_paths`**: on Linux and macOS, the executable is compiled with the instruction
-  to look for them in those same folders (`-Wl,-rpath,...`), so `larimar run` works without copying
-  anything. On Windows, a `.dll` is looked for next to the `.exe` or in the `PATH`.
+- **The ones in `dynamic_library_paths`**: on Linux and macOS, the executable is compiled with the
+  instruction to look for them in those same folders (`-Wl,-rpath,...`), so `larimar run` works without
+  copying anything. On Windows, a `.dll` is looked for next to the `.exe` or in the `PATH`.
 
 Taking the dynamic libraries to another machine (an installer, a system package, a documented
 dependency) is up to whoever distributes the program, and to their licenses. If the executable must be
 a single file, the library is linked statically or compiled as source code.
+
+### Libraries written in Larimar
+
+A project with `kind = "library"` is built into a **library**: a C program uses it like any C library,
+and a Larimar program imports it like a module. It is **static** by default (it goes inside the
+executable that uses it); `type = "dynamic"` in `[library]`, or `larimar build --dynamic`, makes it a
+dynamic one (`--static` goes the other way).
+
+```toml
+[project]
+name = "textkit"
+version = "1.0.0"
+kind = "library"             # "program" (the default) or "library"
+main = "src/textkit.lar"
+
+[library]
+type = "static"              # "static" (the default) or "dynamic"
+prefix = "tk"                # its C names start with it: tk_wordCount (by default, the name)
+```
+
+`larimar new textkit --library` creates one like that, with an export function and a test of it. The
+name of a library is also its module and its files, so it has only letters, digits and `_`.
+
+What C (and Larimar) sees of a library are its **export functions** ([C calling Larimar](#c-calling-larimar-export-function)):
+
+```ts
+// src/textkit.lar
+
+/** Counts the words of a text. */
+public export function wordCount(text: String): int32 {
+    let n: int32 = 0;
+    for (w in text.split(" ")) {
+        if (w != "") { n += 1; }
+    }
+    return n;
+}
+
+/** The text with its first letter in upper case. */
+public export function title(text: String): String {
+    if (text == "") { return ""; }
+    return "${text.substring(0, 1).toUpperCase()}${text.substring(1)}";
+}
+
+/** Counts words as they come. */
+public class Counter {
+    let words: int32 = 0;
+}
+
+public export function newCounter(): Counter { return Counter {}; }
+
+public export function add(c: Counter, text: String): void { c.words += wordCount(text); }
+
+public export function total(c: Counter): int32 { return c.words; }
+```
+
+`larimar build` leaves four files in `build/textkit/`, which go together:
+
+| File | For | What it has |
+|---|---|---|
+| `libtextkit.a` | both | the library (dynamic: `libtextkit.so`, `libtextkit.dylib` or `textkit.dll`) |
+| `textkit.h` | C | the prototypes, with their doc comments, and how to free what they give |
+| `textkit.lar` | Larimar | the same functions as `native` declarations |
+| `textkit.interface` | the compiler | its name, version, kind, what it needs linked and the **interface hash** |
+
+**From C.** The `.h` says everything (here without its first comment):
+
+```c
+typedef struct tk_Counter tk_Counter;
+
+/** Counts the words of a text. */
+int32_t tk_wordCount(const char* text);
+
+/**
+ * The text with its first letter in upper case.
+ *
+ * The text is yours: free it with tk_free.
+ */
+char* tk_title(const char* text);
+
+/** A new Counter that is yours: give it back with tk_Counter_release. */
+tk_Counter* tk_newCounter(void);
+
+void tk_add(tk_Counter* c, const char* text);
+
+int32_t tk_total(tk_Counter* c);
+
+/** Gives back a Counter (NULL does nothing). */
+void tk_Counter_release(tk_Counter* handle);
+
+/** Frees a text the library returned (NULL does nothing). */
+void tk_free(void* text);
+
+/** The interface hash of the library (as in textkit.interface): compare it with TEXTKIT_INTERFACE. */
+const char* tk_interface(void);
+```
+
+```c
+#include <stdio.h>
+#include "textkit.h"
+
+int main(void) {
+    char* t = tk_title("larimar");
+    tk_Counter* c = tk_newCounter();
+    tk_add(c, "one two");
+    tk_add(c, "three");
+    printf("%s %d %d\n", t, tk_wordCount("a b c"), tk_total(c));
+    tk_free(t);
+    tk_Counter_release(c);
+    return 0;
+}
+```
+
+```sh
+cc -std=c99 -Ibuild/textkit main.c build/textkit/libtextkit.a -lm
+./a.out                                  # Larimar 3 3
+```
+
+What a static library needs linked besides is in `links` of its `.interface` (`-lm`, `-pthread` if it
+uses threads, the TLS ones...).
+
+**From Larimar.** The four files are copied into a folder of the program (or left where they are), and
+the library is named in `[c]` like any other:
+
+```toml
+[c]
+static_libraries = ["textkit"]
+static_library_paths = ["libs/textkit"]
+```
+
+```ts
+import textkit;
+import textkit { Counter };
+
+function main(): int32 {
+    let c: Counter = textkit.newCounter();
+    textkit.add(c, "one two");
+    println("${textkit.title("larimar")} ${textkit.total(c)}");
+    return 0;
+}
+```
+
+Output: `Larimar 2`
+
+Since `textkit.interface` is in that folder, the compiler knows it is a library written in Larimar:
+`import textkit` finds `textkit.lar` there (`larimar check` and the editor too), its `.h` is included and
+what it needs is linked. The `.lar` it reads is plain `native` declarations:
+
+```ts
+c_include "textkit.h";
+
+public native type Counter = tk_Counter* released by tk_Counter_release;
+
+/** Counts the words of a text. */
+public native function wordCount(text: String): int32 = tk_wordCount;
+
+/** The text with its first letter in upper case. */
+public native function title(text: String): String = tk_title released by tk_free;
+
+public function newCounter(): Counter { return newCounter_c()!; }
+native function newCounter_c(): Counter? = tk_newCounter;
+
+public native function add(c: Counter, text: String): void = tk_add;
+
+public native function total(c: Counter): int32 = tk_total;
+
+// what gives back the texts and objects of the library (only the compiler calls them)
+native function tk_free(text: String): void = tk_free;
+native function tk_Counter_release(handle: Counter): void = tk_Counter_release;
+```
+
+A text of the library is copied into the program's memory and freed at once
+([`released by` on a function](#texts-that-c-makes-released-by-on-a-function)); a `Counter` is a
+[resource](#resources-released-by): when the memory it lives in is freed, `tk_Counter_release` gives it
+back. Nothing is freed by hand, and the functions have the same names and types as in the library.
+
+**The interface hash.** The `.interface` has eight hexadecimal digits, the start of the SHA-256 of the
+`.lar`; the library has the same ones inside (`tk_interface()` returns them, and the `.h` has them in
+`TEXTKIT_INTERFACE`). Before building a program that links it, `larimar build` checks that the three
+agree, and stops with what is wrong:
+
+- a `.lar` edited by hand: `textkit.lar does not match the library (its hash is ..., textkit.interface says ...)`;
+- a library of another build next to an old `.lar`: `libtextkit.a is from another build than textkit.lar and textkit.interface`;
+- a static library in `dynamic_libraries` (or the opposite): `textkit is a static library (...): put it in static_libraries`.
+
+So a program never calls a library with declarations that are not its own. The hash covers the whole
+`.lar`: the functions, their types and docs, the version and the kind. A new version is four new files
+that go together. A C program can check the same when it starts:
+`strcmp(tk_interface(), TEXTKIT_INTERFACE) == 0`.
+
+**The export functions of a library:**
+
+- **Their C names** are `<prefix>_<name>` (`tk_wordCount`). `= c_name` after the signature gives one of
+  its own (`export function answer(): int32 = tk_the_answer { ... }`), and `prefix = ""` leaves the names
+  as they are. The library itself gives `<prefix>_free`, `<prefix>_<Class>_release` and
+  `<prefix>_interface`: an export function cannot take those names.
+- **Their types**: numbers, `bool`, `String` and `String?` (`const char*`; `NULL` is `null`), and the
+  **classes** of the library and their optionals. Native types and C structs do not go: they belong to C
+  headers that the program would need too.
+- **A text it returns** is a copy (`char*`) for the caller: C frees it with `<prefix>_free`.
+- **An object it returns** is a **handle**: C keeps it (`tk_Counter*`), passes it to other export
+  functions and gives it back with `<prefix>_<Class>_release`. The handle has its own memory: what the
+  object creates later (a list that grows, its texts) lives there and is freed with it. A `NULL` where a
+  class is expected stops the program with a panic that names the function and the parameter
+  (`tk_add: 'c' is NULL`); where `Counter?` is expected, it is `null`.
+- **Each call has its own memory**, freed when it returns. The globals of the library are created when
+  it is loaded (or at its first call) and live as long as the program.
+- **`export` does not make a function `public`**: with both, the tests of the library (and its other
+  modules) can call it from Larimar.
+- **No main**: the program that uses it has its own. A library with a `main` is an error.
+
+**Inside, everything is private.** Everything of the C but the export functions and those three is
+`static`: the runtime of the library, its classes, its other functions. So two libraries written in
+Larimar, and the Larimar program that links them, do not clash: each one has its own runtime (a few KB)
+and its own memories, and nothing crosses from one to another but texts (copied) and handles.
+
+**Its tests.** `larimar test` in the folder of the library runs its tests like in any project: they
+import its modules (the Larimar code, not the `.a`). `larimar check` and the editor apply the rules of a
+library to its code too.
+
+**Clarifications:**
+
+- **Why static by default.** The executable that uses it is a single file, and it does not depend on a
+  `.so` of the right build being installed where it runs. A dynamic library is shared by several
+  programs and can be replaced without building them again.
+- **Where a dynamic one is looked for.** Like any dynamic library: on Linux and macOS, in the
+  `dynamic_library_paths` of the program (rpath; on macOS the library is `@rpath/libtextkit.dylib`); on
+  Windows, next to the `.exe` or in the `PATH` (the linker uses `libtextkit.dll.a`, which is made with it).
+- **What a static one needs.** The libraries its C needs, and those it links itself, are in `links`:
+  a Larimar program adds them on its own; a C program adds them to its command. The static libraries
+  that a static library links are not put inside it: the program needs them too.
+- **Panics.** A panic inside the library (a bug: an index out of range, a `NULL` handle) prints it and
+  ends the program, as in a Larimar program.
+- **Threads.** The library can create threads inside. Calls from several threads of C at the same time
+  are for whoever calls, as with any C library (Larimar cannot see them): one handle, or the globals, in
+  one thread at a time, unless it is a `synchronized class`.
+- **The hash is not a signature.** It finds out mistakes (files of different builds), not someone who
+  changes a library on purpose.
+- **The four files are generated**: they are not edited, they are not kept in the library's repository
+  (they are in `build/`), and they are published together.
+- **Not yet**: lists, callbacks and errors (`throws`) do not cross a library; they go as texts, handles
+  and numbers (an error code), or stay inside.
 
 ### An example with Windows
 
@@ -4290,7 +4612,7 @@ function main(): int32 {
 }
 ```
 
-with `libraries = ["user32"]` in `[c]`. Declaring everything about Windows in a `win` module avoids
+with `dynamic_libraries = ["user32"]` in `[c]`. Declaring everything about Windows in a `win` module avoids
 repeating the `native` declarations: each `native type` is a different type in each module that
 declares it, so the `HWND` must come from a single place.
 
@@ -4880,6 +5202,8 @@ What Larimar does not have, and will not have, with what is used instead:
   `&x` only works as an argument of a C function.
 - The function that lets a resource go (`released by`) receives only the resource: if it needs more
   context (a table of functions loaded with `dlopen`, like OpenSSL in `std.net`), it goes in `c_code`.
+- A library written in Larimar gives C (and the programs that link it) numbers, `bool`, texts and handles
+  of its classes: lists, callbacks and errors do not cross it yet.
 - A memory cannot be emptied by hand (`clear()`); it is freed at the end of its block.
 - The compiler decides without running whether a function creates its result. If it sometimes returns
   something new and sometimes something that already existed, it is treated as if it always created:
@@ -4957,6 +5281,7 @@ native let errno: int32;
 native type CFile = FILE* released by fclose;               // a resource: let go with its memory
 native function fopen(path: String, mode: String): CFile?;
 native function fclose(f: CFile): int32;
+native function strdup(text: String): String released by free;   // a text of C: copied, then freed
 native struct Node = "struct node" { let next: Node*; let name: String; }
 native type Doc = Doc* released by doc_close {                  // a C type with members
     let id: int32;                                              // a field: d.id is d->id
@@ -5018,4 +5343,9 @@ native type File = FILE*;                             // a concrete C type
 native struct Point { let x: float32; let y: float32; }    // a C struct
 native type Op = (int32, int32) -> int32;             // a pointer to a C function
 export function subtract(a: int32, b: int32): int32 { return a - b; }   // C can call it
+export function name(id: int32): String = lm_name { return "n${id}"; }  // C's name; C frees the text
+
+// larimar.toml of a library: build/<name>/ with lib<name>.a, <name>.h, <name>.lar, <name>.interface
+// [project] kind = "library"      [library] type = "static" (or "dynamic"), prefix = "tk"
+// [c] static_libraries / static_library_paths, dynamic_libraries / dynamic_library_paths
 ```

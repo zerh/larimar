@@ -319,7 +319,9 @@ function topLevelDeclaration(): Node {
     }
     if (atWord("export") && next().kind == TT.Function) {
         advance();
+        parsingExport = true;
         let exported: FunctionDecl = functionDeclaration(false, true);
+        parsingExport = false;
         if (exported.typeName != "") { error(exported.line, "Only plain functions can be exported, not '${exported.typeName}.${exported.name}'"); }
         exported.exportName = exported.name;
         return exported;
@@ -385,7 +387,7 @@ function constant(): Node {
 
 /**
  * (after `native`)
- *   function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] ;      a C function
+ *   function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;  a C function
  *   const NAME : Type [ = C ] ;      let NAME : Type [ = NAME ] ;                        a C constant, macro or global
  *   struct NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static ... )* }  a C struct, by value
  *   type NAME [ = CTYPE | = ( Type, ... ) -> Type ] [ released by NAME ] ( ; | { member* } )   a C type
@@ -416,7 +418,7 @@ function cTarget(what: String): String {
     return expect(TT.Ident, "Expected the C name, or \"C text\" in quotes, after '=' in ${what}").text;
 }
 
-/** (after `native function`) NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] ; */
+/** (after `native function`) NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ; */
 function nativeFunctionOfC(): ExternFunctionDecl {
     let name: Token = expect(TT.Ident, "Expected function name");
     let declaration: ExternFunctionDecl = ExternFunctionDecl { line: name.line, name: name.text, cName: name.text, ret: typeNamed("void", name.line) } in default;
@@ -438,6 +440,12 @@ function nativeFunctionOfC(): ExternFunctionDecl {
     }
     let target: String = cTarget("native function '${name.text}'");
     if (target != "") { declaration.cName = target; }
+    if (atWord("released")) {                // a text C makes: copied into the memory of the call, then released
+        advance();
+        let by: Token = expect(TT.Ident, "Expected 'by' and the function that releases the text: released by free");
+        if (by.text != "by") { error(by.line, "Expected 'by' after 'released': released by free"); }
+        declaration.releasedBy = expect(TT.Ident, "Expected the function that releases the result of '${name.text}' after 'released by'").text;
+    }
     noWhenSuffix();
     if (at(TT.LBrace)) { error(current().line, "A native function has no body: it is a function of C (to write one in Larimar, write a plain function)"); }
     expect(TT.Semi, "Expected ';' after native function");
@@ -689,6 +697,9 @@ function parameters(): Param[*] {
  *
  * `wait until` only on a method of a synchronized class; no body (`;`) in an interface.
  */
+/** Inside `export function`: `= c_name` may come before the body. */
+let parsingExport: bool = false;
+
 function functionDeclaration(isOverride: bool, withBody: bool): FunctionDecl {
     expect(TT.Function, "Expected 'function'");
     let name: Token = expect(TT.Ident, "Expected function name");
@@ -706,6 +717,9 @@ function functionDeclaration(isOverride: bool, withBody: bool): FunctionDecl {
     if (optional(TT.Colon)) { declaration.ret = type(); }
     if (optional(TT.In)) { declaration.returnLives = lives(); }
     if (optional(TT.Throws)) { declaration.throwsType = type(); }
+    if (parsingExport && optional(TT.Assign)) {     // export function f(...) = c_name { ... }
+        declaration.exportC = expect(TT.Ident, "Expected the C name after '=' in export function '${name.text}'").text;
+    }
     let waitToken: Token = current();
     if (atWord("wait_until")) {
         error(waitToken.line, "Write 'wait until' (two words): wait until (condition)");

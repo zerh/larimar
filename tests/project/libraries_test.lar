@@ -1,0 +1,365 @@
+// Libraries written in Larimar: larimar build of a project with kind = "library" makes build/<name>/ with the
+// library (static by default, dynamic with --dynamic), its .h, its .lar and its .interface. A C program and
+// a Larimar program use it; a .lar or a library of another build is found out before the C compiler runs.
+// Each test writes its projects in build/test/ and builds them with the compiler under test.
+import std.test { check, checkText, checkInt, fail, skip };
+import std.os.process { Process, ProcessError };
+import std.io.files as Files;
+import std.io { IoError };
+import std.io.path as Paths;
+import std.os;
+import tests.support.compiler { compiler, failsWith, runs, caseFile };
+
+/** The library of the tests: texts, a class whose objects C keeps as handles, a text that may be null. */
+const LIBRARY: String = raw"""
+    /** Counts the words of a text. */
+    public export function wordCount(text: String): int32 {
+        let n: int32 = 0;
+        for (w in text.split(" ")) {
+            if (w != "") { n += 1; }
+        }
+        return n;
+    }
+
+    /** The text with its first letter in upper case. */
+    public export function title(text: String): String {
+        if (text == "") { return ""; }
+        return "${text.substring(0, 1).toUpperCase()}${text.substring(1)}";
+    }
+
+    public export function firstWord(text: String?): String? {
+        if (text == null) { return null; }
+        for (w in text!.split(" ")) {
+            if (w != "") { return w.clone(); }
+        }
+        return null;
+    }
+
+    public class Counter {
+        let words: int32 = 0;
+        let texts: String[*] = [];
+    }
+
+    public export function newCounter(): Counter { return Counter {}; }
+
+    public export function add(c: Counter, text: String): void {
+        c.words += wordCount(text);
+        c.texts.push(text.clone());
+    }
+
+    public export function total(c: Counter): int32 { return c.words; }
+
+    public export function last(c: Counter): String? {
+        if (c.texts.length == 0) { return null; }
+        return c.texts[c.texts.length - 1].clone();
+    }
+
+    public export function answer(): int32 = tk_answer { return 42; }
+    """;
+
+/** A C program that uses the library through textkit.h. */
+const C_PROGRAM: String = """
+    #include <stdio.h>
+    #include <string.h>
+    #include "textkit.h"
+    int main(void) {
+        char* t = tk_title("larimar");
+        char* w = tk_firstWord("  two words");
+        tk_Counter* c = tk_newCounter();
+        tk_add(c, "one two");
+        tk_add(c, "three");
+        char* l = tk_last(c);
+        printf("%d %s %s %d %s %d\\n", tk_wordCount("a b  c"), t, w, tk_total(c), l, tk_answer());
+        printf("%s\\n", tk_firstWord(NULL) == NULL ? "null" : "not null");
+        printf("%s\\n", strcmp(tk_interface(), TEXTKIT_INTERFACE) == 0 ? "same interface" : "another interface");
+        tk_free(t);
+        tk_free(w);
+        tk_free(l);
+        tk_Counter_release(c);
+        return 0;
+    }
+    """;
+
+/** A Larimar program that imports the library's .lar. */
+const LARIMAR_PROGRAM: String = raw"""
+    import textkit;
+    import textkit { Counter };
+
+    function main(): int32 {
+        let c: Counter = textkit.newCounter();
+        textkit.add(c, "one two");
+        textkit.add(c, "three");
+        println("${textkit.wordCount("a b  c")} ${textkit.title("larimar")} ${textkit.firstWord("  two words") ?? "-"} ${textkit.total(c)} ${textkit.last(c) ?? "-"} ${textkit.answer()}");
+        println(textkit.firstWord(null) ?? "null");
+        for (i in 0..3) { println(textkit.title("x${i}")); }
+        return 0;
+    }
+    """;
+
+/** Runs a program: its exit code, and what it printed (errors too) into `output`. */
+function execute(program: String, args: String[*], output: String[*]): int32 {
+    let p: Process = { program, args, mergeErrors: true };
+    try {
+        p.start();
+        output.push(p.readAll(120000));
+        return p.wait(30000) ?? -1;
+    } catch (ProcessError e) {
+        output.push("cannot run ${program}");
+        return -1;
+    }
+}
+
+/** Runs the compiler (`larimarc <args>`). */
+function larimarc(args: String[*], output: String[*]): int32 { return execute(compiler(), args, output); }
+
+/** Writes the library's project in build/test/<folder>: its larimar.toml and src/textkit.lar. */
+function writeLibrary(folder: String, extra: String): String throws IoError {
+    let dir: String = Paths.absolute("build/test/${folder}");
+    Files.createDirectories(Paths.join(dir, "src"));
+    Files.writeString(Paths.join(dir, "larimar.toml"), "[project]\nname = \"textkit\"\nversion = \"1.0.0\"\nkind = \"library\"\nmain = \"src/textkit.lar\"\n\n[library]\nprefix = \"tk\"\n");
+    Files.writeString(Paths.join(dir, "src/textkit.lar"), "${LIBRARY}${extra}");
+    return dir;
+}
+
+/** Writes a program that links the library from libs/textkit (a copy of the library's folder). */
+function writeProgram(folder: String, library: String, toml: String) : String throws IoError {
+    let dir: String = Paths.absolute("build/test/${folder}");
+    let libs: String = Paths.join(dir, "libs/textkit");
+    Files.createDirectories(Paths.join(dir, "src"));
+    Files.createDirectories(libs);
+    for (f in Files.list(library)) { Files.copy(Paths.join(library, f), Paths.join(libs, f)); }
+    Files.writeString(Paths.join(dir, "larimar.toml"), "[project]\nname = \"app\"\n\n[c]\n${toml}");
+    Files.writeString(Paths.join(dir, "src/main.lar"), LARIMAR_PROGRAM);
+    return dir;
+}
+
+/** Builds the library; its folder (build/textkit), or "" when it did not build. */
+function buildLibrary(dir: String, args: String[*]): String {
+    let output: String[*] = [];
+    let all: String[*] = ["build", dir];
+    for (a in args) { all.push(a); }
+    if (larimarc(all, output) != 0) {
+        fail("the library does not build: ${output.join("")}");
+        return "";
+    }
+    return Paths.join(dir, "build/textkit");
+}
+
+const LARIMAR_OUTPUT: String = "3 Larimar two 3 three 42\nnull\nX0\nX1\nX2\n";
+
+function onlyLinuxOrMac(): bool {
+    if (os.platform() == "windows") {
+        skip("the libraries are tested on Linux and macOS");
+        return false;
+    }
+    return true;
+}
+
+test function aStaticLibraryForCAndForLarimar(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let lib: String = buildLibrary(writeLibrary("lib-static", ""), []);
+    if (lib == "") { return; }
+    let files: String[] = ["libtextkit.a", "textkit.h", "textkit.lar", "textkit.interface"];
+    for (f in files) { check(Files.isFile(Paths.join(lib, f)), "build/textkit/${f} is there"); }
+    let itf: String = Files.readString(Paths.join(lib, "textkit.interface"));
+    check(itf.contains("type = \"static\"") && itf.contains("prefix = \"tk\""), "the interface says what it is: ${itf}");
+    let module: String = Files.readString(Paths.join(lib, "textkit.lar"));
+    check(module.contains("public native function title(text: String): String = tk_title released by tk_free;"), "a text is copied and freed: ${module}");
+    check(module.contains("public native type Counter = tk_Counter* released by tk_Counter_release;"), "a class is a handle: ${module}");
+    check(Files.readString(Paths.join(lib, "textkit.h")).contains("int32_t tk_answer(void);"), "= c_name names it in C");
+    // from C
+    let cc: String = (os.env("CC") ?? "").trim();
+    let exe: String = Paths.join(lib, "c-program");
+    Files.writeString(Paths.join(lib, "c-program.c"), C_PROGRAM);
+    let output: String[*] = [];
+    let cmd: String[*] = ["-std=c99", "-I${lib}", Paths.join(lib, "c-program.c"), Paths.join(lib, "libtextkit.a"), "-lm", "-o", exe];
+    checkInt(0, execute(cc != "" ? cc : "cc", cmd, output));
+    output.clear();
+    checkInt(0, execute(exe, [], output));
+    checkText("3 Larimar two 3 three 42\nnull\nsame interface\n", output.join(""));
+    // from Larimar
+    let app: String = writeProgram("lib-static-app", lib, "static_libraries = [\"textkit\"]\nstatic_library_paths = [\"libs/textkit\"]\n");
+    output.clear();
+    checkInt(0, larimarc(["run", app], output));
+    check(output.join("").endsWith(LARIMAR_OUTPUT), "the program uses the library: ${output.join("")}");
+}
+
+test function aDynamicLibrary(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let lib: String = buildLibrary(writeLibrary("lib-dynamic", ""), ["--dynamic"]);
+    if (lib == "") { return; }
+    let file: String = os.platform() == "macos" ? "libtextkit.dylib" : "libtextkit.so";
+    check(Files.isFile(Paths.join(lib, file)), "${file} is there");
+    check(!Files.isFile(Paths.join(lib, "libtextkit.a")), "and no static library of another build");
+    let app: String = writeProgram("lib-dynamic-app", lib, "dynamic_libraries = [\"textkit\"]\ndynamic_library_paths = [\"libs/textkit\"]\n");
+    let output: String[*] = [];
+    checkInt(0, larimarc(["run", app], output));
+    check(output.join("").endsWith(LARIMAR_OUTPUT), "the program loads the library: ${output.join("")}");
+}
+
+test function anotherBuildIsFoundOut(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let lib: String = buildLibrary(writeLibrary("lib-builds", ""), []);
+    if (lib == "") { return; }
+    let app: String = writeProgram("lib-builds-app", lib, "static_libraries = [\"textkit\"]\nstatic_library_paths = [\"libs/textkit\"]\n");
+    let module: String = Paths.join(app, "libs/textkit/textkit.lar");
+    let kept: String = Files.readString(module);
+    Files.writeString(module, "${kept}\npublic native function more(): int32 = tk_more;\n");      // edited by hand
+    let output: String[*] = [];
+    checkInt(1, larimarc(["build", app], output));
+    check(output.join("").contains("textkit.lar does not match the library"), "an edited .lar: ${output.join("")}");
+    Files.writeString(module, kept);
+    // a library of a new build (one more export function), with the .lar and .interface of the old one
+    let lib2: String = buildLibrary(writeLibrary("lib-builds", "\npublic export function more(): int32 { return 1; }\n"), []);
+    if (lib2 == "") { return; }
+    Files.copy(Paths.join(lib2, "libtextkit.a"), Paths.join(app, "libs/textkit/libtextkit.a"));
+    output.clear();
+    checkInt(1, larimarc(["build", app], output));
+    check(output.join("").contains("libtextkit.a is from another build"), "a library of another build: ${output.join("")}");
+    // its four files: it builds
+    for (f in Files.list(lib2)) { Files.copy(Paths.join(lib2, f), Paths.join(app, "libs/textkit/${f}")); }
+    output.clear();
+    checkInt(0, larimarc(["build", app], output));
+}
+
+test function aStaticLibraryIsNotDynamic(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let lib: String = buildLibrary(writeLibrary("lib-kind", ""), []);
+    if (lib == "") { return; }
+    let app: String = writeProgram("lib-kind-app", lib, "dynamic_libraries = [\"textkit\"]\ndynamic_library_paths = [\"libs/textkit\"]\n");
+    let output: String[*] = [];
+    checkInt(1, larimarc(["build", app], output));
+    check(output.join("").contains("textkit is a static library"), "it says which kind it is: ${output.join("")}");
+}
+
+test function theTestsOfALibraryUseItsRules(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let dir: String = writeLibrary("lib-tests", "");
+    Files.createDirectories(Paths.join(dir, "tests"));
+    Files.writeString(Paths.join(dir, "tests/textkit_test.lar"), """
+        import textkit;
+        import std.test { checkInt };
+        test function counts(): void {
+            let c: textkit.Counter = textkit.newCounter();
+            textkit.add(c, "a b");
+            checkInt(2, textkit.total(c));
+        }
+        """);
+    let log: String = Paths.join(dir, "test-output.txt");
+    checkInt(0, os.run("cd '${dir}' && '${compiler()}' test > '${log}' 2>&1"));
+    let text: String = Files.readString(log);
+    check(text.contains("1 passed, 0 failed"), "the library's tests: ${text}");
+}
+
+test function oldLibraryKeysSayTheNewOnes(): void throws IoError {
+    let dir: String = Paths.absolute("build/test/lib-old-keys");
+    Files.createDirectories(Paths.join(dir, "src"));
+    Files.writeString(Paths.join(dir, "larimar.toml"), "[project]\nname = \"old\"\n\n[c]\nlibraries = [\"m\"]\n\n[c.linux]\nlibrary_paths = [\"lib\"]\n");
+    Files.writeString(Paths.join(dir, "src/main.lar"), "function main(): int32 { return 0; }\n");
+    let output: String[*] = [];
+    checkInt(1, larimarc(["build", dir], output));
+    let text: String = output.join("");
+    check(text.contains("'libraries' in [c] is now static_libraries"), "libraries: ${text}");
+    check(text.contains("'library_paths' in [c.linux] is now static_library_paths or dynamic_library_paths"), "library_paths: ${text}");
+}
+
+test function aLibraryHasNoMain(): void throws IoError {
+    let dir: String = writeLibrary("lib-main", "\nfunction main(): int32 { return 0; }\n");
+    let output: String[*] = [];
+    checkInt(1, larimarc(["build", dir], output));
+    check(output.join("").contains("A library has no main"), "main in a library: ${output.join("")}");
+}
+
+test function onlyALibraryGivesItsClassesToC(): void {
+    failsWith(raw"""
+        public class Box { let n: int32 = 0; }
+        export function make(): Box { return Box {}; }
+        function main(): int32 { return 0; }
+        """, "only a library ([project] kind = \"library\") gives C its objects");
+}
+
+test function releasedByGoesOnTexts(): void {
+    failsWith(raw"""
+        native function count(): int32 released by free;
+        native function free(text: String): void;
+        function main(): int32 { return count(); }
+        """, "'released by' after a native function goes on a text that C makes");
+}
+
+test function aReleaserIsCalledOnlyByTheCompiler(): void {
+    failsWith(raw"""
+        native function strdup(text: String): String released by free;
+        native function free(text: String): void;
+        function main(): int32 {
+            free("x");
+            return 0;
+        }
+        """, "'free' releases the texts that C gives");
+}
+
+// A text that C makes with malloc: copied into the memory of the call (a buffer too), then freed.
+test function aTextOfCIsCopiedAndReleased(): void {
+    runs(caseFile("released_text.lar", raw"""
+        c_code {
+            #include <stdio.h>
+            #include <stdlib.h>
+            static char* make_text(int n) {
+                char* p = (char*)malloc(32);
+                snprintf(p, 32, "text %d", n);
+                return p;
+            }
+            static char* maybe_text(int n) { return n > 0 ? make_text(n) : NULL; }
+        }
+        native function make_text(n: int32): String released by free;
+        native function maybe_text(n: int32): String? released by free;
+        native function free(text: String): void;
+
+        function made(n: int32): String { return make_text(n); }
+
+        function main(): int32 {
+            for (i in 0..1000) {
+                let t: String = make_text(i);
+                if (i == 999) { println(t); }
+            }
+            println(made(7));
+            println(maybe_text(0) ?? "null");
+            println(maybe_text(2) ?? "null");
+            let buffer: byte[64] = [];
+            let b: String = make_text(5) in buffer;
+            println(b);
+            return 0;
+        }
+        """), ["text 999", "text 7", "null", "text 2", "text 5"]);
+}
+
+// export function f(...) = c_name: its C name; a String or String? result is a copy that C frees.
+test function anExportGivesCATextToFree(): void {
+    runs(caseFile("export_text.lar", raw"""
+        export function greet(name: String?): String = lar_greet {
+            return "hi ${name ?? "nobody"}";
+        }
+        export function shout(name: String): String? {
+            return name == "" ? null : name.toUpperCase();
+        }
+        c_code {
+            #include <stdio.h>
+            #include <stdlib.h>
+            static void use_them(void) {
+                for (int i = 0; i < 1000; i++) {
+                    char* a = lar_greet("ana");
+                    char* b = lar_greet(NULL);
+                    char* c = shout("x");
+                    if (i == 999) printf("%s / %s / %s / %s\n", a, b, c, shout("") ? "text" : "NULL");
+                    free(a);
+                    free(b);
+                    free(c);
+                }
+            }
+        }
+        native function use_them(): void;
+        function main(): int32 {
+            use_them();
+            return 0;
+        }
+        """), ["hi ana / hi nobody / X / NULL"]);
+}

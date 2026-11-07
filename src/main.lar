@@ -1,7 +1,7 @@
 // larimar: the Larimar tool and compiler, written in Larimar (Larimar.java + Transpiler.java).
 //
 //   larimar new <name>              creates a project
-//   larimar build [folder]          larimar.toml -> build/<name>.c -> executable
+//   larimar build [folder]          larimar.toml -> build/<name>.c -> executable (a library: build/<name>/)
 //   larimar run [folder] [-- args]  builds, then runs the program
 //   larimar build --debug           -g -O0 and #line to the .lar files (debuggers; also run, and file.lar -o)
 //   larimar check [file|folder]     the errors, without generating C (--json for tools)
@@ -25,14 +25,16 @@ import editor.docstore { setDocument };
 import project.testing { TestSettings, TestFunction, runTests, testFunctions, hasMain, withMain };
 import editor.lsp { serve, worker };
 import editor.dap { serveDebugger };
-import codegen.gen { generate, generatorErrors, debugLines, spreadLines };
+import codegen.gen { generate, generatorErrors, debugLines, spreadLines, libraryModule, libraryHeader, libraryProblems, INTERFACE_MARK };
+import semantics.types { buildingLibrary, libraryRules, libraryPrefix };
+import project.libraries { LarimarLibrary, larimarLibraries, interfaceHash, libraryFile, interfaceText };
 import codegen.debugmap { debugMap };
-import project.cc { windows, quote, commandLine, systemLibraries, selfPath, CCompiler, chooseCompiler, installHint };
+import project.cc { windows, mac, quote, commandLine, systemLibraries, selfPath, CCompiler, chooseCompiler, installHint };
 import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 import std.os.process { Process, ProcessError };
 
-const VERSION: String = "1.2.0";
+const VERSION: String = "1.3.0";
 
 /** The version of the language this compiler implements (SPEC.md). */
 const LANGUAGE: String = "1.0";
@@ -72,6 +74,9 @@ let debugBuild: bool = false;
 /** --cc <program>: the C compiler for this build, instead of the project's */
 let compilerOverride: String = "";
 
+/** --static / --dynamic: the kind of library to build, instead of the project's ([library] type) */
+let libraryOverride: String = "";
+
 function fail(msg: String in default): int32 {
     toolError = msg;
     return 1;
@@ -89,6 +94,8 @@ function command(args: String[]): int32 {
             dashed = true;
         } else if (args[i] == "--debug") {
             debugBuild = true;
+        } else if (args[i] == "--static" || args[i] == "--dynamic") {
+            libraryOverride = args[i].substring(2).clone() in default;
         } else if (args[i] == "--cc" && i + 1 < args.length) {
             compilerOverride = args[i + 1].clone() in default;
             i += 1;
@@ -98,12 +105,24 @@ function command(args: String[]): int32 {
         i += 1;
     }
     let cmd: String = args[0];
-    if (cmd == "new") { return rest.length != 1 ? fail("usage: larimar new <name>") : create(rest[0]); }
+    if (cmd == "new") {
+        let library: bool = rest.contains("--library");
+        let names: String[*] = [];
+        for (r in rest) {
+            if (r != "--library") { names.push(r); }
+        }
+        return names.length != 1 ? fail("usage: larimar new <name> [--library]") : create(names[0], library);
+    }
     if (cmd == "build" || cmd == "run") {
         if (rest.length > 1) { return fail("expected at most one folder, got [${rest.join(", ")}]"); }
         let dir: String = rest.length == 1 ? rest[0] : ".";
         let p: Project? = load(Paths.absolute(dir));
         if (p == null) { return 1; }
+        if (p.kind == "library") {
+            if (cmd == "run") { return fail("${p.name} is a library: it has no main to run. Build it (larimar build), and run a program that uses it."); }
+            return buildLibrary(p, debugBuild) ? 0 : 1;
+        }
+        if (libraryOverride != "") { return fail("--${libraryOverride} is for libraries ([project] kind = \"library\"), and ${p.name} is a program"); }
         let exe: String = build(p, debugBuild);
         if (exe == "") { return 1; }
         return cmd == "build" ? 0 : execute(exe, programArgs);
@@ -153,8 +172,10 @@ function command(args: String[]): int32 {
 function usage(): void {
     println("larimar ${VERSION} (language ${LANGUAGE})");
     println("");
-    println("  larimar new <name>            create a project in a new folder");
-    println("  larimar build [folder]        compile the project (larimar.toml) to an executable");
+    println("  larimar new <name> [--library] create a project in a new folder (a program, or a library)");
+    println("  larimar build [folder]        compile the project (larimar.toml) to an executable, or a library:");
+    println("                                build/<name>/ with lib<name>.a, <name>.h, <name>.lar, <name>.interface");
+    println("  larimar build --static | --dynamic  a library of that kind, instead of [library] type");
     println("  larimar run [folder] [-- args] build, then run it with the arguments");
     println("  larimar build --debug         with -g -O0 and the .lar lines, for a debugger (lldb, gdb, VS Code)");
     println("  larimar check [file|folder]   find the errors without generating C (--json for tools)");
@@ -351,7 +372,7 @@ function testSettings(): TestSettings? {
         let cc: CCompiler? = testCompiler((os.env("CC") ?? "").trim());
         if (cc == null) { return null; }
         return TestSettings {
-            compiler: cc.program, first: cc.first, bundled: cc.bundled, libraries: [], libraryPaths: [], includePaths: [],
+            compiler: cc.program, first: cc.first, bundled: cc.bundled, links: [], includePaths: [],
             sources: [], root: "", outDir: Paths.join(here, "build/test")
         };
     }
@@ -361,12 +382,13 @@ function testSettings(): TestSettings? {
     for (x in p.sources) { sources.push(resolve(here, x).clone()); }
     let includes: String[*] = [];
     for (x in p.includePaths) { includes.push(resolve(here, x).clone()); }
-    let libPaths: String[*] = [];
-    for (x in p.libraryPaths) { libPaths.push(resolve(here, x).clone()); }
+    for (l in p.larimarLibraries) { includes.push(l.dir); }
     let cc: CCompiler? = testCompiler(compilerOverride != "" ? compilerOverride : p.compiler);
     if (cc == null) { return null; }
+    let links: String[*] = linkArgs(p, cc.bundled);
+    if (toolError != "") { return null; }
     return TestSettings {
-        compiler: cc.program, first: cc.first, bundled: cc.bundled, libraries: p.libraries, libraryPaths: libPaths, includePaths: includes, sources,
+        compiler: cc.program, first: cc.first, bundled: cc.bundled, links, includePaths: includes, sources,
         root: Paths.parent(resolve(here, p.main)), outDir: Paths.join(resolve(here, p.buildDir), "test")
     };
 }
@@ -430,15 +452,22 @@ function testMain(rest: String[*]): int32 {
 class Project {
     let dir: String;
     let name: String;
+    let version: String;
+    let kind: String;                   // "program" or "library"
+    let libraryType: String;            // a library: "static" or "dynamic"
+    let prefix: String;                 // a library: what its C names start with (<prefix>_<name>)
     let main: String;
     let output: String;
     let buildDir: String;
     let compiler: String;
     let flags: String[*];
-    let libraries: String[*];
-    let libraryPaths: String[*];
+    let staticLibraries: String[*];
+    let staticLibraryPaths: String[*];
+    let dynamicLibraries: String[*];
+    let dynamicLibraryPaths: String[*];
     let includePaths: String[*];
     let sources: String[*];
+    let larimarLibraries: LarimarLibrary[*];     // the linked libraries written in Larimar (with a .interface)
 }
 
 
@@ -460,11 +489,24 @@ function load(dir: String): Project? {
 
 let problems: String[*] = [] in default;
 
-const PROJECT_KEYS: String = "[build_dir, main, name, output, version]";
-const C_KEYS: String = "[compiler, flags, include_paths, libraries, library_paths, sources]";
+const PROJECT_KEYS: String = "[build_dir, kind, main, name, output, version]";
+const LIBRARY_KEYS: String = "[prefix, type]";
+const C_KEYS: String = "[compiler, dynamic_libraries, dynamic_library_paths, flags, include_paths, sources, static_libraries, static_library_paths]";
+
+function keysOf(section: String): String {
+    return section == "project" ? PROJECT_KEYS : section == "library" ? LIBRARY_KEYS : C_KEYS;
+}
 
 function allowedKey(section: String, key: String): bool {
-    return section == "project" ? key == "name" || key == "version" || key == "main" || key == "output" || key == "build_dir" : key == "compiler" || key == "flags" || key == "libraries" || key == "library_paths" || key == "include_paths" || key == "sources";
+    return keysOf(section).contains("[${key},") || keysOf(section).contains(" ${key},") || keysOf(section).contains(" ${key}]");
+}
+
+/** libraries and library_paths of before 1.3: a library is now static or dynamic by the key that names it. */
+function oldKey(key: String, where: String): String {
+    if (key == "libraries") {
+        return "'libraries' in ${where} is now static_libraries (lib<name>.a, inside the executable) or dynamic_libraries (lib<name>.so/.dylib, <name>.dll: loaded when it starts; also the system's, like m or user32)";
+    }
+    return "'library_paths' in ${where} is now static_library_paths or dynamic_library_paths (the folders of each kind; the executable looks for its dynamic libraries in the second)";
 }
 
 function project(dir: String, config: Any): Project? {
@@ -475,11 +517,11 @@ function project(dir: String, config: Any): Project? {
             continue;
         }
         if (sectionName == "dependencies") { continue; }      // the versions are for Minero; the compiler only looks for deps/<name>
-        if (sectionName != "project" && sectionName != "c") {
-            problems.push("unknown section [${sectionName}] (sections: [project], [c], [dependencies])");
+        if (sectionName != "project" && sectionName != "c" && sectionName != "library") {
+            problems.push("unknown section [${sectionName}] (sections: [project], [library], [c], [dependencies])");
             continue;
         }
-        let allowed: String = sectionName == "project" ? PROJECT_KEYS : C_KEYS;
+        let allowed: String = keysOf(sectionName);
         for (key, value in section.fields) {
             // [c.linux], [c.macos], [c.windows], [c.unix]: a table with names (an empty [] is a list, as in libraries = [])
             if (sectionName == "c" && isSection(value) && (isPlatform(key) || hasNames(value))) {
@@ -488,26 +530,43 @@ function project(dir: String, config: Any): Project? {
                     continue;
                 }
                 for (platformKey, platformValue in value.fields) {
-                    if (!allowedKey("c", platformKey)) { problems.push("unknown key '${platformKey}' in [c.${key}] (keys: ${C_KEYS})"); }
+                    if (platformKey == "libraries" || platformKey == "library_paths") {
+                        problems.push(oldKey(platformKey, "[c.${key}]"));
+                    } else if (!allowedKey("c", platformKey)) {
+                        problems.push("unknown key '${platformKey}' in [c.${key}] (keys: ${C_KEYS})");
+                    }
                 }
+            } else if (sectionName == "c" && (key == "libraries" || key == "library_paths")) {
+                problems.push(oldKey(key, "[c]"));
             } else if (!allowedKey(sectionName, key)) {
                 problems.push("unknown key '${key}' in [${sectionName}] (keys: ${allowed})");
             }
         }
     }
-    if (topKeys.length > 0) { problems.push("keys must go inside [project] or [c]: [${topKeys.join(", ")}]"); }
+    if (topKeys.length > 0) { problems.push("keys must go inside [project], [library] or [c]: [${topKeys.join(", ")}]"); }
     let p: Any = config.project;
     let c: Any = config.c;
+    let lib: Any = config.library;
     let name: String = text(p, "name", "");
+    let kind: String = text(p, "kind", "program");
+    if (kind != "program" && kind != "library") { problems.push("kind = \"${kind}\" in [project]: it is \"program\" (the default) or \"library\""); }
     if (name == "") {
         problems.push("[project] needs a name: name = \"my-program\"");
     } else if (!validName(name)) {
         problems.push("the project name can only use letters, digits, '_', '-' and '.'");
+    } else if (kind == "library" && !cIdentifier(name)) {
+        problems.push("a library's name is also its module (import ${name.replace("-", "_").replace(".", "_")}) and its files: use only letters, digits and '_'");
     }
+    if (kind != "library" && lib != null) { problems.push("[library] is for libraries: add kind = \"library\" to [project]"); }
+    let libraryType: String = libraryOverride != "" ? libraryOverride : text(lib, "type", "static");
+    if (libraryType != "static" && libraryType != "dynamic") { problems.push("type = \"${libraryType}\" in [library]: it is \"static\" (the default) or \"dynamic\""); }
+    let prefix: String = text(lib, "prefix", name);
+    if (prefix != "" && !cIdentifier(prefix)) { problems.push("prefix = \"${prefix}\" in [library]: the C names start with it, so only letters, digits and '_'"); }
+    let version: String = text(p, "version", "0.1.0");
     let main: String = text(p, "main", "src/main.lar");
     let buildDir: String = text(p, "build_dir", "build");
     let exeSuffix: String = windows() ? ".exe" : "";
-    let output: String = text(p, "output", "${buildDir}/${name}${exeSuffix}");
+    let output: String = text(p, "output", kind == "library" ? "${buildDir}/${name}" : "${buildDir}/${name}${exeSuffix}");
     let cc: String = (os.env("CC") ?? "").trim();     // what was asked for; "" chooses (chooseCompiler)
     // [c] for every platform, then [c.unix] (Linux and macOS) and [c.<this platform>]: their lists are added
     // to [c]'s, and a compiler there replaces [c]'s
@@ -515,15 +574,19 @@ function project(dir: String, config: Any): Project? {
     let here: Any = c[os.platform()];
     let compiler: String = text(here, "compiler", text(unix, "compiler", text(c, "compiler", cc)));
     let flags: String[*] = list(c, "flags", ["-O2"]);
-    let libraries: String[*] = list(c, "libraries", []);
-    let libraryPaths: String[*] = list(c, "library_paths", []);
+    let staticLibraries: String[*] = list(c, "static_libraries", []);
+    let staticLibraryPaths: String[*] = list(c, "static_library_paths", []);
+    let dynamicLibraries: String[*] = list(c, "dynamic_libraries", []);
+    let dynamicLibraryPaths: String[*] = list(c, "dynamic_library_paths", []);
     let includePaths: String[*] = list(c, "include_paths", []);
     let sources: String[*] = list(c, "sources", []);
     let platformSections: Any[] = [unix, here];
     for (platform in platformSections) {
         for (x in list(platform, "flags", [])) { flags.push(x.clone()); }
-        for (x in list(platform, "libraries", [])) { libraries.push(x.clone()); }
-        for (x in list(platform, "library_paths", [])) { libraryPaths.push(x.clone()); }
+        for (x in list(platform, "static_libraries", [])) { staticLibraries.push(x.clone()); }
+        for (x in list(platform, "static_library_paths", [])) { staticLibraryPaths.push(x.clone()); }
+        for (x in list(platform, "dynamic_libraries", [])) { dynamicLibraries.push(x.clone()); }
+        for (x in list(platform, "dynamic_library_paths", [])) { dynamicLibraryPaths.push(x.clone()); }
         for (x in list(platform, "include_paths", [])) { includePaths.push(x.clone()); }
         for (x in list(platform, "sources", [])) { sources.push(x.clone()); }
     }
@@ -544,8 +607,13 @@ function project(dir: String, config: Any): Project? {
             let depHere: Any = dc[os.platform()];
             let depSections: Any[] = [dc, depUnix, depHere];
             for (section in depSections) {
-                for (x in list(section, "libraries", [])) { libraries.push(x.clone()); }
-                for (x in list(section, "library_paths", [])) { libraryPaths.push(Paths.join(depDir, x).clone()); }
+                if (section != null && (section.libraries != null || section.library_paths != null)) {
+                    problems.push("deps/${depName}/larimar.toml: ${oldKey(section.libraries != null ? "libraries" : "library_paths", "[c]")}".clone());
+                }
+                for (x in list(section, "static_libraries", [])) { staticLibraries.push(x.clone()); }
+                for (x in list(section, "static_library_paths", [])) { staticLibraryPaths.push(Paths.join(depDir, x).clone()); }
+                for (x in list(section, "dynamic_libraries", [])) { dynamicLibraries.push(x.clone()); }
+                for (x in list(section, "dynamic_library_paths", [])) { dynamicLibraryPaths.push(Paths.join(depDir, x).clone()); }
                 for (x in list(section, "include_paths", [])) { includePaths.push(Paths.join(depDir, x).clone()); }
                 for (x in list(section, "sources", [])) { sources.push(Paths.join(depDir, x).clone()); }
             }
@@ -555,11 +623,27 @@ function project(dir: String, config: Any): Project? {
             problems.push("deps/${depName}/larimar.toml: ${Toml.message(e)}".clone());
         }
     }
+    for (x in staticLibraries) {
+        if (dynamicLibraries.contains(x)) { problems.push("'${x}' is in static_libraries and in dynamic_libraries: it is linked one way"); }
+    }
+    let larimarLibs: LarimarLibrary[*] = larimarLibraries(dir, config, true, problems);
     if (problems.length > 0) {
         for (m in problems) { compileErrors.push("Project Error [larimar.toml]: ${m}"); }
         return null;
     }
-    return Project { dir, name, main, output, buildDir, compiler, flags, libraries, libraryPaths, includePaths, sources };
+    return Project {
+        dir, name, version, kind, libraryType, prefix, main, output, buildDir, compiler, flags, staticLibraries, staticLibraryPaths,
+        dynamicLibraries, dynamicLibraryPaths, includePaths, sources, larimarLibraries: larimarLibs
+    };
+}
+
+/** A name of C (and of a module): letters, digits and '_', not starting with a digit. */
+function cIdentifier(name: String): bool {
+    if (name.isEmpty() || isDigit(name[0])) { return false; }
+    for (b in name) {
+        if (!isIdentifierPart(b)) { return false; }
+    }
+    return true;
 }
 
 /** The platforms of [c.<platform>]: the same names as #when. */
@@ -673,13 +757,10 @@ function build(p: Project, debug: bool): String {
     cmd.push(cFile);
     for (s in p.sources) { cmd.push(resolve(dir, s)); }
     for (ip in p.includePaths) { cmd.push("-I${resolve(dir, ip)}"); }
-    for (lp in p.libraryPaths) { cmd.push("-L${resolve(dir, lp)}"); }
-    for (l in p.libraries) { cmd.push("-l${l}"); }
-    // Dynamic libraries stay where they are (nothing is copied): the executable is told to look for them
-    // there when it runs (Linux and macOS; on Windows a DLL is found next to the .exe or in the PATH).
-    if (!windows()) {
-        for (lp in p.libraryPaths) { cmd.push("-Wl,-rpath,${resolve(dir, lp)}"); }
-    }
+    for (l in p.larimarLibraries) { cmd.push("-I${l.dir}"); }          // its .h, for the c_include of its .lar
+    let links: String[*] = linkArgs(p, cc.bundled);
+    if (toolError != "") { return ""; }
+    for (l in links) { cmd.push(l); }
     for (l in systemLibraries(c)) { cmd.push(l.clone()); }
     let code: int32 = os.run(commandLine(cmd));
     if (code == 127) {
@@ -695,6 +776,193 @@ function build(p: Project, debug: bool): String {
     }
     Console.printError(debug ? "built ${Paths.relative(dir, exe)} (debug)" : "built ${Paths.relative(dir, exe)}");
     return exe;
+}
+
+/**
+ * How a program links its libraries. A static one (static_libraries) is the file lib<name>.a of
+ * static_library_paths, given to the linker by its path, so it goes inside the executable even when a
+ * dynamic one is next to it (on Linux, one of the system's: -Wl,-Bstatic). A dynamic one
+ * (dynamic_libraries) is -l<name> with -L for each of dynamic_library_paths, and the executable looks for
+ * it in those folders when it runs (Linux and macOS: rpath; on Windows, next to the .exe or in the PATH).
+ * A static library written in Larimar adds what it needs itself (links in its .interface).
+ */
+function linkArgs(p: Project, bundled: bool): String[*] {
+    let dir: String = p.dir;
+    let out: String[*] = [];
+    for (l in p.staticLibraries) {
+        let found: String = "";
+        for (lp in p.staticLibraryPaths) {
+            let candidate: String = Paths.join(resolve(dir, lp), "lib${l}.a");
+            if (found == "" && Files.isFile(candidate)) { found = candidate; }
+        }
+        if (found != "") {
+            out.push(found.clone());
+        } else if (os.platform() == "linux" && !bundled) {
+            out.push("-Wl,-Bstatic");
+            out.push("-l${l}");
+            out.push("-Wl,-Bdynamic");
+        } else {
+            let where: String = p.staticLibraryPaths.length == 0 ? "there is no static_library_paths" : "not in static_library_paths [${p.staticLibraryPaths.join(", ")}]";
+            toolError = "lib${l}.a (static_libraries) is ${where}: add the folder that has it" in default;
+            return out;
+        }
+        for (ll in p.larimarLibraries) {
+            if (ll.name == l && ll.kind == "static") {
+                for (x in ll.links) { out.push(x.clone()); }
+            }
+        }
+    }
+    for (lp in p.dynamicLibraryPaths) { out.push("-L${resolve(dir, lp)}"); }
+    for (l in p.dynamicLibraries) { out.push("-l${l}"); }
+    if (!windows()) {
+        for (lp in p.dynamicLibraryPaths) { out.push("-Wl,-rpath,${resolve(dir, lp)}"); }
+    }
+    return out;
+}
+
+/**
+ * larimar build of a library: build/<name>/ gets lib<name>.a (or the dynamic one), <name>.h for C,
+ * <name>.lar for Larimar and <name>.interface with the hash of the .lar, which the library also has inside.
+ * Everything of the C but the export functions (and what the library gives with them) is static, so two
+ * libraries and the program that links them do not clash; each one has its own runtime.
+ */
+function buildLibrary(p: Project, debug: bool): bool {
+    let dir: String = p.dir;
+    let main: String = resolve(dir, p.main);
+    if (!Files.isFile(main)) {
+        toolError = "the main file ${p.main} does not exist (set it with main = \"...\" in [project])" in default;
+        return false;
+    }
+    debugLines = debug;
+    buildingLibrary = true;
+    let generated: String = compileFile(main, dir);
+    if (compileErrors.length > 0) { return false; }
+    let problems: String[*] = libraryProblems();
+    if (problems.length > 0) {
+        for (m in problems) { compileErrors.push("Library Error [${p.name}]: ${m}"); }
+        return false;
+    }
+    let kind: String = p.libraryType;
+    let module: String = libraryModule(p.name, p.version, kind, "larimar ${VERSION}");
+    let hash: String = interfaceHash(module);
+    let header: String = libraryHeader(p.name, p.version, kind, hash, "larimar ${VERSION}");
+    let cFile: String = resolve(Paths.join(dir, p.buildDir), "${p.name}.c");
+    let withHash: String = generated.replace(INTERFACE_MARK, hash);
+    let c: String = debug ? spreadLines(withHash, Paths.normalize(Paths.absolute(cFile))) : withHash;
+    let outDir: String = resolve(dir, p.output);
+    let binary: String = Paths.join(outDir, libraryFile(p.name, kind));
+    let problem: String[*] = [];
+    let chosen: CCompiler? = chooseCompiler(larimarHome(), compilerOverride != "" ? compilerOverride : p.compiler, false, generated.contains("#define LM_NET_TLS"), problem);
+    if (chosen == null) {
+        toolError = problem[0].clone() in default;
+        return false;
+    }
+    let cc: CCompiler = chosen;
+    // what a program that links it statically must link too: what its C needs, and the libraries it links
+    let links: String[*] = [];
+    if (kind == "static") {
+        for (l in systemLibraries(c)) { links.push(l.clone()); }
+        for (l in p.dynamicLibraries) { links.push("-l${l}"); }
+        for (l in p.staticLibraries) { links.push("-l${l}"); }
+        if (!windows()) { links.push("-lm"); }
+    }
+    try {
+        Files.createDirectories(Paths.parent(cFile));
+        Files.createDirectories(outDir);
+        Files.writeString(cFile, c);
+        if (debug) { Files.writeString(debugMapPath(cFile), debugMap()); }
+        let kinds: String[] = ["static", "dynamic"];     // no file of another build stays next to this one
+        for (k in kinds) {
+            let old: String = Paths.join(outDir, libraryFile(p.name, k));
+            if (Files.isFile(old)) { Files.delete(old); }
+        }
+    } catch (IoError e) {
+        toolError = "cannot write ${cFile}" in default;
+        return false;
+    }
+    let base: String[*] = [cc.program];
+    for (a in cc.first) { base.push(a); }
+    base.push("-std=c99");
+    for (f in p.flags) {
+        if (!debug || !(f.startsWith("-O") || f == "-s")) { base.push(f); }
+    }
+    if (debug) {
+        base.push("-g");
+        base.push("-O0");
+    }
+    if (!windows()) { base.push("-fPIC"); }                 // it goes into executables and dynamic libraries of any kind
+    for (ip in p.includePaths) { base.push("-I${resolve(dir, ip)}"); }
+    for (l in p.larimarLibraries) { base.push("-I${l.dir}"); }
+    let sources: String[*] = [cFile];
+    for (x in p.sources) { sources.push(resolve(dir, x)); }
+    if (kind == "static") {
+        let objects: String[*] = [];
+        let objDir: String = Paths.join(Paths.parent(cFile), "${p.name}-objects");
+        try { Files.createDirectories(objDir); } catch (IoError e) {}
+        for (i, src in sources) {
+            let name: String = Paths.fileName(src);
+            let dot: int32? = name.lastIndexOf(".");
+            let obj: String = Paths.join(objDir, "${i}-${dot != null ? name.substring(0, dot!) : name}.o");
+            let cmd: String[*] = [];
+            for (a in base) { cmd.push(a); }
+            cmd.push("-c");
+            cmd.push("-o");
+            cmd.push(obj);
+            cmd.push(src);
+            if (!runC(cmd, cc.program, dir, cFile)) { return false; }
+            objects.push(obj.clone());
+        }
+        let ar: String[*] = cc.bundled ? [cc.program, "-ar", "rcs", binary] : ["ar", "rcs", binary];
+        for (o in objects) { ar.push(o); }
+        let code: int32 = os.run(commandLine(ar));
+        if (code != 0) {
+            toolError = "the archiver failed (exit ${code}). Command: ${ar.join(" ")}" in default;
+            return false;
+        }
+    } else {
+        let cmd: String[*] = [];
+        for (a in base) { cmd.push(a); }
+        cmd.push(mac() ? "-dynamiclib" : "-shared");
+        if (mac()) {
+            cmd.push("-install_name");
+            cmd.push("@rpath/${libraryFile(p.name, kind)}");      // the program finds it by its rpath
+        }
+        cmd.push("-o");
+        cmd.push(binary);
+        if (windows()) { cmd.push("-Wl,--out-implib,${Paths.join(outDir, "lib${p.name}.dll.a")}"); }
+        for (x in sources) { cmd.push(x); }
+        let ls: String[*] = linkArgs(p, cc.bundled);
+        if (toolError != "") { return false; }
+        for (l in ls) { cmd.push(l); }
+        for (l in systemLibraries(c)) { cmd.push(l.clone()); }
+        if (!windows()) { cmd.push("-lm"); }
+        if (!runC(cmd, cc.program, dir, cFile)) { return false; }
+    }
+    try {
+        Files.writeString(Paths.join(outDir, "${p.name}.h"), header);
+        Files.writeString(Paths.join(outDir, "${p.name}.lar"), module);
+        Files.writeString(Paths.join(outDir, "${p.name}.interface"), interfaceText(p.name, p.version, kind, p.prefix, hash, VERSION, links));
+    } catch (IoError e) {
+        toolError = "cannot write the library's files in ${outDir}" in default;
+        return false;
+    }
+    let shown: String = Paths.relative(dir, outDir);
+    Console.printError("built ${shown}/: ${libraryFile(p.name, kind)}, ${p.name}.h, ${p.name}.lar, ${p.name}.interface (${kind}${debug ? ", debug" : ""}; interface ${hash})");
+    return true;
+}
+
+/** Runs the C compiler; false (and toolError) when it fails. */
+function runC(cmd: String[*], program: String, dir: String, cFile: String): bool {
+    let code: int32 = os.run(commandLine(cmd));
+    if (code == 127) {
+        toolError = "cannot run the C compiler '${program}'. Install one (${installHint()}), or set compiler = \"...\" in [c]." in default;
+        return false;
+    }
+    if (code != 0) {
+        toolError = "the C compiler failed (exit ${code}). Command: ${cmd.join(" ")}\nThe generated C is in ${Paths.relative(dir, cFile)}" in default;
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -754,10 +1022,12 @@ function execute(exe: String, args: String[*]): int32 {
 // new
 // =========================================================================
 
-function create(path: String): int32 {
+function create(path: String, library: bool): int32 {
     let name: String = Paths.fileName(Paths.normalize(path));
     if (!validName(name)) { return fail("the project name can only use letters, digits, '_', '-' and '.'"); }
+    if (library && !cIdentifier(name)) { return fail("a library's name is also its module and its C prefix: use only letters, digits and '_'"); }
     if (Files.exists(path)) { return fail("${path} already exists"); }
+    if (library) { return createLibrary(path, name); }
     try {
         Files.createDirectories(Paths.join(path, "src"));
         Files.writeString(Paths.join(path, "larimar.toml"), """
@@ -768,7 +1038,7 @@ function create(path: String): int32 {
 
             [c]
             flags = ["-O2"]
-            libraries = []
+            dynamic_libraries = []
             """);
         Files.writeString(Paths.join(path, "src/main.lar"), """
             function main(): int32 {
@@ -781,5 +1051,46 @@ function create(path: String): int32 {
         return fail("cannot create ${path}");
     }
     println("created ${path}\n  cd ${path}\n  larimar run");
+    return 0;
+}
+
+/** larimar new <name> --library: a library with one export function and a test of it. */
+function createLibrary(path: String, name: String): int32 {
+    try {
+        Files.createDirectories(Paths.join(path, "src"));
+        Files.createDirectories(Paths.join(path, "tests"));
+        Files.writeString(Paths.join(path, "larimar.toml"), """
+            [project]
+            name = "${name}"
+            version = "0.1.0"
+            kind = "library"
+            main = "src/${name}.lar"
+
+            [library]
+            type = "static"          # or "dynamic" (also: larimar build --dynamic)
+            prefix = "${name}"       # its C names: ${name}_greeting
+
+            [c]
+            flags = ["-O2"]
+            """);
+        Files.writeString(Paths.join(path, "src/${name}.lar"), """
+            /** A greeting for someone. */
+            public export function greeting(who: String): String {
+                return "Hello, \${who}, from ${name}!";
+            }
+            """);
+        Files.writeString(Paths.join(path, "tests/${name}_test.lar"), """
+            import ${name};
+            import std.test { checkText };
+
+            test function greets(): void {
+                checkText("Hello, Ana, from ${name}!", ${name}.greeting("Ana"));
+            }
+            """);
+        Files.writeString(Paths.join(path, ".gitignore"), "build/\n");
+    } catch (IoError e) {
+        return fail("cannot create ${path}");
+    }
+    println("created ${path}\n  cd ${path}\n  larimar build     (build/${name}/: lib${name}.a, ${name}.h, ${name}.lar, ${name}.interface)\n  larimar test");
     return 0;
 }
