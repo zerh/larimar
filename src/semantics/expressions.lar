@@ -19,14 +19,14 @@ import semantics.types {
     SwitchInfo, isMemParam, usesAny, usedTypes, funcTypes, lambdaList, nativeMethods, structOf, classOf, interfaceOf, enumOf,
     isExternTypeName, structMethod, structField, interfaceMethod, variantOf, enumSimple, parentOf, findField,
     findMethod, allFields, isSubclass, implementor, chain, externSig, ptrT, isPtr, pointable, isResource, externInfoOf,
-    platformWithin, ExternTypeInfo, isExternStruct
+    platformWithin, ExternTypeInfo, isExternStruct, contextView
 };
 import semantics.analyzer {
     error, wrong, frame, frames, frameTop, state, scope, pushFrame, popFrame, pushScope, popScope, declare, lookup,
     narrowedType, noteCapture, noteCompact, declareParam, checkReturns, analyzeStmts, analyzeBlock, analyzeThrow, requireBool,
     requireHandled, lifetime, lifetimeOf, requireOutlives, livesHint, isReference, storageRegion, placeFor, rootSymbol, isLValue,
     reassignedNames, currentOwner, edge, useGlobal, callTargets, checkThreadRun, checkThreadSafeLambda, anyFieldsLoop, block, blockRegion,
-    returnedNames, viewMethod, callMemory, creatingMethod, staticName, platformCtx,
+    returnedNames, viewMethod, callMemory, creatingMethod, staticName, platformCtx, mustLiveForever,
     Mutation, MutK, mutations, alwaysExits, FrameState, nonNull, narrow, bindingSymbol, objectOf
 };
 
@@ -90,7 +90,7 @@ public function resolveType(t: TypeRef in default): Type {
             if (!pointable(inner)) {
                 yield wrong(t.line, isResource(inner)
                     ? "${inner.text} is a resource (released by ${externInfoOf(inner.name)!.decl.releasedBy}): it is passed to C as it is, not through a pointer."
-                    : "A C pointer (T*) points to numbers, bool, C structs, extern types or other pointers, not to ${inner.text}.");
+                    : "A C pointer (T*) points to numbers, bool, C structs, native types or other pointers, not to ${inner.text}.");
             }
             yield ptrT(inner);
         }
@@ -695,7 +695,7 @@ function variantFieldNames(v: VariantInfo in default): String {
 function typeNamed(e: Expr): String {
     if (!(e is Ident id) || lookup(id.name) != null) { return ""; }
     let n: String = id.name;
-    return structOf(n) != null || classOf(n) != null || enumOf(n) != null || primByName(n) != null ? n : "";
+    return structOf(n) != null || classOf(n) != null || enumOf(n) != null || primByName(n) != null || isExternTypeName(n) ? n : "";
 }
 
 function enumNamed(e: Expr): EnumInfo? {
@@ -763,6 +763,16 @@ function checkMember(m: Member in default): Type {
         return pf.type;
     }
     if (ot.kind != TyK.Named) { return wrong(m.line, "A value of type ${ot.text} has no field '${m.name}'."); }
+    let through: String = isExternT(ot) ? externInfoOf(ot.name)!.decl.fieldsStruct : "";
+    if (through != "") {                    // native type X = c_struct* { let f: T; }: x.f is x->f
+        let pointee: Type = ptrT(named(through, NamedK.Struct));
+        let cf: FieldInfo? = fieldOf(pointee.elem!, m.name);
+        if (cf != null) {
+            m.member = MemberInfo { kind: MbK.Field, field: cf, objectType: pointee } in default;
+            setRegion(m, R_STATIC);
+            return cf.type;
+        }
+    }
     let f: FieldInfo? = fieldOf(ot, m.name);
     if (f != null) {
         if (ot.nk == NamedK.Class && classOf(ot.name)!.sync && !(obj is SelfExpr)) {
@@ -804,8 +814,17 @@ function methodOf(t: Type in default, name: String): MethodInfo? {
         case Struct -> structMethod(structOf(t.name)!, name, false, 0);
         case Class -> findMethod(t.name, name, false, 0);
         case Interface -> interfaceMethod(interfaceOf(t.name)!, name);
+        case Extern -> nativeMethodOf(t.name, name);
         default -> null;
     };
+}
+
+/** A method that a native type declares for a C type. */
+function nativeMethodOf(owner: String, name: String): MethodInfo? {
+    for (mi in nativeMethods) {
+        if (mi.owner == owner && mi.name == name && !mi.isOperator) { return mi; }
+    }
+    return null;
 }
 
 function describeExpr(e: Expr): String {
@@ -919,7 +938,7 @@ function checkLambda(l: Lambda in default, expected: Type? in default): Type {
         }
         if (expected == null) { return wrong(l.line, "Cannot infer the type of this lambda. Give it a function type, e.g. let f: (int32) -> int32 = (x) -> { ... };"); }
         if (externSig(expected) != null) {
-            error(l.line, "${expected.text} is a pointer to a C function, and a lambda is not one: pass an extern function or an 'export function'.");
+            error(l.line, "${expected.text} is a pointer to a C function, and a lambda is not one: pass a native function or an 'export function' (or give the type a Context, so a lambda can go).");
         } else if (!isError(expected)) {
             error(l.line, "A lambda cannot be used where ${expected.text} is expected.");
         }
@@ -1377,7 +1396,7 @@ function checkUnary(u: Unary in default, expected: Type? in default, place: Plac
 function checkAddress(u: Unary in default): Type {
     if (!externArg) {
         check(u.operand, null, P_TEMP);
-        return wrong(u.line, "'&' gives a pointer for C: it is only allowed as an argument of an extern function, f(&x).");
+        return wrong(u.line, "'&' gives a pointer for C: it is only allowed as an argument of a native function, f(&x).");
     }
     externArg = false;                       // not inside: &(&x) or f(&g(&x))
     if (!(u.operand is Ident id)) {
@@ -1392,7 +1411,7 @@ function checkAddress(u: Unary in default): Type {
     if (s.kind == SymK.Global && s.externValue != null) { return wrong(u.line, "'${id.name}' is a C global: C already has its address."); }
     if (isMemory(s)) { return wrong(u.line, "'${id.name}' is a memory: a C function receives it as a memory parameter (byte[*]), not with '&'."); }
     if (s.immutable) { return wrong(u.line, "'${id.name}' cannot change, and C could write through &${id.name}."); }
-    if (!pointable(t)) { return wrong(u.line, "C cannot get a pointer to a ${t.text}: '&' is for numbers, bool, C structs, extern types and pointers."); }
+    if (!pointable(t)) { return wrong(u.line, "C cannot get a pointer to a ${t.text}: '&' is for numbers, bool, C structs, native types and pointers."); }
     noteCapture(s, id.line);
     if (s.kind == SymK.Global) {
         s.mutatedGlobal = true;
@@ -1581,7 +1600,7 @@ function checkCall(c: Call in default, expected: Type? in default, place: Place 
                     let t: Type = check(a, null, P_TEMP);
                     let inner: Type = isOpt(t) ? t.elem! : t;
                     if (!isError(t) && !isResource(inner)) {
-                        error(a.line, "release() is for resources (extern types declared 'released by'), got ${t.text}.");
+                        error(a.line, "release() is for resources (native types declared 'released by'), got ${t.text}.");
                     }
                 }
                 builtinCall(c, BK.Release, null);
@@ -1656,11 +1675,23 @@ function checkFunctionCall(c: Call in default, f: FunctionInfo in default, place
     let given: bool = callMemory(f);           // C that creates in the memory of the call
     let ps: Type[*] = [] in default;
     let mps: bool[*] = [] in default;
+    let callback: int32 = -1;                  // the argument that is the callback with a Context
     for (i, t in f.sig!.params) {
-        if (!given || i > 0) { ps.push(t); }
+        if ((given && i == 0) || i == f.ctxParam) { continue; }        // given by the compiler, not written
+        if (i == f.ctxCallback) { callback = ps.length; }
+        ps.push(t);
+        mps.push(i < f.memParams.length && f.memParams[i]);
     }
-    for (i, mp in f.memParams) {
-        if (!given || i > 0) { mps.push(mp); }
+    // a function of C (native or export) goes as it is; any other function goes with its Context (what it captures)
+    let view: Type? = null;
+    let cType: Type? = null;
+    if (callback >= 0 && callback < c.args.length && !namesCFunction(c.args[callback])) {
+        cType = ps[callback];
+        view = contextView(cType!);
+        if (f.ctxParam < 0) {
+            error(c.args[callback].line, "'${f.name}' gives no Context to its callback (it has no parameter of type Context), so only a function of C goes here: a native or an export function.");
+        }
+        ps[callback] = view!;
     }
     let outer: bool = toC;
     toC = f.isExtern;
@@ -1669,6 +1700,15 @@ function checkFunctionCall(c: Call in default, f: FunctionInfo in default, place
     toC = outer;
     throwing(c, f.throwsType, "'${f.name}'");
     c.call = CallInfo { kind: CallK.Direct, func: f } in default;
+    if (view != null && f.ctxParam >= 0) {
+        c.call!.ctxArg = callback;
+        c.call!.ctxExtern = cType;
+        c.call!.ctxView = view;
+        if (f.ctxKeep) {                       // C keeps it: what it uses must outlive every call C makes
+            mustLiveForever(regionOf(c.args[callback]), c.args[callback].line,
+                "C keeps the function given to '${f.name}' (in default), so what it uses must live as long as the whole program, but it lives in {v}. Create what it uses in default.");
+        }
+    }
     // A String from C is static, unless C made it in a memory it received.
     let anyMem: bool = false;
     for (mp in f.memParams) {
@@ -1683,6 +1723,13 @@ function checkFunctionCall(c: Call in default, f: FunctionInfo in default, place
     let made: Region = given || f.creates ? placedResult(c, f.sig!.elem!, place) : R_STATIC;
     setRegion(c, !hasRefs(f.sig!.elem!) || (f.isExtern && !anyMem) ? R_STATIC : meet(r, made));
     return f.sig!.elem!;
+}
+
+/** Does the argument name a function of C, a native or an export function (it goes to C as it is)? */
+function namesCFunction(a: Expr): bool {
+    if (!(a is Ident id)) { return false; }
+    let s: Symbol? = lookup(id.name);
+    return s != null && s.kind == SymK.Function && s.func != null && (s.func!.isExtern || s.func!.exportName != "");
 }
 
 /** n times b. */
@@ -1924,7 +1971,10 @@ function checkArgsLives(c: Call in default, params: Type[*] in default, varargs:
             where = "argument ${j + 1}";
         }
         let shown: String = where == "the whole program" ? where : "${where} ({st})";
-        lifetime(regionOf(a), target, a.line, "${what} must live as long as ${shown}, but it lives in {v}. Use .clone() to copy it there.");
+        let fix: String = params[i].kind == TyK.Func
+            ? "A function cannot be copied with clone(): create what it captures there"
+            : "Use .clone() to copy it there";
+        lifetime(regionOf(a), target, a.line, "${what} must live as long as ${shown}, but it lives in {v}. ${fix}.");
     }
     return r;
 }
@@ -1943,7 +1993,7 @@ function checkArgs(c: Call in default, params: Type[*] in default, varargs: bool
         if (i >= params.length) {
             let t: Type = check(a, null, P_TEMP);
             if (varargs && !isError(t) && !(t.kind == TyK.Prim && t != T_VOID && t != T_ANY) && !isExternT(t)) {
-                error(a.line, "Variadic arguments must be numbers, bool, String or extern types.");
+                error(a.line, "Variadic arguments must be numbers, bool, String or native types.");
             }
             continue;
         }

@@ -9,7 +9,7 @@
 // output: renamed: 9
 // output: maybe: null and "hola"
 // C without c_code-wrappers: pointers to C structs (a linked list), out parameters (&x), constants and
-// macros (extern const), a C global (extern let), C strings in structs, arrays where C takes T*, `when`.
+// macros (native const), a C global (native let), C strings in structs, arrays where C takes T*, `when`.
 c_code {
     typedef struct Node { int value; struct Node* next; const char* name; } Node;
     static Node nodes[3] = { { 10, &nodes[1], "uno" }, { 20, &nodes[2], "dos" }, { 30, NULL, "tres" } };
@@ -23,20 +23,20 @@ c_code {
     static const char* maybe_text(int yes) { return yes ? "hola" : NULL; }
 }
 
-extern type Node = struct "Node" {
+native struct Node {
     let value: int32;
     let next: Node*;
     let name: String;                 // a C string: read as a view
 };
-extern function first_node(): Node*;
-extern function two_results(a: int32*, b: int32*): void;
-extern const COUNT: int32;
-extern const LIMIT: int32;
-extern const POINTER_SIZE: int32 = c "(int)sizeof(void*)";
-extern let counter: int32;
-extern function sum_bytes(p: byte*, n: int32): int32;
-extern function square(x: int32): int32 = c "square_it";
-extern function maybe_text(yes: int32): String?;
+native function first_node(): Node*;
+native function two_results(a: int32*, b: int32*): void;
+native const COUNT: int32;
+native const LIMIT: int32;
+native const POINTER_SIZE: int32 = "(int)sizeof(void*)";
+native let counter: int32;
+native function sum_bytes(p: byte*, n: int32): int32;
+native function square(x: int32): int32 = square_it;
+native function maybe_text(yes: int32): String?;
 
 function main(): int32 {
     let n: int32 = 0;

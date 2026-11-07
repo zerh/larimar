@@ -230,20 +230,20 @@ c_code {
     static const char* lm_dap_h_type(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].type : ""; }
 }
 
-extern function lm_dap_spawn(path: String): bool;
-extern function lm_dap_kill(): void;
-extern function lm_dap_fill(ms: int32): void;
-extern function lm_dap_eof(which: int32): bool;
-extern function lm_dap_take(m: byte[*], which: int32): String;
-extern function lm_dap_took(): bool;
-extern function lm_dap_write(which: int32, body: String, length: int32): void;
-extern function lm_dap_handle(kind: int32, frame: int32, ref: int32, expr: String, type: String): int32;
-extern function lm_dap_clear(): void;
-extern function lm_dap_h_kind(id: int32): int32;
-extern function lm_dap_h_frame(id: int32): int32;
-extern function lm_dap_h_ref(id: int32): int32;
-extern function lm_dap_h_expr(id: int32): String;
-extern function lm_dap_h_type(id: int32): String;
+native function lm_dap_spawn(path: String): bool;
+native function lm_dap_kill(): void;
+native function lm_dap_fill(ms: int32): void;
+native function lm_dap_eof(which: int32): bool;
+native function lm_dap_take(m: byte[*], which: int32): String;
+native function lm_dap_took(): bool;
+native function lm_dap_write(which: int32, body: String, length: int32): void;
+native function lm_dap_handle(kind: int32, frame: int32, ref: int32, expr: String, type: String): int32;
+native function lm_dap_clear(): void;
+native function lm_dap_h_kind(id: int32): int32;
+native function lm_dap_h_frame(id: int32): int32;
+native function lm_dap_h_ref(id: int32): int32;
+native function lm_dap_h_expr(id: int32): String;
+native function lm_dap_h_type(id: int32): String;
 
 const EDITOR: int32 = 0;
 const BACKEND: int32 = 1;

@@ -9,7 +9,7 @@ c_code {
         return out;
     }
 }
-extern function bad(m: byte[*]): String;
+native function bad(m: byte[*]): String;
 function main(): int32 {
     println(bad());
     return 0;

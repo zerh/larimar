@@ -227,6 +227,11 @@ function parse(m: Module in default, source: String in default): void {
         }
         p.decls = kept;
     }
+    for (i, d in p.decls) {                   // std.memory: limit and compact are written by the compiler, not C
+        if (d is ExternFunctionDecl e && nativeKnown(m, e.name)) {
+            p.decls[i] = FunctionDecl { line: e.line, name: e.name, params: e.params, ret: e.ret, isNative: true } in default;
+        }
+    }
     m.program = p;
     for (d in p.decls) {
         let name: String = declName(d);
@@ -417,6 +422,49 @@ function nativeKnown(m: Module in default, name: String): bool {
     return (m.path == "std.memory" || alone) && (name == "limit" || name == "compact");
 }
 
+/**
+ * lar"name" in c_code: a function, type or global of Larimar, by its Larimar name (module.name for another
+ * module); it becomes lar"its linked name", and the generator writes its C name there.
+ */
+function larNames(m: Module in default, code: String, line: int32): String {
+    let out: StringBuilder = {};
+    let i: int32 = 0;
+    while (i < code.length) {
+        let at: int32? = code.indexOf("lar\"", i);
+        if (at == null) {
+            out.add(code.substring(i));
+            break;
+        }
+        let close: int32? = code.indexOf("\"", at! + 4);
+        if (close == null) {
+            error(line, "lar\" without its closing quote in c_code: lar\"name\"");
+            return code.clone();
+        }
+        out.add(code.substring(i, at!));
+        let name: String = code.substring(at! + 4, close!);
+        let linked: String = larName(m, name);
+        if (linked == "") { error(line, "lar\"${name}\" in c_code: '${name}' is not a function, type or global of Larimar seen here."); }
+        out.add("lar\"${linked}\"");
+        i = close! + 1;
+    }
+    return out.toString();
+}
+
+/** The linked name of a Larimar name seen from module m ("a.b.name": the module a.b), or "". */
+function larName(m: Module in default, name: String): String {
+    let dot: int32? = name.lastIndexOf(".");
+    if (dot == null) { return (m.values[name] as String ?? m.types[name] as String ?? "").clone(); }
+    let path: String = name.substring(0, dot!);
+    let n: String = name.substring(dot! + 1);
+    for (other in mods) {
+        let alias: bool = m.aliases[path] != null && (m.aliases[path] as int32 ?? -1) == other.index;
+        if (other.path == path || alias) {
+            if (other.ownValues[n] != null || other.ownTypes[n] != null) { return "${other.prefix}${n}"; }
+        }
+    }
+    return "";
+}
+
 function rewriteDecl(m: Module in default, d: Node in default): void {
     rm = m;
     scopeDepth = 0;
@@ -425,9 +473,6 @@ function rewriteDecl(m: Module in default, d: Node in default): void {
     let own: String = (lang != null && m == lang! && mapped != "" ? mapped : "${m.prefix}${dn}") in default;
     switch (d) {
         case FunctionDecl f -> {
-            if (f.isNative && !nativeKnown(m, f.name)) {
-                error(f.line, "'${f.name}' is declared native, but the compiler does not implement it: a native function of a module is only for the standard library.");
-            }
             if (f.typeName == "") {
                 function_(f, own);
             } else {                                                 // static: Type.name, in the module of Type
@@ -474,10 +519,14 @@ function rewriteDecl(m: Module in default, d: Node in default): void {
             e.name = own;
             for (v in e.variants) { params(v.fields); }
         }
-        case CCodeDecl c -> { c.fromStd = (lang != null && m == lang!) || isStd(m.path); }
+        case CCodeDecl c -> {
+            c.fromStd = (lang != null && m == lang!) || isStd(m.path);
+            if (c.code.contains("lar\"")) { c.code = larNames(m, c.code, c.line); }
+        }
         case ExternTypeDecl t -> {
             t.name = own;
             typeRef(t.func);
+            if (t.fieldsStruct != "") { t.fieldsStruct = (rm.types[t.fieldsStruct] as String ?? t.fieldsStruct).clone() in default; }
             if (t.releasedBy != "") {            // the function that releases it: a name of this module (or one it sees)
                 let v: String = rm.values[t.releasedBy] as String ?? "";
                 if (v != "") { t.releasedBy = v; }

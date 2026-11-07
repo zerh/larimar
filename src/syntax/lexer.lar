@@ -8,7 +8,7 @@ import std.text { isDigit, isIdentifierPart, isUpper, isLower };
 public enum TT {
     Let, Const, Function, Return, If, Else, While, For, In, Is, Break, Continue,
     Struct, Class, Interface, Enum, Extends, Implements, Override, Super, Self, New, Native,
-    True, False, Null, Extern, CInclude, CCode, Switch, Case, Default, Yield, When,
+    True, False, Null, CInclude, CCode, Switch, Case, Default, Yield, When,
     Try, Catch, Throw, Throws, Heap, Operator, As, Import, Public, Private, Synchronized, Static,
     Ident, Int, Float, Str,
     Assign, Eq, Ne, Lt, Le, Gt, Ge, Plus, Minus, Star, Slash, Percent,
@@ -149,7 +149,6 @@ function keyword(w: String): TT {
         case "true" -> TT.True;
         case "false" -> TT.False;
         case "null" -> TT.Null;
-        case "extern" -> TT.Extern;
         case "c_include" -> TT.CInclude;
         case "switch" -> TT.Switch;
         case "case" -> TT.Case;

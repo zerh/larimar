@@ -343,6 +343,13 @@ static inline void* rt_mem_alloc(RtMem* m, size_t size, int line) {
     return p;
 }
 
+/* A copy of size bytes in m (a callback C keeps: its Context lives as long as the memory). */
+static inline void* rt_mem_copy(RtMem* m, const void* p, size_t size, int line) {
+    void* q = rt_mem_alloc(m, size, line);
+    memcpy(q, p, size);
+    return q;
+}
+
 /* Grows the last allocation in place when possible, otherwise copies. */
 static inline void* rt_mem_try_realloc_raw(RtMem* m, void* old, size_t oldSize, size_t newSize) {
     if (old == NULL) return rt_mem_try_alloc_raw(m, newSize);

@@ -36,7 +36,7 @@ c_code {
 #endif
 }
 
-extern function lm_random_fill(buffer: byte[]): int32;
+native function lm_random_fill(buffer: byte[]): int32;
 
 /** n bytes from the system's secure random source (it panics if there is none: it never gives weak bytes). */
 public function randomBytes(n: int32): byte[*] {

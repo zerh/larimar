@@ -8,11 +8,11 @@
 // text of its line.
 
 import std.io.path as Paths;
-import std.text { isIdentifierPart };
+import std.text { isIdentifierPart, isDigit };
 import std.encoding.json as Json;
 import syntax.ast {
     Node, Expr, Stmt, Program, FunctionDecl, StructDecl, ClassDecl, InterfaceDecl, NativeTypeDecl, EnumDecl,
-    EnumVariant, VarDecl, ConstDecl, FieldDecl, Param, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ForStmt, TryStmt,
+    EnumVariant, VarDecl, ConstDecl, FieldDecl, Param, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ForStmt, TryStmt, declName,
     Ident, Member, Call, Lambda, ObjectLit, IsExpr, allStmts, allExprs, exprAll
 };
 import semantics.types {
@@ -576,9 +576,9 @@ function detail(t: Target): String {
             }
             if (t.symbol != null) {
                 let xv: ExternValueDecl? = t.symbol!.externValue;
-                if (xv != null) {                // extern const / extern let: a name C has
+                if (xv != null) {                // native const / native let: a name C has
                     let at: String = xv.platform != "" ? "    // #when ${xv.platform}" : "";
-                    return "extern ${xv.isConst ? "const" : "let"} ${t.name}: ${typeText(t.symbol!.type)}${at}";
+                    return "native ${xv.isConst ? "const" : "let"} ${t.name}: ${typeText(t.symbol!.type)}${at}";
                 }
                 return "let ${t.name}: ${typeText(t.symbol!.type)}";
             }
@@ -587,7 +587,7 @@ function detail(t: Target): String {
         case K_FUNC -> {
             let f: FunctionInfo = t.func!;
             let fd: FunctionDecl? = f.decl;
-            if (f.isExtern) { return "extern function ${funcLabel(f)}"; }
+            if (f.isExtern) { return "native function ${funcLabel(f)}"; }
             let lead: String = fd != null && fd!.exportName != "" ? "export function" : fd != null && fd!.typeName != "" ? "static function" : "function";
             return "${lead} ${funcLabel(f)}";
         }
@@ -623,7 +623,7 @@ function typeDetail(linked: String): String {
         let lines: String[*] = [];
         for (f in so.fields) { lines.push("    let ${f.name}: ${typeText(f.type)};"); }
         for (m in so.methods) { lines.push("    function ${methodLabel(m)};"); }
-        let head: String = so.decl.cName != "" ? "extern type ${n} = struct" : "struct ${n}";
+        let head: String = so.decl.cName != "" ? (so.decl.cName == shortName(so.name) ? "native struct ${n}" : "native struct ${n} = ${cText(so.decl.cName)}") : "struct ${n}";
         return lines.length == 0 ? "${head} {}" : "${head} {\n${lines.join("\n")}\n}";
     }
     let co: ClassInfo? = classOf(linked);
@@ -662,19 +662,33 @@ function typeDetail(linked: String): String {
     }
     let xo: ExternTypeInfo? = externInfoOf(linked);
     if (xo != null) {
-        if (xo.sig != null) { return "extern type ${n} = ${typeText(xo.sig)}"; }
+        if (xo.sig != null) { return "native type ${n} = ${typeText(xo.sig)}"; }
         let lines: String[*] = [] in default;             // one per platform it is declared for
         let all: ExternTypeDecl[*] = [xo.decl] in default;
         for (alt in xo.alts) { all.push(alt); }
         for (d in all) {
-            let c: String = d.cType != "" ? " = c \"${d.cType}\"" : "";
+            let c: String = d.cType != "" ? " = ${cText(d.cType)}" : "";
             let r: String = d.releasedBy != "" ? " released by ${shortName(d.releasedBy)}" : "";
             let w: String = d.platform != "" ? "    // #when ${d.platform}" : "";
-            lines.push("extern type ${n}${c}${r}${w}");
+            lines.push("native type ${n}${c}${r}${w}");
         }
         return lines.join("\n");
     }
     return "native type ${n}";
+}
+
+/** C's name or type as a native declaration writes it: a plain name (FILE*) as it is, anything else in quotes. */
+function cText(c: String): String {
+    let plain: bool = c.length > 0 && !isDigit(c[0]);
+    let stars: bool = false;
+    for (b in c.bytes()) {
+        if (b == '*') {
+            stars = true;
+        } else if (stars || !isIdentifierPart(b)) {
+            plain = false;
+        }
+    }
+    return plain ? c : "\"${c}\"";
 }
 
 // The comment written right above a declaration (// lines or a doc block), as text.
@@ -904,6 +918,7 @@ public function symbolsJson(path: String): String {
     let items: String[*] = [];
     for (d in program.decls) {
         if (d.line / FILE_LINES != index || d.builtin && !isStdFile(path)) { continue; }
+        if (shortName(declName(d)).contains("__")) { continue; }        // made by the parser for a native type's members
         switch (d) {
             case FunctionDecl f -> {
                 let n: String = f.typeName != "" ? "${shortName(f.typeName)}.${f.name}" : shortName(f.name);
@@ -927,6 +942,7 @@ public function symbolsJson(path: String): String {
                 items.push(symbolJson(shortName(i.name), SK_INTERFACE, i.line, shortName(i.name), kids));
             }
             case NativeTypeDecl n -> {
+                if (externInfoOf(n.name) != null) { continue; }          // a C type's members: listed with the type
                 let kids: String[*] = [] in default;
                 for (m in n.methods) { kids.push(symbolJson(m.name, SK_METHOD, m.line, m.name, [] in default)); }
                 items.push(symbolJson(n.name, SK_CLASS, n.line, n.name, kids));
@@ -938,7 +954,13 @@ public function symbolsJson(path: String): String {
             }
             case VarDecl v -> { items.push(symbolJson(shortName(v.name), SK_VARIABLE, v.line, shortName(v.name), [] in default)); }
             case ConstDecl c -> { items.push(symbolJson(shortName(c.name), SK_CONSTANT, c.line, shortName(c.name), [] in default)); }
-            case ExternTypeDecl x -> { items.push(symbolJson(shortName(x.name), SK_CLASS, x.line, shortName(x.name), [] in default)); }
+            case ExternTypeDecl x -> {
+                let kids: String[*] = [] in default;          // native type X = T { ... }: its members
+                for (m in nativeMethods) {
+                    if (m.owner == x.name) { kids.push(symbolJson(m.name, SK_METHOD, m.decl.line, m.name, [] in default)); }
+                }
+                items.push(symbolJson(shortName(x.name), SK_CLASS, x.line, shortName(x.name), kids));
+            }
             case ExternFunctionDecl x -> { items.push(symbolJson(shortName(x.name), SK_FUNCTION, x.line, shortName(x.name), [] in default)); }
             case ExternValueDecl x -> { items.push(symbolJson(shortName(x.name), x.isConst ? SK_CONSTANT : SK_VARIABLE, x.line, shortName(x.name), [] in default)); }
             default -> {}
@@ -1154,7 +1176,7 @@ const CK_ENUM_MEMBER: int32 = 20;
 const CK_CONSTANT: int32 = 21;
 const CK_STRUCT: int32 = 22;
 
-const KEYWORDS: String = "let const function return if else while for in is break continue struct class interface enum extends implements override self super native true false null extern c_include c_code switch case default yield when try catch throw throws heap operator as import public synchronized static export raw";
+const KEYWORDS: String = "let const function return if else while for in is break continue struct class interface enum extends implements override self super native true false null c_include c_code switch case default yield when try catch throw throws heap operator as import public synchronized static export raw";
 
 class Items {
     let parts: String[*] = [];

@@ -31,59 +31,59 @@ c_include "<sys/stat.h>";
 #end
 
 /** A C FILE*, closed when its memory is freed. */
-extern type FileHandle = c "FILE*" released by fclose;
-extern function fclose(f: FileHandle): int32;
-extern function fopen(path: String, mode: String): FileHandle?;
-extern function fread(into: byte*, size: uint64, count: uint64, f: FileHandle): uint64;
-extern function fwrite(from: byte*, size: uint64, count: uint64, f: FileHandle): uint64;
-extern function fflush(f: FileHandle): int32;
-extern function ferror(f: FileHandle): int32;
-extern function fgetc(f: FileHandle): int32;
-extern type Untyped;
-extern function fgets(into: byte*, size: int32, f: FileHandle): Untyped?;
-extern function strlen(text: byte*): uint64;
-extern const EOF: int32;
+native type FileHandle = FILE* released by fclose;
+native function fclose(f: FileHandle): int32;
+native function fopen(path: String, mode: String): FileHandle?;
+native function fread(into: byte*, size: uint64, count: uint64, f: FileHandle): uint64;
+native function fwrite(from: byte*, size: uint64, count: uint64, f: FileHandle): uint64;
+native function fflush(f: FileHandle): int32;
+native function ferror(f: FileHandle): int32;
+native function fgetc(f: FileHandle): int32;
+native type Untyped;
+native function fgets(into: byte*, size: int32, f: FileHandle): Untyped?;
+native function strlen(text: byte*): uint64;
+native const EOF: int32;
 
-extern type Stat = struct "struct stat" { let st_mode: uint32; let st_size: int64; let st_mtime: int64; };
-extern function stat(path: String, into: Stat*): int32;
-extern function remove(path: String): int32;
+native struct Stat = "struct stat" { let st_mode: uint32; let st_size: int64; let st_mtime: int64; };
+native function stat(path: String, into: Stat*): int32;
+native function remove(path: String): int32;
 #when unix
-    extern function mkdir(path: String, mode: uint32): int32;
-    extern function rmdir(path: String): int32;
-    extern function chmod(path: String, mode: uint32): int32;
+    native function mkdir(path: String, mode: uint32): int32;
+    native function rmdir(path: String): int32;
+    native function chmod(path: String, mode: uint32): int32;
 #when windows
-    extern function _mkdir(path: String): int32;
-    extern function _rmdir(path: String): int32;
-    extern function _chmod(path: String, mode: int32): int32;
-    extern const _S_IWRITE: int32;
+    native function _mkdir(path: String): int32;
+    native function _rmdir(path: String): int32;
+    native function _chmod(path: String, mode: int32): int32;
+    native const _S_IWRITE: int32;
 #end
 
 /** A folder being read (Unix), closed when its memory is freed. */
-extern type Dir released by closedir;
-extern type DirEntry = struct "struct dirent" { let d_name: String; };
-extern function opendir(path: String): Dir?;
-extern function readdir(d: Dir): DirEntry*;
+native type Dir released by closedir;
+native struct DirEntry = "struct dirent" { let d_name: String; };
+native function opendir(path: String): Dir?;
+native function readdir(d: Dir): DirEntry*;
 #when unix
-    extern function closedir(d: Dir): int32;
+    native function closedir(d: Dir): int32;
 #end
 
 /** A folder being read (Windows), closed when its memory is freed. */
-extern type FindHandle released by FindClose;                    // a HANDLE (void*)
-extern type FindData = struct "WIN32_FIND_DATAA" { let cFileName: String; };
-extern function FindFirstFileA(pattern: String, data: FindData*): FindHandle?;
+native type FindHandle released by FindClose;                    // a HANDLE (void*)
+native struct FindData = WIN32_FIND_DATAA { let cFileName: String; };
+native function FindFirstFileA(pattern: String, data: FindData*): FindHandle?;
 #when windows
-    extern function FindNextFileA(h: FindHandle, data: FindData*): int32;
-    extern function FindClose(h: FindHandle): int32;
+    native function FindNextFileA(h: FindHandle, data: FindData*): int32;
+    native function FindClose(h: FindHandle): int32;
 #end
 
-extern let errno: int32;
-extern const ENOENT: int32;
-extern const ENOTDIR: int32;
-extern const EACCES: int32;
-extern const EPERM: int32;
-extern const EEXIST: int32;
-extern const S_IFMT: uint32;
-extern const S_IFDIR: uint32;
+native let errno: int32;
+native const ENOENT: int32;
+native const ENOTDIR: int32;
+native const EACCES: int32;
+native const EPERM: int32;
+native const EEXIST: int32;
+native const S_IFMT: uint32;
+native const S_IFDIR: uint32;
 
 /** A message for the error (the same as std.io's): "not found: notes.txt"... */
 public function message(e: IoError): String { return Io.message(e); }

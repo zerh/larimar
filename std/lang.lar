@@ -4,6 +4,10 @@
 // What a Thread runs.
 public interface Runnable { function run(): void; }
 
+// What a C function gives back to its callback (C's void* user data): a native function that takes a callback
+// with a Context can take a Larimar function, with what it captures.
+public native type Context;
+
 // A thread of the operating system: Thread { run: ... } in memory, then start() and join().
 public class Thread {
     let run: Runnable;
@@ -334,8 +338,8 @@ c_code {
     static double text_to_float(const char* s) { return strtod(s, NULL); }
 }
 
-extern function text_is_float(s: String, n: int32): bool;
-extern function text_to_float(s: String): float64;
+native function text_is_float(s: String, n: int32): bool;
+native function text_to_float(s: String): float64;
 
 // Text built piece by piece in the memory of the builder; toString() is a view of it.
 c_code {
@@ -379,13 +383,13 @@ c_code {
     void text_buf_clear(TextBuf* b) { b->len = 0; if (b->buf) b->buf[0] = 0; }
 }
 
-extern type TextBuf;
-extern function text_buf_new(m: byte[*]): TextBuf;
-extern function text_buf_add(b: TextBuf, text: String): void;
-extern function text_buf_add_line(b: TextBuf, text: String): void;
-extern function text_buf_length(b: TextBuf): int32;
-extern function text_buf_view(b: TextBuf): String;
-extern function text_buf_clear(b: TextBuf): void;
+native type TextBuf;
+native function text_buf_new(m: byte[*]): TextBuf;
+native function text_buf_add(b: TextBuf, text: String): void;
+native function text_buf_add_line(b: TextBuf, text: String): void;
+native function text_buf_length(b: TextBuf): int32;
+native function text_buf_view(b: TextBuf): String;
+native function text_buf_clear(b: TextBuf): void;
 
 public class StringBuilder {
     let buf: TextBuf = text_buf_new();
@@ -432,11 +436,11 @@ c_code {
     static const char* byte_text_view(ByteText* t) { return t->bytes; }
 }
 
-extern type ByteText;
-extern function byte_text_new(m: byte[*]): ByteText;
-extern function byte_text_sized(m: byte[*], n: int32): ByteText;
-extern function byte_text_add(t: ByteText, b: byte): void;
-extern function byte_text_view(t: ByteText): String;
+native type ByteText;
+native function byte_text_new(m: byte[*]): ByteText;
+native function byte_text_sized(m: byte[*], n: int32): ByteText;
+native function byte_text_add(t: ByteText, b: byte): void;
+native function byte_text_view(t: ByteText): String;
 
 /** A String with a copy of these bytes (UTF-8 expected, not checked). A byte 0 ends the text. */
 public function stringOf(bytes: byte[]): String {

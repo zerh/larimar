@@ -17,26 +17,26 @@
     c_include "<mach-o/dyld.h>";
 #end
 
-extern type CStream = c "FILE*";
-extern const stdout: CStream;
-extern type Untyped;
-extern function getenv(name: String): String?;
-extern function fflush(f: CStream): int32;
-extern function system(command: String): int32;
-extern function strlen(text: byte*): uint64;
-extern function cExit(code: int32): void = c "exit";
+native type CStream = FILE*;
+native const stdout: CStream;
+native type Untyped;
+native function getenv(name: String): String?;
+native function fflush(f: CStream): int32;
+native function system(command: String): int32;
+native function strlen(text: byte*): uint64;
+native function cExit(code: int32): void = exit;
 #when unix
-    extern function getcwd(into: byte*, size: uint64): Untyped?;
-    extern function getpid(): int32;
+    native function getcwd(into: byte*, size: uint64): Untyped?;
+    native function getpid(): int32;
 #when windows
-    extern function _getcwd(into: byte*, size: int32): Untyped?;
-    extern function GetCurrentProcessId(): uint32;
-    extern function GetModuleFileNameA(module: Untyped?, into: byte*, size: uint32): uint32;
+    native function _getcwd(into: byte*, size: int32): Untyped?;
+    native function GetCurrentProcessId(): uint32;
+    native function GetModuleFileNameA(module: Untyped?, into: byte*, size: uint32): uint32;
 #end
 #when linux
-    extern function readlink(path: String, into: byte*, size: uint64): int64;
+    native function readlink(path: String, into: byte*, size: uint64): int64;
 #when macos
-    extern function _NSGetExecutablePath(into: byte*, size: uint32*): int32;
+    native function _NSGetExecutablePath(into: byte*, size: uint32*): int32;
 #end
 
 /** The number the system gives this running program (its process id). */
@@ -163,8 +163,8 @@ c_code {
 #endif
 }
 
-extern function lm_os_catch_termination(): void;
-extern function lm_os_terminating_now(): int32;
+native function lm_os_catch_termination(): void;
+native function lm_os_terminating_now(): int32;
 
 /**
  * From now on, Ctrl+C and SIGTERM (what systemd, docker stop and kill send) do not end the program at

@@ -159,16 +159,16 @@ c_code {
     #endif
 }
 
-extern function lm_lsp_fork(): int32;
-extern function lm_lsp_send(text: String, length: int32): void;
-extern function lm_lsp_quit(code: int32): void;
-extern function lm_lsp_receive(m: byte[*], pid: int32): String;
-extern function lm_lsp_attempt(): int32;
-extern function lm_lsp_waiting(ms: int32): bool;
-extern function lm_lsp_unbuffered(): void;
-extern function lm_lsp_set_pending(path: String): void;
-extern function lm_lsp_get_pending(): String;
-extern function lm_lsp_pid(): int32;
+native function lm_lsp_fork(): int32;
+native function lm_lsp_send(text: String, length: int32): void;
+native function lm_lsp_quit(code: int32): void;
+native function lm_lsp_receive(m: byte[*], pid: int32): String;
+native function lm_lsp_attempt(): int32;
+native function lm_lsp_waiting(ms: int32): bool;
+native function lm_lsp_unbuffered(): void;
+native function lm_lsp_set_pending(path: String): void;
+native function lm_lsp_get_pending(): String;
+native function lm_lsp_pid(): int32;
 
 const VERSION: String = "0.1";
 const QUIET_MS: int32 = 300;             // how long the editor must stop typing before the errors

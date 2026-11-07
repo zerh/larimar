@@ -14,8 +14,8 @@ c_code {
         return t;
     }
 }
-extern function fill_it(buffer: byte[]): int32;
-extern function total(values: int32[]): int64;
+native function fill_it(buffer: byte[]): int32;
+native function total(values: int32[]): int64;
 
 function main(): int32 {
     let list: byte[*] = [0, 0, 0, 0];

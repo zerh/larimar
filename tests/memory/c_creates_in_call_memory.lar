@@ -11,7 +11,7 @@ c_code {
         return out;
     }
 }
-extern function shout(m: byte[*], text: String): String;
+native function shout(m: byte[*], text: String): String;
 function main(): int32 {
     let memory: byte[*] = [] in heap;
     let kept: String = shout("kept") in memory;

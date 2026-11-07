@@ -1,0 +1,5 @@
+// expect: error A function cannot be copied with clone(): make 'handler' live there (declare the parameter as 'handler: (int32) -> void in default')
+class Route { let handler: (int32) -> void; }
+let routes: Route[*] = [] in default;
+function add(handler: (int32) -> void): void { routes.push(Route { handler: handler }); }
+function main(): int32 { return 0; }

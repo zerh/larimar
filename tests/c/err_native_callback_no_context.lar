@@ -1,0 +1,4 @@
+// expect: error 'take' gives no Context to its callback (it has no parameter of type Context)
+native type G = (int32, Context) -> void;
+native function take(f: G): void;
+function main(): int32 { take((x) -> { println("${x}"); }); return 0; }

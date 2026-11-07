@@ -22,8 +22,8 @@ function writeProject(dir: String, toml: String): void throws IoError {
     Files.createDirectories(Paths.join(dir, "c"));
     Files.writeString(Paths.join(dir, "larimar.toml"), toml);
     Files.writeString(Paths.join(dir, "src/main.lar"), """
-        extern function common_value(): int32;
-        extern function here_value(): int32;
+        native function common_value(): int32;
+        native function here_value(): int32;
         function main(): int32 {
             println("\${common_value() + here_value()}");
             return 0;

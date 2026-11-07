@@ -15,21 +15,21 @@ c_include "<errno.h>";
     c_include "<fcntl.h>";
 #end
 
-extern type CStream = c "FILE*";
-extern const stdin: CStream;
-extern const stdout: CStream;
-extern const stderr: CStream;
-extern const EOF: int32;
-extern function fgetc(f: CStream): int32;
-extern function fputc(b: int32, f: CStream): int32;
-extern function fread(into: byte*, size: uint64, count: uint64, f: CStream): uint64;
-extern function fwrite(from: byte*, size: uint64, count: uint64, f: CStream): uint64;
-extern function fflush(f: CStream): int32;
-extern function ferror(f: CStream): int32;
+native type CStream = FILE*;
+native const stdin: CStream;
+native const stdout: CStream;
+native const stderr: CStream;
+native const EOF: int32;
+native function fgetc(f: CStream): int32;
+native function fputc(b: int32, f: CStream): int32;
+native function fread(into: byte*, size: uint64, count: uint64, f: CStream): uint64;
+native function fwrite(from: byte*, size: uint64, count: uint64, f: CStream): uint64;
+native function fflush(f: CStream): int32;
+native function ferror(f: CStream): int32;
 #when windows
-    extern function _fileno(f: CStream): int32;
-    extern function _setmode(fd: int32, mode: int32): int32;
-    extern const _O_BINARY: int32;
+    native function _fileno(f: CStream): int32;
+    native function _setmode(fd: int32, mode: int32): int32;
+    native const _O_BINARY: int32;
 #end
 
 /** A line of a C stream, without its end; null at its end. */

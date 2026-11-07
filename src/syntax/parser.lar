@@ -45,6 +45,8 @@ let waitUntilAllowed: bool = false;
 let readingCastType: bool = false;
 /** Static functions written inside a type: they become top-level `function Type.name` declarations. */
 let staticFunctions: FunctionDecl[*] = [] in default;
+/** What a native type with members also declares: its methods, the C functions they call, the struct of its fields. */
+let nativeParts: Node[*] = [] in default;
 
 // =========================================================================================
 // Reading tokens
@@ -189,6 +191,8 @@ function program(startLine: int32): Program {
             if (name == "") { error(start.line, "Only declarations with a name can be 'public'"); } else { program.publics.push(name); }
         }
         program.decls.push(declaration);
+        for (part in nativeParts) { program.decls.push(part); }
+        nativeParts.clear();
         for (staticFunction in staticFunctions) { program.decls.push(staticFunction); }
         staticFunctions.clear();
     }
@@ -198,7 +202,7 @@ function program(startLine: int32): Program {
 /**
  * #when PLATFORM declaration* ( #when PLATFORM declaration* )* [ #else declaration* ] #end
  *
- * Declarations for one platform (each gets that platform). Only c_include and extern declarations:
+ * Declarations for one platform (each gets that platform). Only c_include and native declarations:
  * what changes between platforms is how C is reached. Here #else follows only #when windows or
  * #when unix (the rest is then the other one).
  */
@@ -227,11 +231,14 @@ function platformDeclarations(program: Program in default): void {
             switch (declaration) {
                 case CIncludeDecl include -> { include.platform = platform; }
                 case ExternTypeDecl type -> { type.platform = platform; }
-                case ExternFunctionDecl externFunction -> { externFunction.platform = platform; }
+                case ExternFunctionDecl cFunction -> { cFunction.platform = platform; }
                 case ExternValueDecl value -> { value.platform = platform; }
                 default -> { allowed = false; }
             }
-            if (!allowed) { error(start.line, "Outside a function, inside '#when' go only c_include and extern declarations"); }
+            if (!allowed) { error(start.line, "Outside a function, inside '#when' go only c_include and native declarations"); }
+            if (nativeParts.length > 0 || staticFunctions.length > 0) {
+                error(start.line, "A native type with members is declared once, outside '#when': inside it, declare its C type for each platform (native type X = T;)");
+            }
             if (isPublic) { program.publics.push(declName(declaration)); }
             program.decls.push(declaration);
         }
@@ -295,7 +302,7 @@ function importDeclaration(): ImportDecl {
 }
 
 /**
- * c_code | c_include "HEADER" ; | extern ... | test function ... | export function ... | const ... |
+ * c_code | c_include "HEADER" ; | native ... | test function ... | export function ... | const ... |
  * let ... | function ... | struct ... | [synchronized] class ... | interface ... | enum ... | native type ...
  */
 function topLevelDeclaration(): Node {
@@ -305,12 +312,6 @@ function topLevelDeclaration(): Node {
         let include: CIncludeDecl = CIncludeDecl { line: start.line, header: expect(TT.Str, "Expected header string after 'c_include'").text } in default;
         noWhenSuffix();
         return endedBySemicolon(include, "'c_include'");
-    }
-    if (optional(TT.Extern)) {
-        if (at(TT.Const) || at(TT.Let)) { return externValue(); }
-        if (!atWord("type")) { return externFunction(); }
-        advance();
-        return externType();
     }
     if (atWord("test") && next().kind == TT.Function) {
         advance();
@@ -334,15 +335,7 @@ function topLevelDeclaration(): Node {
     }
     if (optional(TT.Interface)) { return interfaceDeclaration(); }
     if (optional(TT.Enum)) { return enumDeclaration(); }
-    if (optional(TT.Native)) {
-        if (optional(TT.Function)) {               // native function f(...); : the compiler writes its calls
-            let declared: FunctionDecl = nativeFunction(start.line);
-            if (declared.hasBody) { error(start.line, "A native function of a module has no body: the compiler writes every call to it"); }
-            declared.isNative = true;
-            return declared;
-        }
-        return nativeType(start.line);
-    }
+    if (optional(TT.Native)) { return nativeDeclaration(start.line); }
     if (at(TT.Override)) {
         error(start.line, "'override' is only valid inside a class");
         return BlockStmt { line: start.line } in default;
@@ -356,7 +349,7 @@ function topLevelDeclaration(): Node {
         error(start.line, "'${start.text}${next().text}...' is a statement: at top level only declarations are allowed. Move it into a function (main).");
         return BlockStmt { line: start.line } in default;
     }
-    error(start.line, "Only declarations (let, const, function, struct, class, interface, enum, extern, c_include, #when) are allowed at top level (got '${start.text}')");
+    error(start.line, "Only declarations (let, const, function, struct, class, interface, enum, native, c_include, #when) are allowed at top level (got '${start.text}')");
     return BlockStmt { line: start.line } in default;
 }
 
@@ -385,80 +378,46 @@ function constant(): Node {
     return endedBySemicolon(ConstDecl { line: name.line, name: name.text, type: constantType, value: expression() } in default, "constant");
 }
 
+// ---- native: what comes from C ---------------------------------------------------------------
+//
+// The left side is the name in Larimar; after '=' comes the name in C (a NAME), or C text in quotes when it is
+// not a plain name ("struct tm", "(fio_start)", "sizeof(struct stat)"). Without '=', C's name is the same.
+
 /**
- * (after `extern type`)
- *   NAME [ released by NAME ] ;                       opaque: void*
- *   NAME = c "C TYPE" [ released by NAME ] ;          a C type ("FILE*")
- *   NAME = ( Type, ... ) -> Type ;                    a pointer to a C function
- *   NAME = struct [ "C NAME" ] { field* }             a C struct, by value
- * `released by f`: a resource, which f releases when the memory it lives in is freed.
+ * (after `native`)
+ *   function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] ;      a C function
+ *   const NAME : Type [ = C ] ;      let NAME : Type [ = NAME ] ;                        a C constant, macro or global
+ *   struct NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static ... )* }  a C struct, by value
+ *   type NAME [ = CTYPE | = ( Type, ... ) -> Type ] [ released by NAME ] ( ; | { member* } )   a C type
+ *   type NAME { ... }                                                                   (std) a type the compiler knows
  */
-function externType(): Node {
-    let name: Token = expect(TT.Ident, "Expected type name after 'extern type'");
-    let declaration: ExternTypeDecl = ExternTypeDecl { line: name.line, name: name.text } in default;
-    if (!optional(TT.Assign)) { return externTypeEnd(declaration); }
-    if (atWord("c") && next().kind == TT.Str) {
-        advance();
-        declaration.cType = advance().text;
-        if (declaration.cType.trim() == "") { error(name.line, "The C type of '${name.text}' is empty"); }
-        return externTypeEnd(declaration);
+function nativeDeclaration(line: int32): Node {
+    if (optional(TT.Function)) { return nativeFunctionOfC(); }
+    if (at(TT.Const) || at(TT.Let)) { return nativeValue(); }
+    if (optional(TT.Struct)) { return nativeStruct(); }
+    if (!atWord("type")) {
+        error(current().line, "Expected 'function', 'type', 'struct', 'const' or 'let' after 'native' (got '${current().text}')");
+        return BlockStmt { line } in default;
     }
-    if (optional(TT.Struct)) {
-        let cStruct: StructDecl = StructDecl { line: name.line, name: name.text, cName: name.text } in default;
-        if (at(TT.Str)) { cStruct.cName = advance().text; }
-        expect(TT.LBrace, "Expected '{' with the fields of the C struct");
-        while (!at(TT.RBrace) && !atEnd() && !hasFailed()) {
-            if (at(TT.Let)) {
-                cStruct.fields.push(field());
-            } else {
-                error(current().line, "A C struct only lists its fields: let name: Type; (got '${current().text}')");
-            }
-        }
-        expect(TT.RBrace, "Expected '}' to close the C struct");
-        optional(TT.Semi);
-        return cStruct;
-    }
-    if (at(TT.LParen)) {
-        declaration.func = type();
-        if (declaration.func!.kind != TK.Func) { error(name.line, "Expected a function type after '=': (int32, int32) -> int32"); }
-        return externTypeEnd(declaration);
-    }
-    error(name.line, "Expected c \"C type\", struct { ... } or a function type after 'extern type ${name.text} ='");
-    return declaration;
+    advance();
+    let name: Token = expect(TT.Ident, "Expected the type's name after 'native type'");
+    if (at(TT.LBrace)) { return nativeType(line, name); }
+    return nativeCType(name);
 }
 
-/** [ released by NAME ] ; */
-function externTypeEnd(declaration: ExternTypeDecl in default): Node {
-    if (atWord("released")) {
-        advance();
-        let by: Token = expect(TT.Ident, "Expected 'by' and the function that releases it: released by close");
-        if (by.text != "by") { error(by.line, "Expected 'by' after 'released': released by close"); }
-        declaration.releasedBy = expect(TT.Ident, "Expected the function that releases '${declaration.name}' after 'released by'").text;
-    } else if (atWord("released_by")) {
-        error(current().line, "Write 'released by' (two words): released by close");
+/** [ = NAME | = "C" ]: what a native declaration is in C; "" without '='. */
+function cTarget(what: String): String {
+    if (!optional(TT.Assign)) { return ""; }
+    if (at(TT.Str)) {
+        let text: Token = advance();
+        if (text.text.trim() == "") { error(text.line, "The C of ${what} is empty"); }
+        return text.text;
     }
-    noWhenSuffix();
-    return endedBySemicolon(declaration, "extern type");
+    return expect(TT.Ident, "Expected the C name, or \"C text\" in quotes, after '=' in ${what}").text;
 }
 
-/** (after `extern`) ( const NAME : Type [ = c "C EXPRESSION" ] | let NAME : Type ) ; */
-function externValue(): Node {
-    let isConst: bool = advance().kind == TT.Const;
-    let name: Token = expect(TT.Ident, "Expected the C name after 'extern ${isConst ? "const" : "let"}'");
-    expect(TT.Colon, "Expected ':' and a type after '${name.text}'");
-    let declaration: ExternValueDecl = ExternValueDecl { line: name.line, name: name.text, type: type(), isConst, cName: name.text } in default;
-    if (isConst && optional(TT.Assign)) {      // = c "C expression": what C writes for it (sizeof, a cast, a macro with arguments)
-        let c: Token = expect(TT.Ident, "Expected c \"C expression\" after '='");
-        if (c.text != "c") { error(c.line, "Expected c \"C expression\" after '=': extern const SIZE: int32 = c \"sizeof(struct stat)\";"); }
-        declaration.cExpr = expect(TT.Str, "Expected the C expression, in quotes").text;
-    }
-    noWhenSuffix();
-    return endedBySemicolon(declaration, isConst ? "extern const" : "extern let");
-}
-
-/** (after `extern`) function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = c "C NAME" ] ; */
-function externFunction(): ExternFunctionDecl {
-    expect(TT.Function, "Expected 'function' or 'type' after 'extern'");
+/** (after `native function`) NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] ; */
+function nativeFunctionOfC(): ExternFunctionDecl {
     let name: Token = expect(TT.Ident, "Expected function name");
     let declaration: ExternFunctionDecl = ExternFunctionDecl { line: name.line, name: name.text, cName: name.text, ret: typeNamed("void", name.line) } in default;
     expect(TT.LParen, "Expected '(' after function name");
@@ -474,13 +433,230 @@ function externFunction(): ExternFunctionDecl {
     }
     expect(TT.RParen, declaration.varargs ? "'...' must be the last parameter" : "Expected ')' after parameters");
     if (optional(TT.Colon)) { declaration.ret = type(); }
-    if (optional(TT.Assign)) {             // = c "name": the C function has another name (exit, for os.exit)
-        let c: Token = expect(TT.Ident, "Expected c \"C name\" after '='");
-        if (c.text != "c") { error(c.line, "Expected c \"C name\" after '=': extern function cExit(code: int32): void = c \"exit\";"); }
-        declaration.cName = expect(TT.Str, "Expected the C function's name, in quotes").text;
+    if (at(TT.Assign) && !(next().kind == TT.Ident || next().kind == TT.Str)) {
+        error(current().line, "A native function of a module names its C function (= c_name;); to write it in Larimar, write a plain function");
+    }
+    let target: String = cTarget("native function '${name.text}'");
+    if (target != "") { declaration.cName = target; }
+    noWhenSuffix();
+    if (at(TT.LBrace)) { error(current().line, "A native function has no body: it is a function of C (to write one in Larimar, write a plain function)"); }
+    expect(TT.Semi, "Expected ';' after native function");
+    return declaration;
+}
+
+/** (after `native`) ( const NAME : Type [ = C ] | let NAME : Type [ = NAME ] ) ; */
+function nativeValue(): Node {
+    let isConst: bool = advance().kind == TT.Const;
+    let what: String = isConst ? "native const" : "native let";
+    let name: Token = expect(TT.Ident, "Expected a name after '${what}'");
+    expect(TT.Colon, "Expected ':' and a type after '${name.text}'");
+    let declaration: ExternValueDecl = ExternValueDecl { line: name.line, name: name.text, type: type(), isConst, cName: name.text } in default;
+    if (optional(TT.Assign)) {
+        if (at(TT.Str)) {                  // what C writes for it: sizeof, a cast, a macro with arguments
+            if (!isConst) { error(current().line, "A native let is a C variable: give its C name (= c_name), not C text"); }
+            declaration.cExpr = advance().text;
+            if (declaration.cExpr.trim() == "") { error(name.line, "The C of '${name.text}' is empty"); }
+        } else {
+            declaration.cName = expect(TT.Ident, "Expected the C name, or \"C text\" in quotes, after '='").text;
+        }
     }
     noWhenSuffix();
-    expect(TT.Semi, "Expected ';' after extern function");
+    return endedBySemicolon(declaration, what);
+}
+
+/** (after `native struct`) NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static ... )* } */
+function nativeStruct(): StructDecl {
+    let name: Token = expect(TT.Ident, "Expected the struct's name after 'native struct'");
+    let declaration: StructDecl = StructDecl { line: name.line, name: name.text, cName: name.text } in default;
+    let target: String = cTarget("native struct '${name.text}'");
+    if (target != "") { declaration.cName = target; }
+    expect(TT.LBrace, "Expected '{' with the fields of the C struct");
+    while (!at(TT.RBrace) && !atEnd() && !hasFailed()) {
+        if (at(TT.Let)) {
+            declaration.fields.push(cField());
+        } else if (at(TT.Function)) {
+            declaration.methods.push(functionDeclaration(false, true));
+        } else if (optional(TT.Static)) {
+            staticFunction(declaration.name);
+        } else {
+            error(current().line, "A native struct has its C fields (let name: Type;) and Larimar functions (got '${current().text}')");
+        }
+    }
+    expect(TT.RBrace, "Expected '}' to close the native struct");
+    optional(TT.Semi);
+    return declaration;
+}
+
+/** let NAME : Type [ = NAME ] ;      a field of a C struct (after '=': its name in C) */
+function cField(): FieldDecl {
+    expect(TT.Let, "Expected 'let'");
+    let name: Token = expect(TT.Ident, "Expected field name");
+    expect(TT.Colon, "Expected ':' and a type after field '${name.text}'");
+    let declaration: FieldDecl = FieldDecl { line: name.line, name: name.text, type: type() } in default;
+    if (optional(TT.Assign)) {
+        declaration.cName = expect(TT.Ident, "A field of C has no default value: after '=' goes its name in C (let size: int64 = st_size;)").text;
+    }
+    expect(TT.Semi, "Expected ';' after field declaration");
+    return declaration;
+}
+
+/**
+ * (after `native type NAME`) [ = CTYPE | = ( Type, ... ) -> Type ] [ released by NAME ] ( ; | { member* } )
+ *     CTYPE: NAME *...  or "C TYPE";  without '=' it is opaque (void*)
+ */
+function nativeCType(name: Token in default): Node {
+    let declaration: ExternTypeDecl = ExternTypeDecl { line: name.line, name: name.text } in default;
+    if (optional(TT.Assign)) {
+        if (at(TT.LParen)) {
+            declaration.func = type();
+            if (declaration.func!.kind != TK.Func) { error(name.line, "Expected a function type after '=': (int32, int32) -> int32"); }
+        } else if (at(TT.Str)) {
+            declaration.cType = advance().text;
+            if (declaration.cType.trim() == "") { error(name.line, "The C type of '${name.text}' is empty"); }
+        } else {
+            let cType: String = expect(TT.Ident, "Expected the C type after 'native type ${name.text} =': a name (FILE*), \"C text\" or a function type").text;
+            while (optional(TT.Star)) { cType = "${cType}*"; }
+            declaration.cType = cType.clone() in default;
+        }
+    }
+    if (atWord("released")) {
+        advance();
+        let by: Token = expect(TT.Ident, "Expected 'by' and the function that releases it: released by close");
+        if (by.text != "by") { error(by.line, "Expected 'by' after 'released': released by close"); }
+        declaration.releasedBy = expect(TT.Ident, "Expected the function that releases '${declaration.name}' after 'released by'").text;
+    } else if (atWord("released_by")) {
+        error(current().line, "Write 'released by' (two words): released by close");
+    }
+    noWhenSuffix();
+    if (at(TT.LBrace)) {
+        nativeMembers(declaration);
+        optional(TT.Semi);
+        return declaration;
+    }
+    return endedBySemicolon(declaration, "native type");
+}
+
+/**
+ * { ( let NAME : Type [ = NAME ] ; | native function ... | native let ... | function ... | static ... )* }
+ * The members of a C type: its fields (when it is a pointer to a C struct), functions of C that take it
+ * first (self), and functions written in Larimar.
+ */
+function nativeMembers(declaration: ExternTypeDecl in default): void {
+    let line: int32 = expect(TT.LBrace, "Expected '{'").line;
+    if (declaration.func != null) { error(line, "A pointer to a C function has no members"); }
+    let methods: NativeTypeDecl = NativeTypeDecl { line: declaration.line, name: declaration.name } in default;
+    let fields: StructDecl = StructDecl { line: declaration.line, name: "${declaration.name}__fields" in default } in default;
+    while (!at(TT.RBrace) && !atEnd() && !hasFailed()) {
+        if (at(TT.Let)) {
+            fields.fields.push(cField());
+        } else if (optional(TT.Native)) {
+            let start: int32 = previous().line;
+            if (optional(TT.Function)) {
+                methods.methods.push(nativeMember(declaration.name, start, false, false));
+            } else if (optional(TT.Let)) {
+                methods.methods.push(nativeMember(declaration.name, start, true, false));
+            } else {
+                error(current().line, "Expected 'function' or 'let' after 'native'");
+            }
+        } else if (optional(TT.Static)) {
+            if (optional(TT.Native)) {
+                let start: int32 = previous().line;
+                expect(TT.Function, "Expected 'function' after 'static native'");
+                staticFunctions.push(nativeMember(declaration.name, start, false, true));
+            } else {
+                let f: FunctionDecl = functionDeclaration(false, true);
+                f.typeName = declaration.name;
+                f.isStatic = true;
+                staticFunctions.push(f);
+            }
+        } else if (at(TT.Function)) {
+            methods.methods.push(functionDeclaration(false, true));
+        } else {
+            error(current().line, "Inside a native type go its C fields (let), native functions and functions (got '${current().text}')");
+        }
+    }
+    expect(TT.RBrace, "Expected '}' to close the native type");
+    if (fields.fields.length > 0) {
+        let c: String = declaration.cType.trim();
+        if (!c.endsWith("*")) {
+            error(fields.fields[0].line, "The fields of '${declaration.name}' are reached through its pointer: its C type must be a pointer to the struct (native type ${declaration.name} = c_struct*)");
+        }
+        fields.cName = c.substring(0, c.length - 1).trim().clone() in default;
+        declaration.fieldsStruct = fields.name;
+        nativeParts.push(fields);
+    }
+    if (methods.methods.length > 0) { nativeParts.push(methods); }
+}
+
+/**
+ * (after `native function` or `native let`, in a native type)
+ *   NAME parameters [ : Type ] [ in lives ] [ throws Type ] = ( C | expression ) ;      (let: NAME : Type = ...)
+ * With `= C` (a name, or "C text"), the method calls that C function with self first: before it only the
+ * memory of the call, when the first parameter is one (m: byte[*]). Any other expression is Larimar.
+ */
+function nativeMember(owner: String in default, line: int32, property: bool, isStatic: bool): FunctionDecl {
+    let name: Token = expect(TT.Ident, "Expected a name");
+    let declaration: FunctionDecl = FunctionDecl { line, name: name.text, ret: typeNamed("void", name.line), isProperty: property } in default;
+    if (property) {
+        expect(TT.Colon, "Expected ':' and the type after 'native let ${name.text}'");
+        declaration.ret = type();
+    } else {
+        declaration.params = parameters();
+        if (optional(TT.Colon)) { declaration.ret = type(); }
+        if (optional(TT.In)) { declaration.returnLives = lives(); }
+        if (optional(TT.Throws)) { declaration.throwsType = type(); }
+    }
+    expect(TT.Assign, "Expected '=' and its C function (= c_name;) or a Larimar expression");
+    let value: Expr? = null;
+    if ((at(TT.Ident) || at(TT.Str)) && next().kind == TT.Semi) {
+        let c: Token = advance();
+        let cFunction: ExternFunctionDecl = ExternFunctionDecl {
+            line: c.line, name: "${owner}__${name.text}" in default, cName: c.text, ret: declaration.ret.clone() in default
+        } in default;
+        let args: Expr[*] = [] in default;
+        let kept: Param[*] = [] in default;
+        let late: Param[*] = [] in default;
+        for (i, p in declaration.params) {
+            let memory: bool = i == 0 && p.type != null && p.type!.kind == TK.Growable && p.type!.inner!.kind == TK.Named && p.type!.inner!.name == "byte";
+            let context: bool = p.type != null && p.type!.kind == TK.Named && p.type!.name == "Context";
+            if (memory) {
+                cFunction.params.push(p.clone() in default);     // the memory of the call: before self, and not written in calls
+            } else if (context) {
+                late.push(p);                                    // C's Context: the compiler gives it, so the method has none
+            } else {
+                kept.push(p);
+            }
+        }
+        if (!isStatic) {
+            cFunction.params.push(Param { line: c.line, name: "receiver", type: typeNamed(owner, c.line) } in default);
+            args.push(SelfExpr { line: c.line } in default);
+        }
+        for (p in declaration.params) {
+            if (late.contains(p)) {
+                cFunction.params.push(p.clone() in default);
+            } else if (kept.contains(p)) {
+                cFunction.params.push(p.clone() in default);
+                args.push(Ident { line: c.line, name: p.name } in default);
+            }
+        }
+        declaration.params = kept;
+        declaration.forwardsToC = true;
+        nativeParts.push(cFunction);
+        value = Call { line: c.line, callee: Ident { line: c.line, name: cFunction.name } in default, args } in default;
+    } else {
+        value = expression();
+    }
+    if (declaration.ret.kind == TK.Named && declaration.ret.name == "void") {
+        declaration.body.push(ExprStmt { line, expr: value! } in default);
+    } else {
+        declaration.body.push(ReturnStmt { line, value: value! } in default);
+    }
+    declaration.hasBody = true;
+    if (isStatic) {
+        declaration.typeName = owner;
+        declaration.isStatic = true;
+    }
+    expect(TT.Semi, property ? "Expected ';' after native let" : "Expected ';' after native function");
     return declaration;
 }
 
@@ -685,11 +861,11 @@ function staticFunction(owner: String in default): void {
     staticFunctions.push(staticFunction);
 }
 
-/** (after `native`) type NAME { ( static ... | native function ... | native let ... | native operator ... | function ... )* } */
-function nativeType(line: int32): NativeTypeDecl {
-    let typeWord: Token = expect(TT.Ident, "Expected 'type' after 'native'");
-    if (typeWord.text != "type") { error(typeWord.line, "Expected 'type' after 'native'"); }
-    let name: Token = expect(TT.Ident, "Expected native type name");
+/**
+ * (after `native type NAME`) { ( static ... | native function ... | native let ... | native operator ... | function ... )* }
+ * The methods of a type the compiler knows (String, Any): only in the standard library.
+ */
+function nativeType(line: int32, name: Token in default): NativeTypeDecl {
     let declaration: NativeTypeDecl = NativeTypeDecl { line, name: name.text } in default;
     expect(TT.LBrace, "Expected '{' to open native type body");
     while (!at(TT.RBrace) && !atEnd()) {
@@ -1113,108 +1289,51 @@ function ternary(): Expr {
     return Ternary { line, cond: condition, then, otherwise: ternary() } in default;
 }
 
-/** or [ ?? coalesce ] */
+/** binary operators [ ?? coalesce ] */
 function coalesce(): Expr {
-    let left: Expr = or();
+    let left: Expr = binaryFrom(1);
     if (!optional(TT.QQ)) { return left; }
     let line: int32 = previous().line;
     return binary("??", left, coalesce(), line);
 }
 
-/** and ( || and )* */
-function or(): Expr {
-    let left: Expr = and();
-    while (optional(TT.Or)) {
-        let line: int32 = previous().line;
-        left = binary("||", left, and(), line);
-    }
-    return left;
+/**
+ * The level of a binary operator, from the loosest (1) to the tightest; 0: not one.
+ *     ||   &&   == != < <= > >= (and `is`)   |   ^   &   << >>   + -   * / %
+ */
+function level(kind: TT): int32 {
+    return switch (kind) {
+        case Or -> 1;
+        case And -> 2;
+        case Eq, Ne, Lt, Le, Gt, Ge -> 3;
+        case Pipe -> 4;
+        case Caret -> 5;
+        case Amp -> 6;
+        case Shl, Shr -> 7;
+        case Plus, Minus -> 8;
+        case Star, Slash, Percent -> 9;
+        default -> 0;
+    };
 }
 
-/** comparison ( && comparison )* */
-function and(): Expr {
-    let left: Expr = comparison();
-    while (optional(TT.And)) {
-        let line: int32 = previous().line;
-        left = binary("&&", left, comparison(), line);
-    }
-    return left;
-}
-
-/** bitOr ( ( == | != | < | <= | > | >= ) bitOr | is qualified NAME [ NAME ] )* */
-function comparison(): Expr {
-    let left: Expr = bitOr();
-    while (true) {
-        if (optional(TT.Is)) {                 // x is Dog, x is Dog d
+/**
+ * cast ( OPERATOR cast ... | is qualified NAME [ NAME ] )*: the operators of level `minimum` or tighter,
+ * each one left-associative (precedence climbing: the right side takes only tighter operators).
+ */
+function binaryFrom(minimum: int32): Expr {
+    let left: Expr = cast();
+    while (!hasFailed()) {
+        if (minimum <= 3 && optional(TT.Is)) {             // x is Dog, x is Dog d: a comparison
             let line: int32 = previous().line;
             let typeName: String = expect(TT.Ident, "Expected a class name after 'is'").text;
             while (optional(TT.Dot)) { typeName = "${typeName}.${expect(TT.Ident, "Expected a name after '.'").text}" in default; }
             left = IsExpr { line, expr: left, typeName, binding: at(TT.Ident) ? advance().text : "" } in default;
             continue;
         }
-        if (!(at(TT.Eq) || at(TT.Ne) || at(TT.Lt) || at(TT.Le) || at(TT.Gt) || at(TT.Ge))) { break; }
+        let tight: int32 = level(current().kind);
+        if (tight == 0 || tight < minimum) { break; }
         let operatorToken: Token = advance();
-        left = binary(operatorToken.text, left, bitOr(), operatorToken.line);
-    }
-    return left;
-}
-
-/** bitXor ( | bitXor )* */
-function bitOr(): Expr {
-    let left: Expr = bitXor();
-    while (optional(TT.Pipe)) {
-        let line: int32 = previous().line;
-        left = binary("|", left, bitXor(), line);
-    }
-    return left;
-}
-
-/** bitAnd ( ^ bitAnd )* */
-function bitXor(): Expr {
-    let left: Expr = bitAnd();
-    while (optional(TT.Caret)) {
-        let line: int32 = previous().line;
-        left = binary("^", left, bitAnd(), line);
-    }
-    return left;
-}
-
-/** shift ( & shift )* */
-function bitAnd(): Expr {
-    let left: Expr = shift();
-    while (optional(TT.Amp)) {
-        let line: int32 = previous().line;
-        left = binary("&", left, shift(), line);
-    }
-    return left;
-}
-
-/** additive ( ( << | >> ) additive )* */
-function shift(): Expr {
-    let left: Expr = additive();
-    while (at(TT.Shl) || at(TT.Shr)) {
-        let operatorToken: Token = advance();
-        left = binary(operatorToken.text, left, additive(), operatorToken.line);
-    }
-    return left;
-}
-
-/** multiplicative ( ( + | - ) multiplicative )* */
-function additive(): Expr {
-    let left: Expr = multiplicative();
-    while (at(TT.Plus) || at(TT.Minus)) {
-        let operatorToken: Token = advance();
-        left = binary(operatorToken.text, left, multiplicative(), operatorToken.line);
-    }
-    return left;
-}
-
-/** cast ( ( * | / | % ) cast )* */
-function multiplicative(): Expr {
-    let left: Expr = cast();
-    while (at(TT.Star) || at(TT.Slash) || at(TT.Percent)) {
-        let operatorToken: Token = advance();
-        left = binary(operatorToken.text, left, cast(), operatorToken.line);
+        left = binary(operatorToken.text, left, binaryFrom(tight + 1), operatorToken.line);
     }
     return left;
 }

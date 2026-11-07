@@ -5,7 +5,7 @@
 // output: failed: null
 // output: in an object: closed 5 after its memory
 // output: memory scratch: closed 6
-// A resource (extern type released by f): released when the memory it lives in is freed, or before with
+// A resource (native type released by f): released when the memory it lives in is freed, or before with
 // release(x) (only once); a C function that fails gives null.
 c_code {
     static int opened = 0, closed = 0;
@@ -15,11 +15,11 @@ c_code {
     static int count_opened(void) { return opened; }
 }
 
-extern type Thing = c "int" released by close_thing;
-extern function open_thing(ok: int32): Thing?;
-extern function close_thing(t: Thing): void;
-extern function count_closed(): int32;
-extern function count_opened(): int32;
+native type Thing = int released by close_thing;
+native function open_thing(ok: int32): Thing?;
+native function close_thing(t: Thing): void;
+native function count_closed(): int32;
+native function count_opened(): int32;
 
 class Holder {
     let thing: Thing? = null;

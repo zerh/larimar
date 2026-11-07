@@ -380,20 +380,20 @@ static void lm_proc_free(LmProcess* p) {
 }
 }
 
-extern type ProcessHandle = c "LmProcess*" released by lm_proc_free;
-extern function lm_proc_free(p: ProcessHandle): void;
-extern function lm_proc_new(program: String, quiet: int32, mergeErrors: int32, shareConsole: int32): ProcessHandle?;
-extern function lm_proc_arg(p: ProcessHandle, arg: String): void;
-extern function lm_proc_env(p: ProcessHandle, entry: String): void;
-extern function lm_proc_start(p: ProcessHandle): int32;
-extern function lm_proc_error_text(code: int32): String;
-extern function lm_proc_write(p: ProcessHandle, bytes: byte*, count: int64): int32;
-extern function lm_proc_read(p: ProcessHandle, into: byte*, size: int32, ms: int32): int32;
-extern function lm_proc_wait(p: ProcessHandle, ms: int32): int32;
-extern function lm_proc_code(p: ProcessHandle): int32;
-extern function lm_proc_kill(p: ProcessHandle): void;
-extern function lm_proc_close_input(p: ProcessHandle): void;
-extern function lm_proc_now(): int64;
+native type ProcessHandle = LmProcess* released by lm_proc_free;
+native function lm_proc_free(p: ProcessHandle): void;
+native function lm_proc_new(program: String, quiet: int32, mergeErrors: int32, shareConsole: int32): ProcessHandle?;
+native function lm_proc_arg(p: ProcessHandle, arg: String): void;
+native function lm_proc_env(p: ProcessHandle, entry: String): void;
+native function lm_proc_start(p: ProcessHandle): int32;
+native function lm_proc_error_text(code: int32): String;
+native function lm_proc_write(p: ProcessHandle, bytes: byte*, count: int64): int32;
+native function lm_proc_read(p: ProcessHandle, into: byte*, size: int32, ms: int32): int32;
+native function lm_proc_wait(p: ProcessHandle, ms: int32): int32;
+native function lm_proc_code(p: ProcessHandle): int32;
+native function lm_proc_kill(p: ProcessHandle): void;
+native function lm_proc_close_input(p: ProcessHandle): void;
+native function lm_proc_now(): int64;
 
 /** Why a process could not be used. */
 public enum ProcessError {
@@ -570,12 +570,12 @@ public function findProgram(name: String): String? {
     return null;
 }
 
-extern function getenv(name: String): String?;
+native function getenv(name: String): String?;
 #when unix
-    extern function access(path: String, mode: int32): int32;
-    extern const X_OK: int32;
+    native function access(path: String, mode: int32): int32;
+    native const X_OK: int32;
 #when windows
-    extern function _access(path: String, mode: int32): int32;
+    native function _access(path: String, mode: int32): int32;
 #end
 
 function isRunnable(path: String): bool {

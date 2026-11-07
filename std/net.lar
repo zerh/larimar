@@ -102,14 +102,14 @@ public function message(e: NetError): String {
 
 /** A socket of the system: an int on Unix, a SOCKET on Windows. Closed when its memory is freed. */
 #when unix
-    public extern type Socket = c "int" released by close;
-    extern function close(s: Socket): int32;
+    public native type Socket = int released by close;
+    native function close(s: Socket): int32;
 #when windows
-    public extern type Socket = c "SOCKET" released by closesocket;
-    extern function closesocket(s: Socket): int32;
+    public native type Socket = SOCKET released by closesocket;
+    native function closesocket(s: Socket): int32;
 #end
 
-extern type AddrInfo = struct "struct addrinfo" {
+native struct AddrInfo = "struct addrinfo" {
     let ai_flags: int32;
     let ai_family: int32;
     let ai_socktype: int32;
@@ -118,75 +118,75 @@ extern type AddrInfo = struct "struct addrinfo" {
     let ai_addr: SockAddr*;
     let ai_next: AddrInfo*;
 };
-extern type SockAddr = struct "struct sockaddr" { let sa_family: uint16; };
+native struct SockAddr = "struct sockaddr" { let sa_family: uint16; };
 /** Big enough for an IPv4 or IPv6 address; the port is at the same place in both. */
-extern type SockAddrIn6 = struct "struct sockaddr_in6" { let sin6_port: uint16; };
-extern type TimeVal = struct "struct timeval" {
+native struct SockAddrIn6 = "struct sockaddr_in6" { let sin6_port: uint16; };
+native struct TimeVal = "struct timeval" {
     let tv_sec: int64;
     let tv_usec: int64;
 };
-extern type WsaData = struct "WSADATA" { let wVersion: uint16; };
+native struct WsaData = WSADATA { let wVersion: uint16; };
 /** What setsockopt and getsockname take as "a pointer to anything". */
-extern type Untyped;
-extern type SignalHandler = (int32) -> void;
+native type Untyped;
+native type SignalHandler = (int32) -> void;
 
-extern const AF_UNSPEC: int32;
-extern const SOCK_STREAM: int32;
-extern const SOCK_DGRAM: int32;
-extern const NI_NUMERICHOST: int32;
-extern const NI_NUMERICSERV: int32;
-extern const AI_PASSIVE: int32;
-extern const IPPROTO_TCP: int32;
-extern const TCP_NODELAY: int32;
-extern const SOL_SOCKET: int32;
-extern const SO_REUSEADDR: int32;
-extern const SO_RCVTIMEO: int32;
-extern const SO_SNDTIMEO: int32;
-extern const SOCKADDR_IN6_SIZE: uint32 = c "(unsigned)sizeof(struct sockaddr_in6)";
+native const AF_UNSPEC: int32;
+native const SOCK_STREAM: int32;
+native const SOCK_DGRAM: int32;
+native const NI_NUMERICHOST: int32;
+native const NI_NUMERICSERV: int32;
+native const AI_PASSIVE: int32;
+native const IPPROTO_TCP: int32;
+native const TCP_NODELAY: int32;
+native const SOL_SOCKET: int32;
+native const SO_REUSEADDR: int32;
+native const SO_RCVTIMEO: int32;
+native const SO_SNDTIMEO: int32;
+native const SOCKADDR_IN6_SIZE: uint32 = "(unsigned)sizeof(struct sockaddr_in6)";
 #when unix
-    extern const TIMEVAL_SIZE: int32 = c "(int)sizeof(struct timeval)";
-    extern const SHUT_WR: int32;
-    extern const SIGPIPE: int32;
-    extern const SIG_IGN: SignalHandler;
-    extern function signal(sig: int32, handler: SignalHandler): SignalHandler;
-    extern let errno: int32;
-    extern const EINTR: int32;
-    extern const EAGAIN: int32;
-    extern const EWOULDBLOCK: int32;
-    extern const ETIMEDOUT: int32;
-    extern const ECONNREFUSED: int32;
-    extern const ECONNRESET: int32;
-    extern const EPIPE: int32;
-    extern const EADDRINUSE: int32;
+    native const TIMEVAL_SIZE: int32 = "(int)sizeof(struct timeval)";
+    native const SHUT_WR: int32;
+    native const SIGPIPE: int32;
+    native const SIG_IGN: SignalHandler;
+    native function signal(sig: int32, handler: SignalHandler): SignalHandler;
+    native let errno: int32;
+    native const EINTR: int32;
+    native const EAGAIN: int32;
+    native const EWOULDBLOCK: int32;
+    native const ETIMEDOUT: int32;
+    native const ECONNREFUSED: int32;
+    native const ECONNRESET: int32;
+    native const EPIPE: int32;
+    native const EADDRINUSE: int32;
 #when windows
-    extern const SD_SEND: int32;
-    extern function WSAStartup(version: uint16, data: WsaData*): int32;
-    extern function WSAGetLastError(): int32;
-    extern const WSAEINTR: int32;
-    extern const WSAETIMEDOUT: int32;
-    extern const WSAEWOULDBLOCK: int32;
-    extern const WSAECONNREFUSED: int32;
-    extern const WSAECONNRESET: int32;
-    extern const WSAECONNABORTED: int32;
-    extern const WSAEADDRINUSE: int32;
+    native const SD_SEND: int32;
+    native function WSAStartup(version: uint16, data: WsaData*): int32;
+    native function WSAGetLastError(): int32;
+    native const WSAEINTR: int32;
+    native const WSAETIMEDOUT: int32;
+    native const WSAEWOULDBLOCK: int32;
+    native const WSAECONNREFUSED: int32;
+    native const WSAECONNRESET: int32;
+    native const WSAECONNABORTED: int32;
+    native const WSAEADDRINUSE: int32;
 #end
 
-extern function getaddrinfo(host: String, service: String, hints: AddrInfo*, list: AddrInfo**): int32;
-extern function freeaddrinfo(list: AddrInfo*): void;
-extern function socket(family: int32, kind: int32, protocol: int32): Socket?;
-extern function connect(s: Socket, addr: SockAddr*, length: uint32): int32;
-extern function bind(s: Socket, addr: SockAddr*, length: uint32): int32;
-extern function listen(s: Socket, backlog: int32): int32;
-extern function accept(s: Socket, addr: SockAddr*, length: Untyped?): Socket?;
-extern function recv(s: Socket, buffer: byte[], flags: int32): int64;
-extern function send(s: Socket, bytes: byte[], flags: int32): int64;
-extern function shutdown(s: Socket, how: int32): int32;
-extern function setsockopt(s: Socket, level: int32, name: int32, value: Untyped, length: int32): int32;
-extern function getsockname(s: Socket, addr: SockAddr*, length: Untyped): int32;
-extern function ntohs(n: uint16): uint16;
-extern function sendto(s: Socket, bytes: byte[], flags: int32, to: SockAddr*, length: uint32): int64;
-extern function recvfrom(s: Socket, buffer: byte[], flags: int32, from: SockAddr*, length: Untyped): int64;
-extern function getnameinfo(addr: SockAddr*, length: uint32, host: byte[], service: byte[], flags: int32): int32;
+native function getaddrinfo(host: String, service: String, hints: AddrInfo*, list: AddrInfo**): int32;
+native function freeaddrinfo(list: AddrInfo*): void;
+native function socket(family: int32, kind: int32, protocol: int32): Socket?;
+native function connect(s: Socket, addr: SockAddr*, length: uint32): int32;
+native function bind(s: Socket, addr: SockAddr*, length: uint32): int32;
+native function listen(s: Socket, backlog: int32): int32;
+native function accept(s: Socket, addr: SockAddr*, length: Untyped?): Socket?;
+native function recv(s: Socket, buffer: byte[], flags: int32): int64;
+native function send(s: Socket, bytes: byte[], flags: int32): int64;
+native function shutdown(s: Socket, how: int32): int32;
+native function setsockopt(s: Socket, level: int32, name: int32, value: Untyped, length: int32): int32;
+native function getsockname(s: Socket, addr: SockAddr*, length: Untyped): int32;
+native function ntohs(n: uint16): uint16;
+native function sendto(s: Socket, bytes: byte[], flags: int32, to: SockAddr*, length: uint32): int64;
+native function recvfrom(s: Socket, buffer: byte[], flags: int32, from: SockAddr*, length: Untyped): int64;
+native function getnameinfo(addr: SockAddr*, length: uint32, host: byte[], service: byte[], flags: int32): int32;
 
 // For the servers: a copy of a socket (another descriptor for the same connection, which a worker thread
 // owns and closes), taking one back as a Socket, and waiting a while for something to read.
@@ -240,11 +240,11 @@ c_code {
     }
 #endif
 }
-extern function lm_net_dup(s: Socket): int64;
-extern function lm_net_adopt(n: int64): Socket?;
-extern function lm_net_readable(s: Socket, ms: int32): int32;
-extern function lm_net_number(s: Socket): int64;
-extern function lm_net_poll(fds: int64[], ready: int32[], ms: int32): int32;
+native function lm_net_dup(s: Socket): int64;
+native function lm_net_adopt(n: int64): Socket?;
+native function lm_net_readable(s: Socket, ms: int32): int32;
+native function lm_net_number(s: Socket): int64;
+native function lm_net_poll(fds: int64[], ready: int32[], ms: int32): int32;
 
 // error codes, as NetError: 1 host not found, 2 refused, 3 timeout, 4 closed, 5 reset, 6 address in use, 100+ other
 
@@ -1213,18 +1213,18 @@ c_code {
     static const char* lm_ossl_conn_text(LmOsslConn* t) { return t->text; }
 }
 
-extern type TlsContextHandle;
-extern type TlsSessionHandle;
-extern function lm_tlss_context(m: byte[*], certificate: String, key: String): TlsContextHandle;
-extern function lm_tlss_context_number(c: TlsContextHandle): int64;
-extern function lm_tlss_context_error(c: TlsContextHandle): int32;
-extern function lm_tlss_context_text(c: TlsContextHandle): String;
-extern function lm_tlss_accept(m: byte[*], context: int64, s: Socket): TlsSessionHandle;
-extern function lm_ossl_conn_error(t: TlsSessionHandle): int32;
-extern function lm_ossl_conn_text(t: TlsSessionHandle): String;
-extern function lm_ossl_read(t: TlsSessionHandle, buffer: byte[]): int32;
-extern function lm_ossl_write(t: TlsSessionHandle, bytes: byte[]): int32;
-extern function lm_ossl_close(t: TlsSessionHandle): void;
+native type TlsContextHandle;
+native type TlsSessionHandle;
+native function lm_tlss_context(m: byte[*], certificate: String, key: String): TlsContextHandle;
+native function lm_tlss_context_number(c: TlsContextHandle): int64;
+native function lm_tlss_context_error(c: TlsContextHandle): int32;
+native function lm_tlss_context_text(c: TlsContextHandle): String;
+native function lm_tlss_accept(m: byte[*], context: int64, s: Socket): TlsSessionHandle;
+native function lm_ossl_conn_error(t: TlsSessionHandle): int32;
+native function lm_ossl_conn_text(t: TlsSessionHandle): String;
+native function lm_ossl_read(t: TlsSessionHandle, buffer: byte[]): int32;
+native function lm_ossl_write(t: TlsSessionHandle, bytes: byte[]): int32;
+native function lm_ossl_close(t: TlsSessionHandle): void;
 
 /**
  * The certificate and the key of a TLS server, loaded with OpenSSL. Load it once and give it to as many

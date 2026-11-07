@@ -13,8 +13,8 @@ c_code {
     static void use_multiply(void) { some_operation = multiplicar; }
 }
 
-extern function some_operation(a: int32, b: int32): int32;
-extern function use_multiply(): void;
+native function some_operation(a: int32, b: int32): int32;
+native function use_multiply(): void;
 
 function main(): int32 {
     println("${some_operation(3, 4)}");

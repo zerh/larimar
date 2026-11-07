@@ -28,7 +28,8 @@ import semantics.types {
     externTypes, externTypeIndex, functions, functionIndex, globals, lambdaList, usedTypes, typeOrder, structOf,
     classOf, interfaceOf, enumOf, functionOf, isExternTypeName, structMethod, interfaceMethod, variantOf, parentOf,
     findField, findMethod, isSubclass, implementor, P_GLOBAL, P_RESULT, primByName, ExternTypeInfo, externInfos,
-    isCValue, isExternStruct, cCodeStd, CallInfo, CallK, BK, includeWhens, isResource, externInfoOf, platformWithin, isPtr
+    isCValue, isExternStruct, cCodeStd, CallInfo, CallK, BK, includeWhens, isResource, externInfoOf, platformWithin, isPtr, nativeOwner,
+    isContextT, contextView
 };
 import semantics.expressions {
     check, coerce, typeOf, regionOf, hasRefs, note, resolveType, resolveTop, resolveValue, evalConst, ConstVal,
@@ -181,7 +182,7 @@ public function analyze(program: Program in default): void {
         }
     }
     for (m in nativeMethods) {
-        if (m.sig != null && m.decl.hasBody) { analyzeMethod(m, primByName(m.owner)!); }
+        if (m.sig != null && m.decl.hasBody) { analyzeMethod(m, nativeOwner(m.owner)); }
     }
 
     resolveRegions();
@@ -270,7 +271,9 @@ function collect(program: Program in default): void {
                 }
             }
             case NativeTypeDecl n -> {
-                if (primByName(n.name) == null || n.name == "void") {
+                // the methods of a type the compiler knows (std: String, Any), or of a C type (native type X = T { ... })
+                let ofC: ExternTypeInfo? = externInfoOf(n.name);
+                if ((primByName(n.name) == null || n.name == "void") && ofC == null) {
                     error(n.line, "Native type '${n.name}' must name a built-in value type.");
                     continue;
                 }
@@ -335,7 +338,7 @@ function collect(program: Program in default): void {
     }
 }
 
-/** #when unix: extern type X = c "int";  #when windows: extern type X = c "SOCKET";  one type, per platform. */
+/** #when unix: native type X = int;  #when windows: native type X = SOCKET;  one type, per platform. */
 function addPlatformType(ex: ExternTypeInfo in default, t: ExternTypeDecl in default): void {
     let all: ExternTypeDecl[*] = [ex.decl];
     for (a in ex.alts) { all.push(a); }
@@ -376,7 +379,7 @@ function typeNameTaken(name: String, line: int32): bool {
 function collectStatic(f: FunctionDecl in default): void {
     let t: String = f.typeName;
     let full: String = "${t}.${f.name}" in default;
-    let isType: bool = structOf(t) != null || classOf(t) != null || enumOf(t) != null || primByName(t) != null;
+    let isType: bool = structOf(t) != null || classOf(t) != null || enumOf(t) != null || primByName(t) != null || isExternTypeName(t);
     if (interfaceOf(t) != null) {
         error(f.line, "Interfaces cannot have static functions ('${full}').");
         return;
@@ -400,15 +403,37 @@ function externSignature(e: ExternTypeInfo in default): void {
     for (i, p in fr.params) {
         let pt: Type = resolveValue(p, "Parameter ${i + 1} of '${e.name}'");
         if (!isError(pt) && !isCValue(pt)) {
-            error(p.line, "Parameter ${i + 1} of C function type '${e.name}': only numbers, bool, String, extern types and C structs can be passed to C.");
+            error(p.line, "Parameter ${i + 1} of C function type '${e.name}': only numbers, bool, String, native types and C structs can be passed to C.");
         }
         ps.push(pt);
     }
     let ret: Type = resolveType(fr.inner!);
     if (!isError(ret) && ret != T_VOID && !isCValue(ret)) {
-        error(fr.line, "C function type '${e.name}' can only return numbers, bool, String, void, extern types or C structs.");
+        error(fr.line, "C function type '${e.name}' can only return numbers, bool, String, void, native types or C structs.");
     }
     e.sig = funcT(ps, ret, false);
+    // (A, Context) -> R: C gives the Context back to the function, so a Larimar function (with what it captures) can go
+    let others: Type[*] = [] in default;
+    for (i, pt in ps) {
+        if (!isContextT(pt)) {
+            others.push(pt);
+            if (isResource(pt) || isOpt(pt) && isResource(pt.elem!)) { e.view = T_ERROR; }
+        } else if (e.ctxIndex >= 0) {
+            error(fr.line, "C function type '${e.name}' has two Contexts: a callback gets back one.");
+        } else {
+            e.ctxIndex = i;
+        }
+    }
+    if (e.ctxIndex < 0) { return; }
+    if (e.view != null) {
+        error(fr.line, "C function type '${e.name}' gets a Context and a resource: give the callback the C value instead (a native type without 'released by').");
+        e.view = null;
+        return;
+    }
+    if (ret == T_STRING || isOpt(ret) && ret.elem! == T_STRING) {
+        error(fr.line, "C function type '${e.name}' gets a Context: the Larimar function it stands for cannot return a String to C (C would not know when to free it).");
+    }
+    e.view = funcT(others, ret, false);
 }
 
 let exportNames: Any = {} in default;
@@ -426,12 +451,12 @@ function checkExport(f: FunctionInfo in default, fd: FunctionDecl in default): v
         let pt: Type = f.sig!.params[i];
         if (p.lives != "") { error(p.line, "'in ${p.lives}' is not allowed on the parameters of an export function: C gives plain values."); }
         if (!isError(pt) && !isCValue(pt)) {
-            error(p.line, "Parameter '${p.name}' of export function '${n}': C can only pass numbers, bool, String, extern types and C structs.");
+            error(p.line, "Parameter '${p.name}' of export function '${n}': C can only pass numbers, bool, String, native types and C structs.");
         }
     }
     let ret: Type = f.sig!.elem!;
     if (!isError(ret) && ret != T_VOID && (!isCValue(ret) || ret == T_STRING)) {
-        error(f.line, "Export function '${n}' can only return numbers, bool, void, extern types or C structs (C would not know when to free a String).");
+        error(f.line, "Export function '${n}' can only return numbers, bool, void, native types or C structs (C would not know when to free a String).");
     }
     if (f.throwsType != null) { error(f.line, "Export function '${n}' cannot throw: an error cannot cross into C. Catch it inside."); }
 }
@@ -517,9 +542,9 @@ function signatures(program: Program in default): void {
                     names[f.name] = true;
                     let ft: Type = resolveTop(f.type, TC_OTHER, "Field '${f.name}'");
                     if (sd.cName != "" && !isError(ft) && !isCValue(ft)) {
-                        error(f.line, "Field '${f.name}' of C struct '${sd.name}': only numbers, bool, String (read only), extern types, C pointers and other C structs can be fields.");
+                        error(f.line, "Field '${f.name}' of C struct '${sd.name}': only numbers, bool, String (read only), native types, C pointers and other C structs can be fields.");
                     }
-                    info.fields.push(FieldInfo { name: f.name, type: ft, defaultValue: f.defaultValue, owner: sd.name, line: f.line } in default);
+                    info.fields.push(FieldInfo { name: f.name, type: ft, defaultValue: f.defaultValue, owner: sd.name, line: f.line, cName: f.cName } in default);
                 }
                 for (m in sd.methods) {
                     let mi: MethodInfo = MethodInfo { name: m.name, owner: sd.name, decl: m, isOperator: m.isOperator, introducer: sd.name, own: newOwner() } in default;
@@ -611,27 +636,43 @@ function signatures(program: Program in default): void {
         let e: ExternFunctionDecl? = f.ext;
         if (e != null) {
             let ps: Type[*] = [] in default;
-            for (p in e.params) {
-                if (p.lives != "") { error(p.line, "'in ${p.lives}' is not allowed on the parameters of an extern function."); }
+            for (i, p in e.params) {
                 let pt: Type = resolveTop(p.type!, TC_PARAM, "Parameter '${p.name}'");
+                if (isContextT(pt)) {
+                    if (f.ctxParam >= 0) { error(p.line, "'${f.name}' takes two Contexts: a C function gives one to its callback."); }
+                    f.ctxParam = i;
+                }
+                if (contextView(pt) != null) {
+                    if (f.ctxCallback >= 0) { error(p.line, "'${f.name}' takes two callbacks with a Context: only one can get it."); }
+                    f.ctxCallback = i;
+                    f.ctxKeep = p.lives == "default";
+                }
+                if (p.lives != "" && !(p.lives == "default" && contextView(pt) != null)) {
+                    error(p.line, p.lives == "default"
+                        ? "'in default' on a parameter of a native function goes on a callback that gets a Context (C keeps it, so what it uses must live as long as the program)."
+                        : "'in ${p.lives}' is not allowed on the parameters of a native function (only 'in default', on a callback that C keeps).");
+                }
                 if (isArray(pt, ArrK.Growable) && pt.elem! == T_BYTE) {
                     f.memParams.push(true);       // a memory: C receives RtMem* and can create things in it
                 } else if (isArray(pt, ArrK.Slice)) {
                     f.memParams.push(false);      // T[]: C receives a pointer to the elements and their count
                     if (!isError(pt.elem!) && !isPlainNumber(pt.elem!)) {
-                        error(p.line, "Parameter '${p.name}' of extern function '${f.name}': a T[] passed to C must be of numbers or bool (byte[], int32[], float64[]...).");
+                        error(p.line, "Parameter '${p.name}' of native function '${f.name}': a T[] passed to C must be of numbers or bool (byte[], int32[], float64[]...).");
                     }
                 } else {
                     f.memParams.push(false);
-                    if (!isError(pt) && !isCValue(pt)) {
-                        error(p.line, "Parameter '${p.name}' of extern function '${f.name}': only numbers, bool, String, extern types, C structs and memories (byte[*]) can be passed to C.");
+                    if (!isError(pt) && !isCValue(pt) && pt != optT(T_STRING)) {       // String?: null goes as NULL
+                        error(p.line, "Parameter '${p.name}' of native function '${f.name}': only numbers, bool, String, native types, C structs and memories (byte[*]) can be passed to C.");
                     }
                 }
                 ps.push(pt);
             }
             let ret: Type = resolveType(e.ret);
             if (!isError(ret) && ret != T_VOID && !isCValue(ret) && ret != optT(T_STRING)) {
-                error(e.line, "Extern function '${f.name}' can only return numbers, bool, String, void, extern types or C structs.");
+                error(e.line, "Native function '${f.name}' can only return numbers, bool, String, void, native types or C structs.");
+            }
+            if (f.ctxParam >= 0 && f.ctxCallback < 0) {
+                error(e.line, "'${f.name}' takes a Context: it is for a callback, so declare that callback's type with a Context too (native type F = (int32, Context) -> void;).");
             }
             f.sig = funcT(ps, ret, false);
         } else {
@@ -662,14 +703,14 @@ function signatures(program: Program in default): void {
 
 /** extern const NAME: T;  extern let NAME: T;  a name C has (a constant, a macro, a global). */
 function externValue(v: ExternValueDecl in default): void {
-    let what: String = v.isConst ? "extern const" : "extern let";
+    let what: String = v.isConst ? "native const" : "native let";
     let t: Type = resolveValue(v.type, "${what} '${v.name}'");
     if (!isError(t)) {
         if (isResource(t)) {
             error(v.line, "'${v.name}': a resource (${t.text}) is made by a C function, not declared as a ${what}.");
         } else if (!isCValue(t) || (t == T_STRING && !v.isConst)) {
-            error(v.line, v.isConst ? "'${v.name}': an extern const is a number, bool, String, extern type, C struct or C pointer."
-                                    : "'${v.name}': an extern let is a number, bool, extern type, C struct or C pointer (a C string is an extern type).");
+            error(v.line, v.isConst ? "'${v.name}': a native const is a number, bool, String, native type, C struct or C pointer."
+                                    : "'${v.name}': a native let is a number, bool, native type, C struct or C pointer (a C string is a native type).");
         }
     }
     let s: Symbol = declare(v.name, SymK.Global, t, v.line);
@@ -692,7 +733,7 @@ function externResource(e: ExternTypeInfo in default): void {
         }
         let fi: FunctionInfo? = functionOf(d.releasedBy);
         if (fi == null || fi.sig == null) {
-            error(d.line, "'${d.releasedBy}' (that releases '${e.name}') is not a function: declare it, e.g. extern function ${d.releasedBy}(x: ${e.name}): void;");
+            error(d.line, "'${d.releasedBy}' (that releases '${e.name}') is not a function: declare it, e.g. native function ${d.releasedBy}(x: ${e.name}): void;");
             e.releasers.push(null);
             continue;
         }
@@ -727,6 +768,14 @@ function externResourceRules(f: FunctionInfo in default): void {
 
 function resolveMethodSig(mi: MethodInfo in default, m: FunctionDecl in default): void {
     mi.sig = resolveSig(m.params, m.ret);
+    if (m.forwardsToC) {             // its C function takes a callback with a Context: the method takes the Larimar function
+        let ps: Type[*] = [] in default;
+        for (t in mi.sig!.params) {
+            let view: Type? = contextView(t);
+            ps.push(view != null ? view! : t);
+        }
+        mi.sig = funcT(ps, mi.sig!.elem!, false);
+    }
     mi.throwsType = resolveThrows(m.throwsType);
     mi.memParams = memoryParams(m.params, m.body);       // an interface method too: byte[*] is a memory
     if (m.isOperator) {
@@ -1512,7 +1561,7 @@ function analyzeAssign(asg: AssignStmt in default): void {
             storage = storageRegion(m.object);
             place = placeFor(m.object);
             root = rootSymbol(m);
-            if (!isLValue(m.object) && !isReference(typeOf(m.object))) {
+            if (!isLValue(m.object) && !isReference(typeOf(m.object)) && !isPtr(mi.objectType!)) {
                 error(asg.line, "Cannot assign to a field of a temporary value; store it in a variable first.");
             }
         }
@@ -1672,6 +1721,11 @@ function linked(e: Expr): Expr { return e is Member m && m.replaced != null ? m.
 
 /** An extern whose first parameter is a memory: it creates in the memory of the call, which is not written. */
 public function callMemory(f: FunctionInfo): bool { return f.isExtern && f.memParams.length > 0 && f.memParams[0]; }
+
+/** A C function that makes a resource (returns X?, X released by f): the resource lives where its result goes. */
+function makesResource(f: FunctionInfo): bool {
+    return f.isExtern && f.sig != null && isOpt(f.sig!.elem!) && isResource(f.sig!.elem!.elem!);
+}
 
 /** The names an expression mentions (self as "self"), lambdas included; `viaPlaced`: also inside `... in m`. */
 /** The class whose method's body flowNames reads ("" outside methods): a number read from self points nowhere. */
@@ -1997,7 +2051,7 @@ function callCreates(c: Call, any: bool, declared: Declared): bool {
         let f: FunctionInfo? = sf;
         if (f == null && !isDeclared(declared, fname)) { f = functionOf(fname); }
         if (f == null) { return true; }              // a function value
-        if (f.isExtern) { return callMemory(f); }
+        if (f.isExtern) { return callMemory(f) || makesResource(f); }
         if (f.creates) { return true; }
         for (i, a in c.args) {                       // (a parameter that says where it lives: there)
             if (i < f.params.length && f.flows[i] && f.params[i].lives == "" && creates(a, any, declared)) { return true; }
@@ -2142,6 +2196,9 @@ function culprit(d: Deferred in default, v: Region, st: Region, resolve: bool): 
     }
     if (d.role.startsWith("field ")) {
         let field: String = d.role.substring(6);
+        if (e is Ident id && isFunctionValue(e)) {        // a function has no clone(): it must live there
+            return fill("Field '${field}' gets the function '${id.name}', which lives in {v}, but the object lives ${lives}. A function cannot be copied with clone(): make '${id.name}' live there${parameterHint(id.name, st)}.", v, st);
+        }
         if (e is Ident id) {
             return fill("Field '${field}' gets '${id.name}', which lives in {v}, but the object lives ${lives}: ${field}: ${id.name}.clone()${keep}", v, st);
         }
@@ -2169,10 +2226,23 @@ function culprit(d: Deferred in default, v: Region, st: Region, resolve: bool): 
     }
     let view: String = viewCulprit(e, v, d.target, lives, keep);
     if (view != "") { return fill(view, v, st); }
+    if (e is Ident id && isFunctionValue(e)) {
+        return fill("The function '${id.name}' lives in {v}, but ${d.target} lives ${lives}. A function cannot be copied with clone(): make '${id.name}' live there${parameterHint(id.name, st)}.", v, st);
+    }
     if (e is Ident id && v.kind == RK.Local) {
         return fill("'${id.name}' lives in {v}, but ${d.target} lives ${lives}. Keep a copy there: ${id.name}.clone()${keep}", v, st);
     }
     return "";
+}
+
+/** A lambda or a function value (it has no clone()). */
+function isFunctionValue(e: Expr): bool { return e.ty != null && e.ty!.kind == TyK.Func; }
+
+/** For a parameter that must live where it is kept: its declaration with `in`. */
+function parameterHint(name: String, st: Region): String {
+    let s: Symbol? = lookup(name);
+    if (s == null || s.kind != SymK.Param) { return ""; }
+    return st.kind == RK.Static ? " (declare the parameter as '${name}: ${s.type.text} in default')" : "";
 }
 
 /** x.trim(), x.substring(...)...: the result shares the bytes of x. */

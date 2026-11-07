@@ -24,8 +24,9 @@ import semantics.types {
     hasCapture, cSuffix, isMemParam, PatternInfo, PatK, SwitchInfo, ForInfo, CatchInfo, CallInfo, CallK, MemberInfo, MbK,
     includes, usesAny, usesThreads, cCode, files, structs, nativeMethods, classes, interfaces, enums, externTypes, functions, globals,
     lambdaList, funcTypes, typeOrder, structOf, classOf, interfaceOf, enumOf, parentOf, syncField, chain, findMethod, allFields, classDepth, primByName,
-    externInfos, externInfoOf, ExternTypeInfo, cCodeStd, includeWhens, isResource, platformCondition
+    externInfos, externInfoOf, ExternTypeInfo, cCodeStd, includeWhens, isResource, platformCondition, nativeOwner
 };
+import std.text { isIdentifierPart, isDigit };
 import codegen.runtimeselect { selectRuntime };
 import codegen.prune { prune, braceDelta };
 import semantics.linker { filePaths, FILE_LINES };
@@ -100,6 +101,9 @@ public let lambdaDefs: String[*] = [] in default;     // by lambda id ("" until 
 public let lambdaDone: bool[*] = [] in default;
 public let resizeHelpers: String[*] = [] in default;
 public let resizeSeen: Any = {} in default;
+/** Trampolines: a C function that gets a Context calls the Larimar function it carries. */
+public let ctxTrampolines: String[*] = [] in default;
+public let ctxSeen: Any = {} in default;
 public let loopBlock: Block? = null;                  // innermost loop body (per function, saved/restored)
 
 // =====================================================================================
@@ -344,9 +348,14 @@ public function generate(): String {
         }
         sectionOf(out, "Export functions", early);
     }
+    let named: StringBuilder = {} in default;      // what c_code names with lar"...": prototypes first
+    for (code in cCode) {
+        if (code.contains("lar\"")) { larPrototypes(code, named); }
+    }
+    sectionOf(out, "Larimar functions named in c_code", named);
     for (ci, code in cCode) {
         section(out, cCodeStd[ci] ? "c_code (std)" : "c_code");
-        out.add(stripIndent(code));
+        out.add(stripIndent(code.contains("lar\"") ? larInC(code) : code));
         out.add("\n");
     }
 
@@ -406,7 +415,7 @@ public function generate(): String {
     section(out, "Prototypes");
     let declared: Any = {} in default;
     for (f in functions) {
-        if (f.isExtern && f.prototype && !declared.contains(f.cName)) {
+        if (f.isExtern && f.prototype && !declared.contains(f.cName) && isCName(f.cName)) {     // "(f)", a cast...: C text, no prototype
             declared[f.cName] = true;
             let pw: String = f.ext!.platform;
             out.add(pw == "" ? "${externPrototype(f)};\n" : "#if ${platformCondition(pw)}\n${externPrototype(f)};\n#endif\n");
@@ -472,6 +481,7 @@ public function generate(): String {
     for (t in typeOrder) { collectionHelpers(part, t); }
     part.add(boxes);
     for (r in resizeHelpers) { part.add(r); }
+    for (t in ctxTrampolines) { part.add(t); }
     sectionOf(out, "Array and optional helpers", part);
 
     if (globals.length > 0) {
@@ -685,7 +695,71 @@ function externPrototype(f: FunctionInfo in default): String {
     return "${ret} ${f.cName}(${ps.join(", ")})";
 }
 
-function externCType(t: Type): String {
+/** c_code with lar"name" (the linker gave the linked name): the C name of that function, type or global. */
+function larInC(code: String): String {
+    let out: StringBuilder = {};
+    let i: int32 = 0;
+    while (i < code.length) {
+        let at: int32? = code.indexOf("lar\"", i);
+        let close: int32? = at != null ? code.indexOf("\"", at! + 4) : null;
+        if (at == null || close == null) {
+            out.add(code.substring(i));
+            break;
+        }
+        out.add(code.substring(i, at!));
+        out.add(cNameOf(code.substring(at! + 4, close!)));
+        i = close! + 1;
+    }
+    return out.toString();
+}
+
+/** The prototypes of the Larimar functions a c_code names (those with C types the runtime already has). */
+function larPrototypes(code: String, out: StringBuilder): void {
+    let i: int32 = 0;
+    while (i < code.length) {
+        let at: int32? = code.indexOf("lar\"", i);
+        let close: int32? = at != null ? code.indexOf("\"", at! + 4) : null;
+        if (at == null || close == null) { return; }
+        let name: String = code.substring(at! + 4, close!);
+        for (f in functions) {
+            if (f.name == name && !f.isExtern && f.exportName == "" && f.sig != null && plainSig(f.sig!)) { out.add("${functionHeader(f)};\n"); }
+        }
+        i = close! + 1;
+    }
+}
+
+/** Only numbers, bool, String and void: C types the runtime declares before any c_code. */
+function plainSig(sig: Type): bool {
+    let all: Type[*] = [sig.elem!];
+    for (p in sig.params) { all.push(p); }
+    for (t in all) {
+        if (!(t.kind == TyK.Prim && t != T_ANY)) { return false; }
+    }
+    return true;
+}
+
+function cNameOf(name: String): String {
+    for (f in functions) {
+        if (f.name == name) { return f.exportName != "" ? f.exportName : f.cName; }
+    }
+    if (structOf(name) != null || classOf(name) != null || enumOf(name) != null) { return tname(name); }
+    if (externInfoOf(name) != null) { return "Ext_${name}"; }
+    for (g in globals) {
+        if (g.name == name && g.symbol != null) { return g.symbol!.cName; }
+    }
+    return name;
+}
+
+/** A plain C name (a function a prototype can declare), not C text. */
+function isCName(n: String): bool {
+    if (n.isEmpty() || isDigit(n[0])) { return false; }
+    for (b in n.bytes()) {
+        if (!isIdentifierPart(b)) { return false; }
+    }
+    return true;
+}
+
+public function externCType(t: Type): String {
     if (t == T_STRING || (isOpt(t) && t.elem! == T_STRING)) { return "const char*"; }
     if (isResource(t)) { return "Ext_${t.name}"; }                              // the C value itself
     if (isOpt(t) && isResource(t.elem!)) { return "Ext_${t.elem!.name}"; }
@@ -876,7 +950,10 @@ function methodHeader(m: MethodInfo, isStructMethod: bool): String {
     let ps: String = params(m.paramSymbols, m.memParams);
     if (returnsData(m.sig!.elem!)) { ps = ps.isEmpty() ? "RtMem* rt_dest" : "RtMem* rt_dest, ${ps}"; }
     let recv: String = "${tname(m.introducer)}* self_";
-    if (isStructMethod) { recv = "${tname(m.owner)}* self"; }
+    if (isStructMethod) {
+        let so: StructInfo? = structOf(m.owner);
+        recv = so != null && so!.decl.cName != "" ? "${so!.decl.cName}* self" : "${tname(m.owner)}* self";   // a native struct: C's own
+    }
     let st: String = isStructMethod ? "" : "static ";
     let rest: String = !ps.isEmpty() ? ", ${ps}" : "";
     return "${st}${cType(m.sig!.elem!)} ${methodName(m)}(${recv}${rest}${errParam(m.throwsType != null)})";
@@ -886,7 +963,7 @@ function nativeMethodHeader(m: MethodInfo): String {
     let ps: String = params(m.paramSymbols, m.memParams);
     if (returnsData(m.sig!.elem!)) { ps = ps.isEmpty() ? "RtMem* rt_dest" : "RtMem* rt_dest, ${ps}"; }
     let rest: String = !ps.isEmpty() ? ", ${ps}" : "";
-    return "${cType(m.sig!.elem!)} ${methodName(m)}(${cType(primByName(m.owner)!)} self${rest}${errParam(m.throwsType != null)})";
+    return "${cType(m.sig!.elem!)} ${methodName(m)}(${cType(nativeOwner(m.owner))} self${rest}${errParam(m.throwsType != null)})";
 }
 
 public function lambdaHeader(l: LambdaInfo): String {

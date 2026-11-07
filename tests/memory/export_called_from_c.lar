@@ -8,7 +8,7 @@ c_code {
         return total;
     }
 }
-extern function call_many(n: int32): int32;
+native function call_many(n: int32): int32;
 export function measure(text: String): int32 {
     let big: String = "${text.toUpperCase()}${text}".substring(0, 3);
     return big.length;

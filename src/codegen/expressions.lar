@@ -19,7 +19,7 @@ import codegen.gen {
     fn, line, tmp, counter, indent4, Block, block, cleanupsUntil, propagate, switchCode, methodName, dispatchName,
     ifaceCallName, paramCTypes, envField, body, samInterfaces, samSeen, literalTypes, literalPrototypes, literalTables,
     literalThunks, lambdaDefs, lambdaDone, resizeHelpers, resizeSeen, loopBlock, rootBlock, topBlock, returnsData, tempMem, lambdaHeader,
-    internalError
+    internalError, ctxTrampolines, ctxSeen, externCType
 };
 
 c_code {
@@ -35,7 +35,7 @@ c_code {
     }
 }
 
-extern function gen_double_text(d: float64): String;
+native function gen_double_text(d: float64): String;
 
 // =====================================================================================
 // Names and C types
@@ -567,7 +567,8 @@ function member(m: Member in default): String {
         case Property -> {           // native let: its method, with no arguments
             let pm: MethodInfo = mi.method!;
             let o: String = value(m.object);
-            return isClass(mi.objectType!) ? "${dispatchName(pm.introducer, pm)}((${pm.introducer}*)${o})" : "${methodName(pm)}(&${paren(o)})";
+            if (isClass(mi.objectType!)) { return "${dispatchName(pm.introducer, pm)}((${pm.introducer}*)${o})"; }
+            return isExternT(mi.objectType!) ? "${methodName(pm)}(${o})" : "${methodName(pm)}(&${paren(o)})";   // a native type takes self by value
         }
         case Length -> {
             let ot: Type = mi.objectType!;
@@ -578,8 +579,10 @@ function member(m: Member in default): String {
         }
         default -> {
             let pt: Type = mi.objectType!;
+            let ot: Type = m.object.ty!;
+            let p: String = isResource(ot) ? "${ot.name}__get(${expr(m.object)}, ${m.line})" : expr(m.object);   // a native type X = T* with fields
             let acc: String = isPtr(pt)       // through a C pointer: p->field, never through NULL
-                ? "((${cType(pt)})rt_unwrap((void*)(${expr(m.object)}), ${m.line}))->${fieldC(mi.field!)}"
+                ? "((${cType(pt)})rt_unwrap((void*)(${p}), ${m.line}))->${fieldC(mi.field!)}"
                 : fieldAccess(m.object, mi);
             let so: StructInfo? = structOf(mi.field!.owner);
             if (mi.field!.type == T_STRING && so != null && so.decl.cName != "") { return "rt_str_c(${acc})"; }   // a C string: a view
@@ -600,6 +603,7 @@ function fieldAccess(obj: Expr in default, f: MemberInfo): String {
 
 /** A field's name in C: the exact one in a C struct, otherwise escaped. */
 public function fieldC(f: FieldInfo): String {
+    if (f.cName != "") { return f.cName; }
     let so: StructInfo? = structOf(f.owner);
     return so != null && so.decl.cName != "" ? f.name : escapeName(f.name);
 }
@@ -637,7 +641,7 @@ function isLvalueExpr(e: Expr): bool {
     return switch (e) {
         case Ident -> e.symbol != null && e.symbol!.kind != SymK.Const;
         case SelfExpr -> true;
-        case Member m -> isClass(m.object.ty!) || isPtr(m.object.ty!) || isLvalueExpr(m.object);
+        case Member m -> isClass(m.object.ty!) || isPtr(m.object.ty!) || (m.member != null && m.member!.objectType != null && isPtr(m.member!.objectType!)) || isLvalueExpr(m.object);
         case Index x -> {
             let ot: Type = x.object.ty!;
             yield (ot.kind == TyK.Array && ot.ak != ArrK.Fixed) || isLvalueExpr(x.object);
@@ -1141,7 +1145,7 @@ function call(c: Call in default): String {
     }
     if (ci.kind == CallK.CPointer) {             // a pointer to a C function
         let callee: String = value(c.callee);
-        let cx: String = "${paren(callee)}(${externArgs(c.args, false, null).join(", ")})";
+        let cx: String = "${paren(callee)}(${externArgsAs(c.args, false, null).join(", ")})";
         return ci.type!.elem! == T_STRING ? "rt_str_c(${cx})" : cx;
     }
     if (ci.kind == CallK.Method && isBuilderAdd(c, ci)) {
@@ -1157,7 +1161,7 @@ function call(c: Call in default): String {
     let throwsErr: bool = false;
     if (ci.kind == CallK.Direct) {
         let f: FunctionInfo = ci.func!;
-        let asg: String[*] = f.isExtern ? externArgs(c.args, f.varargs, f.sig) : args(c.args, f.memParams);
+        let asg: String[*] = f.isExtern ? (f.ctxParam >= 0 ? contextArgs(c, f, ci) : externArgsAs(c.args, f.varargs, writtenParams(f))) : args(c.args, f.memParams);
         if (!f.isExtern && f.creates && c.place == null) {
             internalError(c.line, "'${f.name}' creates its result, but this call was given no memory for it.");
         }
@@ -1240,7 +1244,17 @@ function args(asg: Expr[*] in default, memParams: bool[*]): String[*] {
     return out;
 }
 
-function externArgs(asg: Expr[*] in default, varargs: bool, sig: Type?): String[*] {
+/** The parameters of a C function that a call writes (not the memory of the call, when C takes it first). */
+function writtenParams(f: FunctionInfo): Type[*] {
+    let out: Type[*] = [];
+    for (i, p in f.sig!.params) {
+        if (!(i == 0 && f.memParams.length > 0 && f.memParams[0])) { out.push(p); }
+    }
+    return out;
+}
+
+/** The arguments as C takes them, for C parameters of these types (a T[] is two: its elements and their count). */
+function externArgsAs(asg: Expr[*] in default, varargs: bool, params: Type[*]?): String[*] {
     let out: String[*] = [];
     for (i, a in asg) {
         let m: Symbol? = a.memArg;
@@ -1251,13 +1265,21 @@ function externArgs(asg: Expr[*] in default, varargs: bool, sig: Type?): String[
         let t: Type = a.ty!;
         let v: String = value(a);
         let rt: Type = isOpt(t) ? t.elem! : t;
+        let p: Type? = params != null && i < params!.length ? params![i] : null;
         if (isResource(rt)) {
             out.push("${rt.name}__get(${v}, ${a.line})");          // the C value (a panic if it was released)
+        } else if (p != null && isOpt(p!) && p!.elem! == T_STRING) {     // a String? to C: NULL when null
+            if (a is NullLit) {
+                out.push("NULL");
+            } else {
+                let h: String = hoist(cType(p!), v);
+                out.push("(${h}.has ? rt_str_cz(${h}.value, ${tempMem()}, ${a.line}) : NULL)");
+            }
         } else if (t == T_STRING) {
             out.push("rt_str_cz(${v}, ${tempMem()}, ${a.line})");
-        } else if (sig != null && i < sig!.params.length && sig!.params[i].kind == TyK.Array && sig!.params[i].ak == ArrK.Slice) {
-            let s: String = hoist(cType(sig!.params[i]), v);   // T[] -> the elements and their count, as C takes them
-            out.push("(void*)${s}.items");                       // (void*): it fits char*, unsigned char*, void*...
+        } else if (p != null && p!.kind == TyK.Array && p!.ak == ArrK.Slice) {
+            let s: String = hoist(cType(p!), v);   // T[] -> the elements and their count, as C takes them
+            out.push("(void*)${s}.items");           // (void*): it fits char*, unsigned char*, void*...
             out.push("${s}.length");
         } else if (t == T_FLOAT32 && varargs) {
             out.push("(double)${paren(v)}");
@@ -1266,6 +1288,71 @@ function externArgs(asg: Expr[*] in default, varargs: bool, sig: Type?): String[
         }
     }
     return out;
+}
+
+/**
+ * The arguments of a C function that takes a callback and its Context, in C's order: the callback goes as a
+ * trampoline (a C function), and the Context as the Larimar function itself, which the trampoline calls.
+ */
+function contextArgs(c: Call in default, f: FunctionInfo, ci: CallInfo): String[*] {
+    let out: String[*] = [];
+    let context: String = "NULL";          // a function of C given as it is: it gets no Context
+    if (ci.ctxView != null) {
+        let a: Expr = c.args[ci.ctxArg];
+        let closure: String = cType(ci.ctxView!);
+        let held: String = hoist(closure, value(a));
+        context = f.ctxKeep ? "rt_mem_copy(&rt_default_mem, &${held}, sizeof(${closure}), ${c.line})" : "(void*)&${held}";
+    }
+    let k: int32 = 0;
+    let start: int32 = f.memParams.length > 0 && f.memParams[0] ? 1 : 0;      // the memory of the call goes first, apart
+    for (i, p in f.sig!.params) {
+        if (i < start) { continue; }
+        if (i == f.ctxParam) {
+            out.push(context);
+            continue;
+        }
+        if (k >= c.args.length) { break; }
+        if (ci.ctxView != null && k == ci.ctxArg) {
+            out.push(trampoline(ci.ctxExtern!, ci.ctxView!));
+        } else {
+            for (x in externArgsAs([c.args[k]] in default, false, [p])) { out.push(x.clone()); }
+        }
+        k += 1;
+    }
+    let rest: Expr[*] = [] in default;
+    while (k < c.args.length) {
+        rest.push(c.args[k]);
+        k += 1;
+    }
+    for (x in externArgsAs(rest, true, null)) { out.push(x.clone()); }
+    return out;
+}
+
+/** The C function of type `ext` that calls the Larimar function its Context carries (made once per pair). */
+function trampoline(ext: Type, view: Type): String {
+    let name: String = "lm_ctx_${ext.name}_${view.funcId}";
+    if (ctxSeen.contains(name)) { return name; }
+    ctxSeen[name] = true;
+    let e: ExternTypeInfo = externInfoOf(ext.name)!;
+    let sig: Type = e.sig!;
+    let ps: String[*] = [] in default;
+    let args: StringBuilder = {} in default;
+    for (i, p in sig.params) {
+        ps.push("${externCType(p)} a${i}");
+        if (i == e.ctxIndex) { continue; }
+        if (p == T_STRING) {
+            args.add(", rt_str_c(a${i})");
+        } else if (isOpt(p) && p.elem! == T_STRING) {
+            let o: String = cType(p);
+            args.add(", (a${i} ? ((${o}){ .has = true, .value = rt_str_c(a${i}) }) : ((${o}){ .has = false }))");
+        } else {
+            args.add(", a${i}");
+        }
+    }
+    let ret: Type = sig.elem!;
+    let call: String = "call_Closure_${view.funcId}(*(${cType(view)}*)a${e.ctxIndex}${args.toString()})";
+    ctxTrampolines.push("static ${externCType(ret)} ${name}(${ps.join(", ")}) { ${ret == T_VOID ? "" : "return "}${call}; }\n".clone() in default);
+    return name;
 }
 
 /** The elements of an array as C: items and length. */

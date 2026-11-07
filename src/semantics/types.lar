@@ -411,7 +411,7 @@ public class Symbol {
     let varRegion: Region? = null;   // reassigned locals: the meet of everything they receive
     let resolved: Region? = null;
     let mutatedGlobal: bool = false;
-    /** extern const / extern let: a C name, and the platform it exists on ("" every one). */
+    /** native const / native let: a C name, and the platform it exists on ("" every one). */
     let externValue: ExternValueDecl? = null;
 }
 
@@ -423,9 +423,21 @@ public function isMemory(s: Symbol): bool { return s.memKind != MemK.None; }
 
 // C keywords, the names the generated C uses, and the C library's (clang treats log, exp, index... as
 // built-in functions even without their header): a Larimar name like these gets a '_' in the C.
-const C_RESERVED: String = " auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while bool true false NULL main env env_ self_ err err_out errno stdin stdout stderr FILE fpos_t size_t ptrdiff_t wchar_t div_t ldiv_t lldiv_t time_t clock_t tm jmp_buf va_list sig_atomic_t intptr_t uintptr_t intmax_t uintmax_t ssize_t pid_t off_t int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t printf fprintf sprintf snprintf vprintf vfprintf vsprintf vsnprintf scanf fscanf sscanf puts fputs gets fgets putchar putc fputc getchar getc fgetc ungetc fopen freopen fclose fflush fread fwrite fseek ftell rewind fgetpos fsetpos feof ferror clearerr perror remove rename tmpfile tmpnam setbuf setvbuf malloc calloc realloc free abort exit atexit _Exit quick_exit getenv system abs labs llabs div ldiv lldiv atoi atol atoll atof strtol strtoll strtoul strtoull strtod strtof strtold rand srand qsort bsearch mblen mbtowc wctomb memcpy memmove memset memcmp memchr strcpy strncpy strcat strncat strcmp strncmp strcoll strxfrm strchr strrchr strstr strspn strcspn strpbrk strtok strlen strerror strdup strndup index rindex bzero bcopy isalnum isalpha isblank iscntrl isdigit isgraph islower isprint ispunct isspace isupper isxdigit tolower toupper acos asin atan atan2 cos sin tan acosh asinh atanh cosh sinh tanh exp exp2 expm1 frexp ldexp log log10 log1p log2 logb modf pow sqrt cbrt hypot ceil floor round lround llround trunc fmod remainder fabs fmin fmax fma nan isnan isinf isfinite signbit copysign nearbyint rint lrint erf erfc tgamma lgamma time clock difftime mktime asctime ctime gmtime localtime strftime setjmp longjmp signal raise assert read write open close fork pipe dup dup2 alarm sleep usleep poll select getpid getppid kill wait waitpid execv execvp unlink access chdir getcwd isatty _exit unix linux ";
+const C_RESERVED: String = " _h _super auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while bool true false NULL main env env_ self_ err err_out errno stdin stdout stderr FILE fpos_t size_t ptrdiff_t wchar_t div_t ldiv_t lldiv_t time_t clock_t tm jmp_buf va_list sig_atomic_t intptr_t uintptr_t intmax_t uintmax_t ssize_t pid_t off_t int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t printf fprintf sprintf snprintf vprintf vfprintf vsprintf vsnprintf scanf fscanf sscanf puts fputs gets fgets putchar putc fputc getchar getc fgetc ungetc fopen freopen fclose fflush fread fwrite fseek ftell rewind fgetpos fsetpos feof ferror clearerr perror remove rename tmpfile tmpnam setbuf setvbuf malloc calloc realloc free abort exit atexit _Exit quick_exit getenv system abs labs llabs div ldiv lldiv atoi atol atoll atof strtol strtoll strtoul strtoull strtod strtof strtold rand srand qsort bsearch mblen mbtowc wctomb memcpy memmove memset memcmp memchr strcpy strncpy strcat strncat strcmp strncmp strcoll strxfrm strchr strrchr strstr strspn strcspn strpbrk strtok strlen strerror strdup strndup index rindex bzero bcopy isalnum isalpha isblank iscntrl isdigit isgraph islower isprint ispunct isspace isupper isxdigit tolower toupper acos asin atan atan2 cos sin tan acosh asinh atanh cosh sinh tanh exp exp2 expm1 frexp ldexp log log10 log1p log2 logb modf pow sqrt cbrt hypot ceil floor round lround llround trunc fmod remainder fabs fmin fmax fma nan isnan isinf isfinite signbit copysign nearbyint rint lrint erf erfc tgamma lgamma time clock difftime mktime asctime ctime gmtime localtime strftime setjmp longjmp signal raise assert read write open close fork pipe dup dup2 alarm sleep usleep poll select getpid getppid kill wait waitpid execv execvp unlink access chdir getcwd isatty _exit unix linux ";
 
-public function isCReserved(name: String): bool { return C_RESERVED.contains(" ${name} "); }
+/** The words of C_RESERVED, as a table: asked for every name the generator writes. */
+let reserved: Any = {} in default;
+let reservedReady: bool = false;
+
+public function isCReserved(name: String): bool {
+    if (!reservedReady) {
+        for (w in C_RESERVED.split(" ")) {
+            if (w != "") { reserved[w] = true; }
+        }
+        reservedReady = true;
+    }
+    return reserved.containsKey(name);
+}
 
 /** C99 identifiers are ASCII: año -> a_u00f1o. */
 public function ascii(name: String): String {
@@ -472,6 +484,7 @@ public class FieldInfo {
     let defaultValue: Expr? = null;
     let owner: String;
     let line: int32;
+    let cName: String = "";          // a field of a C struct with another name in C
 }
 
 public class FunctionInfo {
@@ -499,12 +512,16 @@ public class FunctionInfo {
     let exportName: String = "";
     /** The resource type it releases (`released by` it): only release() may call it. */
     let releases: String = "";
+    /** A C function that takes a callback and its Context: their parameters (declared order), and whether C keeps them. */
+    let ctxParam: int32 = -1;
+    let ctxCallback: int32 = -1;
+    let ctxKeep: bool = false;
 }
 
 /**
  * A type that comes from C: opaque (void*), a C type (c "T") or a pointer to a C function (sig). With
  * `released by`, a resource: it lives in a memory, and the releaser runs when that memory is freed.
- * alts: the same type for other platforms (#when windows: extern type X = c "SOCKET").
+ * alts: the same type for other platforms (#when windows: native type X = SOCKET).
  */
 public class ExternTypeInfo {
     let name: String;
@@ -512,6 +529,9 @@ public class ExternTypeInfo {
     let sig: Type? = null;
     let alts: ExternTypeDecl[*] = [];
     let releasers: FunctionInfo?[*] = [];    // per declaration (decl, then alts), when released
+    /** A pointer to a C function that gets a Context: the Larimar function it stands for (without the Context). */
+    let view: Type? = null;
+    let ctxIndex: int32 = -1;
 }
 
 public class MethodInfo {
@@ -662,6 +682,10 @@ public class CallInfo {
     /** Memory.limit and Memory.compact: the memory, and (compact) the variables moved with it. */
     let memory: Symbol? = null;
     let roots: Symbol[*] = [];
+    /** A Larimar function given to C with its Context: which argument, the C type it goes as, and its Larimar type. */
+    let ctxArg: int32 = -1;
+    let ctxExtern: Type? = null;
+    let ctxView: Type? = null;
 }
 
 public enum MbK { Field, EnumConst, Length, MemoryStat, AnyKey, StaticMethod, Property }
@@ -796,19 +820,37 @@ public function platformWithin(inner: String, outer: String): bool {
     return outer == "unix" && (inner == "macos" || inner == "linux");
 }
 
+/** The type whose methods a native type declares: one the compiler knows (String), or one of C. */
+public function nativeOwner(owner: String): Type {
+    let p: Type? = primByName(owner);
+    if (p != null) { return p!; }
+    let i: int32 = (typeIndex[owner] as int32 ?? -1);
+    return i >= 0 ? allTypes[i] : named(owner.clone() in default, NamedK.Extern);
+}
+
 public function externInfoOf(name: String): ExternTypeInfo? {
     let i: int32 = (externTypeIndex[name] as int32 ?? -1);
     return i < 0 ? null : externInfos[i];
 }
 
 /** The signature of a pointer to a C function (extern type X = (A) -> R), or null. */
+/** Context: the void* of C that a callback gets back (std.lang declares it). */
+public function isContextT(t: Type): bool { return isExternT(t) && t.name == "Context"; }
+
+/** The Larimar function a pointer to a C function with a Context stands for, or null. */
+public function contextView(t: Type): Type? {
+    if (!isExternT(t)) { return null; }
+    let e: ExternTypeInfo? = externInfoOf(t.name);
+    return e != null ? e.view : null;
+}
+
 public function externSig(t: Type): Type? {
     if (!isExternT(t)) { return null; }
     let e: ExternTypeInfo? = externInfoOf(t.name);
     return e != null ? e.sig : null;
 }
 
-/** The C struct an `extern type X = struct { ... }` describes ("" for other types). */
+/** The C struct a `native struct X { ... }` describes ("" for other types). */
 public function externStructC(t: Type): String {
     if (!isStruct(t)) { return ""; }
     let s: StructInfo? = structOf(t.name);

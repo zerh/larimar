@@ -95,16 +95,18 @@ public class CCodeDecl extends Node {
     let code: String;
     let fromStd: bool = false;          // the standard library's: only what is used reaches the C
 }
-/** extern type X;  = c "T";  = (A, B) -> R  (a C function pointer);  ... released by f;  (inside #when for one platform) */
+/** native type X;  = T*;  = "C TYPE";  = (A, B) -> R  (a C function pointer);  ... released by f;  (inside #when for one platform) */
 public class ExternTypeDecl extends Node {
     let name: String;
-    let cType: String = "";             // c "T": the C type ("" is void*)
+    let cType: String = "";             // the C type ("" is void*)
     let func: TypeRef? = null;          // a pointer to a C function
     let releasedBy: String = "";        // a resource: the function that releases it when its memory is freed
     let platform: String = "";
+    let fieldsStruct: String = "";      // native type X = T* { let f: ...; }: the struct (made by the parser) X points to
 }
 
-/** cName: the C function called (it stays when a module renames the declaration); prototype: no c_include. */
+/** cName: the C function called (it stays when a module renames the declaration); prototype: no c_include. A
+ *  method of a native type (`native function m() = c_m;`) becomes one of these, with self first. */
 public class ExternFunctionDecl extends Node {
     let name: String;
     let params: Param[*] = [];
@@ -115,13 +117,13 @@ public class ExternFunctionDecl extends Node {
     let platform: String = "";
 }
 
-/** extern const NAME: T;  extern let NAME: T;  a C constant (or macro) or a C global variable. */
+/** native const NAME: T [= c_name | = "C"];  native let NAME: T [= c_name];  a C constant (or macro) or a C global variable. */
 public class ExternValueDecl extends Node {
     let name: String;
     let type: TypeRef;
     let isConst: bool;
     let cName: String;
-    let cExpr: String = "";             // extern const N: T = c "sizeof(struct stat)";  a C expression
+    let cExpr: String = "";             // native const N: T = "sizeof(struct stat)";  a C expression
     let platform: String = "";
 }
 
@@ -155,6 +157,7 @@ public class FunctionDecl extends Node {
     let isTest: bool = false;           // test function: only in `larimar test` (and the editor)
     let isProperty: bool = false;       // native let: read without parentheses, never assigned
     let isNative: bool = false;         // native function of a module: the compiler writes every call to it
+    let forwardsToC: bool = false;      // a member of a native type that calls its C function (= c_name): a callback goes as a Larimar function
     /** wait until (cond): a method of a synchronized class that runs only when cond holds (the caller waits). */
     let waitUntil: Expr? = null;
 }
@@ -163,11 +166,12 @@ public class FieldDecl extends Node {
     let name: String;
     let type: TypeRef;
     let defaultValue: Expr? = null;
+    let cName: String = "";             // a field of a C struct with another name in C: let size: int64 = st_size;
 }
 
 public class StructDecl extends Node {
     let name: String;
-    let cName: String = "";             // extern type X = struct { ... }: the C struct it describes
+    let cName: String = "";             // native struct X = c_struct { ... }: the C struct it describes
     let fields: FieldDecl[*] = [];
     let methods: FunctionDecl[*] = [];
 }
