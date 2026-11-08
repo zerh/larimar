@@ -50,10 +50,11 @@ The names of the language, the tool and the examples are in English, like the ex
 24. [Modules](#24-modules)
 25. [Standard library](#25-standard-library)
 26. [Projects: `larimar.toml` and `larimar build`](#26-projects-larimartoml-and-larimar-build)
-27. [What the transpiler generates](#27-what-the-transpiler-generates)
-28. [Larimar written in Larimar](#28-larimar-written-in-larimar)
-29. [Current limitations](#29-current-limitations)
-30. [Quick reference](#30-quick-reference)
+27. [Libraries written in Larimar](#27-libraries-written-in-larimar)
+28. [What the transpiler generates](#28-what-the-transpiler-generates)
+29. [Larimar written in Larimar](#29-larimar-written-in-larimar)
+30. [Current limitations](#30-current-limitations)
+31. [Quick reference](#31-quick-reference)
 
 ---
 
@@ -2326,6 +2327,9 @@ says to Larimar how each one is called. With `<math.h>`, on some systems the mat
 **linked** (joined to the program when it is built): `dynamic_libraries = ["m"]` in the `larimar.toml` of a
 project ([chapter 26](#26-projects-larimartoml-and-larimar-build)).
 
+The other way, Larimar seen from C, is [`export function`](#c-calling-larimar-export-function), and
+on a large scale a whole library written in Larimar for C programs ([chapter 27](#27-libraries-written-in-larimar)).
+
 Everything that comes from C is declared with **`native`**, and every declaration follows the same rule:
 **the Larimar name goes on the left; after `=`, the C name**. Without `=`, the name is the same.
 
@@ -2458,7 +2462,7 @@ Output: `25`
   global of Larimar seen here*.
 - The prototypes of the functions named this way are written before the `c_code` when their types are
   numbers, `bool`, `String` or `void`. A function that returns data also receives the memory of the call
-  (as [chapter 27](#27-what-the-transpiler-generates) shows); for C to call Larimar with a plain C
+  (as [chapter 28](#28-what-the-transpiler-generates) shows); for C to call Larimar with a plain C
   signature there is [`export function`](#c-calling-larimar-export-function).
 
 In the standard library, `native type` also declares the methods of the types the compiler knows, and
@@ -3091,7 +3095,7 @@ What `export function` guarantees:
 - **Its name in C is its own**, inside a module too: `public export function lm_double(...)` in the
   module `gfx.shapes` is still called `lm_double` in C. **`= c_name`** after the signature gives it
   another one: `export function double(x: int32): int32 = lm_double { ... }`. In a library it is
-  `<prefix>_<name>` unless it says `= c_name` (see [Libraries written in Larimar](#libraries-written-in-larimar)).
+  `<prefix>_<name>` unless it says `= c_name` (see [Libraries written in Larimar](#27-libraries-written-in-larimar)).
 - **A clean C signature**: no hidden parameters. Numbers and `bool` as they are, `String` arrives as
   `const char*` (it becomes Larimar text when it enters), a `String?` too (`NULL` is `null`), `native`
   types as their C type and C structs by value.
@@ -3138,7 +3142,7 @@ And what it does not allow, because C could not handle it:
 - `throws`: an error cannot cross C code, so it is caught inside;
 - `in` on the parameters or the result, memories (`byte[*]`), lists or `Any`;
 - classes, except in a library, where C keeps its objects as handles
-  ([Libraries written in Larimar](#libraries-written-in-larimar));
+  ([Libraries written in Larimar](#27-libraries-written-in-larimar));
 - `main`.
 
 If the library calls the function from another thread, the compiler cannot know it: Larimar's thread
@@ -4290,7 +4294,7 @@ to bring in a library, depending on how it comes:
 | **Static library** (`.a`) | `static_libraries = ["sqlite3"]` and `static_library_paths = ["vendor/lib"]` | it ends up inside the executable, even if a dynamic one is next to it |
 | **Dynamic library of your own** (`.so`, `.dylib`, `.dll`) | `dynamic_libraries = ["tone"]` and `dynamic_library_paths = ["vendor/lib"]` | the executable loads it when it starts, from that folder |
 | **System library** (`m`, `pthread`, `user32`, one installed with the package manager) | `dynamic_libraries = ["m"]` and, if needed, `include_paths` | the executable loads it from the system |
-| **Library written in Larimar** (with its `.interface`) | one of the two above, with its folder | see [Libraries written in Larimar](#libraries-written-in-larimar) |
+| **Library written in Larimar** (with its `.interface`) | one of the two above, with its folder | see [Libraries written in Larimar](#27-libraries-written-in-larimar) |
 
 An example with four at once:
 
@@ -4347,292 +4351,8 @@ Taking the dynamic libraries to another machine (an installer, a system package,
 dependency) is up to whoever distributes the program, and to their licenses. If the executable must be
 a single file, the library is linked statically or compiled as source code.
 
-### Libraries written in Larimar
-
-A project with `kind = "library"` is built into a **library**: a C program uses it like any C library,
-and a Larimar program imports it like a module. It is **static** by default (it goes inside the
-executable that uses it); `type = "dynamic"` in `[library]`, or `larimar build --dynamic`, makes it a
-dynamic one (`--static` goes the other way).
-
-```toml
-[project]
-name = "textkit"
-version = "1.0.0"
-kind = "library"             # "program" (the default) or "library"
-main = "src/textkit.lar"
-
-[library]
-type = "static"              # "static" (the default) or "dynamic"
-prefix = "tk"                # its C names start with it: tk_wordCount (by default, the name)
-```
-
-`larimar new textkit --library` creates one like that, with an export function and a test of it. The
-name of a library is also its module and its files, so it has only letters, digits and `_`.
-
-What C (and Larimar) sees of a library are its **export functions** ([C calling Larimar](#c-calling-larimar-export-function))
-and the classes they give or take, with their fields and methods:
-
-```ts
-// src/textkit.lar
-
-/** Counts the words of a text. */
-public export function wordCount(text: String): int32 {
-    let n: int32 = 0;
-    for (w in text.split(" ")) {
-        if (w != "") { n += 1; }
-    }
-    return n;
-}
-
-/** The text with its first letter in upper case. */
-public export function title(text: String): String {
-    if (text == "") { return ""; }
-    return "${text.substring(0, 1).toUpperCase()}${text.substring(1)}";
-}
-
-/** Counts words as they come. */
-public class Counter {
-    /** The words counted so far. */
-    let words: int32 = 0;
-    let texts: String[*] = [];
-
-    /** Counts the words of a text, and keeps it. */
-    function add(text: String): void {
-        self.words += wordCount(text);
-        self.texts.push(text.clone());
-    }
-
-    /** The last text it counted (null when there is none). */
-    function last(): String? {
-        if (self.texts.length == 0) { return null; }
-        return self.texts[self.texts.length - 1].clone();
-    }
-}
-
-/** A new counter, at zero. */
-public export function newCounter(): Counter { return Counter {}; }
-```
-
-`larimar build` leaves four files in `build/textkit/`, which go together:
-
-| File | For | What it has |
-|---|---|---|
-| `libtextkit.a` | both | the library (dynamic: `libtextkit.so`, `libtextkit.dylib` or `textkit.dll`) |
-| `textkit.h` | C | the prototypes, with their doc comments, and how to free what they give |
-| `textkit.lar` | Larimar | the same functions as `native` declarations |
-| `textkit.interface` | the compiler | its name, version, kind, what it needs linked and the **interface hash** |
-
-**From C.** The `.h` says everything (here without its first comment):
-
-```c
-typedef struct tk_Counter tk_Counter;
-
-/* Counter: its fields (to read) and its methods; self is the handle. */
-
-/** The words counted so far. */
-int32_t tk_Counter_words(tk_Counter* self);
-
-/** Counts the words of a text, and keeps it. */
-void tk_Counter_add(tk_Counter* self, const char* text);
-
-/**
- * The last text it counted (null when there is none).
- *
- * NULL, or a text that is yours: free it with tk_free.
- */
-char* tk_Counter_last(tk_Counter* self);
-
-/** Counts the words of a text. */
-int32_t tk_wordCount(const char* text);
-
-/**
- * The text with its first letter in upper case.
- *
- * The text is yours: free it with tk_free.
- */
-char* tk_title(const char* text);
-
-/**
- * A new counter, at zero.
- *
- * A new Counter that is yours: give it back with tk_Counter_release.
- */
-tk_Counter* tk_newCounter(void);
-
-/** Gives back a Counter (NULL does nothing). */
-void tk_Counter_release(tk_Counter* handle);
-
-/** Frees a text the library returned (NULL does nothing). */
-void tk_free(void* text);
-
-/** The interface hash of the library (as in textkit.interface): compare it with TEXTKIT_INTERFACE. */
-const char* tk_interface(void);
-```
-
-```c
-#include <stdio.h>
-#include "textkit.h"
-
-int main(void) {
-    char* t = tk_title("larimar");
-    tk_Counter* c = tk_newCounter();
-    tk_Counter_add(c, "one two");
-    tk_Counter_add(c, "three");
-    char* last = tk_Counter_last(c);
-    printf("%s %d %d %s\n", t, tk_wordCount("a b c"), tk_Counter_words(c), last);
-    tk_free(t);
-    tk_free(last);
-    tk_Counter_release(c);
-    return 0;
-}
-```
-
-```sh
-cc -std=c99 -Ibuild/textkit main.c build/textkit/libtextkit.a -lm
-./a.out                                  # Larimar 3 3 three
-```
-
-What a static library needs linked besides is in `links` of its `.interface` (`-lm`, `-pthread` if it
-uses threads, the TLS ones...).
-
-**From Larimar.** The four files are copied into a folder of the program (or left where they are), and
-the library is named in `[c]` like any other:
-
-```toml
-[c]
-static_libraries = ["textkit"]
-static_library_paths = ["libs/textkit"]
-```
-
-```ts
-import textkit;
-import textkit { Counter };
-
-function main(): int32 {
-    let c: Counter = textkit.newCounter();
-    c.add("one two");
-    c.add("three");
-    println("${textkit.title("larimar")} ${c.words} ${c.last() ?? "-"}");
-    return 0;
-}
-```
-
-Output: `Larimar 3 three`
-
-Since `textkit.interface` is in that folder, the compiler knows it is a library written in Larimar:
-`import textkit` finds `textkit.lar` there (`larimar check` and the editor too), its `.h` is included and
-what it needs is linked. The `.lar` it reads is plain `native` declarations:
-
-```ts
-c_include "textkit.h";
-
-/** Counts words as they come. */
-public native type Counter = tk_Counter* released by tk_Counter_release {
-    // not given to C (they do not cross): texts (String[*])
-    /** The words counted so far. */
-    native let words: int32 = tk_Counter_words;
-    /** Counts the words of a text, and keeps it. */
-    native function add(text: String): void = tk_Counter_add;
-    /** The last text it counted (null when there is none). */
-    native function last(): String? = tk_Counter_last released by tk_free;
-}
-
-/** Counts the words of a text. */
-public native function wordCount(text: String): int32 = tk_wordCount;
-
-/** The text with its first letter in upper case. */
-public native function title(text: String): String = tk_title released by tk_free;
-
-/** A new counter, at zero. */
-public function newCounter(): Counter { return newCounter_c()!; }
-native function newCounter_c(): Counter? = tk_newCounter;
-
-// what gives back the texts and objects of the library (only the compiler calls them)
-native function tk_free(text: String): void = tk_free;
-native function tk_Counter_release(handle: Counter): void = tk_Counter_release;
-```
-
-A text of the library is copied into the program's memory and freed at once
-([`released by` on a function](#texts-that-c-makes-released-by-on-a-function)); a `Counter` is a
-[resource](#resources-released-by): when the memory it lives in is freed, `tk_Counter_release` gives it
-back. Nothing is freed by hand, and the class is used as in the library: its methods are called on it
-(`c.add("x")`), its fields are read (`c.words`), and the functions have the same names and types.
-
-**The interface hash.** The `.interface` has eight hexadecimal digits, the start of the SHA-256 of the
-`.lar`; the library has the same ones inside (`tk_interface()` returns them, and the `.h` has them in
-`TEXTKIT_INTERFACE`). Before building a program that links it, `larimar build` checks that the three
-agree, and stops with what is wrong:
-
-- a `.lar` edited by hand: `textkit.lar does not match the library (its hash is ..., textkit.interface says ...)`;
-- a library of another build next to an old `.lar`: `libtextkit.a is from another build than textkit.lar and textkit.interface`;
-- a static library in `dynamic_libraries` (or the opposite): `textkit is a static library (...): put it in static_libraries`.
-
-So a program never calls a library with declarations that are not its own. The hash covers the whole
-`.lar`: the functions, their types and docs, the version and the kind. A new version is four new files
-that go together. A C program can check the same when it starts:
-`strcmp(tk_interface(), TEXTKIT_INTERFACE) == 0`.
-
-**The export functions of a library:**
-
-- **Their C names** are `<prefix>_<name>` (`tk_wordCount`). `= c_name` after the signature gives one of
-  its own (`export function answer(): int32 = tk_the_answer { ... }`), and `prefix = ""` leaves the names
-  as they are. The library itself gives `<prefix>_free`, `<prefix>_<Class>_release` and
-  `<prefix>_interface`: an export function cannot take those names (nor a method called `release`).
-- **Their types**: numbers, `bool`, `String` and `String?` (`const char*`; `NULL` is `null`), and the
-  **classes** of the library and their optionals. Native types and C structs do not go: they belong to C
-  headers that the program would need too.
-- **A text it returns** is a copy (`char*`) for the caller: C frees it with `<prefix>_free`.
-- **An object it returns** is a **handle**: C keeps it (`tk_Counter*`), passes it to its methods and
-  to other export functions, and gives it back with `<prefix>_<Class>_release`. The handle has its own memory: what the
-  object creates later (a list that grows, its texts) lives there and is freed with it. A `NULL` where a
-  class is expected stops the program with a panic that names the function and the parameter
-  (`tk_Counter_add: 'self' is NULL`); where `Counter?` is expected, it is `null`.
-- **The members of its classes go too.** For each class that C receives: each field is read with
-  `<prefix>_<Class>_<field>(handle)` (a text: a copy to free) and each method is called with
-  `<prefix>_<Class>_<method>(handle, ...)`, through its vtable, so the method of a subclass runs. Its
-  parents' members go as well. In the `.lar` they are a `native let` and a `native function` of the
-  class, so a program writes `c.words` and `c.add("x")`. A field is only read: it is changed through
-  a method. What does not cross (a list field, a method that throws or that takes a list, an operator)
-  stays inside, and the `.lar` says so in a comment. A field of a class type does not go either: its
-  object belongs to the other one; a method that returns a new one does.
-- **Each call has its own memory**, freed when it returns. The globals of the library are created when
-  it is loaded (or at its first call) and live as long as the program.
-- **`export` does not make a function `public`**: with both, the tests of the library (and its other
-  modules) can call it from Larimar.
-- **No main**: the program that uses it has its own. A library with a `main` is an error.
-
-**Inside, everything is private.** Everything of the C but the export functions and those three is
-`static`: the runtime of the library, its classes, its other functions. So two libraries written in
-Larimar, and the Larimar program that links them, do not clash: each one has its own runtime (a few KB)
-and its own memories, and nothing crosses from one to another but texts (copied) and handles.
-
-**Its tests.** `larimar test` in the folder of the library runs its tests like in any project: they
-import its modules (the Larimar code, not the `.a`). `larimar check` and the editor apply the rules of a
-library to its code too.
-
-**Clarifications:**
-
-- **Why static by default.** The executable that uses it is a single file, and it does not depend on a
-  `.so` of the right build being installed where it runs. A dynamic library is shared by several
-  programs and can be replaced without building them again.
-- **Where a dynamic one is looked for.** Like any dynamic library: on Linux and macOS, in the
-  `dynamic_library_paths` of the program (rpath; on macOS the library is `@rpath/libtextkit.dylib`); on
-  Windows, next to the `.exe` or in the `PATH` (the linker uses `libtextkit.dll.a`, which is made with it).
-- **What a static one needs.** The libraries its C needs, and those it links itself, are in `links`:
-  a Larimar program adds them on its own; a C program adds them to its command. The static libraries
-  that a static library links are not put inside it: the program needs them too.
-- **Panics.** A panic inside the library (a bug: an index out of range, a `NULL` handle) prints it and
-  ends the program, as in a Larimar program.
-- **Threads.** The library can create threads inside. Calls from several threads of C at the same time
-  are for whoever calls, as with any C library (Larimar cannot see them): one handle, or the globals, in
-  one thread at a time, unless it is a `synchronized class`.
-- **The hash is not a signature.** It finds out mistakes (files of different builds), not someone who
-  changes a library on purpose.
-- **The four files are generated**: they are not edited, they are not kept in the library's repository
-  (they are in `build/`), and they are published together.
-- **Not yet**: lists, callbacks and errors (`throws`) do not cross a library; they go as texts, handles
-  and numbers (an error code), or stay inside. A program does not create objects of the library with
-  `Counter {}`, nor extend its classes: they are made by its functions and methods.
+A project can also be built into a library for C and for Larimar: see
+[chapter 28](#28-libraries-written-in-larimar).
 
 ### An example with Windows
 
@@ -4957,7 +4677,315 @@ The rules:
 
 ---
 
-## 27. What the transpiler generates
+## 27. Libraries written in Larimar
+
+[Chapter 23](#23-calling-c) is C seen from Larimar. This chapter is the other way around, on a large
+scale: code written in Larimar delivered as a **C library**, which a C program uses with its `.h`
+without knowing Larimar, and which a Larimar program imports like a module. Whoever writes it has the
+memory rules of Larimar; whoever uses it gets a plain C library.
+
+A project with `kind = "library"` is built into a **library**: a C program uses it like any C library,
+and a Larimar program imports it like a module. It is **static** by default (it goes inside the
+executable that uses it); `type = "dynamic"` in `[library]`, or `larimar build --dynamic`, makes it a
+dynamic one (`--static` goes the other way).
+
+```toml
+[project]
+name = "textkit"
+version = "1.0.0"
+kind = "library"             # "program" (the default) or "library"
+main = "src/textkit.lar"
+
+[library]
+type = "static"              # "static" (the default) or "dynamic"
+prefix = "tk"                # its C names start with it: tk_wordCount (by default, the name)
+```
+
+### Creating a library
+
+`larimar new textkit --library` creates one like that, with an export function and a test of it. The
+name of a library is also its module and its files, so it has only letters, digits and `_`.
+
+What C (and Larimar) sees of a library are its **export functions** ([C calling Larimar](#c-calling-larimar-export-function))
+and the classes they give or take, with their fields and methods:
+
+```ts
+// src/textkit.lar
+
+/** Counts the words of a text. */
+public export function wordCount(text: String): int32 {
+    let n: int32 = 0;
+    for (w in text.split(" ")) {
+        if (w != "") { n += 1; }
+    }
+    return n;
+}
+
+/** The text with its first letter in upper case. */
+public export function title(text: String): String {
+    if (text == "") { return ""; }
+    return "${text.substring(0, 1).toUpperCase()}${text.substring(1)}";
+}
+
+/** Counts words as they come. */
+public class Counter {
+    /** The words counted so far. */
+    let words: int32 = 0;
+    let texts: String[*] = [];
+
+    /** Counts the words of a text, and keeps it. */
+    function add(text: String): void {
+        self.words += wordCount(text);
+        self.texts.push(text.clone());
+    }
+
+    /** The last text it counted (null when there is none). */
+    function last(): String? {
+        if (self.texts.length == 0) { return null; }
+        return self.texts[self.texts.length - 1].clone();
+    }
+}
+
+/** A new counter, at zero. */
+public export function newCounter(): Counter { return Counter {}; }
+```
+
+`larimar build` leaves four files in `build/textkit/`, which go together:
+
+| File | For | What it has |
+|---|---|---|
+| `libtextkit.a` | both | the library (dynamic: `libtextkit.so`, `libtextkit.dylib` or `textkit.dll`) |
+| `textkit.h` | C | the prototypes, with their doc comments, and how to free what they give |
+| `textkit.lar` | Larimar | the same functions as `native` declarations |
+| `textkit.interface` | the compiler | its name, version, kind, what it needs linked and the **interface hash** |
+
+### Using it from C
+
+The `.h` says everything (here without its first comment):
+
+```c
+typedef struct tk_Counter tk_Counter;
+
+/* Counter: its fields (to read) and its methods; self is the handle. */
+
+/** The words counted so far. */
+int32_t tk_Counter_words(tk_Counter* self);
+
+/** Counts the words of a text, and keeps it. */
+void tk_Counter_add(tk_Counter* self, const char* text);
+
+/**
+ * The last text it counted (null when there is none).
+ *
+ * NULL, or a text that is yours: free it with tk_free.
+ */
+char* tk_Counter_last(tk_Counter* self);
+
+/** Counts the words of a text. */
+int32_t tk_wordCount(const char* text);
+
+/**
+ * The text with its first letter in upper case.
+ *
+ * The text is yours: free it with tk_free.
+ */
+char* tk_title(const char* text);
+
+/**
+ * A new counter, at zero.
+ *
+ * A new Counter that is yours: give it back with tk_Counter_release.
+ */
+tk_Counter* tk_newCounter(void);
+
+/** Gives back a Counter (NULL does nothing). */
+void tk_Counter_release(tk_Counter* handle);
+
+/** Frees a text the library returned (NULL does nothing). */
+void tk_free(void* text);
+
+/** The interface hash of the library (as in textkit.interface): compare it with TEXTKIT_INTERFACE. */
+const char* tk_interface(void);
+```
+
+```c
+#include <stdio.h>
+#include "textkit.h"
+
+int main(void) {
+    char* t = tk_title("larimar");
+    tk_Counter* c = tk_newCounter();
+    tk_Counter_add(c, "one two");
+    tk_Counter_add(c, "three");
+    char* last = tk_Counter_last(c);
+    printf("%s %d %d %s\n", t, tk_wordCount("a b c"), tk_Counter_words(c), last);
+    tk_free(t);
+    tk_free(last);
+    tk_Counter_release(c);
+    return 0;
+}
+```
+
+```sh
+cc -std=c99 -Ibuild/textkit main.c build/textkit/libtextkit.a -lm
+./a.out                                  # Larimar 3 3 three
+```
+
+What a static library needs linked besides is in `links` of its `.interface` (`-lm`, `-pthread` if it
+uses threads, the TLS ones...).
+
+### Using it from Larimar
+
+The four files are copied into a folder of the program (or left where they are), and
+the library is named in `[c]` like any other:
+
+```toml
+[c]
+static_libraries = ["textkit"]
+static_library_paths = ["libs/textkit"]
+```
+
+```ts
+import textkit;
+import textkit { Counter };
+
+function main(): int32 {
+    let c: Counter = textkit.newCounter();
+    c.add("one two");
+    c.add("three");
+    println("${textkit.title("larimar")} ${c.words} ${c.last() ?? "-"}");
+    return 0;
+}
+```
+
+Output: `Larimar 3 three`
+
+Since `textkit.interface` is in that folder, the compiler knows it is a library written in Larimar:
+`import textkit` finds `textkit.lar` there (`larimar check` and the editor too), its `.h` is included and
+what it needs is linked. The `.lar` it reads is plain `native` declarations:
+
+```ts
+c_include "textkit.h";
+
+/** Counts words as they come. */
+public native type Counter = tk_Counter* released by tk_Counter_release {
+    // not given to C (they do not cross): texts (String[*])
+    /** The words counted so far. */
+    native let words: int32 = tk_Counter_words;
+    /** Counts the words of a text, and keeps it. */
+    native function add(text: String): void = tk_Counter_add;
+    /** The last text it counted (null when there is none). */
+    native function last(): String? = tk_Counter_last released by tk_free;
+}
+
+/** Counts the words of a text. */
+public native function wordCount(text: String): int32 = tk_wordCount;
+
+/** The text with its first letter in upper case. */
+public native function title(text: String): String = tk_title released by tk_free;
+
+/** A new counter, at zero. */
+public function newCounter(): Counter { return newCounter_c()!; }
+native function newCounter_c(): Counter? = tk_newCounter;
+
+// what gives back the texts and objects of the library (only the compiler calls them)
+native function tk_free(text: String): void = tk_free;
+native function tk_Counter_release(handle: Counter): void = tk_Counter_release;
+```
+
+A text of the library is copied into the program's memory and freed at once
+([`released by` on a function](#texts-that-c-makes-released-by-on-a-function)); a `Counter` is a
+[resource](#resources-released-by): when the memory it lives in is freed, `tk_Counter_release` gives it
+back. Nothing is freed by hand, and the class is used as in the library: its methods are called on it
+(`c.add("x")`), its fields are read (`c.words`), and the functions have the same names and types.
+
+### The interface hash
+
+The `.interface` has eight hexadecimal digits, the start of the SHA-256 of the
+`.lar`; the library has the same ones inside (`tk_interface()` returns them, and the `.h` has them in
+`TEXTKIT_INTERFACE`). Before building a program that links it, `larimar build` checks that the three
+agree, and stops with what is wrong:
+
+- a `.lar` edited by hand: `textkit.lar does not match the library (its hash is ..., textkit.interface says ...)`;
+- a library of another build next to an old `.lar`: `libtextkit.a is from another build than textkit.lar and textkit.interface`;
+- a static library in `dynamic_libraries` (or the opposite): `textkit is a static library (...): put it in static_libraries`.
+
+So a program never calls a library with declarations that are not its own. The hash covers the whole
+`.lar`: the functions, their types and docs, the version and the kind. A new version is four new files
+that go together. A C program can check the same when it starts:
+`strcmp(tk_interface(), TEXTKIT_INTERFACE) == 0`.
+
+### The export functions and classes of a library
+
+What goes to C, and how:
+
+- **Their C names** are `<prefix>_<name>` (`tk_wordCount`). `= c_name` after the signature gives one of
+  its own (`export function answer(): int32 = tk_the_answer { ... }`), and `prefix = ""` leaves the names
+  as they are. The library itself gives `<prefix>_free`, `<prefix>_<Class>_release` and
+  `<prefix>_interface`: an export function cannot take those names (nor a method called `release`).
+- **Their types**: numbers, `bool`, `String` and `String?` (`const char*`; `NULL` is `null`), and the
+  **classes** of the library and their optionals. Native types and C structs do not go: they belong to C
+  headers that the program would need too.
+- **A text it returns** is a copy (`char*`) for the caller: C frees it with `<prefix>_free`.
+- **An object it returns** is a **handle**: C keeps it (`tk_Counter*`), passes it to its methods and
+  to other export functions, and gives it back with `<prefix>_<Class>_release`. The handle has its own memory: what the
+  object creates later (a list that grows, its texts) lives there and is freed with it. A `NULL` where a
+  class is expected stops the program with a panic that names the function and the parameter
+  (`tk_Counter_add: 'self' is NULL`); where `Counter?` is expected, it is `null`.
+- **The members of its classes go too.** For each class that C receives: each field is read with
+  `<prefix>_<Class>_<field>(handle)` (a text: a copy to free) and each method is called with
+  `<prefix>_<Class>_<method>(handle, ...)`, through its vtable, so the method of a subclass runs. Its
+  parents' members go as well. In the `.lar` they are a `native let` and a `native function` of the
+  class, so a program writes `c.words` and `c.add("x")`. A field is only read: it is changed through
+  a method. What does not cross (a list field, a method that throws or that takes a list, an operator)
+  stays inside, and the `.lar` says so in a comment. A field of a class type does not go either: its
+  object belongs to the other one; a method that returns a new one does.
+- **Each call has its own memory**, freed when it returns. The globals of the library are created when
+  it is loaded (or at its first call) and live as long as the program.
+- **`export` does not make a function `public`**: with both, the tests of the library (and its other
+  modules) can call it from Larimar.
+- **No main**: the program that uses it has its own. A library with a `main` is an error.
+
+### Inside, everything is private
+
+Everything of the C but the export functions and those three is
+`static`: the runtime of the library, its classes, its other functions. So two libraries written in
+Larimar, and the Larimar program that links them, do not clash: each one has its own runtime (a few KB)
+and its own memories, and nothing crosses from one to another but texts (copied) and handles.
+
+### Its tests
+
+`larimar test` in the folder of the library runs its tests like in any project: they
+import its modules (the Larimar code, not the `.a`). `larimar check` and the editor apply the rules of a
+library to its code too.
+
+### Clarifications
+
+- **Why static by default.** The executable that uses it is a single file, and it does not depend on a
+  `.so` of the right build being installed where it runs. A dynamic library is shared by several
+  programs and can be replaced without building them again.
+- **Where a dynamic one is looked for.** Like any dynamic library: on Linux and macOS, in the
+  `dynamic_library_paths` of the program (rpath; on macOS the library is `@rpath/libtextkit.dylib`); on
+  Windows, next to the `.exe` or in the `PATH` (the linker uses `libtextkit.dll.a`, which is made with it).
+- **What a static one needs.** The libraries its C needs, and those it links itself, are in `links`:
+  a Larimar program adds them on its own; a C program adds them to its command. The static libraries
+  that a static library links are not put inside it: the program needs them too.
+- **Panics.** A panic inside the library (a bug: an index out of range, a `NULL` handle) prints it and
+  ends the program, as in a Larimar program.
+- **Threads.** The library can create threads inside. Calls from several threads of C at the same time
+  are for whoever calls, as with any C library (Larimar cannot see them): one handle, or the globals, in
+  one thread at a time, unless it is a `synchronized class`.
+- **The hash is not a signature.** It finds out mistakes (files of different builds), not someone who
+  changes a library on purpose.
+- **The four files are generated**: they are not edited, they are not kept in the library's repository
+  (they are in `build/`), and they are published together.
+- **Not yet**: lists, callbacks and errors (`throws`) do not cross a library; they go as texts, handles
+  and numbers (an error code), or stay inside. A program does not create objects of the library with
+  `Counter {}`, nor extend its classes: they are made by its functions and methods.
+
+---
+
+## 28. What the transpiler generates
 
 A **transpiler** is a compiler that writes code in another language instead of a program: Larimar
 writes C. This chapter is for the curious, and for whoever wants to build the C by hand.
@@ -5094,7 +5122,7 @@ that says so, instead of failing with a segmentation fault.
 
 ---
 
-## 28. Larimar written in Larimar
+## 29. Larimar written in Larimar
 
 The Larimar compiler, **larimarc**, and the `larimar` tool are written in Larimar. The repository has:
 
@@ -5216,7 +5244,7 @@ from `$LARIMARC` (`run-tests.sh` sets it) or the PATH.
 
 ---
 
-## 29. Current limitations
+## 30. Current limitations
 
 ### By design
 
@@ -5265,7 +5293,7 @@ What Larimar does not have, and will not have, with what is used instead:
 
 ---
 
-## 30. Quick reference
+## 31. Quick reference
 
 ```ts
 // Modules

@@ -69,7 +69,7 @@ inside, so a program that links it (`static_libraries` or `dynamic_libraries` in
 `import <name>`) builds only with files of one build. The library's classes go to C as handles, with
 their fields and methods (`tk_Counter_add(c, "x")` in C, `c.add("x")` in Larimar), its texts as copies to
 free; everything else of its C is static, so libraries and programs do not clash. See
-"Libraries written in Larimar" in chapter 26 of `MANUAL.md`.
+chapter 27 of `MANUAL.md`.
 
 ## Building from C Bootstrap
 
