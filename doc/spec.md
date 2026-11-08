@@ -4,10 +4,10 @@
 
 This document defines the Larimar programming language. It is normative: a program means what this
 document says, and an implementation is correct when it does what this document says. The
-[Manual](MANUAL.md) teaches the language with examples; when the two disagree, this document wins.
+[Manual](manual.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 1.3.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
+`larimar 1.3.1 (language 1.0)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
@@ -1856,7 +1856,7 @@ A conforming implementation documents each of these.
 ## Appendix C. Outside this specification
 
 These belong to the tools and the library, which have their own versions and documentation (the
-[Manual](MANUAL.md)):
+[Manual](manual.md)):
 
 - the modules of the standard library other than `std.lang` (`std.io`, `std.io.files`, `std.os`,
   `std.os.process`, `std.time`, `std.crypto`, `std.encoding.json`, `std.net`, `std.test`, ...);

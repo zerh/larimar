@@ -1,5 +1,5 @@
 // larimar --debug with a real debugger. Builds values.lar with #line to the .lar file, stops on the line
-// marked "// break here" and checks that Larimar's formatters (debug/larimar_lldb.py, debug/larimar_gdb.py)
+// marked "// break here" and checks that Larimar's formatters (tools/debuggers/larimar_lldb.py, tools/debuggers/larimar_gdb.py)
 // show the values as Larimar values, with lldb and gdb (whichever are installed). Then, with lldb-dap,
 // talks to larimar dap (the debugger written in Larimar) like an editor: Larimar names in the stack and
 // the variables, values, children, Larimar paths in evaluate, and a panic shown as an exception.
@@ -128,7 +128,7 @@ test function lldbShowsLarimarValues(): void {
     for (e in expected()) { variables.push(e.name.clone()); }
     let commands: String = Paths.join(outDir(), "lldb.txt");
     try {
-        Files.writeString(commands, "command script import \"${Paths.join(repository(), "debug/larimar_lldb.py")}\"\nbreakpoint set --file values.lar --line ${line}\nrun\nframe variable ${variables.join(" ")}\nbt 1\nkill\nquit\n");
+        Files.writeString(commands, "command script import \"${Paths.join(repository(), "tools/debuggers/larimar_lldb.py")}\"\nbreakpoint set --file values.lar --line ${line}\nrun\nframe variable ${variables.join(" ")}\nbt 1\nkill\nquit\n");
     } catch (IoError e) {
         fail("cannot write ${commands}");
         return;
@@ -150,7 +150,7 @@ test function gdbShowsLarimarValues(): void {
     let program: String = build(source(), "values");
     if (program == "") { return; }
     let line: int32 = breakLine();
-    let args: String[*] = ["-batch", "-ex", "source ${Paths.join(repository(), "debug/larimar_gdb.py")}", "-ex", "break values.lar:${line}", "-ex", "run"];
+    let args: String[*] = ["-batch", "-ex", "source ${Paths.join(repository(), "tools/debuggers/larimar_gdb.py")}", "-ex", "break values.lar:${line}", "-ex", "run"];
     for (e in expected()) {
         args.push("-ex");
         args.push("output ${e.name}");

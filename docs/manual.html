@@ -531,12 +531,12 @@
   </div>
 
   <script>
-    // The manual is MANUAL.md (English) or MANUAL_ES.md (Spanish), read from the repository and shown here
+    // The manual is doc/manual.md (English) or doc/manual.es.md (Spanish), read from the repository and shown here
     // with the style of the page: what is in main is what this page shows. The language is the one of the
     // page (ES / EN, remembered in 'larimar-lang'), then the browser's, then English.
     (function () {
-      var REPO = 'https://raw.githubusercontent.com/zerh/larimar/main/';
-      var FILES = { en: 'MANUAL.md', es: 'MANUAL_ES.md' };
+      var REPO = 'https://raw.githubusercontent.com/zerh/larimar/main/doc/';
+      var FILES = { en: 'manual.md', es: 'manual.es.md' };
       var KEY = 'larimar-lang';
       var WORDS = {
         en: { features: 'Language', memory: 'Memory', concurrency: 'Threads', tools: 'Tools', install: 'Install',
@@ -643,9 +643,9 @@
           },
           link: function (href, title, text) {
             var url = href || '';
-            var other = url.match(/^(?:\.\/)?(MANUAL(?:_ES)?\.md)(#.*)?$/);       // the other language: this page
-            if (other) { return '<a href="manual.html?lang=' + (other[1] === 'MANUAL.md' ? 'en' : 'es') + (other[2] || '') + '">' + text + '</a>'; }
-            if (!/^(https?:|mailto:|#)/.test(url)) { url = 'https://github.com/zerh/larimar/blob/main/' + url.replace(/^\.\//, ''); }
+            var other = url.match(/^(?:\.\/)?(manual(?:\.es)?\.md)(#.*)?$/);       // the other language: this page
+            if (other) { return '<a href="manual.html?lang=' + (other[1] === 'manual.md' ? 'en' : 'es') + (other[2] || '') + '">' + text + '</a>'; }
+            if (!/^(https?:|mailto:|#)/.test(url)) { url = 'https://github.com/zerh/larimar/blob/main/doc/' + url.replace(/^\.\//, ''); }   // relative to doc/
             var outside = /^https?:/.test(url) ? ' target="_blank" rel="noopener"' : '';
             return '<a href="' + url + '"' + (title ? ' title="' + title + '"' : '') + outside + '>' + text + '</a>';
           }
@@ -782,7 +782,7 @@
           }
         }).catch(function () {
           article.innerHTML = '<p class="manual-status">' + WORDS[lang].failed +
-            '<a href="https://github.com/zerh/larimar/blob/main/' + file + '">' + file + '</a></p>';
+            '<a href="https://github.com/zerh/larimar/blob/main/doc/' + file + '">' + file + '</a></p>';
         });
       }
 

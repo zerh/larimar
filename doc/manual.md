@@ -20,7 +20,7 @@ A few words appear from the start:
 | **terminal** | the window where commands are typed (Terminal on macOS, PowerShell on Windows) |
 
 The names of the language, the tool and the examples are in English, like the explanations.
-[Leer en español](MANUAL_ES.md).
+[Leer en español](manual.es.md).
 
 ## Contents
 
@@ -5137,35 +5137,38 @@ larimar/
     project/               the C compiler, larimar test (larimar.toml is read with std.encoding.toml)
   std/                   the standard library
   tests/                 the tests (tests/lsp: check and the language server)
-  debug/                 value formatters for lldb and gdb
+  doc/                   this manual (manual.md; manual.es.md in Spanish) and the specification (spec.md)
+  bootstrap/
+    larimarc.c           the compiler already translated to C, to start without Larimar
+    build.sh, build.ps1  build the compiler and install the ../out/larimar folder
   bin/larimar            the launcher that is installed
-  MANUAL.md              this manual (MANUAL_ES.md: in Spanish)
-  larimarc_bootstrap.c   the compiler already translated to C, to start without Larimar
-  build-bootstrap.sh     builds the compiler and installs the ../out/larimar folder
+  tools/
+    debuggers/           value formatters for lldb and gdb (installed as debug/)
+    tcc/                 build the tcc that the releases bring (Linux, Windows)
 ```
 
 To build it only a C compiler is needed:
 
 ```sh
 cd larimar
-./build-bootstrap.sh --verify
+./bootstrap/build.sh --verify
 ```
 
-1. It compiles `larimarc_bootstrap.c` and gets `larimarc`.
+1. It compiles `bootstrap/larimarc.c` and gets `larimarc`.
 2. With `--verify`, it compiles `src/` three times: with that larimarc (`build/stage1.c`), with the
    compiler that comes out of it (`build/stage2.c`) and with the one that comes out of that one
    (`build/stage3.c`). `stage2.c` and `stage3.c` must be identical byte by byte: the compiler, compiled
-   by itself, produces itself. If `larimarc_bootstrap.c` is older than `src/`, it says so and installs
+   by itself, produces itself. If `bootstrap/larimarc.c` is older than `src/`, it says so and installs
    the compiler made from `src/`.
 3. It installs the result in `../out/larimar` (or in `LARIMAR_PREFIX`): `bin/larimarc`, `bin/larimar`,
-   a copy of `std/`, of `debug/` and of this manual. That folder can be deleted and regenerated whenever
+   a copy of `std/`, of `doc/` and of the formatters (`debug/`). That folder can be deleted and regenerated whenever
    you want; everything is edited in the repository.
 
-After changing the compiler, `./build-bootstrap.sh --verify` checks and installs it, and the bootstrap C
+After changing the compiler, `./bootstrap/build.sh --verify` checks and installs it, and the bootstrap C
 is updated with what it says:
 
 ```sh
-cp build/stage2.c larimarc_bootstrap.c
+cp build/stage2.c bootstrap/larimarc.c
 ```
 
 `bin/larimar` sets `LARIMAR_HOME` to the folder of the installation, and the compiler looks for the
@@ -5174,7 +5177,7 @@ standard library in `$LARIMAR_HOME/std`.
 **A rule when changing the language.** The compiler is built with its own standard library, so `std/`
 can only use what the compiler that compiles it already understands. If you add something to the
 language (like `panic`) and want to use it in `std/`, it is first added to the compiler,
-`larimarc_bootstrap.c` is regenerated with a compiler that already understands it, and then it is used
+`bootstrap/larimarc.c` is regenerated with a compiler that already understands it, and then it is used
 in `std/`.
 
 ### The tests
@@ -5215,8 +5218,8 @@ helper writes and compiles stays in `build/test/cases/`. It compiles with `$CC` 
 AddressSanitizer and UBSan except on Windows, with tcc or with `LARIMAR_TEST_SANITIZE=0`.
 
 ```sh
-./build-bootstrap.sh --verify --test  # build, check that it compiles itself, test and install
-tests/run-tests.sh                    # all of them, with the larimarc that build-bootstrap.sh made
+./bootstrap/build.sh --verify --test  # build, check that it compiles itself, test and install
+tests/run-tests.sh                    # all of them, with the larimarc that bootstrap/build.sh made
 tests/run-tests.sh memory             # only the ones with "memory" in their path or name
 larimarc test tests/memory            # only larimarc test, on one folder
 LARIMARC=build/larimarc_stage2 tests/run-tests.sh

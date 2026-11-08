@@ -1,8 +1,8 @@
 # Builds the tcc that comes with Larimar on Windows into <larimar>\toolchain\tcc (GitHub Actions runs it
-# after build-bootstrap.ps1, with MinGW's gcc in the Path). tcc brings its own headers and uses the C
+# after bootstrap/build.ps1, with MinGW's gcc in the Path). tcc brings its own headers and uses the C
 # library of Windows (msvcrt.dll): programs it builds need nothing else.
 #
-#   .\tools\build-tcc.ps1 ..\out\larimar
+#   .\tools\tcc\build.ps1 ..\out\larimar
 #
 # Larimar uses it for `larimar file.lar` (it starts fast) and when the system has no C compiler. Programs
 # that use TLS need another compiler (the SChannel headers are not in tcc's).

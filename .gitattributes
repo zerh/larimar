@@ -1,2 +1,4 @@
 # GitHub does not know Larimar: color .lar as ActionScript, without counting it in the language bar
 *.lar linguist-language=ActionScript linguist-detectable=false
+# The compiler already translated to C: generated, so GitHub folds its diffs and does not count it as C
+bootstrap/larimarc.c linguist-generated=true

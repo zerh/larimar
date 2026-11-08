@@ -1,52 +1,35 @@
-# Larimar Compiler
+# Larimar
 
-The Larimar compiler, written in Larimar. Self-hosting compiler that compiles to C99.
+Larimar is a programming language that compiles to C99: classes, interfaces, lambdas, threads and
+modules, with **memory without a garbage collector and without `free`**. Every value lives in a memory
+(the block that created it, an object, a memory of your own), and the compiler checks that nothing
+outlives what it points to. C libraries are declared, not wrapped, and a Larimar project can itself be
+built into a static or dynamic C library. The compiler is written in Larimar.
 
-## Directory Structure
-
-```
-larimar-compiler/
-├── src/                     # Compiler source code (Larimar), one folder per stage
-│   ├── main.lar             # Entry point: the commands
-│   ├── syntax/              # lexer, parser, ast
-│   ├── semantics/           # linker (modules), types, analyzer, expressions
-│   ├── codegen/             # gen, expressions, runtime, runtimeselect, prune, debugmap
-│   ├── editor/              # session (larimar check), lsp, ide, docstore, dap
-│   └── project/             # cc (the C compiler), testing (larimar test)
-├── std/                     # Standard library source (edit it here): io.lar and io/ (files, path, console), os.lar and os/process.lar,
-│                            # time.lar, crypto.lar, memory.lar, encoding/ (json, toml, base64, hex, url), net.lar (TCP, UDP, servers with TLS),
-│                            # net/tls.lar (client TLS), net/http.lar (HTTP client), text.lar and text/regex.lar, test.lar
-│                            # (net, io and os are written in Larimar over the system's C functions: native, #when, T*, released by)
-├── tests/                   # Tests (larimarc test, tests/run-tests.sh; tests/lsp for check and lsp)
-├── debug/                   # lldb and gdb formatters for Larimar values (installed in larimar/debug)
-├── bin/larimar              # Wrapper installed as larimar/bin/larimar
-├── MANUAL.md                # Language manual (English)
-├── MANUAL_ES.md             # Language manual (Spanish)
-├── SPEC.md                  # Language specification (version 1.0)
-├── tools/                   # build-tcc.sh / build-tcc.ps1: build the tcc that the releases bring (Linux, Windows)
-├── larimarc_bootstrap.c     # C bootstrap
-├── build-bootstrap.sh       # Build from the C bootstrap and install
-├── larimar.toml             # Project configuration
-└── README.md                # This file
+```ts
+function main(): int32 {
+    let names: String[*] = ["Ana", "Luis"];
+    for (n in names) { println("Hello, ${n}!"); }
+    return 0;
+}
 ```
 
-Everything is edited here. `../larimar/` is the **installation**: a build result that
-`build-bootstrap.sh` fills and that can be deleted and regenerated at any time:
+## Install
 
-```
-larimar/
-├── bin/larimarc             # the compiler
-├── bin/larimar              # wrapper that sets LARIMAR_HOME
-├── debug/                   # copy of debug/ (lldb and gdb formatters)
-├── std/                     # copy of std/
-├── toolchain/tcc/           # the releases for Linux and Windows: tcc (and musl on Linux), see tools/
-└── MANUAL.md                # copy of MANUAL.md
+```sh
+curl -fsSL https://zerh.github.io/larimar/install.sh | sh                    # macOS and Linux
+powershell -c "irm https://zerh.github.io/larimar/install.ps1 | iex"         # Windows
 ```
 
-The releases for Linux and Windows bring **tcc** in `toolchain/tcc`, so `larimar file.lar` runs a file
-at once and nothing else is needed to start. Projects use the system's compiler (cc, gcc, clang) when
-there is one; programs with TLS need it. GitHub Actions builds tcc with `tools/build-tcc.sh` and
-`tools/build-tcc.ps1`.
+Or download a release from [Releases](https://github.com/zerh/larimar/releases): Linux and Windows bring
+their own C compiler (tcc), so `larimar hello.lar` runs a file at once.
+
+## Documentation
+
+- [Manual](doc/manual.md) ([en español](doc/manual.es.md)): the language with examples, projects,
+  C, libraries, the editor and the tests.
+- [Specification](doc/spec.md) (language 1.0): when it and the manual disagree, it wins.
+- [Changelog](CHANGELOG.md) and [how to contribute](CONTRIBUTING.md).
 
 ## Calling C
 
@@ -57,7 +40,7 @@ it lives in is freed, or with `release(x)`), C types with fields and methods
 (`native type Db = sqlite3* { native function errmsg(): String = sqlite3_errmsg; }`), callbacks that take
 lambdas when C passes a `Context`, `lar"name"` inside `c_code`, and `#when windows` ... `#else` ... `#end` for
 what changes between platforms (compiled as `#if`, every branch checked). A text that C makes with `malloc`
-is copied and freed (`native function strdup(s: String): String released by free`). See chapter 23 of `MANUAL.md`.
+is copied and freed (`native function strdup(s: String): String released by free`). See [chapter 23 of the manual](doc/manual.md#23-calling-c).
 
 ## Libraries for C and for Larimar
 
@@ -69,63 +52,56 @@ inside, so a program that links it (`static_libraries` or `dynamic_libraries` in
 `import <name>`) builds only with files of one build. The library's classes go to C as handles, with
 their fields and methods (`tk_Counter_add(c, "x")` in C, `c.add("x")` in Larimar), its texts as copies to
 free; everything else of its C is static, so libraries and programs do not clash. See
-chapter 27 of `MANUAL.md`.
+[chapter 27 of the manual](doc/manual.md#27-libraries-written-in-larimar).
 
-## Building from C Bootstrap
+## Building from source
 
-If you have a C compiler but no Larimar compiler:
+Only a C99 compiler is needed (cc, gcc, clang, tcc...):
 
-```bash
-./build-bootstrap.sh            # builds ./larimarc and installs it into ../larimar
-./build-bootstrap.sh --verify   # also checks that the compiler compiles itself
-./build-bootstrap.sh --no-install
-LARIMAR_PREFIX=/opt/larimar ./build-bootstrap.sh   # install somewhere else
+```sh
+./bootstrap/build.sh                     # builds bin/larimarc from bootstrap/larimarc.c and installs ../out/larimar
+./bootstrap/build.sh --verify            # also checks that the compiler compiles itself (stage 2 = stage 3)
+./bootstrap/build.sh --verify --test     # and runs all the tests
+./bootstrap/build.sh --no-install
+LARIMAR_PREFIX=/opt/larimar ./bootstrap/build.sh   # install somewhere else
 ```
 
-This compiles `larimarc_bootstrap.c` (pre-generated C code) into a working Larimar compiler.
-The only requirement is a C99 compiler (gcc, clang, tcc...).
+On Windows, `.\bootstrap\build.ps1 -verify` (with MinGW's gcc). `bootstrap/larimarc.c` is the compiler
+already translated to C. After changing `src/`, `--verify` says whether it is older than `src/`; then:
 
-## Building with Larimar
-
-If you already have a working Larimar compiler:
-
-```bash
-export LARIMAR_HOME=$(pwd)      # use std/ from this folder while developing
-larimar build
-# Creates: build/larimarc
+```sh
+cp build/stage2.c bootstrap/larimarc.c
 ```
 
-This compiles the Larimar source code in `src/` into a new compiler.
+`std/` can only use what the compiler that compiles it already understands: something new in the
+language goes into the compiler first, the bootstrap is regenerated, and then `std/` may use it.
 
-## Regenerating Bootstrap C
+## Repository layout
 
-To update `larimarc_bootstrap.c` after changes:
-
-```bash
-# Build compiler with Larimar
-larimar build
-
-# Check that the new compiler compiles itself, and install it
-./build-bootstrap.sh --verify
-
-# Then update the bootstrap C with the compiler built from src/
-cp build/stage2.c larimarc_bootstrap.c
+```
+larimar/
+├── src/                 the compiler (Larimar), one folder per stage
+│   ├── main.lar         the commands
+│   ├── syntax/          lexer, parser, ast
+│   ├── semantics/       linker (modules), types, analyzer, expressions
+│   ├── codegen/         gen, expressions, runtime, runtimeselect, prune, debugmap
+│   ├── editor/          session (larimar check), lsp, ide, docstore, dap
+│   └── project/         cc (the C compiler), testing (larimar test), libraries
+├── std/                 the standard library (io, os, net, encoding, text, time, crypto, test...)
+├── tests/               the tests (tests/run-tests.sh)
+├── doc/                 manual.md, manual.es.md, spec.md
+├── bootstrap/           larimarc.c (the compiler in C), build.sh, build.ps1
+├── bin/                 the launchers installed as larimar/bin/larimar(.cmd)
+├── tools/
+│   ├── debuggers/       lldb and gdb formatters (installed as larimar/debug)
+│   └── tcc/             build the tcc that the releases bring (Linux, Windows)
+├── docs/                the website (GitHub Pages)
+└── larimar.toml
 ```
 
-## Verification
-
-Test the compiler:
-
-```bash
-./larimarc --version
-# Should output: larimar 1.3.0 (language 1.0)
-
-# Compile a test program
-echo 'function main(): void { println("Hello!"); }' > test.lar
-LARIMAR_HOME=$(pwd) ./larimarc test.lar -o test.c
-cc -std=c99 -O2 test.c -o test
-./test
-```
+Everything is edited here. `../out/larimar/` is the **installation**, which `bootstrap/build.sh` fills
+and can be deleted and regenerated at any time: `bin/larimarc`, `bin/larimar` (sets `LARIMAR_HOME`),
+`std/`, `doc/`, `debug/` and, in the releases for Linux and Windows, `toolchain/tcc/`.
 
 ## Tests
 
@@ -135,11 +111,11 @@ tests/run-tests.sh memory     # only the tests whose path or name contains "memo
 bin/larimarc test tests/std   # only larimarc test, on one folder
 ```
 
-Tests are `test function`s with `std.test` checks (MANUAL.md, section 26), grouped one file per topic
+Tests are `test function`s with `std.test` checks ([manual, chapter 26](doc/manual.md#tests-test-function-and-larimar-test)), grouped one file per topic
 (`tests/c/callbacks_test.lar`, `tests/language/when_test.lar`...), run with AddressSanitizer and UBSan. The
 ones that test the compiler itself use `tests/support/compiler.lar`: `failsWith(raw"""...""", "error")` for a
 program the compiler must reject, and `runs("tests/cases/...", [lines])`, `panics(...)`, `memoryError(...)`
-for the programs in `tests/cases/` (section 28).
+for the programs in `tests/cases/` (chapter 29).
 Every bug found goes in as a test first.
 
 `tests/lsp/lsp_test.lar`, `tests/debug/debug_test.lar` and `tests/tls/tls_test.lar` start the compiler,
@@ -152,12 +128,12 @@ the debuggers and a client as other programs (`std.os.process`) and talk to them
 Other programs of `$LARIMAR_HOME/bin` answer commands of `larimar`, declared in `$LARIMAR_HOME/plugins/<name>.toml`
 (that is how Minero gives `larimar add` and `larimar fetch`). A project's `[dependencies]` live in
 `deps/<name>/`: their modules are imported from `deps/<name>/src` and their `[c]` is added to the
-project's. (MANUAL.md, section 26.)
+project's. ([manual, chapter 26](doc/manual.md#26-projects-larimartoml-and-larimar-build).)
 
 ## Editor support
 
 `larimar check [file|folder] [--json]` reports the errors without generating C. `larimar lsp` is the
-language server (see "The editor" in section 26 of `MANUAL.md`): the server keeps the open documents
+language server (see "The editor" in chapter 26 of the [manual](doc/manual.md)): the server keeps the open documents
 (`editor/docstore.lar`) and answers each request in a forked process that links and analyzes the program
 (`editor/session.lar`) and answers from the analysis (`editor/ide.lar`).
 
@@ -168,22 +144,9 @@ one JSON object per line: that is how the VS Code extension shows them in its Te
 (`build/<name>.debug.json`, from `codegen/debugmap.lar`). `larimar dap` (`editor/dap.lar`) is the debugger for editors:
 a DAP adapter written in Larimar over LLVM's `lldb-dap`, which shows the stack, variables and values
 as Larimar (names, real classes, Any, enums), understands Larimar paths in evaluate and stops on
-panics as exceptions. `debug/larimar_lldb.py` and
-`debug/larimar_gdb.py` show the same values in lldb and gdb from a terminal. `tests/debug/debug_test.lar`
+panics as exceptions. `tools/debuggers/larimar_lldb.py` and
+`tools/debuggers/larimar_gdb.py` show the same values in lldb and gdb from a terminal. `tests/debug/debug_test.lar`
 checks all of it.
-
-## Project Configuration
-
-`larimar.toml`:
-```toml
-[project]
-name = "larimarc"
-version = "1.3.0"
-main = "src/main.lar"
-
-[c]
-flags = ["-O2"]
-```
 
 ## Source Files Overview
 
@@ -212,32 +175,6 @@ flags = ["-O2"]
 | project/testing.lar | Test runner: larimar test and test functions |
 | project/libraries.lar | Libraries written in Larimar: their files, the interface hash and its checks |
 
-## Self-Hosting
-
-The compiler is **self-hosting**: it's written in Larimar and can compile itself.
-
-```
-Larimar source → [larimarc] → C code → [gcc/clang] → larimarc executable
-```
-
-The bootstrap C file (`larimarc_bootstrap.c`) allows cold-start compilation on any system with just a C compiler.
-
-## Development
-
-Modify `src/` or `std/`, then rebuild:
-
-```bash
-larimar build
-./build/larimarc --version
-```
-
-Install it (copies the compiler, `std/` and `MANUAL.md` into `../out/larimar`):
-
-```bash
-./build-bootstrap.sh --verify
-cp build/stage2.c larimarc_bootstrap.c     # when it says the bootstrap C is older than src/
-```
-
 ## License
 
-See individual files for license information.
+[MIT](LICENSE).

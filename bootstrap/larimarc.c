@@ -58903,7 +58903,7 @@ int32_t command(Slice_s args) {
         return ret_9207;
     }
     if (rt_str_eq(cmd, rt_str("version", 7)) || rt_str_eq(cmd, rt_str("--version", 9))) {
-        printf("larimar %.*s (language %.*s)\n", (int)(rt_str("1.3.0", 5)).len, (rt_str("1.3.0", 5)).ptr, (int)(rt_str("1.0", 3)).len, (rt_str("1.0", 3)).ptr);
+        printf("larimar %.*s (language %.*s)\n", (int)(rt_str("1.3.1", 5)).len, (rt_str("1.3.1", 5)).ptr, (int)(rt_str("1.0", 3)).len, (rt_str("1.0", 3)).ptr);
         int32_t ret_9208 = 0;
         rt_mem_free(&mem_352);
         return ret_9208;
@@ -58984,7 +58984,7 @@ int32_t command(Slice_s args) {
 
 void usage(void) {
     RtMem mem_358 = rt_mem_growable();
-    printf("larimar %.*s (language %.*s)\n", (int)(rt_str("1.3.0", 5)).len, (rt_str("1.3.0", 5)).ptr, (int)(rt_str("1.0", 3)).len, (rt_str("1.0", 3)).ptr);
+    printf("larimar %.*s (language %.*s)\n", (int)(rt_str("1.3.1", 5)).len, (rt_str("1.3.1", 5)).ptr, (int)(rt_str("1.0", 3)).len, (rt_str("1.0", 3)).ptr);
     fputs("\n", stdout);
     fputs("  larimar new <name> [--library] create a project in a new folder (a program, or a library)\n", stdout);
     fputs("  larimar build [folder]        compile the project (larimar.toml) to an executable, or a library:\n", stdout);
@@ -60935,14 +60935,14 @@ bool buildLibrary(Project* p, bool debug) {
     RtMem tmp_9710 = rt_mem_growable();
     RtSb sb_9709 = rt_sb_mem(&tmp_9710, 846);
     rt_sb_add(&sb_9709, "larimar ", 8);
-    rt_sb_str(&sb_9709, rt_str("1.3.0", 5));
+    rt_sb_str(&sb_9709, rt_str("1.3.1", 5));
     RtString module = codegen__gen__libraryModule(&mem_368, (p)->name, (p)->version, kind, rt_sb_finish(&sb_9709));
     rt_mem_free(&tmp_9710);
     RtString hash = project__libraries__interfaceHash(&mem_368, module);
     RtMem tmp_9712 = rt_mem_growable();
     RtSb sb_9711 = rt_sb_mem(&tmp_9712, 848);
     rt_sb_add(&sb_9711, "larimar ", 8);
-    rt_sb_str(&sb_9711, rt_str("1.3.0", 5));
+    rt_sb_str(&sb_9711, rt_str("1.3.1", 5));
     RtString header = codegen__gen__libraryHeader(&mem_368, (p)->name, (p)->version, kind, hash, rt_sb_finish(&sb_9711));
     rt_mem_free(&tmp_9712);
     RtMem tmp_9713 = rt_mem_growable();
@@ -61350,7 +61350,7 @@ bool buildLibrary(Project* p, bool debug) {
         rt_sb_str(&sb_9807, (p)->name);
         rt_sb_add(&sb_9807, ".interface", 10);
         RtString t_9809 = std__io__path__join(&tmp_9808, outDir, rt_sb_finish(&sb_9807));
-        std__io__files__writeString(t_9809, project__libraries__interfaceText(&tmp_9808, (p)->name, (p)->version, kind, (p)->prefix, hash, rt_str("1.3.0", 5), links), &err);
+        std__io__files__writeString(t_9809, project__libraries__interfaceText(&tmp_9808, (p)->name, (p)->version, kind, (p)->prefix, hash, rt_str("1.3.1", 5), links), &err);
         if (err.kind != 0) {
             rt_mem_free(&tmp_9808);
             goto try_catch_9801;

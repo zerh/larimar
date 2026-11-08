@@ -11,7 +11,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$ScriptDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Definition)   # the repository
 Set-Location $ScriptDir
 
 $CC = if ($env:CC) { $env:CC } else { "gcc" }
@@ -25,7 +25,7 @@ if (!(Test-Path "bin")) {
 }
 
 # Validación adaptada para incluir larimar.cmd en lugar del script bash
-$requiredFiles = @("larimarc_bootstrap.c", "std/lang.lar", "MANUAL.md", "bin/larimar.cmd")
+$requiredFiles = @("bootstrap/larimarc.c", "std/lang.lar", "doc/manual.md", "bin/larimar.cmd")
 foreach ($f in $requiredFiles) {
     if (!(Test-Path $f)) {
         Write-Error "ERROR: $f not found in $ScriptDir"
@@ -39,10 +39,10 @@ Write-Host "=== Building the Larimar compiler ==="
 Write-Host "C compiler: $CC $($CFLAGS -join ' ')"
 Write-Host ""
 
-$lines = (Get-Content "larimarc_bootstrap.c" | Measure-Object -Line).Lines
-Write-Host "Step 1: compiling larimarc_bootstrap.c ($lines lines)..."
+$lines = (Get-Content "bootstrap/larimarc.c" | Measure-Object -Line).Lines
+Write-Host "Step 1: compiling bootstrap/larimarc.c ($lines lines)..."
 
-& $CC @CFLAGS larimarc_bootstrap.c -o $Output
+& $CC @CFLAGS bootstrap/larimarc.c -o $Output
 Write-Host "  -> ./$Output"
 
 if ($Verify) {
@@ -70,11 +70,11 @@ if ($Verify) {
         exit 1
     }
 
-    $bootstrapBytes = Get-FileHash "larimarc_bootstrap.c" -Algorithm SHA256
+    $bootstrapBytes = Get-FileHash "bootstrap/larimarc.c" -Algorithm SHA256
     if ($bootstrapBytes.Hash -eq $stage2Bytes.Hash) {
-        Write-Host "  OK: larimarc_bootstrap.c is up to date with src/"
+        Write-Host "  OK: bootstrap/larimarc.c is up to date with src/"
     } else {
-        Write-Host "  NOTE: larimarc_bootstrap.c is older than src/; installing the compiler built from src/."
+        Write-Host "  NOTE: bootstrap/larimarc.c is older than src/; installing the compiler built from src/."
         Copy-Item "build/larimarc_stage2.exe" $Output -Force
     }
 }
@@ -115,10 +115,13 @@ if (-not $NoInstall) {
     if (Test-Path $stdDir) { Remove-Item $stdDir -Recurse -Force }
     Copy-Item "std" $stdDir -Recurse -Force
 
-    Copy-Item "MANUAL.md" "$PREFIX/MANUAL.md" -Force
+    $docDir = Join-Path $PREFIX "doc"
+    if (Test-Path $docDir) { Remove-Item $docDir -Recurse -Force }
+    if (Test-Path "$PREFIX/MANUAL.md") { Remove-Item "$PREFIX/MANUAL.md" -Force }
+    Copy-Item "doc" $docDir -Recurse -Force
 
     if (Test-Path $debugDir) { Remove-Item $debugDir -Recurse -Force }
-    if (Test-Path "debug") { Copy-Item "debug" $debugDir -Recurse -Force }
+    if (Test-Path "tools/debuggers") { Copy-Item "tools/debuggers" $debugDir -Recurse -Force }
 
     $PrefixAbs = (Resolve-Path $PREFIX).Path
     Write-Host "  -> $PrefixAbs"

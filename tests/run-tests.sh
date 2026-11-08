@@ -4,7 +4,7 @@
 # larimarc test reports failures, and every std file checked alone.
 #
 # Usage:
-#   tests/run-tests.sh                   all the tests, with the larimarc build-bootstrap.sh made
+#   tests/run-tests.sh                   all the tests, with the larimarc bootstrap/build.sh made
 #   tests/run-tests.sh memory            only the files (and tests) whose path or name contains "memory"
 #   LARIMARC=build/larimarc_stage2 tests/run-tests.sh
 #
@@ -14,7 +14,7 @@
 cd "$(dirname "$0")/.." || exit 2
 ROOT="$(pwd)"
 export LARIMAR_HOME="$ROOT"
-if [ -z "${LARIMARC:-}" ]; then              # where build-bootstrap.sh leaves it
+if [ -z "${LARIMARC:-}" ]; then              # where bootstrap/build.sh leaves it
     for c in "$ROOT/../out/larimar/bin/larimarc" "$ROOT/bin/larimarc" "$ROOT/larimarc"; do
         if [ -x "$c" ] || [ -x "$c.exe" ]; then LARIMARC="$c"; break; fi
     done
@@ -25,7 +25,7 @@ export LARIMARC CC
 FILTER="${1:-}"
 
 if [ ! -x "$LARIMARC" ]; then
-    echo "No compiler at $LARIMARC: build it with ./build-bootstrap.sh, or set LARIMARC."
+    echo "No compiler at $LARIMARC: build it with ./bootstrap/build.sh, or set LARIMARC."
     exit 2
 fi
 

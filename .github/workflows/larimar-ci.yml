@@ -39,7 +39,7 @@ jobs:
       - name: Build and Verify (Unix)
         if: matrix.script_type == 'sh'
         run: |
-          ./build-bootstrap.sh --verify
+          ./bootstrap/build.sh --verify
 
       # 2. Compilación y verificación en Windows (con MinGW/GCC)
       - name: Setup MinGW & Build (Windows)
@@ -51,7 +51,7 @@ jobs:
           $env:CC = "gcc"
           $env:CFLAGS = "-std=c99 -O2"
           
-          .\build-bootstrap.ps1 -verify
+          .\bootstrap\build.ps1 -verify
 
       # 3. El tcc incluido (Linux y Windows): toolchain/tcc dentro de ../out/larimar
       - name: Bundled tcc (Linux)
@@ -59,32 +59,32 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-dev
-          sh tools/build-tcc.sh ../out/larimar
+          sh tools/tcc/build.sh ../out/larimar
 
       - name: Bundled tcc (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $env:Path += ";C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
-          .\tools\build-tcc.ps1 ..\out\larimar
+          .\tools\tcc\build.ps1 ..\out\larimar
 
       # 4. Lo instalado funciona: un archivo suelto (con el tcc incluido en Linux y Windows) y un programa con hilos
       - name: Smoke test (Unix)
         if: matrix.script_type == 'sh'
         run: |
-          expected="$(grep '^// output: ' tests/language/float_text.lar | sed 's#^// output: ##')"
-          out="$(../out/larimar/bin/larimar tests/language/float_text.lar)"
+          expected="$(printf '%s\n%s' '0.1 0.30000000000000004 2.0 100.0 1234567.0 1e+20 1e-05 0.0001 -0.0' '0.3333333333333333 nan inf -inf 1.5 true')"
+          out="$(../out/larimar/bin/larimar tests/cases/language/float_text.lar)"
           [ "$out" = "$expected" ] || { printf 'expected:\n%s\ngot:\n%s\n' "$expected" "$out"; exit 1; }
-          ../out/larimar/bin/larimar tests/language/sync_wait_until.lar
+          ../out/larimar/bin/larimar tests/cases/language/sync_wait_until.lar
 
       - name: Smoke test (Windows)
         if: matrix.script_type == 'pwsh'
         shell: pwsh
         run: |
-          $expected = (Get-Content tests\language\float_text.lar | Where-Object { $_.StartsWith('// output: ') } | ForEach-Object { $_.Substring(11) }) -join "`n"
-          $out = (& ..\out\larimar\bin\larimar.cmd tests\language\float_text.lar) -join "`n"
+          $expected = @('0.1 0.30000000000000004 2.0 100.0 1234567.0 1e+20 1e-05 0.0001 -0.0', '0.3333333333333333 nan inf -inf 1.5 true') -join "`n"
+          $out = (& ..\out\larimar\bin\larimar.cmd tests\cases\language\float_text.lar) -join "`n"
           if ($LASTEXITCODE -ne 0 -or $out -ne $expected) { throw "expected:`n$expected`ngot:`n$out" }
-          & ..\out\larimar\bin\larimar.cmd tests\language\sync_wait_until.lar
+          & ..\out\larimar\bin\larimar.cmd tests\cases\language\sync_wait_until.lar
           if ($LASTEXITCODE -ne 0) { throw "sync_wait_until failed" }
 
       # 5. Empaquetar el contenido de ../out/larimar

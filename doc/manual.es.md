@@ -20,7 +20,7 @@ Algunas palabras aparecen desde el principio:
 | **terminal** | la ventana donde se escriben comandos (Terminal en macOS, PowerShell en Windows) |
 
 Los nombres del lenguaje, de la herramienta y de los ejemplos están en inglés; las explicaciones, en español.
-[Read in English](MANUAL.md).
+[Read in English](manual.md).
 
 ## Índice
 
@@ -5138,34 +5138,37 @@ larimar/
     project/               el compilador de C, larimar test (larimar.toml se lee con std.encoding.toml)
   std/                   la biblioteca estándar
   tests/                 las pruebas (tests/lsp: check y el servidor de lenguaje)
-  debug/                 formateadores de valores para lldb y gdb
+  doc/                   el manual (manual.md en inglés; manual.es.md, este) y la especificación (spec.md)
+  bootstrap/
+    larimarc.c           el compilador ya traducido a C, para arrancar sin Larimar
+    build.sh, build.ps1  construyen el compilador e instalan la carpeta ../out/larimar
   bin/larimar            el lanzador que se instala
-  MANUAL.md              el manual en inglés (MANUAL_ES.md: este, en español)
-  larimarc_bootstrap.c   el compilador ya traducido a C, para arrancar sin Larimar
-  build-bootstrap.sh     construye el compilador e instala la carpeta ../out/larimar
+  tools/
+    debuggers/           formateadores de valores para lldb y gdb (se instalan como debug/)
+    tcc/                 construyen el tcc que traen los releases (Linux, Windows)
 ```
 
 Para construirlo solo hace falta un compilador de C:
 
 ```sh
 cd larimar
-./build-bootstrap.sh --verify
+./bootstrap/build.sh --verify
 ```
 
-1. Compila `larimarc_bootstrap.c` y obtiene `larimarc`.
+1. Compila `bootstrap/larimarc.c` y obtiene `larimarc`.
 2. Con `--verify`, compila `src/` tres veces: con ese larimarc (`build/stage1.c`), con el compilador que
    sale de ahí (`build/stage2.c`) y con el que sale de este (`build/stage3.c`). `stage2.c` y `stage3.c`
    deben ser idénticos byte a byte: el compilador, compilado por sí mismo, se produce a sí mismo. Si
-   `larimarc_bootstrap.c` es más antiguo que `src/`, lo avisa e instala el compilador hecho desde `src/`.
+   `bootstrap/larimarc.c` es más antiguo que `src/`, lo avisa e instala el compilador hecho desde `src/`.
 3. Instala en `../out/larimar` (o en `LARIMAR_PREFIX`) el resultado: `bin/larimarc`, `bin/larimar`, una
-   copia de `std/`, de `debug/` y del manual. Esa carpeta se puede borrar y regenerar cuando se quiera;
+   copia de `std/`, de `doc/` y de los formateadores (`debug/`). Esa carpeta se puede borrar y regenerar cuando se quiera;
    todo se edita en el repositorio.
 
-Después de cambiar el compilador, `./build-bootstrap.sh --verify` lo comprueba e instala, y el C de
+Después de cambiar el compilador, `./bootstrap/build.sh --verify` lo comprueba e instala, y el C de
 arranque se actualiza con lo que indica:
 
 ```sh
-cp build/stage2.c larimarc_bootstrap.c
+cp build/stage2.c bootstrap/larimarc.c
 ```
 
 `bin/larimar` fija `LARIMAR_HOME` en la carpeta de la instalación, y el compilador busca la biblioteca
@@ -5174,7 +5177,7 @@ estándar en `$LARIMAR_HOME/std`.
 **Una regla al cambiar el lenguaje.** El compilador se construye con su propia biblioteca estándar, así
 que `std/` solo puede usar lo que ya entiende el compilador que lo compila. Si añades algo al lenguaje
 (como `panic`) y quieres usarlo en `std/`, primero se añade al compilador, se regenera
-`larimarc_bootstrap.c` con un compilador que ya lo entiende, y después se usa en `std/`.
+`bootstrap/larimarc.c` con un compilador que ya lo entiende, y después se usa en `std/`.
 
 ### Las pruebas
 
@@ -5214,8 +5217,8 @@ el ayudante escribe y compila queda en `build/test/cases/`. Compila con `$CC` (o
 AddressSanitizer y UBSan salvo en Windows, con tcc o con `LARIMAR_TEST_SANITIZE=0`.
 
 ```sh
-./build-bootstrap.sh --verify --test  # construir, comprobar que se compila a sí mismo, probar e instalar
-tests/run-tests.sh                    # todas, con el larimarc que hizo build-bootstrap.sh
+./bootstrap/build.sh --verify --test  # construir, comprobar que se compila a sí mismo, probar e instalar
+tests/run-tests.sh                    # todas, con el larimarc que hizo bootstrap/build.sh
 tests/run-tests.sh memory             # solo las que tienen "memory" en la ruta o el nombre
 larimarc test tests/memory            # solo larimarc test, sobre una carpeta
 LARIMARC=build/larimarc_stage2 tests/run-tests.sh

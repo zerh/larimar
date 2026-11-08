@@ -7,16 +7,16 @@
 #   bin/larimarc    the compiler
 #   bin/larimar     wrapper that sets LARIMAR_HOME
 #   std/            copy of std/
-#   MANUAL.md       copy of MANUAL.md
-#   debug/          lldb and gdb formatters (larimar build --debug, VS Code)
+#   doc/            the manuals and the specification
+#   debug/          lldb and gdb formatters (from tools/debuggers) (larimar build --debug, VS Code)
 #
 # Requirements: a C99 compiler (cc, gcc, clang, tcc...).
 #
 # Usage:
-#   ./build-bootstrap.sh                  # build ./larimarc and install it
-#   ./build-bootstrap.sh --verify         # also check that it compiles itself
-#   ./build-bootstrap.sh --no-install     # only build ./larimarc
-#   ./build-bootstrap.sh --verify --test  # also run tests/run-tests.sh (needs AddressSanitizer)
+#   ./bootstrap/build.sh                  # build ./larimarc and install it
+#   ./bootstrap/build.sh --verify         # also check that it compiles itself
+#   ./bootstrap/build.sh --no-install     # only build ./larimarc
+#   ./bootstrap/build.sh --verify --test  # also run tests/run-tests.sh (needs AddressSanitizer)
 #
 # Environment:
 #   CC              C compiler (default: cc)
@@ -24,7 +24,7 @@
 #   LARIMAR_PREFIX  installation folder (default: ../out/larimar)
 
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."                 # the repository, whatever folder this is run from
 HERE="$(pwd)"
 
 CC="${CC:-cc}"
@@ -44,7 +44,7 @@ for arg in "$@"; do
     esac
 done
 
-for f in larimarc_bootstrap.c std/lang.lar MANUAL.md bin/larimar; do
+for f in bootstrap/larimarc.c std/lang.lar doc/manual.md bin/larimar; do
     if [ ! -e "$f" ]; then
         echo "ERROR: $f not found in $HERE"
         exit 1
@@ -58,8 +58,8 @@ export LARIMAR_HOME="$HERE"
 echo "=== Building the Larimar compiler ==="
 echo "C compiler: $CC $CFLAGS"
 echo ""
-echo "Step 1: compiling larimarc_bootstrap.c ($(wc -l < larimarc_bootstrap.c | tr -d ' ') lines)..."
-$CC $CFLAGS larimarc_bootstrap.c -o "$OUTPUT"
+echo "Step 1: compiling bootstrap/larimarc.c ($(wc -l < bootstrap/larimarc.c | tr -d ' ') lines)..."
+$CC $CFLAGS bootstrap/larimarc.c -o "$OUTPUT"
 echo "  -> ./$OUTPUT"
 
 if [ "$VERIFY" = 1 ]; then
@@ -80,11 +80,11 @@ if [ "$VERIFY" = 1 ]; then
         diff build/stage2.c build/stage3.c | head -20
         exit 1
     fi
-    if cmp -s larimarc_bootstrap.c build/stage2.c; then
-        echo "  OK: larimarc_bootstrap.c is up to date with src/"
+    if cmp -s bootstrap/larimarc.c build/stage2.c; then
+        echo "  OK: bootstrap/larimarc.c is up to date with src/"
     else
-        echo "  NOTE: larimarc_bootstrap.c is older than src/; installing the compiler built from src/."
-        echo "        To update it: cp build/stage2.c larimarc_bootstrap.c"
+        echo "  NOTE: bootstrap/larimarc.c is older than src/; installing the compiler built from src/."
+        echo "        To update it: cp build/stage2.c bootstrap/larimarc.c"
         rm -f "$OUTPUT"; cp build/larimarc_stage2 "$OUTPUT"     # a new file: macOS kills a signed binary changed in place
     fi
 fi
@@ -111,9 +111,10 @@ if [ "$INSTALL" = 1 ]; then
     chmod +x "$PREFIX/bin/larimarc" "$PREFIX/bin/larimar"
     rm -rf "$PREFIX/std"
     cp -R std "$PREFIX/std"
-    cp MANUAL.md "$PREFIX/MANUAL.md"
+    rm -rf "$PREFIX/doc" "$PREFIX/MANUAL.md"
+    cp -R doc "$PREFIX/doc"
     rm -rf "$PREFIX/debug"
-    cp -R debug "$PREFIX/debug"
+    cp -R tools/debuggers "$PREFIX/debug"
     PREFIX_ABS="$(cd "$PREFIX" && pwd)"
     echo "  -> $PREFIX_ABS"
     echo ""
