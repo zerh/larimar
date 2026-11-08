@@ -616,11 +616,17 @@ function nativeMember(owner: String in default, line: int32, property: bool, isS
     }
     expect(TT.Assign, "Expected '=' and its C function (= c_name;) or a Larimar expression");
     let value: Expr? = null;
-    if ((at(TT.Ident) || at(TT.Str)) && next().kind == TT.Semi) {
+    if ((at(TT.Ident) || at(TT.Str)) && (next().kind == TT.Semi || next().kind == TT.Ident && next().text == "released")) {
         let c: Token = advance();
         let cFunction: ExternFunctionDecl = ExternFunctionDecl {
             line: c.line, name: "${owner}__${name.text}" in default, cName: c.text, ret: declaration.ret.clone() in default
         } in default;
+        if (atWord("released")) {            // = c_f released by r: the text C makes is copied, then released
+            advance();
+            let by: Token = expect(TT.Ident, "Expected 'by' and the function that releases the text: released by free");
+            if (by.text != "by") { error(by.line, "Expected 'by' after 'released': released by free"); }
+            cFunction.releasedBy = expect(TT.Ident, "Expected the function that releases the result of '${name.text}' after 'released by'").text;
+        }
         let args: Expr[*] = [] in default;
         let kept: Param[*] = [] in default;
         let late: Param[*] = [] in default;

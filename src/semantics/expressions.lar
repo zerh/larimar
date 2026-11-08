@@ -545,7 +545,7 @@ function checkInner(e: Expr in default, expected: Type? in default, place: Place
         case Ident id -> checkIdent(id, expected);
         case SelfExpr -> checkSelf(e);
         case SuperMember s -> wrong(e.line, "'super' can only be used to call a parent method: super.${s.name}(...)");
-        case Member m -> checkMember(m);
+        case Member m -> checkMember(m, place);
         case Index x -> checkIndex(x);
         case Call c -> checkCall(c, expected, place);
         case Unary u -> checkUnary(u, expected, place);
@@ -709,7 +709,7 @@ function memoryNamed(e: Expr): Symbol? {
     return s != null && isMemory(s) ? s : null;
 }
 
-function checkMember(m: Member in default): Type {
+function checkMember(m: Member in default, place: Place in default): Type {
     let obj: Expr = m.object;
     // Enum constants: State.On
     let e: EnumInfo? = enumNamed(obj);
@@ -786,11 +786,18 @@ function checkMember(m: Member in default): Type {
     }
     let pm: MethodInfo? = methodOf(ot, m.name);
     if (pm != null && pm.decl.isProperty) {         // native let: read like a field
-        if (hasRefs(pm.sig!.elem!)) { return wrong(m.line, "A native let gives a number or bool ('${m.name}' is ${pm.sig!.elem!.text})."); }
+        let pt: Type = pm.sig!.elem!;
+        let text: bool = pt == T_STRING || pt == optT(T_STRING);
+        if (hasRefs(pt) && !text) { return wrong(m.line, "A native let gives a number, bool, String or String? ('${m.name}' is ${pt.text})."); }
         for (t in callTargets(ot, pm)) { edge(currentOwner(), t.own); }
         m.member = MemberInfo { kind: MbK.Property, method: pm, objectType: ot } in default;
-        setRegion(m, R_STATIC);
-        return pm.sig!.elem!;
+        if (text) {                          // a text: made where the value goes, like the result of a call
+            m.place = place;
+            setRegion(m, placedResult(m, pt, place));
+        } else {
+            setRegion(m, R_STATIC);
+        }
+        return pt;
     }
     if (pm != null) { return wrong(m.line, "Method '${m.name}' must be called: ${m.name}(...)"); }
     return wrong(m.line, "'${ot.text}' has no field '${m.name}'.");

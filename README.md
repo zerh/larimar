@@ -66,8 +66,9 @@ A project with `kind = "library"` builds a library instead of an executable, sta
 gets four files: `lib<name>.a`, `<name>.h` for C, `<name>.lar` for Larimar (its `export function`s as
 `native` declarations) and `<name>.interface` with an 8-digit hash of the `.lar` that the library also has
 inside, so a program that links it (`static_libraries` or `dynamic_libraries` in `[c]`, then
-`import <name>`) builds only with files of one build. The library's classes go to C as handles, its texts
-as copies to free; everything else of its C is static, so libraries and programs do not clash. See
+`import <name>`) builds only with files of one build. The library's classes go to C as handles, with
+their fields and methods (`tk_Counter_add(c, "x")` in C, `c.add("x")` in Larimar), its texts as copies to
+free; everything else of its C is static, so libraries and programs do not clash. See
 "Libraries written in Larimar" in chapter 26 of `MANUAL.md`.
 
 ## Building from C Bootstrap

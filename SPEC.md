@@ -539,8 +539,8 @@ of C are in [§19.4](#194-native-types):
 
 `native function ... = expression;` can also be written in a class, and so can
 `native let name: T = expression;`: a value read without parentheses (`sb.length`), computed by that
-expression, of a number type or `bool`. A `native let` is never assigned, and calling it with
-parentheses is an error.
+expression, of a number type, `bool`, `String` or `String?` (a text is made where the value goes, like the
+result of a call). A `native let` is never assigned, and calling it with parentheses is an error.
 
 ---
 
@@ -1456,6 +1456,8 @@ Each native type is distinct, even when two declarations are equal. The members 
   arguments; before `self` goes only the memory of the call, when the first parameter is one. A parameter
   of type `Context` is not part of the method. Any other expression after `=` is Larimar, as in a class.
 - **`native let x: T = C;`** is the same with no arguments, read without parentheses.
+- After `= C` of either, `released by r` works as for a native function ([§19.3](#193-native-functions)):
+  the text C makes is copied where the value goes, then released.
 - **`function`** is a method written in Larimar; `self` is the C value.
 - **`static native function f(...) = C;`** calls that C function without `self`; `static function` is
   written in Larimar. Both are called as `NAME.f(...)`.
@@ -1557,12 +1559,17 @@ given by the project (by default, its name; it may be empty). In a library:
 - A class is a **handle** in C (`<prefix>_<Class>*`). An object returned to C lives, with everything it
   creates afterwards, in a memory of its own, freed by `<prefix>_<Class>_release`. A `NULL` handle passed
   where a class is expected is a panic; where an optional is expected, it is `null`.
+- The fields and instance methods of such a class (and of its parents) whose types are those above go
+  to C too, except fields of a class type, operators, methods that throw, take a memory or say where
+  their result lives, and a method called `release`: a field is read with `<prefix>_<Class>_<field>(h)`,
+  a method is called with `<prefix>_<Class>_<method>(h, ...)` through dynamic dispatch.
 - A `String` result is freed by C with `<prefix>_free`.
 - The globals are initialized before the first call.
 
 The compiler also writes the library's interface for C (a header) and for Larimar (a module of `native`
 declarations of the same functions, where a class is a resource released by `<prefix>_<Class>_release`
-and a text is `released by <prefix>_free`), and an interface hash: the first 8 hexadecimal digits of the
+with its fields as `native let` and its methods as `native function`, and a text is
+`released by <prefix>_free`), and an interface hash: the first 8 hexadecimal digits of the
 SHA-256 of that module, which the library contains and returns from `<prefix>_interface`. A program that
 links the library compiles only if the module it imports, the hash and the library agree.
 

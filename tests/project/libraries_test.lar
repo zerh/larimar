@@ -35,24 +35,29 @@ const LIBRARY: String = raw"""
         return null;
     }
 
+    /** Counts words as they come. */
     public class Counter {
+        /** The words counted. */
         let words: int32 = 0;
+        let name: String = "";
         let texts: String[*] = [];
+
+        function add(text: String): void {
+            self.words += wordCount(text);
+            self.texts.push(text.clone());
+        }
+
+        function last(): String? {
+            if (self.texts.length == 0) { return null; }
+            return self.texts[self.texts.length - 1].clone();
+        }
+
+        function copy(): Counter { return Counter { words: self.words, name: "${self.name} (copy)" }; }
     }
 
-    public export function newCounter(): Counter { return Counter {}; }
-
-    public export function add(c: Counter, text: String): void {
-        c.words += wordCount(text);
-        c.texts.push(text.clone());
-    }
+    public export function newCounter(name: String): Counter { return Counter { name: name.clone() }; }
 
     public export function total(c: Counter): int32 { return c.words; }
-
-    public export function last(c: Counter): String? {
-        if (c.texts.length == 0) { return null; }
-        return c.texts[c.texts.length - 1].clone();
-    }
 
     public export function answer(): int32 = tk_answer { return 42; }
     """;
@@ -65,16 +70,21 @@ const C_PROGRAM: String = """
     int main(void) {
         char* t = tk_title("larimar");
         char* w = tk_firstWord("  two words");
-        tk_Counter* c = tk_newCounter();
-        tk_add(c, "one two");
-        tk_add(c, "three");
-        char* l = tk_last(c);
+        tk_Counter* c = tk_newCounter("mine");
+        tk_Counter_add(c, "one two");
+        tk_Counter_add(c, "three");
+        char* l = tk_Counter_last(c);
+        tk_Counter* d = tk_Counter_copy(c);
+        char* n = tk_Counter_name(d);
         printf("%d %s %s %d %s %d\\n", tk_wordCount("a b  c"), t, w, tk_total(c), l, tk_answer());
+        printf("%d %s\\n", tk_Counter_words(d), n);
         printf("%s\\n", tk_firstWord(NULL) == NULL ? "null" : "not null");
         printf("%s\\n", strcmp(tk_interface(), TEXTKIT_INTERFACE) == 0 ? "same interface" : "another interface");
         tk_free(t);
         tk_free(w);
         tk_free(l);
+        tk_free(n);
+        tk_Counter_release(d);
         tk_Counter_release(c);
         return 0;
     }
@@ -86,10 +96,12 @@ const LARIMAR_PROGRAM: String = raw"""
     import textkit { Counter };
 
     function main(): int32 {
-        let c: Counter = textkit.newCounter();
-        textkit.add(c, "one two");
-        textkit.add(c, "three");
-        println("${textkit.wordCount("a b  c")} ${textkit.title("larimar")} ${textkit.firstWord("  two words") ?? "-"} ${textkit.total(c)} ${textkit.last(c) ?? "-"} ${textkit.answer()}");
+        let c: Counter = textkit.newCounter("mine");
+        c.add("one two");
+        c.add("three");
+        println("${textkit.wordCount("a b  c")} ${textkit.title("larimar")} ${textkit.firstWord("  two words") ?? "-"} ${textkit.total(c)} ${c.last() ?? "-"} ${textkit.answer()}");
+        let d: Counter = c.copy();
+        println("${d.words} ${d.name}");
         println(textkit.firstWord(null) ?? "null");
         for (i in 0..3) { println(textkit.title("x${i}")); }
         return 0;
@@ -145,7 +157,7 @@ function buildLibrary(dir: String, args: String[*]): String {
     return Paths.join(dir, "build/textkit");
 }
 
-const LARIMAR_OUTPUT: String = "3 Larimar two 3 three 42\nnull\nX0\nX1\nX2\n";
+const LARIMAR_OUTPUT: String = "3 Larimar two 3 three 42\n3 mine (copy)\nnull\nX0\nX1\nX2\n";
 
 function onlyLinuxOrMac(): bool {
     if (os.platform() == "windows") {
@@ -165,7 +177,10 @@ test function aStaticLibraryForCAndForLarimar(): void throws IoError {
     check(itf.contains("type = \"static\"") && itf.contains("prefix = \"tk\""), "the interface says what it is: ${itf}");
     let module: String = Files.readString(Paths.join(lib, "textkit.lar"));
     check(module.contains("public native function title(text: String): String = tk_title released by tk_free;"), "a text is copied and freed: ${module}");
-    check(module.contains("public native type Counter = tk_Counter* released by tk_Counter_release;"), "a class is a handle: ${module}");
+    check(module.contains("public native type Counter = tk_Counter* released by tk_Counter_release {"), "a class is a handle: ${module}");
+    check(module.contains("    native let name: String = tk_Counter_name released by tk_free;"), "its fields are read: ${module}");
+    check(module.contains("    native function add(text: String): void = tk_Counter_add;"), "its methods are called: ${module}");
+    check(module.contains("// not given to C (they do not cross): texts (String[*])"), "and it says what stays inside: ${module}");
     check(Files.readString(Paths.join(lib, "textkit.h")).contains("int32_t tk_answer(void);"), "= c_name names it in C");
     // from C
     let cc: String = (os.env("CC") ?? "").trim();
@@ -176,7 +191,7 @@ test function aStaticLibraryForCAndForLarimar(): void throws IoError {
     checkInt(0, execute(cc != "" ? cc : "cc", cmd, output));
     output.clear();
     checkInt(0, execute(exe, [], output));
-    checkText("3 Larimar two 3 three 42\nnull\nsame interface\n", output.join(""));
+    checkText("3 Larimar two 3 three 42\n3 mine (copy)\nnull\nsame interface\n", output.join(""));
     // from Larimar
     let app: String = writeProgram("lib-static-app", lib, "static_libraries = [\"textkit\"]\nstatic_library_paths = [\"libs/textkit\"]\n");
     output.clear();
@@ -240,8 +255,8 @@ test function theTestsOfALibraryUseItsRules(): void throws IoError {
         import textkit;
         import std.test { checkInt };
         test function counts(): void {
-            let c: textkit.Counter = textkit.newCounter();
-            textkit.add(c, "a b");
+            let c: textkit.Counter = textkit.newCounter("t");
+            c.add("a b");
             checkInt(2, textkit.total(c));
         }
         """);

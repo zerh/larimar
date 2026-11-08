@@ -2653,6 +2653,9 @@ Salida: `clicks: 17 17`
   Si su primer parámetro es una memoria (`m: byte[*]`), esa va antes de `self` y no se escribe en la
   llamada, como en [Pasar una memoria a C](#pasar-una-memoria-a-c).
 - **`native let x: T = c_x;`** es lo mismo sin argumentos, y se lee sin paréntesis.
+- Después del `= c_m` de cualquiera de los dos, **`released by f`** dice que C hace el texto que devuelve,
+  que se copia y se libera ([Textos que hace C](#textos-que-hace-c-released-by-en-una-función)):
+  `native let name: String = item_name released by free;`.
 - Con cualquier otra expresión después del `=`, el método es esa expresión de Larimar, como en una clase:
   `native function ok(text: String): void = reply(self, 200, text);`.
 - **`function`** es un método escrito en Larimar, y **`static native function`** llama a una función de C
@@ -4364,7 +4367,8 @@ prefix = "tk"                # sus nombres de C empiezan con él: tk_wordCount (
 `larimar new textkit --library` crea una así, con una export function y una prueba de ella. El nombre de
 una biblioteca es también su módulo y sus archivos, así que solo lleva letras, dígitos y `_`.
 
-Lo que C (y Larimar) ve de una biblioteca son sus **export functions** ([Que C llame a Larimar](#que-c-llame-a-larimar-export-function)):
+Lo que C (y Larimar) ve de una biblioteca son sus **export functions** ([Que C llame a Larimar](#que-c-llame-a-larimar-export-function))
+y las clases que dan o reciben, con sus campos y métodos:
 
 ```ts
 // src/textkit.lar
@@ -4386,14 +4390,25 @@ public export function title(text: String): String {
 
 /** Counts words as they come. */
 public class Counter {
+    /** The words counted so far. */
     let words: int32 = 0;
+    let texts: String[*] = [];
+
+    /** Counts the words of a text, and keeps it. */
+    function add(text: String): void {
+        self.words += wordCount(text);
+        self.texts.push(text.clone());
+    }
+
+    /** The last text it counted (null when there is none). */
+    function last(): String? {
+        if (self.texts.length == 0) { return null; }
+        return self.texts[self.texts.length - 1].clone();
+    }
 }
 
+/** A new counter, at zero. */
 public export function newCounter(): Counter { return Counter {}; }
-
-public export function add(c: Counter, text: String): void { c.words += wordCount(text); }
-
-public export function total(c: Counter): int32 { return c.words; }
 ```
 
 `larimar build` deja cuatro archivos en `build/textkit/`, que van juntos:
@@ -4411,6 +4426,21 @@ de la biblioteca y los que escribe el compilador, en inglés):
 ```c
 typedef struct tk_Counter tk_Counter;
 
+/* Counter: its fields (to read) and its methods; self is the handle. */
+
+/** The words counted so far. */
+int32_t tk_Counter_words(tk_Counter* self);
+
+/** Counts the words of a text, and keeps it. */
+void tk_Counter_add(tk_Counter* self, const char* text);
+
+/**
+ * The last text it counted (null when there is none).
+ *
+ * NULL, or a text that is yours: free it with tk_free.
+ */
+char* tk_Counter_last(tk_Counter* self);
+
 /** Counts the words of a text. */
 int32_t tk_wordCount(const char* text);
 
@@ -4421,12 +4451,12 @@ int32_t tk_wordCount(const char* text);
  */
 char* tk_title(const char* text);
 
-/** A new Counter that is yours: give it back with tk_Counter_release. */
+/**
+ * A new counter, at zero.
+ *
+ * A new Counter that is yours: give it back with tk_Counter_release.
+ */
 tk_Counter* tk_newCounter(void);
-
-void tk_add(tk_Counter* c, const char* text);
-
-int32_t tk_total(tk_Counter* c);
 
 /** Gives back a Counter (NULL does nothing). */
 void tk_Counter_release(tk_Counter* handle);
@@ -4445,10 +4475,12 @@ const char* tk_interface(void);
 int main(void) {
     char* t = tk_title("larimar");
     tk_Counter* c = tk_newCounter();
-    tk_add(c, "one two");
-    tk_add(c, "three");
-    printf("%s %d %d\n", t, tk_wordCount("a b c"), tk_total(c));
+    tk_Counter_add(c, "one two");
+    tk_Counter_add(c, "three");
+    char* last = tk_Counter_last(c);
+    printf("%s %d %d %s\n", t, tk_wordCount("a b c"), tk_Counter_words(c), last);
     tk_free(t);
+    tk_free(last);
     tk_Counter_release(c);
     return 0;
 }
@@ -4456,7 +4488,7 @@ int main(void) {
 
 ```sh
 cc -std=c99 -Ibuild/textkit main.c build/textkit/libtextkit.a -lm
-./a.out                                  # Larimar 3 3
+./a.out                                  # Larimar 3 3 three
 ```
 
 Lo que una biblioteca estática necesita enlazado además está en `links` de su `.interface` (`-lm`,
@@ -4477,13 +4509,14 @@ import textkit { Counter };
 
 function main(): int32 {
     let c: Counter = textkit.newCounter();
-    textkit.add(c, "one two");
-    println("${textkit.title("larimar")} ${textkit.total(c)}");
+    c.add("one two");
+    c.add("three");
+    println("${textkit.title("larimar")} ${c.words} ${c.last() ?? "-"}");
     return 0;
 }
 ```
 
-Salida: `Larimar 2`
+Salida: `Larimar 3 three`
 
 Como `textkit.interface` está en esa carpeta, el compilador sabe que es una biblioteca escrita en
 Larimar: `import textkit` encuentra ahí `textkit.lar` (también `larimar check` y el editor), se incluye su
@@ -4492,7 +4525,16 @@ Larimar: `import textkit` encuentra ahí `textkit.lar` (también `larimar check`
 ```ts
 c_include "textkit.h";
 
-public native type Counter = tk_Counter* released by tk_Counter_release;
+/** Counts words as they come. */
+public native type Counter = tk_Counter* released by tk_Counter_release {
+    // not given to C (they do not cross): texts (String[*])
+    /** The words counted so far. */
+    native let words: int32 = tk_Counter_words;
+    /** Counts the words of a text, and keeps it. */
+    native function add(text: String): void = tk_Counter_add;
+    /** The last text it counted (null when there is none). */
+    native function last(): String? = tk_Counter_last released by tk_free;
+}
 
 /** Counts the words of a text. */
 public native function wordCount(text: String): int32 = tk_wordCount;
@@ -4500,12 +4542,9 @@ public native function wordCount(text: String): int32 = tk_wordCount;
 /** The text with its first letter in upper case. */
 public native function title(text: String): String = tk_title released by tk_free;
 
+/** A new counter, at zero. */
 public function newCounter(): Counter { return newCounter_c()!; }
 native function newCounter_c(): Counter? = tk_newCounter;
-
-public native function add(c: Counter, text: String): void = tk_add;
-
-public native function total(c: Counter): int32 = tk_total;
 
 // what gives back the texts and objects of the library (only the compiler calls them)
 native function tk_free(text: String): void = tk_free;
@@ -4515,7 +4554,8 @@ native function tk_Counter_release(handle: Counter): void = tk_Counter_release;
 Un texto de la biblioteca se copia en la memoria del programa y se libera en seguida
 ([`released by` en una función](#textos-que-hace-c-released-by-en-una-función)); un `Counter` es un
 [recurso](#recursos-released-by): cuando se libera la memoria donde vive, `tk_Counter_release` lo
-devuelve. No se libera nada a mano, y las funciones tienen los mismos nombres y tipos que en la biblioteca.
+devuelve. No se libera nada a mano, y la clase se usa como en la biblioteca: se llaman sus métodos
+(`c.add("x")`), se leen sus campos (`c.words`), y las funciones tienen los mismos nombres y tipos.
 
 **El hash de la interfaz.** El `.interface` tiene ocho dígitos hexadecimales, el comienzo del SHA-256 del
 `.lar`; la biblioteca tiene los mismos dentro (`tk_interface()` los devuelve, y el `.h` los tiene en
@@ -4536,16 +4576,24 @@ archivos nuevos que van juntos. Un programa de C puede comprobar lo mismo al arr
 - **Sus nombres de C** son `<prefijo>_<nombre>` (`tk_wordCount`). `= nombre_c` después de la firma le da
   uno propio (`export function answer(): int32 = tk_the_answer { ... }`), y `prefix = ""` deja los
   nombres como están. La biblioteca misma da `<prefijo>_free`, `<prefijo>_<Clase>_release` y
-  `<prefijo>_interface`: una export function no puede tomar esos nombres.
+  `<prefijo>_interface`: una export function no puede tomar esos nombres (ni un método llamarse `release`).
 - **Sus tipos**: números, `bool`, `String` y `String?` (`const char*`; `NULL` es `null`), y las **clases**
   de la biblioteca y sus opcionales. Los tipos native y los structs de C no van: son de cabeceras de C que
   el programa también necesitaría.
 - **Un texto que devuelve** es una copia (`char*`) para quien llama: C la libera con `<prefijo>_free`.
-- **Un objeto que devuelve** es un **handle**: C lo guarda (`tk_Counter*`), lo pasa a otras export
-  functions y lo devuelve con `<prefijo>_<Clase>_release`. El handle tiene su propia memoria: lo que el
+- **Un objeto que devuelve** es un **handle**: C lo guarda (`tk_Counter*`), lo pasa a sus métodos y a
+  otras export functions, y lo devuelve con `<prefijo>_<Clase>_release`. El handle tiene su propia memoria: lo que el
   objeto crea después (una lista que crece, sus textos) vive ahí y se libera con él. Un `NULL` donde se
   espera una clase detiene el programa con un pánico que nombra la función y el parámetro
-  (`tk_add: 'c' is NULL`); donde se espera `Counter?`, es `null`.
+  (`tk_Counter_add: 'self' is NULL`); donde se espera `Counter?`, es `null`.
+- **También van los miembros de sus clases.** Por cada clase que C recibe: cada campo se lee con
+  `<prefijo>_<Clase>_<campo>(handle)` (un texto: una copia que se libera) y cada método se llama con
+  `<prefijo>_<Clase>_<método>(handle, ...)`, por su vtable, así que corre el método de una subclase.
+  Van también los miembros de sus padres. En el `.lar` son un `native let` y una `native function` de
+  la clase, así que un programa escribe `c.words` y `c.add("x")`. Un campo solo se lee: se cambia con un
+  método. Lo que no cruza (un campo lista, un método que lanza o que recibe una lista, un operador) se
+  queda dentro, y el `.lar` lo dice en un comentario. Un campo de tipo clase tampoco va: su objeto es
+  del otro; un método que devuelve uno nuevo sí.
 - **Cada llamada tiene su propia memoria**, que se libera al volver. Las globales de la biblioteca se
   crean al cargarla (o en su primera llamada) y viven lo que dura el programa.
 - **`export` no hace `public` a una función**: con las dos, las pruebas de la biblioteca (y sus otros
@@ -4582,7 +4630,8 @@ aplican a su código las reglas de una biblioteca.
 - **Los cuatro archivos se generan**: no se editan, no se guardan en el repositorio de la biblioteca
   (están en `build/`) y se publican juntos.
 - **Todavía no**: las listas, los callbacks y los errores (`throws`) no cruzan una biblioteca; van como
-  textos, handles y números (un código de error), o se quedan dentro.
+  textos, handles y números (un código de error), o se quedan dentro. Un programa no crea objetos de la
+  biblioteca con `Counter {}`, ni extiende sus clases: los hacen sus funciones y métodos.
 
 ### Un ejemplo con Windows
 

@@ -567,8 +567,9 @@ function member(m: Member in default): String {
         case Property -> {           // native let: its method, with no arguments
             let pm: MethodInfo = mi.method!;
             let o: String = value(m.object);
-            if (isClass(mi.objectType!)) { return "${dispatchName(pm.introducer, pm)}((${pm.introducer}*)${o})"; }
-            return isExternT(mi.objectType!) ? "${methodName(pm)}(${o})" : "${methodName(pm)}(&${paren(o)})";   // a native type takes self by value
+            let dest: String = returnsData(pm.sig!.elem!) ? ", ${callMem(m)}" : "";       // a text: in the memory of the value
+            if (isClass(mi.objectType!)) { return "${dispatchName(pm.introducer, pm)}((${pm.introducer}*)${o}${dest})"; }
+            return isExternT(mi.objectType!) ? "${methodName(pm)}(${o}${dest})" : "${methodName(pm)}(&${paren(o)}${dest})";   // a native type takes self by value
         }
         case Length -> {
             let ot: Type = mi.objectType!;
