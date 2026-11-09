@@ -24,9 +24,6 @@ jobs:
           - os: macos-latest              # Apple Silicon
             artifact_name: larimar-macos-arm64.tar.gz
             script_type: sh
-          - os: macos-13                  # Intel
-            artifact_name: larimar-macos-x86_64.tar.gz
-            script_type: sh
           - os: windows-latest
             artifact_name: larimar-windows-x86_64.zip
             script_type: pwsh
@@ -138,3 +135,4 @@ jobs:
           files: |
             final-release/*
           generate_release_notes: true
+          make_latest: legacy
