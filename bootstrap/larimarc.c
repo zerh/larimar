@@ -651,271 +651,272 @@ static inline void* rt_unwrap(void* p, int line) {
     if (!p) rt_panic("'!' used on a null value", line);
     return p;
 }
-/* ---- runtime: Any ---------------------------------------------------- */
 
-enum { RT_ANY_NULL, RT_ANY_I8, RT_ANY_I16, RT_ANY_I32, RT_ANY_I64, RT_ANY_U8, RT_ANY_U16, RT_ANY_U32, RT_ANY_U64,
-       RT_ANY_F32, RT_ANY_F64, RT_ANY_BOOL, RT_ANY_STR, RT_ANY_TABLE, RT_ANY_OBJ, RT_ANY_VAL };
+    /* ---- runtime: Any ---------------------------------------------------- */
 
-static const char* const rt_any_kinds[] = { "null", "int8", "int16", "int32", "int64", "byte", "uint16", "uint32",
-    "uint64", "float32", "float64", "bool", "String", "a table", "an object", "a struct or enum" };
+    enum { RT_ANY_NULL, RT_ANY_I8, RT_ANY_I16, RT_ANY_I32, RT_ANY_I64, RT_ANY_U8, RT_ANY_U16, RT_ANY_U32, RT_ANY_U64,
+        RT_ANY_F32, RT_ANY_F64, RT_ANY_BOOL, RT_ANY_STR, RT_ANY_TABLE, RT_ANY_OBJ, RT_ANY_VAL };
 
-/* A struct or enum stored in an Any is copied into a box; this describes the box. */
-typedef struct RtValType {
-    const char* name;
-    void* (*clone)(const void* v, RtMem* mem, RtCloneMap* cm);
-} RtValType;
+    static const char* const rt_any_kinds[] = { "null", "int8", "int16", "int32", "int64", "byte", "uint16", "uint32",
+        "uint64", "float32", "float64", "bool", "String", "a table", "an object", "a struct or enum" };
 
-typedef struct RtTable RtTable;
-typedef struct RtAny {
-    int32_t kind;
-    union { int64_t i; uint64_t u; double f; bool b; RtString s; RtTable* t; struct { void* ptr; const void* type; } box; } as;
-} RtAny;
+    /* A struct or enum stored in an Any is copied into a box; this describes the box. */
+    typedef struct RtValType {
+        const char* name;
+        void* (*clone)(const void* v, RtMem* mem, RtCloneMap* cm);
+    } RtValType;
 
-/* Positions (items) and named entries (keys/values, in insertion order, with a hash index). */
-struct RtTable {
-    RtMem* mem;
-    RtAny* items; int32_t length, capacity;
-    RtString* keys; RtAny* values; int32_t count, cap;
-    int32_t* slots; int32_t nslots;          /* slot -> entry + 1; 0 is empty */
-};
+    typedef struct RtTable RtTable;
+    typedef struct RtAny {
+        int32_t kind;
+        union { int64_t i; uint64_t u; double f; bool b; RtString s; RtTable* t; struct { void* ptr; const void* type; } box; } as;
+    } RtAny;
 
-static inline RtAny rt_any_null(void) { RtAny a; memset(&a, 0, sizeof a); return a; }
-static inline RtAny rt_any_i(int64_t v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.i = v; return a; }
-static inline RtAny rt_any_u(uint64_t v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.u = v; return a; }
-static inline RtAny rt_any_f(double v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.f = v; return a; }
-static inline RtAny rt_any_b(bool v) { RtAny a = rt_any_null(); a.kind = RT_ANY_BOOL; a.as.b = v; return a; }
-static inline RtAny rt_any_s(RtString v) { RtAny a = rt_any_null(); a.kind = RT_ANY_STR; a.as.s = v; return a; }
-static inline RtAny rt_any_t(RtTable* v) { RtAny a = rt_any_null(); a.kind = RT_ANY_TABLE; a.as.t = v; return a; }
-/* A class object: stored by reference, with its class (for case Dog d). */
-static inline RtAny rt_any_obj(void* o) {
-    RtAny a = rt_any_null();
-    if (!o) return a;
-    a.kind = RT_ANY_OBJ;
-    a.as.box.ptr = o;
-    a.as.box.type = rt_obj_class(o);
-    return a;
-}
-static inline RtAny rt_any_val(void* box, const RtValType* type) {
-    RtAny a = rt_any_null();
-    a.kind = RT_ANY_VAL;
-    a.as.box.ptr = box;
-    a.as.box.type = type;
-    return a;
-}
-static inline bool rt_any_is_obj(RtAny a, const RtClass* c) {
-    return a.kind == RT_ANY_OBJ && rt_is_a((const RtClass*)a.as.box.type, c);
-}
-static inline bool rt_any_is_val(RtAny a, const RtValType* t) { return a.kind == RT_ANY_VAL && a.as.box.type == t; }
+    /* Positions (items) and named entries (keys/values, in insertion order, with a hash index). */
+    struct RtTable {
+        RtMem* mem;
+        RtAny* items; int32_t length, capacity;
+        RtString* keys; RtAny* values; int32_t count, cap;
+        int32_t* slots; int32_t nslots;          /* slot -> entry + 1; 0 is empty */
+    };
 
-static inline RtTable* rt_table_new(RtMem* mem, int line) {
-    RtTable* t = (RtTable*)rt_mem_alloc(mem, sizeof(RtTable), line);
-    t->mem = mem;
-    return t;
-}
-
-static inline RtTable* rt_any_table(RtAny a, int line) {
-    if (a.kind != RT_ANY_TABLE) {
-        char msg[96];
-        snprintf(msg, sizeof msg, "this Any is not a table (it holds %s)", rt_any_kinds[a.kind]);
-        rt_panic(msg, line);
+    static inline RtAny rt_any_null(void) { RtAny a; memset(&a, 0, sizeof a); return a; }
+    static inline RtAny rt_any_i(int64_t v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.i = v; return a; }
+    static inline RtAny rt_any_u(uint64_t v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.u = v; return a; }
+    static inline RtAny rt_any_f(double v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.f = v; return a; }
+    static inline RtAny rt_any_b(bool v) { RtAny a = rt_any_null(); a.kind = RT_ANY_BOOL; a.as.b = v; return a; }
+    static inline RtAny rt_any_s(RtString v) { RtAny a = rt_any_null(); a.kind = RT_ANY_STR; a.as.s = v; return a; }
+    static inline RtAny rt_any_t(RtTable* v) { RtAny a = rt_any_null(); a.kind = RT_ANY_TABLE; a.as.t = v; return a; }
+    /* A class object: stored by reference, with its class (for case Dog d). */
+    static inline RtAny rt_any_obj(void* o) {
+        RtAny a = rt_any_null();
+        if (!o) return a;
+        a.kind = RT_ANY_OBJ;
+        a.as.box.ptr = o;
+        a.as.box.type = rt_obj_class(o);
+        return a;
     }
-    return a.as.t;
-}
-
-static inline RtMem* rt_any_mem(RtAny a, int line) { return rt_any_table(a, line)->mem; }
-
-static inline void rt_table_push(RtTable* t, RtAny v, int line) {
-    if (t->length == t->capacity) {
-        int32_t nc = t->capacity ? t->capacity * 2 : 8;
-        RtAny* ni = (RtAny*)rt_mem_try_realloc(t->mem, t->items, sizeof(RtAny) * (size_t)t->capacity, sizeof(RtAny) * (size_t)nc);
-        if (!ni) rt_panic("memory is full", line);
-        t->items = ni;
-        t->capacity = nc;
+    static inline RtAny rt_any_val(void* box, const RtValType* type) {
+        RtAny a = rt_any_null();
+        a.kind = RT_ANY_VAL;
+        a.as.box.ptr = box;
+        a.as.box.type = type;
+        return a;
     }
-    t->items[t->length++] = v;
-}
-
-static inline uint32_t rt_str_hash(RtString s) {
-    uint32_t h = 2166136261u;
-    for (int32_t i = 0; i < s.len; i++) { h ^= (uint8_t)s.ptr[i]; h *= 16777619u; }
-    return h;
-}
-
-static inline int32_t rt_table_find(const RtTable* t, RtString key) {
-    if (t->nslots == 0) return -1;
-    uint32_t mask = (uint32_t)t->nslots - 1;
-    for (uint32_t i = rt_str_hash(key) & mask;; i = (i + 1) & mask) {
-        int32_t e = t->slots[i];
-        if (e == 0) return -1;
-        if (rt_str_eq(t->keys[e - 1], key)) return e - 1;
+    static inline bool rt_any_is_obj(RtAny a, const RtClass* c) {
+        return a.kind == RT_ANY_OBJ && rt_is_a((const RtClass*)a.as.box.type, c);
     }
-}
+    static inline bool rt_any_is_val(RtAny a, const RtValType* t) { return a.kind == RT_ANY_VAL && a.as.box.type == t; }
 
-static inline void rt_table_index(RtTable* t, int32_t nslots, int line) {
-    int32_t* slots = (int32_t*)rt_mem_alloc(t->mem, sizeof(int32_t) * (size_t)nslots, line);
-    uint32_t mask = (uint32_t)nslots - 1;
-    for (int32_t e = 0; e < t->count; e++) {
-        uint32_t i = rt_str_hash(t->keys[e]) & mask;
-        while (slots[i] != 0) i = (i + 1) & mask;
-        slots[i] = e + 1;
+    static inline RtTable* rt_table_new(RtMem* mem, int line) {
+        RtTable* t = (RtTable*)rt_mem_alloc(mem, sizeof(RtTable), line);
+        t->mem = mem;
+        return t;
     }
-    t->slots = slots;
-    t->nslots = nslots;
-}
 
-/* The key is copied into the table's memory, so it lives as long as the table. */
-static inline void rt_table_set(RtTable* t, RtString key, RtAny v, int line) {
-    int32_t e = rt_table_find(t, key);
-    if (e >= 0) { t->values[e] = v; return; }
-    if (t->count == t->cap) {
-        int32_t nc = t->cap ? t->cap * 2 : 8;
-        RtString* nk = (RtString*)rt_mem_try_realloc(t->mem, t->keys, sizeof(RtString) * (size_t)t->cap, sizeof(RtString) * (size_t)nc);
-        RtAny* nv = nk ? (RtAny*)rt_mem_try_realloc(t->mem, t->values, sizeof(RtAny) * (size_t)t->cap, sizeof(RtAny) * (size_t)nc) : NULL;
-        if (!nk || !nv) rt_panic("memory is full", line);
-        t->keys = nk;
-        t->values = nv;
-        t->cap = nc;
-    }
-    e = t->count++;
-    t->keys[e] = rt_str_clone(key, t->mem, line);
-    t->values[e] = v;
-    if (t->count * 2 > t->nslots) {
-        rt_table_index(t, t->nslots ? t->nslots * 2 : 16, line);
-    } else {
-        uint32_t mask = (uint32_t)t->nslots - 1;
-        uint32_t i = rt_str_hash(key) & mask;
-        while (t->slots[i] != 0) i = (i + 1) & mask;
-        t->slots[i] = e + 1;
-    }
-}
-
-/* Reading never fails: a missing entry, or reading from something that is not a table, gives null. */
-static inline RtAny rt_any_get(RtAny a, RtString key) {
-    if (a.kind != RT_ANY_TABLE) return rt_any_null();
-    int32_t e = rt_table_find(a.as.t, key);
-    return e < 0 ? rt_any_null() : a.as.t->values[e];
-}
-
-static inline RtAny rt_any_at(RtAny a, int64_t i) {
-    if (a.kind != RT_ANY_TABLE || i < 0 || i >= a.as.t->length) return rt_any_null();
-    return a.as.t->items[i];
-}
-
-static inline void rt_any_set(RtAny a, RtString key, RtAny v, int line) { rt_table_set(rt_any_table(a, line), key, v, line); }
-
-static inline void rt_any_push(RtAny a, RtAny v, int line) { rt_table_push(rt_any_table(a, line), v, line); }
-
-/* Rebuilds the name index in place (after entries were removed). */
-static inline void rt_table_rehash(RtTable* t) {
-    if (t->nslots == 0) return;
-    memset(t->slots, 0, sizeof(int32_t) * (size_t)t->nslots);
-    uint32_t mask = (uint32_t)t->nslots - 1;
-    for (int32_t e = 0; e < t->count; e++) {
-        uint32_t i = rt_str_hash(t->keys[e]) & mask;
-        while (t->slots[i] != 0) i = (i + 1) & mask;
-        t->slots[i] = e + 1;
-    }
-}
-
-/* Removes a named entry, keeping the order of the others. */
-static inline bool rt_any_remove(RtAny a, RtString key, int line) {
-    RtTable* t = rt_any_table(a, line);
-    int32_t e = rt_table_find(t, key);
-    if (e < 0) return false;
-    for (int32_t k = e + 1; k < t->count; k++) { t->keys[k - 1] = t->keys[k]; t->values[k - 1] = t->values[k]; }
-    t->count--;
-    rt_table_rehash(t);
-    return true;
-}
-
-static inline void rt_any_clear(RtAny a, int line) {
-    RtTable* t = rt_any_table(a, line);
-    t->length = 0;
-    t->count = 0;
-    rt_table_rehash(t);
-}
-static inline int32_t rt_any_length(RtAny a) { return a.kind == RT_ANY_TABLE ? a.as.t->length : 0; }
-static inline int32_t rt_any_count(RtAny a) { return a.kind == RT_ANY_TABLE ? a.as.t->count : 0; }
-static inline bool rt_any_is_null(RtAny a) { return a.kind == RT_ANY_NULL; }
-
-/* `a as int32`: any integer that fits (as raw bits in *out). */
-static inline bool rt_any_to_int(RtAny a, int64_t lo, uint64_t hi, uint64_t* out) {
-    if (a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_I64) {
-        if (a.as.i < lo || (a.as.i > 0 && (uint64_t)a.as.i > hi)) return false;
-        *out = (uint64_t)a.as.i;
-        return true;
-    }
-    if (a.kind >= RT_ANY_U8 && a.kind <= RT_ANY_U64) {
-        if (a.as.u > hi) return false;
-        *out = a.as.u;
-        return true;
-    }
-    return false;
-}
-
-/* `a as float64`: decimals, and integers converted. */
-static inline bool rt_any_to_float(RtAny a, double* out) {
-    if (a.kind == RT_ANY_F32 || a.kind == RT_ANY_F64) { *out = a.as.f; return true; }
-    if (a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_I64) { *out = (double)a.as.i; return true; }
-    if (a.kind >= RT_ANY_U8 && a.kind <= RT_ANY_U64) { *out = (double)a.as.u; return true; }
-    return false;
-}
-
-/* contains(): numbers by value (1 is 1.0), bool and String by value, the rest by identity. */
-static inline bool rt_any_equals(RtAny a, RtAny b) {
-    bool an = a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_F64, bn = b.kind >= RT_ANY_I8 && b.kind <= RT_ANY_F64;
-    if (an || bn) {
-        if (!an || !bn) return false;
-        if (a.kind >= RT_ANY_F32 || b.kind >= RT_ANY_F32) {
-            double x, y;
-            rt_any_to_float(a, &x);
-            rt_any_to_float(b, &y);
-            return x == y;
+    static inline RtTable* rt_any_table(RtAny a, int line) {
+        if (a.kind != RT_ANY_TABLE) {
+            char msg[96];
+            snprintf(msg, sizeof msg, "this Any is not a table (it holds %s)", rt_any_kinds[a.kind]);
+            rt_panic(msg, line);
         }
-        bool as = a.kind <= RT_ANY_I64, bs = b.kind <= RT_ANY_I64;
-        if (as == bs) return a.as.u == b.as.u;
-        int64_t i = as ? a.as.i : b.as.i;
-        return i >= 0 && (uint64_t)i == (as ? b.as.u : a.as.u);
+        return a.as.t;
     }
-    if (a.kind != b.kind) return false;
-    switch (a.kind) {
-        case RT_ANY_NULL: return true;
-        case RT_ANY_BOOL: return a.as.b == b.as.b;
-        case RT_ANY_STR: return rt_str_eq(a.as.s, b.as.s);
-        case RT_ANY_TABLE: return a.as.t == b.as.t;
-        default: return a.as.box.ptr == b.as.box.ptr;
+
+    static inline RtMem* rt_any_mem(RtAny a, int line) { return rt_any_table(a, line)->mem; }
+
+    static inline void rt_table_push(RtTable* t, RtAny v, int line) {
+        if (t->length == t->capacity) {
+            int32_t nc = t->capacity ? t->capacity * 2 : 8;
+            RtAny* ni = (RtAny*)rt_mem_try_realloc(t->mem, t->items, sizeof(RtAny) * (size_t)t->capacity, sizeof(RtAny) * (size_t)nc);
+            if (!ni) rt_panic("memory is full", line);
+            t->items = ni;
+            t->capacity = nc;
+        }
+        t->items[t->length++] = v;
     }
-}
 
-/* x is the name of an entry, or equal to an element by position. */
-static inline bool rt_any_contains(RtAny a, RtAny x) {
-    if (a.kind != RT_ANY_TABLE) return false;
-    const RtTable* t = a.as.t;
-    if (x.kind == RT_ANY_STR && rt_table_find(t, x.as.s) >= 0) return true;
-    for (int32_t i = 0; i < t->length; i++) if (rt_any_equals(t->items[i], x)) return true;
-    return false;
-}
+    static inline uint32_t rt_str_hash(RtString s) {
+        uint32_t h = 2166136261u;
+        for (int32_t i = 0; i < s.len; i++) { h ^= (uint8_t)s.ptr[i]; h *= 16777619u; }
+        return h;
+    }
 
-static inline bool rt_any_contains_key(RtAny a, RtString key) { return a.kind == RT_ANY_TABLE && rt_table_find(a.as.t, key) >= 0; }
+    static inline int32_t rt_table_find(const RtTable* t, RtString key) {
+        if (t->nslots == 0) return -1;
+        uint32_t mask = (uint32_t)t->nslots - 1;
+        for (uint32_t i = rt_str_hash(key) & mask;; i = (i + 1) & mask) {
+            int32_t e = t->slots[i];
+            if (e == 0) return -1;
+            if (rt_str_eq(t->keys[e - 1], key)) return e - 1;
+        }
+    }
 
-/* A deep copy; tables that appear several times (or in cycles) are copied once. */
-static inline RtAny rt_any_clone(RtAny a, RtMem* mem, RtCloneMap* cm) {
-    if (a.kind == RT_ANY_STR && rt_clone_keeps(cm, a.as.s.ptr)) return a;
-    if ((a.kind == RT_ANY_OBJ || a.kind == RT_ANY_VAL) && rt_clone_keeps(cm, a.as.box.ptr)) return a;
-    if (a.kind == RT_ANY_TABLE && rt_clone_keeps(cm, a.as.t)) return a;
-    if (a.kind == RT_ANY_STR) { a.as.s = rt_str_clone(a.as.s, mem, 0); return a; }
-    if (a.kind == RT_ANY_OBJ) { a.as.box.ptr = rt_obj_vt(a.as.box.ptr)->clone(a.as.box.ptr, mem, cm); return a; }
-    if (a.kind == RT_ANY_VAL) { a.as.box.ptr = ((const RtValType*)a.as.box.type)->clone(a.as.box.ptr, mem, cm); return a; }
-    if (a.kind != RT_ANY_TABLE) return a;
-    RtTable* done = (RtTable*)rt_clone_get(cm, a.as.t);
-    if (done) return rt_any_t(done);
-    const RtTable* src = a.as.t;
-    RtTable* t = rt_table_new(mem, 0);
-    rt_clone_put(cm, a.as.t, t);
-    for (int32_t i = 0; i < src->length; i++) rt_table_push(t, rt_any_clone(src->items[i], mem, cm), 0);
-    for (int32_t e = 0; e < src->count; e++) rt_table_set(t, src->keys[e], rt_any_clone(src->values[e], mem, cm), 0);
-    return rt_any_t(t);
-}
+    static inline void rt_table_index(RtTable* t, int32_t nslots, int line) {
+        int32_t* slots = (int32_t*)rt_mem_alloc(t->mem, sizeof(int32_t) * (size_t)nslots, line);
+        uint32_t mask = (uint32_t)nslots - 1;
+        for (int32_t e = 0; e < t->count; e++) {
+            uint32_t i = rt_str_hash(t->keys[e]) & mask;
+            while (slots[i] != 0) i = (i + 1) & mask;
+            slots[i] = e + 1;
+        }
+        t->slots = slots;
+        t->nslots = nslots;
+    }
+
+    /* The key is copied into the table's memory, so it lives as long as the table. */
+    static inline void rt_table_set(RtTable* t, RtString key, RtAny v, int line) {
+        int32_t e = rt_table_find(t, key);
+        if (e >= 0) { t->values[e] = v; return; }
+        if (t->count == t->cap) {
+            int32_t nc = t->cap ? t->cap * 2 : 8;
+            RtString* nk = (RtString*)rt_mem_try_realloc(t->mem, t->keys, sizeof(RtString) * (size_t)t->cap, sizeof(RtString) * (size_t)nc);
+            RtAny* nv = nk ? (RtAny*)rt_mem_try_realloc(t->mem, t->values, sizeof(RtAny) * (size_t)t->cap, sizeof(RtAny) * (size_t)nc) : NULL;
+            if (!nk || !nv) rt_panic("memory is full", line);
+            t->keys = nk;
+            t->values = nv;
+            t->cap = nc;
+        }
+        e = t->count++;
+        t->keys[e] = rt_str_clone(key, t->mem, line);
+        t->values[e] = v;
+        if (t->count * 2 > t->nslots) {
+            rt_table_index(t, t->nslots ? t->nslots * 2 : 16, line);
+        } else {
+            uint32_t mask = (uint32_t)t->nslots - 1;
+            uint32_t i = rt_str_hash(key) & mask;
+            while (t->slots[i] != 0) i = (i + 1) & mask;
+            t->slots[i] = e + 1;
+        }
+    }
+
+    /* Reading never fails: a missing entry, or reading from something that is not a table, gives null. */
+    static inline RtAny rt_any_get(RtAny a, RtString key) {
+        if (a.kind != RT_ANY_TABLE) return rt_any_null();
+        int32_t e = rt_table_find(a.as.t, key);
+        return e < 0 ? rt_any_null() : a.as.t->values[e];
+    }
+
+    static inline RtAny rt_any_at(RtAny a, int64_t i) {
+        if (a.kind != RT_ANY_TABLE || i < 0 || i >= a.as.t->length) return rt_any_null();
+        return a.as.t->items[i];
+    }
+
+    static inline void rt_any_set(RtAny a, RtString key, RtAny v, int line) { rt_table_set(rt_any_table(a, line), key, v, line); }
+
+    static inline void rt_any_push(RtAny a, RtAny v, int line) { rt_table_push(rt_any_table(a, line), v, line); }
+
+    /* Rebuilds the name index in place (after entries were removed). */
+    static inline void rt_table_rehash(RtTable* t) {
+        if (t->nslots == 0) return;
+        memset(t->slots, 0, sizeof(int32_t) * (size_t)t->nslots);
+        uint32_t mask = (uint32_t)t->nslots - 1;
+        for (int32_t e = 0; e < t->count; e++) {
+            uint32_t i = rt_str_hash(t->keys[e]) & mask;
+            while (t->slots[i] != 0) i = (i + 1) & mask;
+            t->slots[i] = e + 1;
+        }
+    }
+
+    /* Removes a named entry, keeping the order of the others. */
+    static inline bool rt_any_remove(RtAny a, RtString key, int line) {
+        RtTable* t = rt_any_table(a, line);
+        int32_t e = rt_table_find(t, key);
+        if (e < 0) return false;
+        for (int32_t k = e + 1; k < t->count; k++) { t->keys[k - 1] = t->keys[k]; t->values[k - 1] = t->values[k]; }
+        t->count--;
+        rt_table_rehash(t);
+        return true;
+    }
+
+    static inline void rt_any_clear(RtAny a, int line) {
+        RtTable* t = rt_any_table(a, line);
+        t->length = 0;
+        t->count = 0;
+        rt_table_rehash(t);
+    }
+    static inline int32_t rt_any_length(RtAny a) { return a.kind == RT_ANY_TABLE ? a.as.t->length : 0; }
+    static inline int32_t rt_any_count(RtAny a) { return a.kind == RT_ANY_TABLE ? a.as.t->count : 0; }
+    static inline bool rt_any_is_null(RtAny a) { return a.kind == RT_ANY_NULL; }
+
+    /* `a as int32`: any integer that fits (as raw bits in *out). */
+    static inline bool rt_any_to_int(RtAny a, int64_t lo, uint64_t hi, uint64_t* out) {
+        if (a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_I64) {
+            if (a.as.i < lo || (a.as.i > 0 && (uint64_t)a.as.i > hi)) return false;
+            *out = (uint64_t)a.as.i;
+            return true;
+        }
+        if (a.kind >= RT_ANY_U8 && a.kind <= RT_ANY_U64) {
+            if (a.as.u > hi) return false;
+            *out = a.as.u;
+            return true;
+        }
+        return false;
+    }
+
+    /* `a as float64`: decimals, and integers converted. */
+    static inline bool rt_any_to_float(RtAny a, double* out) {
+        if (a.kind == RT_ANY_F32 || a.kind == RT_ANY_F64) { *out = a.as.f; return true; }
+        if (a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_I64) { *out = (double)a.as.i; return true; }
+        if (a.kind >= RT_ANY_U8 && a.kind <= RT_ANY_U64) { *out = (double)a.as.u; return true; }
+        return false;
+    }
+
+    /* contains(): numbers by value (1 is 1.0), bool and String by value, the rest by identity. */
+    static inline bool rt_any_equals(RtAny a, RtAny b) {
+        bool an = a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_F64, bn = b.kind >= RT_ANY_I8 && b.kind <= RT_ANY_F64;
+        if (an || bn) {
+            if (!an || !bn) return false;
+            if (a.kind >= RT_ANY_F32 || b.kind >= RT_ANY_F32) {
+                double x, y;
+                rt_any_to_float(a, &x);
+                rt_any_to_float(b, &y);
+                return x == y;
+            }
+            bool as = a.kind <= RT_ANY_I64, bs = b.kind <= RT_ANY_I64;
+            if (as == bs) return a.as.u == b.as.u;
+            int64_t i = as ? a.as.i : b.as.i;
+            return i >= 0 && (uint64_t)i == (as ? b.as.u : a.as.u);
+        }
+        if (a.kind != b.kind) return false;
+        switch (a.kind) {
+            case RT_ANY_NULL: return true;
+            case RT_ANY_BOOL: return a.as.b == b.as.b;
+            case RT_ANY_STR: return rt_str_eq(a.as.s, b.as.s);
+            case RT_ANY_TABLE: return a.as.t == b.as.t;
+            default: return a.as.box.ptr == b.as.box.ptr;
+        }
+    }
+
+    /* x is the name of an entry, or equal to an element by position. */
+    static inline bool rt_any_contains(RtAny a, RtAny x) {
+        if (a.kind != RT_ANY_TABLE) return false;
+        const RtTable* t = a.as.t;
+        if (x.kind == RT_ANY_STR && rt_table_find(t, x.as.s) >= 0) return true;
+        for (int32_t i = 0; i < t->length; i++) if (rt_any_equals(t->items[i], x)) return true;
+        return false;
+    }
+
+    static inline bool rt_any_contains_key(RtAny a, RtString key) { return a.kind == RT_ANY_TABLE && rt_table_find(a.as.t, key) >= 0; }
+
+    /* A deep copy; tables that appear several times (or in cycles) are copied once. */
+    static inline RtAny rt_any_clone(RtAny a, RtMem* mem, RtCloneMap* cm) {
+        if (a.kind == RT_ANY_STR && rt_clone_keeps(cm, a.as.s.ptr)) return a;
+        if ((a.kind == RT_ANY_OBJ || a.kind == RT_ANY_VAL) && rt_clone_keeps(cm, a.as.box.ptr)) return a;
+        if (a.kind == RT_ANY_TABLE && rt_clone_keeps(cm, a.as.t)) return a;
+        if (a.kind == RT_ANY_STR) { a.as.s = rt_str_clone(a.as.s, mem, 0); return a; }
+        if (a.kind == RT_ANY_OBJ) { a.as.box.ptr = rt_obj_vt(a.as.box.ptr)->clone(a.as.box.ptr, mem, cm); return a; }
+        if (a.kind == RT_ANY_VAL) { a.as.box.ptr = ((const RtValType*)a.as.box.type)->clone(a.as.box.ptr, mem, cm); return a; }
+        if (a.kind != RT_ANY_TABLE) return a;
+        RtTable* done = (RtTable*)rt_clone_get(cm, a.as.t);
+        if (done) return rt_any_t(done);
+        const RtTable* src = a.as.t;
+        RtTable* t = rt_table_new(mem, 0);
+        rt_clone_put(cm, a.as.t, t);
+        for (int32_t i = 0; i < src->length; i++) rt_table_push(t, rt_any_clone(src->items[i], mem, cm), 0);
+        for (int32_t e = 0; e < src->count; e++) rt_table_set(t, src->keys[e], rt_any_clone(src->values[e], mem, cm), 0);
+        return rt_any_t(t);
+    }
 #if !defined(_WIN32)
 #include <unistd.h>
 #endif
@@ -43709,24 +43710,24 @@ int32_t editor__dap__serveDebugger(List_s* args) {
 
 RtString codegen__runtimeselect__runtimeC(RtMem* rt_dest, RtString file) {
     (void)rt_dest;
-    Opt_i32 t_6385 = String_indexOf_1(file, rt_str("ccode {\n", 8));
+    Opt_i32 t_6385 = String_indexOf_1(file, rt_str("ccode {", 7));
     int32_t value_6384;
     if (t_6385.has) value_6384 = t_6385.value;
     else {
         value_6384 = (-1);
     }
-    int32_t open_ = ((int32_t)((uint32_t)(value_6384) + (uint32_t)(8)));
+    int32_t marker = value_6384;
     Opt_i32 t_6387 = String_lastIndexOf(file, rt_str("}", 1));
     int32_t value_6386;
     if (t_6387.has) value_6386 = t_6387.value;
     else {
-        value_6386 = 0;
+        value_6386 = (-1);
     }
     int32_t close_ = value_6386;
     RtString value_6389;
-    if ((open_ >= 8) && (close_ > open_)) {
+    if ((marker >= 0) && (close_ > ((int32_t)((uint32_t)(marker) + (uint32_t)(7))))) {
         RtString t_6388 = file;
-        value_6389 = rt_str_sub(t_6388, (int64_t)(open_), (int64_t)(close_), 27000023);
+        value_6389 = rt_str_sub(t_6388, (int64_t)(((int32_t)((uint32_t)(marker) + (uint32_t)(7)))), (int64_t)(close_), 27000029);
     } else {
         value_6389 = rt_str("", 0);
     }
@@ -43737,7 +43738,7 @@ RtString codegen__runtimeselect__runtimeSource(RtMem* rt_dest) {
     RtError err;
     err.kind = 0;
     if (!(!(codegen__runtimeselect__runtimeRead).has)) {
-        return Opt_s_unwrap(codegen__runtimeselect__runtimeRead, 27000029);
+        return Opt_s_unwrap(codegen__runtimeselect__runtimeRead, 27000036);
     }
     RtString text_5990 = rt_str("", 0);
     {
@@ -43745,13 +43746,13 @@ RtString codegen__runtimeselect__runtimeSource(RtMem* rt_dest) {
         for (int32_t i_6390 = 0; i_6390 < list_6391->length; i_6390++) {
             RtString name = list_6391->items[i_6390];
             RtMem mem_188 = rt_mem_growable();
-            RtSb sb_6392 = rt_sb_mem(&mem_188, 27000032);
+            RtSb sb_6392 = rt_sb_mem(&mem_188, 27000039);
             rt_sb_str(&sb_6392, name);
             rt_sb_add(&sb_6392, ".lar", 4);
             RtString path = std__io__path__join(&mem_188, std__io__path__join(&mem_188, semantics__linker__stdDir, rt_str("runtime", 7)), rt_sb_finish(&sb_6392));
             {
                 RtMem tmp_6396 = rt_mem_growable();
-                RtSb sb_6395 = rt_sb_mem(rt_dest, 27000034);
+                RtSb sb_6395 = rt_sb_mem(rt_dest, 27000041);
                 rt_sb_str(&sb_6395, text_5990);
                 RtString t_6397 = std__io__files__readString(&tmp_6396, path, &err);
                 if (err.kind != 0) {
@@ -43768,7 +43769,7 @@ RtString codegen__runtimeselect__runtimeSource(RtMem* rt_dest) {
                 std__io__IoError e = err.as.e_std__io__IoError;
                 (void)e;
                 err.kind = 0;
-                RtSb sb_6398 = rt_sb_mem(rt_dest, 27000036);
+                RtSb sb_6398 = rt_sb_mem(rt_dest, 27000043);
                 rt_sb_str(&sb_6398, text_5990);
                 rt_sb_add(&sb_6398, "#error \"Larimar's runtime was not found: ", 41);
                 rt_sb_str(&sb_6398, path);
@@ -43830,7 +43831,7 @@ RtString codegen__runtimeselect__headerNames(RtMem* rt_dest, int32_t i) {
             goto switch_end_6403;
         }
     }
-    rt_panic("no case of the switch matched", 27000053);
+    rt_panic("no case of the switch matched", 27000060);
     switch_end_6403: ;
     return value_6402;
 }
@@ -43838,13 +43839,13 @@ RtString codegen__runtimeselect__headerNames(RtMem* rt_dest, int32_t i) {
 RtString codegen__runtimeselect__selectRuntime(RtMem* rt_dest, RtString program, bool threads, bool files, bool allHeaders) {
     RtMem mem_189 = rt_mem_growable();
     List_codegen__runtimeselect__Unit* units = codegen__runtimeselect__split(rt_dest, codegen__runtimeselect__resolve(rt_dest, codegen__runtimeselect__runtimeSource(rt_dest), threads, files));
-    RtTable* table_6404 = rt_table_new(&mem_189, 27000079);
+    RtTable* table_6404 = rt_table_new(&mem_189, 27000086);
     RtAny head = rt_any_t(table_6404);
-    List_i32* list_6405 = List_i32_new(&mem_189, 27000080);
+    List_i32* list_6405 = List_i32_new(&mem_189, 27000087);
     List_i32* defUnit = list_6405;
-    List_i32* list_6406 = List_i32_new(&mem_189, 27000081);
+    List_i32* list_6406 = List_i32_new(&mem_189, 27000088);
     List_i32* defNext = list_6406;
-    List_i32* list_6407 = List_i32_new(&mem_189, 27000082);
+    List_i32* list_6407 = List_i32_new(&mem_189, 27000089);
     List_i32* heads = list_6407;
     {
         List_codegen__runtimeselect__Unit* list_6409 = units;
@@ -43866,16 +43867,16 @@ RtString codegen__runtimeselect__selectRuntime(RtMem* rt_dest, RtString program,
                         slot = (heads)->length;
                         List_i32_push(heads, (-1));
                         RtAny t_6414 = head;
-                        rt_any_set(t_6414, d, rt_any_i((int64_t)(slot), RT_ANY_I32), 27000089);
+                        rt_any_set(t_6414, d, rt_any_i((int64_t)(slot), RT_ANY_I32), 27000096);
                     }
                     List_i32_push(defUnit, i);
-                    List_i32_push(defNext, (heads)->items[rt_index((int64_t)(slot), (heads)->length, 27000092)]);
-                    (heads)->items[rt_index((int64_t)(slot), (heads)->length, 27000093)] = ((int32_t)((uint32_t)((defUnit)->length) - (uint32_t)(1)));
+                    List_i32_push(defNext, (heads)->items[rt_index((int64_t)(slot), (heads)->length, 27000099)]);
+                    (heads)->items[rt_index((int64_t)(slot), (heads)->length, 27000100)] = ((int32_t)((uint32_t)((defUnit)->length) - (uint32_t)(1)));
                 }
             }
         }
     }
-    List_b* list_6415 = List_b_new(&mem_189, 27000096);
+    List_b* list_6415 = List_b_new(&mem_189, 27000103);
     List_b* need = list_6415;
     {
         List_codegen__runtimeselect__Unit* list_6417 = units;
@@ -43885,7 +43886,7 @@ RtString codegen__runtimeselect__selectRuntime(RtMem* rt_dest, RtString program,
             List_b_push(need, false);
         }
     }
-    List_i32* list_6418 = List_i32_new(&mem_189, 27000098);
+    List_i32* list_6418 = List_i32_new(&mem_189, 27000105);
     List_i32* work = list_6418;
     RtAny wanted = codegen__runtimeselect__identifiers(&mem_189, program);
     if (allHeaders) {
@@ -43894,23 +43895,23 @@ RtString codegen__runtimeselect__selectRuntime(RtMem* rt_dest, RtString program,
             RtMem tmp_6421 = rt_mem_growable();
             RtAny t_6419 = wanted;
             RtString t_6420 = codegen__runtimeselect__headerNames(NULL, i);
-            List_s* t_6422 = List_s_new(&tmp_6421, 27000103);
+            List_s* t_6422 = List_s_new(&tmp_6421, 27000110);
             RtString t_6423 = rt_str(" ", 1);
             if (t_6423.len == 0) {
-                for (int32_t k_6425 = 0; k_6425 < t_6420.len; k_6425++) List_s_add(t_6422, rt_str(t_6420.ptr + k_6425, 1), 27000103);
+                for (int32_t k_6425 = 0; k_6425 < t_6420.len; k_6425++) List_s_add(t_6422, rt_str(t_6420.ptr + k_6425, 1), 27000110);
             } else if (t_6420.len > 0 || !false) {
                 int32_t start_6424 = 0;
                 for (;;) {
                     int32_t k_6425 = rt_str_find(t_6420, t_6423, start_6424);
                     int32_t end_k_6425 = k_6425 < 0 ? t_6420.len : k_6425;
                     RtString part_k_6425 = rt_str(t_6420.ptr + start_6424, end_k_6425 - start_6424);
-                    List_s_add(t_6422, part_k_6425, 27000103);
+                    List_s_add(t_6422, part_k_6425, 27000110);
                     if (k_6425 < 0) break;
                     start_6424 = k_6425 + t_6423.len;
                 }
             }
             List_s* t_6426 = t_6422;
-            rt_any_set(t_6419, t_6426->items[rt_index((int64_t)(0), t_6426->length, 27000103)], rt_any_b(true), 27000103);
+            rt_any_set(t_6419, t_6426->items[rt_index((int64_t)(0), t_6426->length, 27000110)], rt_any_b(true), 27000110);
             rt_mem_free(&tmp_6421);
             i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
         }
@@ -43920,7 +43921,7 @@ RtString codegen__runtimeselect__selectRuntime(RtMem* rt_dest, RtString program,
         RtTable* table_6427 = table_6427_v.kind == RT_ANY_TABLE ? table_6427_v.as.t : NULL;
         int32_t n_6428 = table_6427 ? table_6427->count : 0;
         for (int32_t i_6429 = 0; i_6429 < n_6428; i_6429++) {
-            if (table_6427->count != n_6428) rt_panic("an Any table cannot gain or lose entries while it is being iterated", 27000107);
+            if (table_6427->count != n_6428) rt_panic("an Any table cannot gain or lose entries while it is being iterated", 27000114);
             RtString k = table_6427->keys[i_6429];
             RtAny v = table_6427->values[i_6429];
             (void)v;
@@ -43930,7 +43931,7 @@ RtString codegen__runtimeselect__selectRuntime(RtMem* rt_dest, RtString program,
     int32_t w = 0;
     while (w < (work)->length) {
         {
-            List_s* list_6431 = ((units)->items[rt_index((int64_t)((work)->items[rt_index((int64_t)(w), (work)->length, 27000110)]), (units)->length, 27000110)])->uses;
+            List_s* list_6431 = ((units)->items[rt_index((int64_t)((work)->items[rt_index((int64_t)(w), (work)->length, 27000117)]), (units)->length, 27000117)])->uses;
             for (int32_t i_6430 = 0; i_6430 < list_6431->length; i_6430++) {
                 RtString name = list_6431->items[i_6430];
                 codegen__runtimeselect__mark(name, head, heads, defUnit, defNext, need, work);
@@ -43939,7 +43940,7 @@ RtString codegen__runtimeselect__selectRuntime(RtMem* rt_dest, RtString program,
         w = ((int32_t)((uint32_t)(w) + (uint32_t)(1)));
     }
     RtMem* t_6432 = rt_dest;
-    StringBuilder* obj_6433 = (StringBuilder*)rt_mem_alloc(t_6432, sizeof(StringBuilder), 27000113);
+    StringBuilder* obj_6433 = (StringBuilder*)rt_mem_alloc(t_6432, sizeof(StringBuilder), 27000120);
     *obj_6433 = (StringBuilder){ ._h = { (const void*)&vtable_StringBuilder, t_6432 }, .buf = text_buf_new(t_6432) };
     StringBuilder* out = obj_6433;
     bool lastInclude = false;
@@ -43948,11 +43949,11 @@ RtString codegen__runtimeselect__selectRuntime(RtMem* rt_dest, RtString program,
         for (int32_t i_6434 = 0; i_6434 < list_6435->length; i_6434++) {
             int32_t i = i_6434;
             codegen__runtimeselect__Unit* u = list_6435->items[i_6434];
-            bool emit = (need)->items[rt_index((int64_t)(i), (need)->length, 27000116)];
+            bool emit = (need)->items[rt_index((int64_t)(i), (need)->length, 27000123)];
             if ((u)->heading) {
                 int32_t j = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
-                while ((j < (units)->length) && (!(((units)->items[rt_index((int64_t)(j), (units)->length, 27000119)])->heading))) {
-                    if ((need)->items[rt_index((int64_t)(j), (need)->length, 27000120)]) {
+                while ((j < (units)->length) && (!(((units)->items[rt_index((int64_t)(j), (units)->length, 27000126)])->heading))) {
+                    if ((need)->items[rt_index((int64_t)(j), (need)->length, 27000127)]) {
                         emit = true;
                     }
                     j = ((int32_t)((uint32_t)(j) + (uint32_t)(1)));
@@ -43991,42 +43992,42 @@ void codegen__runtimeselect__mark(RtString name, RtAny head, List_i32* heads, Li
     if (slot < 0) {
         return;
     }
-    int32_t e = (heads)->items[rt_index((int64_t)(slot), (heads)->length, 27000138)];
+    int32_t e = (heads)->items[rt_index((int64_t)(slot), (heads)->length, 27000145)];
     while (e >= 0) {
-        int32_t u = (defUnit)->items[rt_index((int64_t)(e), (defUnit)->length, 27000140)];
-        if (!((need)->items[rt_index((int64_t)(u), (need)->length, 27000141)])) {
-            (need)->items[rt_index((int64_t)(u), (need)->length, 27000142)] = true;
+        int32_t u = (defUnit)->items[rt_index((int64_t)(e), (defUnit)->length, 27000147)];
+        if (!((need)->items[rt_index((int64_t)(u), (need)->length, 27000148)])) {
+            (need)->items[rt_index((int64_t)(u), (need)->length, 27000149)] = true;
             List_i32_push(work, u);
         }
-        e = (defNext)->items[rt_index((int64_t)(e), (defNext)->length, 27000145)];
+        e = (defNext)->items[rt_index((int64_t)(e), (defNext)->length, 27000152)];
     }
 }
 
 List_s* codegen__runtimeselect__resolve(RtMem* rt_dest, RtString text_6034, bool threads, bool files) {
     RtMem mem_190 = rt_mem_growable();
-    List_s* list_6441 = List_s_new(rt_dest, 27000151);
+    List_s* list_6441 = List_s_new(rt_dest, 27000158);
     List_s* out = list_6441;
-    List_b* list_6442 = List_b_new(&mem_190, 27000153);
+    List_b* list_6442 = List_b_new(&mem_190, 27000160);
     List_b* known = list_6442;
-    List_b* list_6443 = List_b_new(&mem_190, 27000154);
+    List_b* list_6443 = List_b_new(&mem_190, 27000161);
     List_b* cond = list_6443;
-    List_b* list_6444 = List_b_new(&mem_190, 27000155);
+    List_b* list_6444 = List_b_new(&mem_190, 27000162);
     List_b* parent = list_6444;
     int32_t top = 0;
     bool active = true;
     {
         RtString t_6447 = text_6034;
-        List_s* t_6448 = List_s_new(rt_dest, 27000158);
+        List_s* t_6448 = List_s_new(rt_dest, 27000165);
         RtString t_6449 = rt_str("\n", 1);
         if (t_6449.len == 0) {
-            for (int32_t k_6451 = 0; k_6451 < t_6447.len; k_6451++) List_s_add(t_6448, rt_str(t_6447.ptr + k_6451, 1), 27000158);
+            for (int32_t k_6451 = 0; k_6451 < t_6447.len; k_6451++) List_s_add(t_6448, rt_str(t_6447.ptr + k_6451, 1), 27000165);
         } else if (t_6447.len > 0 || !false) {
             int32_t start_6450 = 0;
             for (;;) {
                 int32_t k_6451 = rt_str_find(t_6447, t_6449, start_6450);
                 int32_t end_k_6451 = k_6451 < 0 ? t_6447.len : k_6451;
                 RtString part_k_6451 = rt_str(t_6447.ptr + start_6450, end_k_6451 - start_6450);
-                List_s_add(t_6448, part_k_6451, 27000158);
+                List_s_add(t_6448, part_k_6451, 27000165);
                 if (k_6451 < 0) break;
                 start_6450 = k_6451 + t_6449.len;
             }
@@ -44050,9 +44051,9 @@ List_s* codegen__runtimeselect__resolve(RtMem* rt_dest, RtString text_6034, bool
                 bool defined = (rt_str_eq(macro, rt_str("RT_THREADS", 10)) ? threads : files);
                 bool c = (String_startsWith(t, rt_str("#ifdef ", 7)) == defined);
                 if (top < (known)->length) {
-                    (known)->items[rt_index((int64_t)(top), (known)->length, 27000167)] = k;
-                    (cond)->items[rt_index((int64_t)(top), (cond)->length, 27000168)] = c;
-                    (parent)->items[rt_index((int64_t)(top), (parent)->length, 27000169)] = active;
+                    (known)->items[rt_index((int64_t)(top), (known)->length, 27000174)] = k;
+                    (cond)->items[rt_index((int64_t)(top), (cond)->length, 27000175)] = c;
+                    (parent)->items[rt_index((int64_t)(top), (parent)->length, 27000176)] = active;
                 } else {
                     List_b_push(known, k);
                     List_b_push(cond, c);
@@ -44069,17 +44070,17 @@ List_s* codegen__runtimeselect__resolve(RtMem* rt_dest, RtString text_6034, bool
                 int32_t f = ((int32_t)((uint32_t)(top) - (uint32_t)(1)));
                 if (String_startsWith(t, rt_str("#endif", 6))) {
                     top = ((int32_t)((uint32_t)(top) - (uint32_t)(1)));
-                    active = (parent)->items[rt_index((int64_t)(f), (parent)->length, 27000184)];
-                    if ((!((known)->items[rt_index((int64_t)(f), (known)->length, 27000185)])) && active) {
+                    active = (parent)->items[rt_index((int64_t)(f), (parent)->length, 27000191)];
+                    if ((!((known)->items[rt_index((int64_t)(f), (known)->length, 27000192)])) && active) {
                         List_s_push(out, ln);
                     }
                     continue;
                 }
-                if ((known)->items[rt_index((int64_t)(f), (known)->length, 27000188)]) {
-                    (cond)->items[rt_index((int64_t)(f), (cond)->length, 27000189)] = (!((cond)->items[rt_index((int64_t)(f), (cond)->length, 27000189)]));
-                    active = ((parent)->items[rt_index((int64_t)(f), (parent)->length, 27000190)] && (cond)->items[rt_index((int64_t)(f), (cond)->length, 27000190)]);
+                if ((known)->items[rt_index((int64_t)(f), (known)->length, 27000195)]) {
+                    (cond)->items[rt_index((int64_t)(f), (cond)->length, 27000196)] = (!((cond)->items[rt_index((int64_t)(f), (cond)->length, 27000196)]));
+                    active = ((parent)->items[rt_index((int64_t)(f), (parent)->length, 27000197)] && (cond)->items[rt_index((int64_t)(f), (cond)->length, 27000197)]);
                 } else {
-                    if ((parent)->items[rt_index((int64_t)(f), (parent)->length, 27000191)]) {
+                    if ((parent)->items[rt_index((int64_t)(f), (parent)->length, 27000198)]) {
                         List_s_push(out, ln);
                     }
                 }
@@ -44096,9 +44097,9 @@ List_s* codegen__runtimeselect__resolve(RtMem* rt_dest, RtString text_6034, bool
 }
 
 List_codegen__runtimeselect__Unit* codegen__runtimeselect__split(RtMem* rt_dest, List_s* lines) {
-    List_codegen__runtimeselect__Unit* list_6455 = List_codegen__runtimeselect__Unit_new(rt_dest, 27000203);
+    List_codegen__runtimeselect__Unit* list_6455 = List_codegen__runtimeselect__Unit_new(rt_dest, 27000210);
     List_codegen__runtimeselect__Unit* units = list_6455;
-    List_s* list_6456 = List_s_new(rt_dest, 27000204);
+    List_s* list_6456 = List_s_new(rt_dest, 27000211);
     List_s* cur = list_6456;
     int32_t braces = 0;
     int32_t pp = 0;
@@ -44112,11 +44113,11 @@ List_codegen__runtimeselect__Unit* codegen__runtimeselect__split(RtMem* rt_dest,
                 if ((cur)->length > 0) {
                     List_codegen__runtimeselect__Unit_push(units, codegen__runtimeselect__unit((units)->mem, cur, false));
                 }
-                List_s* list_6459 = List_s_new(rt_dest, 27000212);
+                List_s* list_6459 = List_s_new(rt_dest, 27000219);
                 cur = list_6459;
                 if (!(String_isEmpty(t))) {
-                    List_s* list_6460 = List_s_new((units)->mem, 27000213);
-                    List_s_add(list_6460, ln, 27000213);
+                    List_s* list_6460 = List_s_new((units)->mem, 27000220);
+                    List_s_add(list_6460, ln, 27000220);
                     List_codegen__runtimeselect__Unit_push(units, codegen__runtimeselect__unit((units)->mem, list_6460, true));
                 }
                 continue;
@@ -44142,27 +44143,27 @@ int32_t codegen__runtimeselect__braceDelta(RtString ln) {
     int32_t d = 0;
     int32_t i = 0;
     while (i < (ln).len) {
-        uint8_t c = rt_str_byte(ln, (int64_t)(i), 27000231);
+        uint8_t c = rt_str_byte(ln, (int64_t)(i), 27000238);
         if (codegen__runtimeselect__inComment) {
-            if (((c == (uint8_t)42) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (ln).len)) && (rt_str_byte(ln, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000233) == (uint8_t)47)) {
+            if (((c == (uint8_t)42) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (ln).len)) && (rt_str_byte(ln, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000240) == (uint8_t)47)) {
                 codegen__runtimeselect__inComment = false;
                 i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
             }
             i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
             continue;
         }
-        if (((c == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (ln).len)) && (rt_str_byte(ln, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000240) == (uint8_t)42)) {
+        if (((c == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (ln).len)) && (rt_str_byte(ln, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000247) == (uint8_t)42)) {
             codegen__runtimeselect__inComment = true;
             i = ((int32_t)((uint32_t)(i) + (uint32_t)(2)));
             continue;
         }
-        if (((c == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (ln).len)) && (rt_str_byte(ln, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000245) == (uint8_t)47)) {
+        if (((c == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (ln).len)) && (rt_str_byte(ln, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000252) == (uint8_t)47)) {
             break;
         }
         if ((c == (uint8_t)34) || (c == (uint8_t)39)) {
             i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
-            while ((i < (ln).len) && (!(rt_str_byte(ln, (int64_t)(i), 27000248) == c))) {
-                if (rt_str_byte(ln, (int64_t)(i), 27000249) == (uint8_t)92) {
+            while ((i < (ln).len) && (!(rt_str_byte(ln, (int64_t)(i), 27000255) == c))) {
+                if (rt_str_byte(ln, (int64_t)(i), 27000256) == (uint8_t)92) {
                     i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
                 }
                 i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
@@ -44185,15 +44186,15 @@ int32_t codegen__runtimeselect__braceDelta(RtString ln) {
 codegen__runtimeselect__Unit* codegen__runtimeselect__unit(RtMem* rt_dest, List_s* lines, bool include) {
     RtMem mem_191 = rt_mem_growable();
     List_s* t_6461 = lines;
-    List_s* toks = codegen__runtimeselect__tokens(rt_dest, rt_str_join(t_6461->items, t_6461->length, rt_str("\n", 1), rt_dest, 27000262));
+    List_s* toks = codegen__runtimeselect__tokens(rt_dest, rt_str_join(t_6461->items, t_6461->length, rt_str("\n", 1), rt_dest, 27000269));
     RtMem* t_6462 = rt_dest;
-    codegen__runtimeselect__Unit* obj_6463 = (codegen__runtimeselect__Unit*)rt_mem_alloc(t_6462, sizeof(codegen__runtimeselect__Unit), 27000263);
-    List_s* list_6464 = List_s_new(t_6462, 27000066);
-    List_s* list_6465 = List_s_new(t_6462, 27000067);
+    codegen__runtimeselect__Unit* obj_6463 = (codegen__runtimeselect__Unit*)rt_mem_alloc(t_6462, sizeof(codegen__runtimeselect__Unit), 27000270);
+    List_s* list_6464 = List_s_new(t_6462, 27000073);
+    List_s* list_6465 = List_s_new(t_6462, 27000074);
     *obj_6463 = (codegen__runtimeselect__Unit){ ._h = { (const void*)&vtable_codegen__runtimeselect__Unit, t_6462 }, .lines = lines, .defines = list_6464, .uses = list_6465, .include = include, .heading = false };
     codegen__runtimeselect__Unit* u = obj_6463;
     if (include) {
-        RtString h = String_trim((lines)->items[rt_index((int64_t)(0), (lines)->length, 27000265)], NULL);
+        RtString h = String_trim((lines)->items[rt_index((int64_t)(0), (lines)->length, 27000272)], NULL);
         RtString t_6466 = h;
         Opt_i32 t_6468 = String_indexOf_1(h, rt_str("<", 1));
         int32_t value_6467;
@@ -44207,21 +44208,21 @@ codegen__runtimeselect__Unit* codegen__runtimeselect__unit(RtMem* rt_dest, List_
         else {
             value_6469 = (h).len;
         }
-        h = rt_str_sub(t_6466, (int64_t)(((int32_t)((uint32_t)(value_6467) + (uint32_t)(1)))), (int64_t)(value_6469), 27000266);
+        h = rt_str_sub(t_6466, (int64_t)(((int32_t)((uint32_t)(value_6467) + (uint32_t)(1)))), (int64_t)(value_6469), 27000273);
         RtMem tmp_6474 = rt_mem_growable();
         {
             RtString t_6473 = rt_str("stdint.h stdbool.h stddef.h stdio.h stdlib.h string.h", 53);
-            List_s* t_6475 = List_s_new(&tmp_6474, 27000267);
+            List_s* t_6475 = List_s_new(&tmp_6474, 27000274);
             RtString t_6476 = rt_str(" ", 1);
             if (t_6476.len == 0) {
-                for (int32_t k_6478 = 0; k_6478 < t_6473.len; k_6478++) List_s_add(t_6475, rt_str(t_6473.ptr + k_6478, 1), 27000267);
+                for (int32_t k_6478 = 0; k_6478 < t_6473.len; k_6478++) List_s_add(t_6475, rt_str(t_6473.ptr + k_6478, 1), 27000274);
             } else if (t_6473.len > 0 || !false) {
                 int32_t start_6477 = 0;
                 for (;;) {
                     int32_t k_6478 = rt_str_find(t_6473, t_6476, start_6477);
                     int32_t end_k_6478 = k_6478 < 0 ? t_6473.len : k_6478;
                     RtString part_k_6478 = rt_str(t_6473.ptr + start_6477, end_k_6478 - start_6477);
-                    List_s_add(t_6475, part_k_6478, 27000267);
+                    List_s_add(t_6475, part_k_6478, 27000274);
                     if (k_6478 < 0) break;
                     start_6477 = k_6478 + t_6476.len;
                 }
@@ -44233,17 +44234,17 @@ codegen__runtimeselect__Unit* codegen__runtimeselect__unit(RtMem* rt_dest, List_
                 if (rt_str_eq(name, h)) {
                     {
                         RtString t_6481 = codegen__runtimeselect__headerNames(NULL, i);
-                        List_s* t_6482 = List_s_new(rt_dest, 27000269);
+                        List_s* t_6482 = List_s_new(rt_dest, 27000276);
                         RtString t_6483 = rt_str(" ", 1);
                         if (t_6483.len == 0) {
-                            for (int32_t k_6485 = 0; k_6485 < t_6481.len; k_6485++) List_s_add(t_6482, rt_str(t_6481.ptr + k_6485, 1), 27000269);
+                            for (int32_t k_6485 = 0; k_6485 < t_6481.len; k_6485++) List_s_add(t_6482, rt_str(t_6481.ptr + k_6485, 1), 27000276);
                         } else if (t_6481.len > 0 || !false) {
                             int32_t start_6484 = 0;
                             for (;;) {
                                 int32_t k_6485 = rt_str_find(t_6481, t_6483, start_6484);
                                 int32_t end_k_6485 = k_6485 < 0 ? t_6481.len : k_6485;
                                 RtString part_k_6485 = rt_str(t_6481.ptr + start_6484, end_k_6485 - start_6484);
-                                List_s_add(t_6482, part_k_6485, 27000269);
+                                List_s_add(t_6482, part_k_6485, 27000276);
                                 if (k_6485 < 0) break;
                                 start_6484 = k_6485 + t_6483.len;
                             }
@@ -44262,7 +44263,7 @@ codegen__runtimeselect__Unit* codegen__runtimeselect__unit(RtMem* rt_dest, List_
         rt_mem_free(&mem_191);
         return ret_6486;
     }
-    RtTable* table_6487 = rt_table_new(&mem_191, 27000274);
+    RtTable* table_6487 = rt_table_new(&mem_191, 27000281);
     RtAny seen = rt_any_t(table_6487);
     {
         List_s* list_6489 = toks;
@@ -44270,20 +44271,20 @@ codegen__runtimeselect__Unit* codegen__runtimeselect__unit(RtMem* rt_dest, List_
             RtString t = list_6489->items[i_6488];
             if (codegen__runtimeselect__isName(t) && (!(rt_any_contains(seen, rt_any_s(t))))) {
                 RtAny t_6490 = seen;
-                rt_any_set(t_6490, t, rt_any_b(true), 27000277);
+                rt_any_set(t_6490, t, rt_any_b(true), 27000284);
                 List_s_push((u)->uses, t);
             }
         }
     }
-    RtTable* table_6491 = rt_table_new(&mem_191, 27000281);
+    RtTable* table_6491 = rt_table_new(&mem_191, 27000288);
     RtAny defs = rt_any_t(table_6491);
     int32_t braces = 0;
     int32_t parens = 0;
     int32_t i = 0;
     while (i < (toks)->length) {
-        RtString t = (toks)->items[rt_index((int64_t)(i), (toks)->length, 27000286)];
-        RtString prev = ((i > 0) ? (toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), (toks)->length, 27000287)] : rt_str("", 0));
-        RtString next = ((((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (toks)->length) ? (toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (toks)->length, 27000288)] : rt_str("", 0));
+        RtString t = (toks)->items[rt_index((int64_t)(i), (toks)->length, 27000293)];
+        RtString prev = ((i > 0) ? (toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), (toks)->length, 27000294)] : rt_str("", 0));
+        RtString next = ((((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (toks)->length) ? (toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (toks)->length, 27000295)] : rt_str("", 0));
         if (rt_str_eq(t, rt_str("{", 1))) {
             braces = ((int32_t)((uint32_t)(braces) + (uint32_t)(1)));
         } else {
@@ -44308,12 +44309,12 @@ codegen__runtimeselect__Unit* codegen__runtimeselect__unit(RtMem* rt_dest, List_
         } else {
             if (rt_str_eq(t, rt_str("typedef", 7))) {
                 if (rt_str_eq(next, rt_str("struct", 6)) && (((int32_t)((uint32_t)(i) + (uint32_t)(2))) < (toks)->length)) {
-                    codegen__runtimeselect__define(u, defs, (toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(2)))), (toks)->length, 27000305)]);
+                    codegen__runtimeselect__define(u, defs, (toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(2)))), (toks)->length, 27000312)]);
                 }
                 int32_t depth = 0;
                 int32_t j = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
                 while (j < (toks)->length) {
-                    RtString x = (toks)->items[rt_index((int64_t)(j), (toks)->length, 27000309)];
+                    RtString x = (toks)->items[rt_index((int64_t)(j), (toks)->length, 27000316)];
                     if (rt_str_eq(x, rt_str("{", 1))) {
                         depth = ((int32_t)((uint32_t)(depth) + (uint32_t)(1)));
                     } else {
@@ -44327,19 +44328,19 @@ codegen__runtimeselect__Unit* codegen__runtimeselect__unit(RtMem* rt_dest, List_
                     }
                     j = ((int32_t)((uint32_t)(j) + (uint32_t)(1)));
                 }
-                if ((j < (toks)->length) && codegen__runtimeselect__isName((toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(j) - (uint32_t)(1)))), (toks)->length, 27000319)])) {
-                    codegen__runtimeselect__define(u, defs, (toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(j) - (uint32_t)(1)))), (toks)->length, 27000319)]);
+                if ((j < (toks)->length) && codegen__runtimeselect__isName((toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(j) - (uint32_t)(1)))), (toks)->length, 27000326)])) {
+                    codegen__runtimeselect__define(u, defs, (toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(j) - (uint32_t)(1)))), (toks)->length, 27000326)]);
                 }
                 i = j;
             } else {
-                if (((rt_str_eq(t, rt_str("struct", 6)) && codegen__runtimeselect__isName(next)) && (((int32_t)((uint32_t)(i) + (uint32_t)(2))) < (toks)->length)) && rt_str_eq((toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(2)))), (toks)->length, 27000321)], rt_str("{", 1))) {
+                if (((rt_str_eq(t, rt_str("struct", 6)) && codegen__runtimeselect__isName(next)) && (((int32_t)((uint32_t)(i) + (uint32_t)(2))) < (toks)->length)) && rt_str_eq((toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(2)))), (toks)->length, 27000328)], rt_str("{", 1))) {
                     codegen__runtimeselect__define(u, defs, next);
                 } else {
                     if (rt_str_eq(t, rt_str("enum", 4)) && rt_str_eq(next, rt_str("{", 1))) {
                         int32_t j = ((int32_t)((uint32_t)(i) + (uint32_t)(2)));
-                        while ((j < (toks)->length) && (!rt_str_eq((toks)->items[rt_index((int64_t)(j), (toks)->length, 27000325)], rt_str("}", 1)))) {
-                            RtString x = (toks)->items[rt_index((int64_t)(j), (toks)->length, 27000326)];
-                            RtString after = ((((int32_t)((uint32_t)(j) + (uint32_t)(1))) < (toks)->length) ? (toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(j) + (uint32_t)(1)))), (toks)->length, 27000327)] : rt_str("", 0));
+                        while ((j < (toks)->length) && (!rt_str_eq((toks)->items[rt_index((int64_t)(j), (toks)->length, 27000332)], rt_str("}", 1)))) {
+                            RtString x = (toks)->items[rt_index((int64_t)(j), (toks)->length, 27000333)];
+                            RtString after = ((((int32_t)((uint32_t)(j) + (uint32_t)(1))) < (toks)->length) ? (toks)->items[rt_index((int64_t)(((int32_t)((uint32_t)(j) + (uint32_t)(1)))), (toks)->length, 27000334)] : rt_str("", 0));
                             if (codegen__runtimeselect__isName(x) && ((rt_str_eq(after, rt_str(",", 1)) || rt_str_eq(after, rt_str("}", 1))) || rt_str_eq(after, rt_str("=", 1)))) {
                                 codegen__runtimeselect__define(u, defs, x);
                             }
@@ -44364,13 +44365,13 @@ codegen__runtimeselect__Unit* codegen__runtimeselect__unit(RtMem* rt_dest, List_
 void codegen__runtimeselect__define(codegen__runtimeselect__Unit* u, RtAny defs, RtString name) {
     if (!(rt_any_contains(defs, rt_any_s(name)))) {
         RtAny t_6493 = defs;
-        rt_any_set(t_6493, name, rt_any_b(true), 27000342);
+        rt_any_set(t_6493, name, rt_any_b(true), 27000349);
         List_s_push((u)->defines, name);
     }
 }
 
 bool codegen__runtimeselect__isName(RtString t) {
-    return ((!(String_isEmpty(t))) && codegen__runtimeselect__letter(rt_str_byte(t, (int64_t)(0), 27000347)));
+    return ((!(String_isEmpty(t))) && codegen__runtimeselect__letter(rt_str_byte(t, (int64_t)(0), 27000354)));
 }
 
 bool codegen__runtimeselect__letter(uint8_t c) {
@@ -44378,7 +44379,7 @@ bool codegen__runtimeselect__letter(uint8_t c) {
 }
 
 RtAny codegen__runtimeselect__identifiers(RtMem* rt_dest, RtString c) {
-    RtTable* table_6494 = rt_table_new(rt_dest, 27000353);
+    RtTable* table_6494 = rt_table_new(rt_dest, 27000360);
     RtAny out = rt_any_t(table_6494);
     RtMem tmp_6497 = rt_mem_growable();
     {
@@ -44387,7 +44388,7 @@ RtAny codegen__runtimeselect__identifiers(RtMem* rt_dest, RtString c) {
             RtString t = list_6496->items[i_6495];
             if (codegen__runtimeselect__isName(t)) {
                 RtAny t_6498 = out;
-                rt_any_set(t_6498, t, rt_any_b(true), 27000355);
+                rt_any_set(t_6498, t, rt_any_b(true), 27000362);
             }
         }
     }
@@ -44396,13 +44397,13 @@ RtAny codegen__runtimeselect__identifiers(RtMem* rt_dest, RtString c) {
 }
 
 List_s* codegen__runtimeselect__tokens(RtMem* rt_dest, RtString c) {
-    List_s* list_6499 = List_s_new(rt_dest, 27000362);
+    List_s* list_6499 = List_s_new(rt_dest, 27000369);
     List_s* out = list_6499;
     int32_t i = 0;
     int32_t n = (c).len;
     while (i < n) {
-        uint8_t ch = rt_str_byte(c, (int64_t)(i), 27000366);
-        if (((ch == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < n)) && (rt_str_byte(c, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000367) == (uint8_t)42)) {
+        uint8_t ch = rt_str_byte(c, (int64_t)(i), 27000373);
+        if (((ch == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < n)) && (rt_str_byte(c, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000374) == (uint8_t)42)) {
             Opt_i32 t_6501 = String_indexOf_2(c, rt_str("*/", 2), ((int32_t)((uint32_t)(i) + (uint32_t)(2))));
             int32_t value_6500;
             if (t_6501.has) value_6500 = t_6501.value;
@@ -44412,15 +44413,15 @@ List_s* codegen__runtimeselect__tokens(RtMem* rt_dest, RtString c) {
             int32_t end = value_6500;
             i = ((end < 0) ? n : ((int32_t)((uint32_t)(end) + (uint32_t)(2))));
         } else {
-            if (((ch == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < n)) && (rt_str_byte(c, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000370) == (uint8_t)47)) {
-                while ((i < n) && (!(rt_str_byte(c, (int64_t)(i), 27000371) == (uint8_t)10))) {
+            if (((ch == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < n)) && (rt_str_byte(c, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000377) == (uint8_t)47)) {
+                while ((i < n) && (!(rt_str_byte(c, (int64_t)(i), 27000378) == (uint8_t)10))) {
                     i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
                 }
             } else {
                 if ((ch == (uint8_t)34) || (ch == (uint8_t)39)) {
                     i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
-                    while ((i < n) && (!(rt_str_byte(c, (int64_t)(i), 27000374) == ch))) {
-                        if (rt_str_byte(c, (int64_t)(i), 27000375) == (uint8_t)92) {
+                    while ((i < n) && (!(rt_str_byte(c, (int64_t)(i), 27000381) == ch))) {
+                        if (rt_str_byte(c, (int64_t)(i), 27000382) == (uint8_t)92) {
                             i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
                         }
                         i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
@@ -44429,15 +44430,15 @@ List_s* codegen__runtimeselect__tokens(RtMem* rt_dest, RtString c) {
                 } else {
                     if (std__text__isIdentifierPart(ch)) {
                         int32_t start = i;
-                        while ((i < n) && std__text__isIdentifierPart(rt_str_byte(c, (int64_t)(i), 27000381))) {
+                        while ((i < n) && std__text__isIdentifierPart(rt_str_byte(c, (int64_t)(i), 27000388))) {
                             i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
                         }
                         RtString t_6502 = c;
-                        List_s_push(out, rt_str_sub(t_6502, (int64_t)(start), (int64_t)(i), 27000382));
+                        List_s_push(out, rt_str_sub(t_6502, (int64_t)(start), (int64_t)(i), 27000389));
                     } else {
                         if (ch > (uint8_t)32) {
                             RtString t_6503 = c;
-                            List_s_push(out, rt_str_sub(t_6503, (int64_t)(i), (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000384));
+                            List_s_push(out, rt_str_sub(t_6503, (int64_t)(i), (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 27000391));
                         }
                         i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
                     }
