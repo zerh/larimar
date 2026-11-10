@@ -17,10 +17,17 @@ import semantics.linker { stdDir };
 let runtimeFiles: String[*] = ["base", "threads", "panic", "memory", "thread", "string", "string_methods", "integer", "class", "any"];
 
 /** The C of a runtime file: between "ccode {" and the last "}" (each file is that one ccode). */
+// function runtimeC(file: String): String {
+//     let open: int32 = (file.indexOf("ccode {\n") ?? -1) + 8;
+//     let close: int32 = file.lastIndexOf("}") ?? 0;
+//     return open >= 8 && close > open ? file.substring(open, close) : "";
+// }
 function runtimeC(file: String): String {
-    let open: int32 = (file.indexOf("ccode {\n") ?? -1) + 8;
-    let close: int32 = file.lastIndexOf("}") ?? 0;
-    return open >= 8 && close > open ? file.substring(open, close) : "";
+    let marker: int32 = file.indexOf("ccode {") ?? -1;
+    let close: int32 = file.lastIndexOf("}") ?? -1;
+    return marker >= 0 && close > marker + 7
+        ? file.substring(marker + 7, close)
+        : "";
 }
 
 /** The runtime's C, read once from std/runtime (an #error line for C if a file is missing). */
