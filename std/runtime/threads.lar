@@ -1,0 +1,66 @@
+// std.runtime.threads: threads and locks of the system (pthreads, Win32).
+// Part of the runtime: the compiler takes from here what a program uses (it is not imported).
+ccode {
+#ifdef RT_THREADS
+/* ---- runtime: threads (POSIX or Windows) ------------------------------ */
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#if defined(__TINYC__) && !defined(CONDITION_VARIABLE_INIT)
+/* the windows.h of tcc predates Vista: what the runtime uses of it */
+typedef struct { void* Ptr; } CONDITION_VARIABLE, *PCONDITION_VARIABLE;
+typedef struct { void* Ptr; } SRWLOCK, *PSRWLOCK;
+#define CONDITION_VARIABLE_INIT {0}
+#define SRWLOCK_INIT {0}
+WINBASEAPI VOID WINAPI InitializeConditionVariable(PCONDITION_VARIABLE c);
+WINBASEAPI BOOL WINAPI SleepConditionVariableCS(PCONDITION_VARIABLE c, PCRITICAL_SECTION m, DWORD ms);
+WINBASEAPI VOID WINAPI WakeAllConditionVariable(PCONDITION_VARIABLE c);
+WINBASEAPI VOID WINAPI AcquireSRWLockExclusive(PSRWLOCK l);
+WINBASEAPI VOID WINAPI ReleaseSRWLockExclusive(PSRWLOCK l);
+#endif
+typedef CRITICAL_SECTION RtMutex;                 /* recursive */
+typedef CONDITION_VARIABLE RtCond;
+typedef HANDLE RtThreadHandle;
+static inline void rt_mutex_init(RtMutex* m) { InitializeCriticalSection(m); }
+static inline void rt_mutex_destroy(RtMutex* m) { DeleteCriticalSection(m); }
+static inline void rt_mutex_lock(RtMutex* m) { EnterCriticalSection(m); }
+static inline void rt_mutex_unlock(RtMutex* m) { LeaveCriticalSection(m); }
+static inline void rt_cond_init(RtCond* c) { InitializeConditionVariable(c); }
+static inline void rt_cond_destroy(RtCond* c) { (void)c; }
+static inline void rt_cond_wait(RtCond* c, RtMutex* m) { SleepConditionVariableCS(c, m, INFINITE); }
+static inline void rt_cond_broadcast(RtCond* c) { WakeAllConditionVariable(c); }
+static SRWLOCK rt_shared_mutex = SRWLOCK_INIT;
+static inline void rt_shared_lock(void) { AcquireSRWLockExclusive(&rt_shared_mutex); }
+static inline void rt_shared_unlock(void) { ReleaseSRWLockExclusive(&rt_shared_mutex); }
+#else
+#include <pthread.h>
+typedef pthread_mutex_t RtMutex;                  /* recursive */
+typedef pthread_cond_t RtCond;
+typedef pthread_t RtThreadHandle;
+static inline void rt_mutex_init(RtMutex* m) {
+    pthread_mutexattr_t a;
+    pthread_mutexattr_init(&a);
+    pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(m, &a);
+    pthread_mutexattr_destroy(&a);
+}
+static inline void rt_mutex_destroy(RtMutex* m) { pthread_mutex_destroy(m); }
+static inline void rt_mutex_lock(RtMutex* m) { pthread_mutex_lock(m); }
+static inline void rt_mutex_unlock(RtMutex* m) { pthread_mutex_unlock(m); }
+static inline void rt_cond_init(RtCond* c) { pthread_cond_init(c, NULL); }
+static inline void rt_cond_destroy(RtCond* c) { pthread_cond_destroy(c); }
+static inline void rt_cond_wait(RtCond* c, RtMutex* m) { pthread_cond_wait(c, m); }
+static inline void rt_cond_broadcast(RtCond* c) { pthread_cond_broadcast(c); }
+static pthread_mutex_t rt_shared_mutex = PTHREAD_MUTEX_INITIALIZER;
+static inline void rt_shared_lock(void) { pthread_mutex_lock(&rt_shared_mutex); }
+static inline void rt_shared_unlock(void) { pthread_mutex_unlock(&rt_shared_mutex); }
+#endif
+#endif
+
+}

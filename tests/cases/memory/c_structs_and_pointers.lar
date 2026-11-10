@@ -1,5 +1,5 @@
 // Structs de C por valor en listas y punteros a función.
-c_code {
+ccode {
     typedef struct Rect { float w, h; } Rect;
     typedef int32_t (*op_fn)(int32_t, int32_t);
     static float area(Rect r) { return r.w * r.h; }

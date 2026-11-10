@@ -1,5 +1,5 @@
-// lar"name" in c_code: the C name of a Larimar function (a module's: lar"module.name").
-c_code {
+// lar"name" in ccode: the C name of a Larimar function (a module's: lar"module.name").
+ccode {
     static int32_t both(int32_t a) { return lar"twice"(a) + lar"area"(a, 3); }
 }
 function twice(x: int32): int32 { return x * 2; }

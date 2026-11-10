@@ -1,5 +1,5 @@
 // A T[] of numbers given to C arrives as a pointer to the elements and their count, and C can write in it.
-c_code {
+ccode {
     static int32_t fill_it(uint8_t* items, int32_t length) {
         for (int32_t i = 0; i < length; i++) items[i] = (uint8_t)(65 + i);
         return length;

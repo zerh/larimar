@@ -160,7 +160,7 @@ function buildLibrary(dir: String, args: String[*]): String {
 const LARIMAR_OUTPUT: String = "3 Larimar two 3 three 42\n3 mine (copy)\nnull\nX0\nX1\nX2\n";
 
 function onlyLinuxOrMac(): bool {
-    if (os.platform() == "windows") {
+    if (os.platformName() == "windows") {
         skip("the libraries are tested on Linux and macOS");
         return false;
     }
@@ -203,7 +203,7 @@ test function aDynamicLibrary(): void throws IoError {
     if (!onlyLinuxOrMac()) { return; }
     let lib: String = buildLibrary(writeLibrary("lib-dynamic", ""), ["--dynamic"]);
     if (lib == "") { return; }
-    let file: String = os.platform() == "macos" ? "libtextkit.dylib" : "libtextkit.so";
+    let file: String = os.platformName() == "macos" ? "libtextkit.dylib" : "libtextkit.so";
     check(Files.isFile(Paths.join(lib, file)), "${file} is there");
     check(!Files.isFile(Paths.join(lib, "libtextkit.a")), "and no static library of another build");
     let app: String = writeProgram("lib-dynamic-app", lib, "dynamic_libraries = [\"textkit\"]\ndynamic_library_paths = [\"libs/textkit\"]\n");
@@ -315,7 +315,7 @@ test function aReleaserIsCalledOnlyByTheCompiler(): void {
 // A text that C makes with malloc: copied into the memory of the call (a buffer too), then freed.
 test function aTextOfCIsCopiedAndReleased(): void {
     runs(caseFile("released_text.lar", raw"""
-        c_code {
+        ccode {
             #include <stdio.h>
             #include <stdlib.h>
             static char* make_text(int n) {
@@ -356,7 +356,7 @@ test function anExportGivesCATextToFree(): void {
         export function shout(name: String): String? {
             return name == "" ? null : name.toUpperCase();
         }
-        c_code {
+        ccode {
             #include <stdio.h>
             #include <stdlib.h>
             static void use_them(void) {

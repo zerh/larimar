@@ -1,0 +1,306 @@
+// std.runtime.memory: memories (arenas), their limits and finalizers.
+// Part of the runtime: the compiler takes from here what a program uses (it is not imported).
+ccode {
+/* ---- runtime: memories ------------------------------------------------ */
+
+#define RT_ALIGN 16
+
+/* Memory checks. With AddressSanitizer (-fsanitize=address) the unused part of every heap block is
+   poisoned, each allocation unpoisons exactly its bytes, and growable memories leave a poisoned gap
+   after each allocation: reading or writing past what was asked for stops at that line. RT_DEBUG_MEMORY
+   adds the gaps without ASan and fills freed blocks with 0xDD, so a dangling value reads as garbage. */
+#if defined(__SANITIZE_ADDRESS__)
+#define RT_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define RT_ASAN 1
+#endif
+#endif
+#ifdef RT_ASAN
+void __asan_poison_memory_region(void* addr, size_t size);      /* the ASan API (as void*: no false warning) */
+void __asan_unpoison_memory_region(void* addr, size_t size);
+#define RT_POISON(p, n) __asan_poison_memory_region((p), (n))
+#define RT_UNPOISON(p, n) __asan_unpoison_memory_region((p), (n))
+#else
+#define RT_POISON(p, n) ((void)(p), (void)(n))
+#define RT_UNPOISON(p, n) ((void)(p), (void)(n))
+#endif
+#if defined(RT_ASAN) || defined(RT_DEBUG_MEMORY)
+#define RT_REDZONE 32
+#else
+#define RT_REDZONE 0
+#endif
+
+typedef struct RtChunk { struct RtChunk* prev; size_t cap; } RtChunk;
+
+/* Work to do before a memory is freed: wait for its threads, release its synchronized objects. */
+typedef struct RtFinal { void (*fn)(void*); void* p; struct RtFinal* next; } RtFinal;
+
+typedef struct RtMem {
+    uint8_t* base;      /* current block */
+    size_t cap;         /* size of the current block */
+    size_t used;        /* bytes used in the current block */
+    size_t total;       /* bytes in use across all blocks */
+    size_t peak;        /* highest value of total */
+    size_t reserved;    /* bytes obtained for the memory (capacity) */
+    RtChunk* chunks;    /* heap blocks owned by this memory */
+    void* last;         /* last allocation, can grow in place */
+    size_t lastSize;
+    bool growable;
+    RtFinal* finals;    /* run (newest first) before the memory is freed */
+    bool shared;        /* used by several threads: the default memory */
+    size_t limit;       /* Memory.limit: the most it may obtain from the system (0: no limit) */
+    const char* name;   /* its name, for the message when it passes its limit */
+} RtMem;
+
+static inline size_t rt_align_up(size_t n) {
+    return (n + (RT_ALIGN - 1)) & ~(size_t)(RT_ALIGN - 1);
+}
+
+static inline RtMem rt_mem_empty(void) {
+    RtMem m;
+    memset(&m, 0, sizeof m);
+    return m;
+}
+
+/* A memory backed by a buffer that the caller owns (stack or static). */
+static inline RtMem rt_mem_fixed(void* buf, size_t cap) {
+    RtMem m = rt_mem_empty();
+    uintptr_t p = (uintptr_t)buf;
+    uintptr_t a = (p + (RT_ALIGN - 1)) & ~(uintptr_t)(RT_ALIGN - 1);
+    size_t skip = (size_t)(a - p);
+    m.base = (uint8_t*)a;
+    m.cap = cap > skip ? cap - skip : 0;
+    m.reserved = m.cap;
+    return m;
+}
+
+static inline RtChunk* rt_chunk_new(size_t dataSize) {
+    size_t hdr = rt_align_up(sizeof(RtChunk));
+    RtChunk* c = (RtChunk*)malloc(hdr + dataSize);
+    if (!c) rt_panic("out of memory: the system refused the heap request", 0);
+    c->prev = NULL;
+    c->cap = dataSize;
+    RT_POISON((uint8_t*)c + hdr, dataSize);       /* nothing allocated yet */
+    return c;
+}
+
+static inline uint8_t* rt_chunk_data(RtChunk* c) {
+    return (uint8_t*)c + rt_align_up(sizeof(RtChunk));
+}
+
+/* byte[N] in heap: one block requested from the system. */
+static inline RtMem rt_mem_heap(int64_t cap, int line) {
+    if (cap < 0) rt_panic("negative memory size", line);
+    RtMem m = rt_mem_empty();
+    RtChunk* c = rt_chunk_new((size_t)cap);
+    m.chunks = c;
+    m.base = rt_chunk_data(c);
+    m.cap = (size_t)cap;
+    m.reserved = (size_t)cap;
+    return m;
+}
+
+/* byte[*] in heap: grows by requesting more blocks. */
+static inline RtMem rt_mem_growable(void) {
+    RtMem m = rt_mem_empty();
+    m.growable = true;
+    return m;
+}
+
+/* Runs the finalizers: threads living here are waited for, synchronized objects released. */
+static inline void rt_mem_finalize(RtMem* m) {
+    for (;;) {
+#ifdef RT_THREADS
+        if (m->shared) rt_shared_lock();
+#endif
+        RtFinal* f = m->finals;
+        if (f) m->finals = f->next;
+#ifdef RT_THREADS
+        if (m->shared) rt_shared_unlock();
+#endif
+        if (!f) return;
+        f->fn(f->p);
+    }
+}
+
+static inline void rt_mem_free(RtMem* m) {
+    rt_mem_finalize(m);
+    RtChunk* c = m->chunks;
+    while (c) {
+        RtChunk* prev = c->prev;
+#if defined(RT_DEBUG_MEMORY) && !defined(RT_ASAN)
+        memset(c, 0xDD, rt_align_up(sizeof(RtChunk)) + c->cap);     /* what lived here reads as garbage */
+#endif
+        free(c);
+        c = prev;
+    }
+    *m = rt_mem_empty();
+}
+
+/* Memory.limit: a memory that needs more than its limit stops the program, naming it. */
+static const char* rt_size_text(size_t n, char* out) {
+    if (n >= 1048576) snprintf(out, 32, "%.1f MB", (double)n / 1048576.0);
+    else snprintf(out, 32, "%.1f KB", (double)n / 1024.0);
+    return out;
+}
+
+static void rt_mem_over_limit(RtMem* m, size_t need) {
+    static char text[256];
+    char a[32], b[32], c[32];
+    snprintf(text, sizeof text, "memory '%s' passed its limit of %s (it has %s and needs %s more)", m->name ? m->name : "?",
+        rt_size_text(m->limit, a), rt_size_text(m->reserved, b), rt_size_text(need, c));
+    rt_panic(text, 0);
+}
+
+static inline void rt_mem_limit(RtMem* m, int64_t bytes, const char* name, int line) {
+    if (bytes < 0) rt_panic("a memory limit cannot be negative", line);
+    m->name = name;
+    m->limit = (size_t)bytes;
+    if (m->limit && m->reserved > m->limit) rt_mem_over_limit(m, 0);
+}
+
+/* Whether p points into one of these blocks (what Memory.compact moves). */
+static inline bool rt_owned(const RtChunk* c, const void* p) {
+    const uint8_t* q = (const uint8_t*)p;
+    for (; c; c = c->prev) {
+        const uint8_t* d = (const uint8_t*)c + rt_align_up(sizeof(RtChunk));
+        if (q >= d && q < d + c->cap) return true;
+    }
+    return false;
+}
+
+/* Memory.compact, first half: the memory keeps its name and limit, and starts again with no blocks; its
+   old blocks go to *old, from where the live data is copied back. */
+static inline void rt_mem_compact_begin(RtMem* m, RtMem* old, const char* name, int line) {
+    if (m->finals) {
+        static char text[256];
+        snprintf(text, sizeof text, "memory '%s' holds threads, synchronized objects or C resources; compact() cannot move them", name);
+        rt_panic(text, line);
+    }
+    *old = *m;
+    *m = rt_mem_growable();          /* empty again; it keeps its limit, its name and its peak */
+    m->limit = old->limit;
+    m->name = old->name;
+    m->peak = old->peak;
+}
+
+/* Memory.compact, second half: the old blocks are freed. */
+static inline void rt_mem_compact_end(RtMem* old) { rt_mem_free(old); }
+
+static inline void rt_mem_track(RtMem* m, size_t add) {
+    m->total += add;
+    if (m->total > m->peak) m->peak = m->total;
+}
+
+/* Returns NULL when a fixed memory is full. */
+static inline void* rt_mem_try_alloc_raw(RtMem* m, size_t size) {
+    size_t need = rt_align_up(size ? size : 1);
+    size_t span = need + (m->growable ? RT_REDZONE : 0);      /* with checks: a poisoned gap after it */
+    if (m->base == NULL || m->cap - m->used < span) {
+        if (!m->growable) return NULL;
+        size_t chunk = 64 * 1024;
+        if (m->cap * 2 > chunk && m->cap < ((size_t)64 << 20)) chunk = m->cap * 2;
+        while (chunk < span) chunk *= 2;
+        if (m->limit && m->reserved + chunk > m->limit) {        /* the last block fits what is left */
+            size_t room = m->limit > m->reserved ? m->limit - m->reserved : 0;
+            if (room < span) rt_mem_over_limit(m, span);
+            chunk = room;
+        }
+        RtChunk* c = rt_chunk_new(chunk);
+        c->prev = m->chunks;
+        m->chunks = c;
+        m->base = rt_chunk_data(c);
+        m->cap = chunk;
+        m->used = 0;
+        m->reserved += chunk;
+    }
+    void* p = m->base + m->used;
+    m->used += span;
+    m->last = p;
+    m->lastSize = need;
+    rt_mem_track(m, need);
+    RT_UNPOISON(p, size ? size : 1);
+    return p;
+}
+
+static inline void* rt_mem_try_alloc(RtMem* m, size_t size) {
+#ifdef RT_THREADS
+    if (m->shared) {
+        rt_shared_lock();
+        void* p = rt_mem_try_alloc_raw(m, size);
+        rt_shared_unlock();
+        return p;
+    }
+#endif
+    return rt_mem_try_alloc_raw(m, size);
+}
+
+static inline void* rt_mem_alloc(RtMem* m, size_t size, int line) {
+    if (!m) rt_panic("internal error: something was created without a memory (a bug of the compiler, please report it)", line);
+    void* p = rt_mem_try_alloc(m, size);
+    if (!p) rt_panic("memory is full", line);
+    memset(p, 0, size);
+    return p;
+}
+
+/* A copy of size bytes in m (a callback C keeps: its Context lives as long as the memory). */
+static inline void* rt_mem_copy(RtMem* m, const void* p, size_t size, int line) {
+    void* q = rt_mem_alloc(m, size, line);
+    memcpy(q, p, size);
+    return q;
+}
+
+/* Grows the last allocation in place when possible, otherwise copies. */
+static inline void* rt_mem_try_realloc_raw(RtMem* m, void* old, size_t oldSize, size_t newSize) {
+    if (old == NULL) return rt_mem_try_alloc_raw(m, newSize);
+    if (old == m->last) {
+        size_t need = rt_align_up(newSize);
+        size_t gap = m->growable ? RT_REDZONE : 0;
+        size_t off = (size_t)((uint8_t*)old - m->base);
+        if (need >= m->lastSize && off + need + gap <= m->cap) {
+            rt_mem_track(m, need - m->lastSize);
+            m->used = off + need + gap;
+            m->lastSize = need;
+            RT_UNPOISON(old, newSize);
+            return old;
+        }
+    }
+    void* p = rt_mem_try_alloc_raw(m, newSize);
+    if (!p) return NULL;
+    memcpy(p, old, oldSize < newSize ? oldSize : newSize);
+    return p;
+}
+
+static inline void* rt_mem_try_realloc(RtMem* m, void* old, size_t oldSize, size_t newSize) {
+#ifdef RT_THREADS
+    if (m->shared) {
+        rt_shared_lock();
+        void* p = rt_mem_try_realloc_raw(m, old, oldSize, newSize);
+        rt_shared_unlock();
+        return p;
+    }
+#endif
+    return rt_mem_try_realloc_raw(m, old, oldSize, newSize);
+}
+
+/* Registers work to do when the memory is freed. */
+static inline void rt_mem_on_free(RtMem* m, void (*fn)(void*), void* p, int line) {
+    RtFinal* f = (RtFinal*)rt_mem_alloc(m, sizeof(RtFinal), line);
+    f->fn = fn;
+    f->p = p;
+#ifdef RT_THREADS
+    if (m->shared) rt_shared_lock();
+#endif
+    f->next = m->finals;
+    m->finals = f;
+#ifdef RT_THREADS
+    if (m->shared) rt_shared_unlock();
+#endif
+}
+
+/* The default memory: grows, lives for the whole program. */
+RtMem rt_default_mem = { NULL, 0, 0, 0, 0, 0, NULL, NULL, 0, true, NULL, true };
+
+#ifdef RT_THREADS
+}

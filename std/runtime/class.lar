@@ -1,0 +1,98 @@
+// std.runtime.class: classes: virtual tables, clone, casts.
+// Part of the runtime: the compiler takes from here what a program uses (it is not imported).
+ccode {
+/* ---- runtime: classes ------------------------------------------------- */
+
+typedef struct RtClass { const char* name; const struct RtClass* parent; } RtClass;
+
+static inline bool rt_is_a(const RtClass* c, const RtClass* target) {
+    for (; c; c = c->parent) if (c == target) return true;
+    return false;
+}
+
+/* Remembers already cloned objects so that cyclic graphs clone correctly (a hash table of addresses).
+   only != NULL: Memory.compact, which copies only what lives in those blocks and keeps the rest. */
+typedef struct RtCloneMap { void** keys; void** vals; int32_t len; int32_t cap; const struct RtChunk* only; } RtCloneMap;
+
+static inline RtCloneMap rt_clone_map(void) {
+    RtCloneMap m;
+    m.keys = NULL;
+    m.vals = NULL;
+    m.len = 0;
+    m.cap = 0;
+    m.only = NULL;
+    return m;
+}
+
+static inline size_t rt_clone_slot(const RtCloneMap* m, const void* key) {
+    uint64_t h = (uint64_t)(uintptr_t)key;
+    h ^= h >> 33;
+    h *= 0xff51afd7ed558ccdULL;
+    h ^= h >> 33;
+    return (size_t)h & (size_t)(m->cap - 1);
+}
+
+static inline void* rt_clone_get(RtCloneMap* m, void* key) {
+    if (m->cap == 0) return NULL;
+    for (size_t i = rt_clone_slot(m, key);; i = (i + 1) & (size_t)(m->cap - 1)) {
+        if (m->keys[i] == key) return m->vals[i];
+        if (m->keys[i] == NULL) return NULL;
+    }
+}
+
+static inline void rt_clone_put(RtCloneMap* m, void* key, void* val) {
+    if ((m->len + 1) * 2 > m->cap) {
+        RtCloneMap g = *m;
+        g.cap = m->cap ? m->cap * 2 : 64;
+        g.len = 0;
+        g.keys = (void**)calloc((size_t)g.cap, sizeof(void*));
+        g.vals = (void**)calloc((size_t)g.cap, sizeof(void*));
+        if (!g.keys || !g.vals) rt_panic("out of memory while cloning", 0);
+        for (int32_t i = 0; i < m->cap; i++) if (m->keys[i]) rt_clone_put(&g, m->keys[i], m->vals[i]);
+        free(m->keys);
+        free(m->vals);
+        *m = g;
+    }
+    size_t i = rt_clone_slot(m, key);
+    while (m->keys[i] != NULL && m->keys[i] != key) i = (i + 1) & (size_t)(m->cap - 1);
+    if (m->keys[i] == NULL) m->len++;
+    m->keys[i] = key;
+    m->vals[i] = val;
+}
+
+/* Memory.compact: whether a value is left where it is (it does not live in the memory being compacted). */
+static inline bool rt_clone_keeps(const RtCloneMap* m, const void* p) {
+    return m->only != NULL && (p == NULL || !rt_owned(m->only, p));
+}
+
+static inline void rt_clone_done(RtCloneMap* m) {
+    free(m->keys);
+    free(m->vals);
+}
+
+/* Every class object starts with this header, and every vtable with RtVTableHead. */
+typedef struct RtVTableHead {
+    const RtClass* cls;
+    void* (*clone)(void* self, RtMem* mem, RtCloneMap* cm);
+} RtVTableHead;
+
+typedef struct RtObjHead { const void* vt; RtMem* mem; } RtObjHead;
+
+static inline const RtVTableHead* rt_obj_vt(const void* obj) {
+    return (const RtVTableHead*)((const RtObjHead*)obj)->vt;
+}
+
+static inline const RtClass* rt_obj_class(const void* obj) { return rt_obj_vt(obj)->cls; }
+
+static inline RtMem* rt_obj_mem(const void* obj) { return ((const RtObjHead*)obj)->mem; }
+
+/* The object if it is of class c (or a subclass), NULL otherwise. */
+static inline void* rt_as_class(void* obj, const RtClass* c) {
+    return obj && rt_is_a(rt_obj_class(obj), c) ? obj : NULL;
+}
+
+static inline void* rt_unwrap(void* p, int line) {
+    if (!p) rt_panic("'!' used on a null value", line);
+    return p;
+}
+}

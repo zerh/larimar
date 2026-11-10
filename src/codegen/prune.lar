@@ -1,8 +1,8 @@
 // codegen.prune: only the generated C the program reaches. The same idea as rtselect, applied to the program:
 // the C is cut into declarations (a function, a type, a helper, a prototype, a global), and a
 // declaration is kept when it defines a name that a kept declaration uses. The roots are main, the
-// export functions, and what the program wrote in C itself (c_include, c_code), which stays whole.
-// The c_code of the standard library ("c_code (std)") is cut like the rest: only what is used stays.
+// export functions, and what the program wrote in C itself (cinclude, ccode), which stays whole.
+// The ccode of the standard library ("ccode (std)") is cut like the rest: only what is used stays.
 // So unused functions and methods of std, the types only their signatures mention, the helpers of
 // those types, and the runtime only they needed, all leave the C.
 
@@ -21,7 +21,7 @@ class Piece {
 
 /** Sections written by the program itself: they stay whole, and what they use is kept. */
 function rootSection(title: String): bool {
-    return title == "" || title == "c_code" || title == "Export functions" || title == "Entry point" || title == "Library";
+    return title == "" || title == "ccode" || title == "Export functions" || title == "Entry point" || title == "Library";
 }
 
 /** The generated program without what it does not reach. roots: main and the export functions. */

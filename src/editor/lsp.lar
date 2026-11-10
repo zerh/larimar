@@ -12,6 +12,7 @@
 // changed last, and published for every file of its program.
 
 import std.os;
+import std.os { OnUnix, OnWindows };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io.console as Console;
@@ -26,137 +27,173 @@ import editor.ide {
     prepareCompletion, pathOfUri, fileIndex
 };
 
-c_code {
-    #ifndef _WIN32
-    #include <unistd.h>
-    #include <poll.h>
-    #include <sys/types.h>
-    #include <sys/wait.h>
-    #endif
-    #include <stdlib.h>
+/** Lsp's C on Unix. */
+class LspUnix implements OnUnix {
+    ccode {
+        #include <unistd.h>
+        #include <poll.h>
+        #include <sys/types.h>
+        #include <sys/wait.h>
+        #include <stdlib.h>
 
-    #ifndef _WIN32
-    static int lm_lsp_pipe[2] = { -1, -1 };     /* (Windows has no fork: the worker is a process) */
-    #endif
+        static int lm_lsp_pipe[2] = { -1, -1 };     /* (Windows has no fork: the worker is a process) */
 
-    /* fork with a pipe from the child: 0 in the child, its pid in the server, -1 if it cannot */
-    static int32_t lm_lsp_fork(void) {
-    #ifdef _WIN32
-        return -1;
-    #else
-        fflush(stdout);
-        fflush(stderr);
-        if (pipe(lm_lsp_pipe) != 0) return -1;
-        pid_t p = fork();
-        if (p < 0) {
-            close(lm_lsp_pipe[0]);
+        /* fork with a pipe from the child: 0 in the child, its pid in the server, -1 if it cannot */
+        static int32_t lm_lsp_fork(void) {
+            fflush(stdout);
+            fflush(stderr);
+            if (pipe(lm_lsp_pipe) != 0) return -1;
+            pid_t p = fork();
+            if (p < 0) {
+                close(lm_lsp_pipe[0]);
+                close(lm_lsp_pipe[1]);
+                return -1;
+            }
+            if (p == 0) {
+                close(lm_lsp_pipe[0]);
+                dup2(2, 1);                  /* stdout is the editor's: nothing the analysis prints goes there */
+                alarm(60);                   /* an analysis that never ends must not stay forever */
+                return 0;
+            }
             close(lm_lsp_pipe[1]);
+            return (int32_t)p;
+        }
+
+        /* in the child: writes the answer and ends */
+        static void lm_lsp_send(const char* text, int32_t len) {
+            size_t done = 0;
+            while (done < (size_t)len) {
+                ssize_t k = write(lm_lsp_pipe[1], text + done, (size_t)len - done);
+                if (k <= 0) break;
+                done += (size_t)k;
+            }
+            close(lm_lsp_pipe[1]);
+            _exit(0);
+        }
+
+        /* in the child: ends without answering, with a code for the one waiting */
+        static void lm_lsp_quit(int32_t code) {
+            _exit(code);
+        }
+
+        /* in the server: everything the child wrote ("" if it ended without answering) */
+        static const char* lm_lsp_receive(RtMem* m, int32_t pid) {
+            RtSb sb = rt_sb_mem(m, 0);
+            rt_sb_add(&sb, "", 0);
+            char buf[65536];
+            for (;;) {
+                ssize_t k = read(lm_lsp_pipe[0], buf, sizeof buf);
+                if (k < 0 && errno == EINTR) continue;
+                if (k <= 0) break;
+                rt_sb_add(&sb, buf, (int32_t)k);
+            }
+            close(lm_lsp_pipe[0]);
+            int status = 0;
+            while (waitpid((pid_t)pid, &status, 0) < 0 && errno == EINTR) {}
+            return sb.buf;
+        }
+
+        /*
+         * In the child: one more process tries first (the program of the project, which may not reach the
+         * file). 0: this is that process; 1: it answered, so the child ends; 2: it could not.
+         */
+        static int32_t lm_lsp_attempt(void) {
+            fflush(stderr);
+            pid_t p = fork();
+            if (p < 0) return 2;
+            if (p == 0) return 0;
+            int status = 0;
+            while (waitpid(p, &status, 0) < 0 && errno == EINTR) {}
+            return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 1 : 2;
+        }
+
+        /* whether a message arrives on stdin within ms milliseconds */
+        static bool lm_lsp_waiting(int32_t ms) {
+            struct pollfd p;
+            p.fd = 0;
+            p.events = POLLIN;
+            p.revents = 0;
+            return poll(&p, 1, ms) > 0;
+        }
+
+        /* stdin without a buffer of its own, so poll() sees every byte that has not been read */
+        static void lm_lsp_unbuffered(void) { setvbuf(stdin, NULL, _IONBF, 0); }
+
+        /* the file whose errors are still to be published */
+        static char* lm_lsp_pending;
+        static void lm_lsp_set_pending(const char* path) {
+            free(lm_lsp_pending);
+            lm_lsp_pending = NULL;
+            if (path[0]) {
+                size_t n = strlen(path);
+                lm_lsp_pending = (char*)malloc(n + 1);
+                if (lm_lsp_pending) memcpy(lm_lsp_pending, path, n + 1);
+            }
+        }
+        static const char* lm_lsp_get_pending(void) { return lm_lsp_pending ? lm_lsp_pending : ""; }
+
+        static int32_t lm_lsp_pid(void) { return (int32_t)getpid(); }
+    }
+}
+
+/** Lsp's C on Windows. */
+class LspWindows implements OnWindows {
+    ccode {
+        #include <stdlib.h>
+
+
+        /* fork with a pipe from the child: 0 in the child, its pid in the server, -1 if it cannot */
+        static int32_t lm_lsp_fork(void) {
             return -1;
         }
-        if (p == 0) {
-            close(lm_lsp_pipe[0]);
-            dup2(2, 1);                  /* stdout is the editor's: nothing the analysis prints goes there */
-            alarm(60);                   /* an analysis that never ends must not stay forever */
-            return 0;
+
+        /* in the child: writes the answer and ends */
+        static void lm_lsp_send(const char* text, int32_t len) {
         }
-        close(lm_lsp_pipe[1]);
-        return (int32_t)p;
-    #endif
-    }
 
-    /* in the child: writes the answer and ends */
-    static void lm_lsp_send(const char* text, int32_t len) {
-    #ifndef _WIN32
-        size_t done = 0;
-        while (done < (size_t)len) {
-            ssize_t k = write(lm_lsp_pipe[1], text + done, (size_t)len - done);
-            if (k <= 0) break;
-            done += (size_t)k;
+        /* in the child: ends without answering, with a code for the one waiting */
+        static void lm_lsp_quit(int32_t code) {
         }
-        close(lm_lsp_pipe[1]);
-        _exit(0);
-    #endif
-    }
 
-    /* in the child: ends without answering, with a code for the one waiting */
-    static void lm_lsp_quit(int32_t code) {
-    #ifndef _WIN32
-        _exit(code);
-    #endif
-    }
-
-    /* in the server: everything the child wrote ("" if it ended without answering) */
-    static const char* lm_lsp_receive(RtMem* m, int32_t pid) {
-        RtSb sb = rt_sb_mem(m, 0);
-        rt_sb_add(&sb, "", 0);
-    #ifndef _WIN32
-        char buf[65536];
-        for (;;) {
-            ssize_t k = read(lm_lsp_pipe[0], buf, sizeof buf);
-            if (k < 0 && errno == EINTR) continue;
-            if (k <= 0) break;
-            rt_sb_add(&sb, buf, (int32_t)k);
+        /* in the server: everything the child wrote ("" if it ended without answering) */
+        static const char* lm_lsp_receive(RtMem* m, int32_t pid) {
+            RtSb sb = rt_sb_mem(m, 0);
+            rt_sb_add(&sb, "", 0);
+            return sb.buf;
         }
-        close(lm_lsp_pipe[0]);
-        int status = 0;
-        while (waitpid((pid_t)pid, &status, 0) < 0 && errno == EINTR) {}
-    #endif
-        return sb.buf;
-    }
 
-    /*
-     * In the child: one more process tries first (the program of the project, which may not reach the
-     * file). 0: this is that process; 1: it answered, so the child ends; 2: it could not.
-     */
-    static int32_t lm_lsp_attempt(void) {
-    #ifdef _WIN32
-        return 2;
-    #else
-        fflush(stderr);
-        pid_t p = fork();
-        if (p < 0) return 2;
-        if (p == 0) return 0;
-        int status = 0;
-        while (waitpid(p, &status, 0) < 0 && errno == EINTR) {}
-        return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 1 : 2;
-    #endif
-    }
-
-    /* whether a message arrives on stdin within ms milliseconds */
-    static bool lm_lsp_waiting(int32_t ms) {
-    #ifdef _WIN32
-        return false;
-    #else
-        struct pollfd p;
-        p.fd = 0;
-        p.events = POLLIN;
-        p.revents = 0;
-        return poll(&p, 1, ms) > 0;
-    #endif
-    }
-
-    /* stdin without a buffer of its own, so poll() sees every byte that has not been read */
-    static void lm_lsp_unbuffered(void) { setvbuf(stdin, NULL, _IONBF, 0); }
-
-    /* the file whose errors are still to be published */
-    static char* lm_lsp_pending;
-    static void lm_lsp_set_pending(const char* path) {
-        free(lm_lsp_pending);
-        lm_lsp_pending = NULL;
-        if (path[0]) {
-            size_t n = strlen(path);
-            lm_lsp_pending = (char*)malloc(n + 1);
-            if (lm_lsp_pending) memcpy(lm_lsp_pending, path, n + 1);
+        /*
+         * In the child: one more process tries first (the program of the project, which may not reach the
+         * file). 0: this is that process; 1: it answered, so the child ends; 2: it could not.
+         */
+        static int32_t lm_lsp_attempt(void) {
+            return 2;
         }
-    }
-    static const char* lm_lsp_get_pending(void) { return lm_lsp_pending ? lm_lsp_pending : ""; }
 
-    #ifdef _WIN32
-    #include <process.h>
-    static int32_t lm_lsp_pid(void) { return (int32_t)_getpid(); }
-    #else
-    static int32_t lm_lsp_pid(void) { return (int32_t)getpid(); }
-    #endif
+        /* whether a message arrives on stdin within ms milliseconds */
+        static bool lm_lsp_waiting(int32_t ms) {
+            return false;
+        }
+
+        /* stdin without a buffer of its own, so poll() sees every byte that has not been read */
+        static void lm_lsp_unbuffered(void) { setvbuf(stdin, NULL, _IONBF, 0); }
+
+        /* the file whose errors are still to be published */
+        static char* lm_lsp_pending;
+        static void lm_lsp_set_pending(const char* path) {
+            free(lm_lsp_pending);
+            lm_lsp_pending = NULL;
+            if (path[0]) {
+                size_t n = strlen(path);
+                lm_lsp_pending = (char*)malloc(n + 1);
+                if (lm_lsp_pending) memcpy(lm_lsp_pending, path, n + 1);
+            }
+        }
+        static const char* lm_lsp_get_pending(void) { return lm_lsp_pending ? lm_lsp_pending : ""; }
+
+        #include <process.h>
+        static int32_t lm_lsp_pid(void) { return (int32_t)_getpid(); }
+    }
 }
 
 native function lm_lsp_fork(): int32;
@@ -241,7 +278,7 @@ let forking: bool = true;
 public function serve(): int32 {
     Console.binaryMode();
     lm_lsp_unbuffered();
-    forking = os.platform() != "windows" && (os.env("LARIMAR_LSP_NO_FORK") ?? "") != "1";
+    forking = os.platformName() != "windows" && (os.env("LARIMAR_LSP_NO_FORK") ?? "") != "1";
     let shutdown: bool = false;
     while (true) {
         // the errors, once the editor stops typing

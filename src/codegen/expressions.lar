@@ -22,7 +22,7 @@ import codegen.gen {
     internalError, ctxTrampolines, ctxSeen, externCType
 };
 
-c_code {
+ccode {
     /* The shortest decimal text that gives the same double back. */
     static const char* gen_double_text(double d) {
         char* buf = (char*)rt_mem_alloc(&rt_default_mem, 40, 0);

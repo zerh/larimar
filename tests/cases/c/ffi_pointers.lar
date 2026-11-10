@@ -1,6 +1,6 @@
-// C without c_code-wrappers: pointers to C structs (a linked list), out parameters (&x), constants and
+// C without ccode-wrappers: pointers to C structs (a linked list), out parameters (&x), constants and
 // macros (native const), a C global (native let), C strings in structs, arrays where C takes T*, `when`.
-c_code {
+ccode {
     typedef struct Node { int value; struct Node* next; const char* name; } Node;
     static Node nodes[3] = { { 10, &nodes[1], "uno" }, { 20, &nodes[2], "dos" }, { 30, NULL, "tres" } };
     static Node* first_node(void) { return &nodes[0]; }
@@ -22,7 +22,7 @@ native function first_node(): Node*;
 native function two_results(a: int32*, b: int32*): void;
 native const COUNT: int32;
 native const LIMIT: int32;
-native const POINTER_SIZE: int32 = "(int)sizeof(void*)";
+native const POINTER_SIZE: int32 = c"(int)sizeof(void*)";
 native let counter: int32;
 native function sum_bytes(p: byte*, n: int32): int32;
 native function square(x: int32): int32 = square_it;

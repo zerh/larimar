@@ -13,22 +13,14 @@
 //
 // What these functions give lives where the call says (Files.readString(path) in memory), or in
 // the memory of the block that keeps it. Everything that can fail throws IoError. Written in Larimar
-// over the C functions of the system (stdio, stat, mkdir, opendir; FindFirstFile on Windows).
+// over C's stdio; folders over each system's own functions (opendir, mkdir; FindFirstFile, _mkdir).
 
 import std.io { IoError, raise, InputStream, OutputStream };
 import std.io as Io;
+import std.os { platform, Platform, OnUnix, OnWindows };
 
-c_include "<errno.h>";
-c_include "<sys/stat.h>";
-#when unix
-    c_include "<unistd.h>";
-    c_include "<dirent.h>";
-#when windows
-    c_include "<winsock2.h>";        // before windows.h (it includes it): no clash with the old winsock.h
-    c_include "<windows.h>";
-    c_include "<direct.h>";
-    c_include "<io.h>";
-#end
+cinclude "<errno.h>";
+cinclude "<sys/stat.h>";
 
 /** A C FILE*, closed when its memory is freed. */
 native type FileHandle = FILE* released by fclose;
@@ -44,37 +36,99 @@ native function fgets(into: byte*, size: int32, f: FileHandle): Untyped?;
 native function strlen(text: byte*): uint64;
 native const EOF: int32;
 
-native struct Stat = "struct stat" { let st_mode: uint32; let st_size: int64; let st_mtime: int64; };
+native struct Stat = c"struct stat" { let st_mode: uint32; let st_size: int64; let st_mtime: int64; };
 native function stat(path: String, into: Stat*): int32;
 native function remove(path: String): int32;
-#when unix
-    native function mkdir(path: String, mode: uint32): int32;
-    native function rmdir(path: String): int32;
-    native function chmod(path: String, mode: uint32): int32;
-#when windows
-    native function _mkdir(path: String): int32;
-    native function _rmdir(path: String): int32;
-    native function _chmod(path: String, mode: int32): int32;
-    native const _S_IWRITE: int32;
-#end
 
-/** A folder being read (Unix), closed when its memory is freed. */
-native type Dir released by closedir;
-native struct DirEntry = "struct dirent" { let d_name: String; };
-native function opendir(path: String): Dir?;
-native function readdir(d: Dir): DirEntry*;
-#when unix
-    native function closedir(d: Dir): int32;
-#end
+/** What std.io.files needs of the system for folders: one class for each. */
+interface FolderSystem {
+    function makeDirectory(path: String): int32;         // 0, or -1 (errno says why)
+    function removeDirectory(path: String): int32;
+    function makeWritable(path: String): void;            // before replacing a read-only file
+    function copyPermissions(from: String, to: String): void;
+    function listOpen(path: String): int64;               // 0: it could not be opened
+    function listNext(list: int64, into: byte[]): bool;   // the next name, ending in a zero byte
+    function listClose(list: int64): void;
+}
 
-/** A folder being read (Windows), closed when its memory is freed. */
-native type FindHandle released by FindClose;                    // a HANDLE (void*)
-native struct FindData = WIN32_FIND_DATAA { let cFileName: String; };
-native function FindFirstFileA(pattern: String, data: FindData*): FindHandle?;
-#when windows
-    native function FindNextFileA(h: FindHandle, data: FindData*): int32;
-    native function FindClose(h: FindHandle): int32;
-#end
+class PosixFolders implements FolderSystem, OnUnix {
+    cinclude "<unistd.h>";
+    cinclude "<dirent.h>";
+
+    function makeDirectory(path: String): int32 ccode { return mkdir(path, 0777); }   /* less what the umask takes away */
+
+    function removeDirectory(path: String): int32 ccode { return rmdir(path); }
+
+    function makeWritable(path: String): void ccode { (void)path; }
+
+    function copyPermissions(from: String, to: String): void ccode {
+        struct stat st;
+        if (stat(from, &st) == 0) chmod(to, st.st_mode & 07777);
+    }
+
+    function listOpen(path: String): int64 ccode { return (int64_t)(intptr_t)opendir(path); }
+
+    function listNext(list: int64, into: byte[]): bool ccode {
+        struct dirent* e = readdir((DIR*)(intptr_t)list);
+        if (e == NULL) return false;
+        snprintf((char*)into, (size_t)into_length, "%s", e->d_name);
+        return true;
+    }
+
+    function listClose(list: int64): void ccode { closedir((DIR*)(intptr_t)list); }
+}
+
+class WindowsFolders implements FolderSystem, OnWindows {
+    cinclude "<winsock2.h>";        // before windows.h (it includes it): no clash with the old winsock.h
+    cinclude "<windows.h>";
+    cinclude "<direct.h>";
+    cinclude "<io.h>";
+
+    ccode {
+        typedef struct LmFind { HANDLE h; WIN32_FIND_DATAA data; int pending; } LmFind;
+    }
+
+    function makeDirectory(path: String): int32 ccode { return _mkdir(path); }
+
+    function removeDirectory(path: String): int32 ccode { return _rmdir(path); }
+
+    function makeWritable(path: String): void ccode { _chmod(path, _S_IWRITE); }
+
+    function copyPermissions(from: String, to: String): void ccode { (void)from; (void)to; }
+
+    function listOpen(path: String): int64 ccode {
+        size_t n = strlen(path);
+        char* pattern = (char*)malloc(n + 3);
+        LmFind* f = (LmFind*)calloc(1, sizeof(LmFind));
+        if (pattern == NULL || f == NULL) { free(pattern); free(f); return 0; }
+        memcpy(pattern, path, n);
+        memcpy(pattern + n, "\\*", 3);
+        f->h = FindFirstFileA(pattern, &f->data);
+        free(pattern);
+        if (f->h == INVALID_HANDLE_VALUE) { free(f); return 0; }
+        f->pending = 1;
+        return (int64_t)(intptr_t)f;
+    }
+
+    function listNext(list: int64, into: byte[]): bool ccode {
+        LmFind* f = (LmFind*)(intptr_t)list;
+        if (!f->pending && !FindNextFileA(f->h, &f->data)) return false;
+        f->pending = 0;
+        snprintf((char*)into, (size_t)into_length, "%s", f->data.cFileName);
+        return true;
+    }
+
+    function listClose(list: int64): void ccode {
+        LmFind* f = (LmFind*)(intptr_t)list;
+        FindClose(f->h);
+        free(f);
+    }
+}
+
+let folders: FolderSystem = switch (platform()) {
+    case Linux, MacOS, Unix -> PosixFolders {};
+    case Windows -> WindowsFolders {};
+};
 
 native let errno: int32;
 native const ENOENT: int32;
@@ -165,39 +219,20 @@ public function size(path: String): int64 {
 /** The names of what a folder holds (files and folders, in no particular order). */
 public function list(path: String): String[*] throws IoError {
     let names: String[*] = [];
-    #when windows
-        let data: FindData = {};
-        let h: FindHandle? = FindFirstFileA("${path}\\*", &data);
-        if (h == null) { raise(isDirectory(path) ? 2 : 1, path); }
-        while (true) {
-            let n: String = data.cFileName;               // a view of C's text: copied below
-            if (n != "." && n != "..") { names.push(n.clone()); }
-            if (FindNextFileA(h!, &data) == 0) { break; }
-        }
-        release(h);
-    #else
-        let d: Dir? = opendir(path);
-        if (d == null) { raise(isDirectory(path) ? 2 : 1, path); }
-        while (true) {
-            let e: DirEntry* = readdir(d!);
-            if (e == null) { break; }
-            let n: String = e.d_name;                      // a view of C's text: copied below
-            if (n != "." && n != "..") { names.push(n.clone()); }
-        }
-        release(d);
-    #end
+    let found: int64 = folders.listOpen(path);
+    if (found == 0) { raise(isDirectory(path) ? 2 : 1, path); }
+    let name: byte[*] = bytes(1024);
+    while (folders.listNext(found, name)) {
+        let n: String = stringOfRange(name, 0, strlen(name) as int32);
+        if (n != "." && n != "..") { names.push(n.clone()); }
+    }
+    folders.listClose(found);
     return names;
 }
 
 /** Creates one folder; fine if it is already there. */
 function makeDirectory(path: String): int32 {
-    let r: int32 = 0;
-    #when windows
-        r = _mkdir(path);
-    #else
-        r = mkdir(path, 511);                             // 0777, less what the umask takes away
-    #end
-    if (r == 0) { return 0; }
+    if (folders.makeDirectory(path) == 0) { return 0; }
     return errno == EEXIST && kind(path) == 2 ? 0 : code();
 }
 
@@ -219,9 +254,7 @@ public function copy(from: String, to: String): void throws IoError {
     let input: FileHandle? = fopen(from, "rb");
     if (input == null) { raise(code(), from); }
     if (kind(to) == 1) {                       // a copy kept read-only (Homebrew's libraries): a new file instead
-        #when windows
-            _chmod(to, _S_IWRITE);
-        #end
+        folders.makeWritable(to);
         remove(to);
     }
     let output: FileHandle? = fopen(to, "wb");
@@ -237,21 +270,14 @@ public function copy(from: String, to: String): void throws IoError {
     release(input);
     release(output);
     if (!ok) { raise(3, from); }
-    #when unix
-        let st: Stat = {};
-        if (stat(from, &st) == 0) { chmod(to, st.st_mode & 4095); }   // the permissions (07777)
-    #end
+    folders.copyPermissions(from, to);                     // on Unix an executable stays executable
 }
 
 /** Deletes a file, or an empty folder. */
 public function delete(path: String): void throws IoError {
     let r: int32 = 0;
     if (kind(path) == 2) {
-        #when windows
-            r = _rmdir(path);
-        #else
-            r = rmdir(path);
-        #end
+        r = folders.removeDirectory(path);
     } else {
         r = remove(path);
     }

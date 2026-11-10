@@ -7,7 +7,7 @@ document says, and an implementation is correct when it does what this document 
 [Manual](manual.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 1.3.1 (language 1.0)`. A compiler release may add to the standard library and to the tools
+`larimar 1.4.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
@@ -51,7 +51,7 @@ might not foresee:
 - **Nothing is hidden.** No garbage collector, no hidden threads, no hidden control flow, no implicit
   conversions, no constructors, no overloading. What a program does can be read in its text.
 - **No undefined behavior.** Every operation of the language either has a defined result or stops the
-  program with a message ([§16.3](#163-panics)). Only code written in C (`c_code`, native functions)
+  program with a message ([§16.3](#163-panics)). Only code written in C (`ccode`, native functions)
   is outside this guarantee.
 - **Memory without a collector and without dangling references.** Every value that needs storage lives
   in a *memory* that is freed whole at a point that can be seen in the code ([§14](#14-memory)), and the
@@ -138,11 +138,11 @@ else      enum      extends   false     for       function  heap      if
 implements import   in        interface is        let       native
 new       null      operator  override  private   public    return    self
 static    struct    super     switch    synchronized          throw     throws
-true      try       when      while     yield     c_include c_code
+true      try       when      while     yield     cinclude ccode
 ```
 
 Also part of the language, but not reserved: `wait until`, `thread safe`, `released by`, `test`,
-`export`, `type`, `lar` (only inside `c_code`) and `raw` (see the table below).
+`export`, `type`, `lar` (only inside `ccode`) and `raw` (see the table below).
 
 `new` and `private` are reserved but have no meaning: `new` is an error (objects are created with
 literals), and `private` is an error that says it is not needed (what is not `public` is private).
@@ -154,14 +154,14 @@ These words have a meaning only in one place, and are identifiers everywhere els
 | `test` | before `function` at the top level ([§22](#22-tests)) |
 | `export` | before `function` at the top level ([§19.9](#199-export-functions)) |
 | `type` | after `native` |
-| `c` | before a string in `= c "..."` ([§19](#19-c-interoperability)) |
+| `c` | immediately before `"`: C text, `c"..."`, after `=` in a native declaration ([§19.3](#193-native-functions)) |
 | `raw` | immediately before `"""` ([§4.9](#49-raw-text-blocks)) |
 | `released by` | in a `native type` ([§19.7](#197-resources)), and after a `native function` that returns a text ([§19.3](#193-native-functions)) |
 | `wait until` | at the end of a method signature ([§18.3](#183-wait-until)) |
 | `thread safe` | after a function type ([§18.4](#184-thread-safe-functions)) |
 
 The two-word clauses (`released by`, `wait until`, `thread safe`) describe a declaration and read like
-a phrase; keywords that start a declaration are a single token (`c_include`, `c_code`).
+a phrase; keywords that start a declaration are a single token (`cinclude`, `ccode`).
 
 ### 4.5 Operators and punctuation
 
@@ -346,7 +346,7 @@ program = import* ( [ public ] declaration | #when block )*
 
 A file is a list of imports followed by declarations. At the top level there are only declarations:
 `const`, `let`, `function`, `test function`, `export function`, `struct`, `class`,
-`synchronized class`, `interface`, `enum`, `c_include`, `c_code` and the `native` declarations
+`synchronized class`, `interface`, `enum`, `cinclude`, `ccode` and the `native` declarations
 ([§19](#19-c-interoperability)). Statements go only inside functions.
 
 Statements end with `;`. Blocks are written between `{` and `}`.
@@ -1383,35 +1383,35 @@ between synchronized objects.
 
 ## 19. C interoperability
 
-### 19.1 `c_include`
+### 19.1 `cinclude`
 
-`c_include "<header.h>";` or `c_include "file.h";` adds an `#include` to the generated C.
+`cinclude "<header.h>";` or `cinclude "file.h";` adds an `#include` to the generated C.
 
-### 19.2 `c_code`
+### 19.2 `ccode`
 
 ```
-c_code { C text }
+ccode { C text }
 ```
 
 The C text is copied to the generated C, after the headers and before the program. Braces inside C
 strings, characters and comments do not count toward the closing brace. Inside it, **`lar"NAME"`** (or
 `lar"module.NAME"`) is replaced by the C name of that Larimar function, type or global variable; a name
 that does not exist is a compile error. The prototypes of the functions named this way whose types are
-numbers, `bool`, `String` or `void` are written before the `c_code`. Otherwise the C must use only the
+numbers, `bool`, `String` or `void` are written before the `ccode`. Otherwise the C must use only the
 doors of §19: `native` declarations (C seen from Larimar), `export function`s (Larimar seen from C) and
 `lar"..."`; the names the compiler generates for everything else are not part of the language. Code in
-`c_code` is outside every guarantee of this document.
+`ccode` is outside every guarantee of this document.
 
 ### 19.3 Native functions
 
 ```
 native function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;
-C = NAME | "C TEXT"
+C = NAME | c"C TEXT"
 ```
 
 A `native` declaration names something of C. The name on the left is the Larimar one; after `=` comes
-the C one: a name, or C text in quotes when it is not a plain name (`"(fio_start)"`, a cast). Without
-`=`, the C name is the same.
+the C one: a name, or C text, `c"..."`, when it is not a plain name (`c"(fio_start)"`, a cast). C text is
+not a Larimar `String`. Without `=`, the C name is the same.
 
 - Parameter and result types: numbers, `bool`, `String` (a `const char*`), `String?` parameters (`null`
   is `NULL`), native types and their optionals, C structs, pointers, `T[]` of numbers or `bool`, and
@@ -1430,7 +1430,7 @@ the C one: a name, or C text in quotes when it is not a plain name (`"(fio_start
   during the call. A memory in another position is passed explicitly.
 - A parameter of type `Context` is not written in the call either: it carries the function given in the
   callback parameter ([§19.8](#198-c-function-pointers-and-callbacks)).
-- When the module has no `c_include` and no `c_code`, the compiler writes the C prototype of each native
+- When the module has no `cinclude` and no `ccode`, the compiler writes the C prototype of each native
   function whose C is a plain name.
 - A native function has no body. In the standard library, `std.memory` declares `limit` and `compact` as
   native functions that the compiler writes itself.
@@ -1474,12 +1474,12 @@ native let NAME : Type [ = NAME ] ;
 ```
 
 A native struct is a C struct, by value. It declares only the fields the program uses; the C definition
-(from a header or `c_code`) gives the layout. Its fields are numbers, `bool`, native types, pointers, C
+(from a header or `ccode`) gives the layout. Its fields are numbers, `bool`, native types, pointers, C
 structs and `String`; after `=` comes a field's C name when it is another. A `String` field is a C text,
 read-only, and a view of the C storage. A native struct is used like a Larimar struct (literals, field
 access, copies, lists, methods written in Larimar); fields not given in a literal are zero.
 
-`native const` names a C constant, a macro or a C expression (`= "sizeof(struct stat)"`), read-only; it
+`native const` names a C constant, a macro or a C expression (`= c"sizeof(struct stat)"`), read-only; it
 can be a `String`. `native let` names a C variable that can be read and assigned; it cannot be a `String`.
 
 ### 19.6 Pointers
@@ -1575,6 +1575,41 @@ links the library compiles only if the module it imports, the hash and the libra
 
 ---
 
+### 19.11 Functions with a body of C
+
+```
+function NAME parameters [ : Type ] ccode { C text }
+```
+
+A function, a method or a static function can have C text as its body. The compiler writes a C function
+with that body: its parameters have the names of the Larimar ones and the C types of §19.3 (a slice
+`T[]` NAME is two parameters, `NAME` and `NAME_length`), and its result is the declared type, converted as
+the result of a native function. `self` is not visible; `lar"NAME"` is (§19.2). Such a method cannot say
+`wait until`.
+
+### 19.12 Classes for one system
+
+A class body can also contain `cinclude "TEXT" ;` and `ccode { C TEXT }`: they are those of §19.1 and
+§19.2. A class that implements one of the interfaces `OnUnix`, `OnLinux`, `OnMacOS` or `OnWindows` of
+`std.os` is **for that system** (`unix`, `linux`, `macos`, `windows`, as in §20): its `cinclude`s, its
+`ccode`s and the C bodies of its methods are compiled only for that system (inside the matching `#if`).
+On another system, calling one of its methods with a C body panics. A class names at most one of the four
+(error otherwise). Its other methods, its fields and its type exist everywhere: the program is checked
+for every system at once.
+
+`std.os.platform()` gives the system as `enum Platform { Linux, MacOS, Windows, Unix }`, from the C
+compiler's macros; a `switch` on it chooses the class:
+
+```
+let clock: Clock = switch (platform()) {
+    case Linux, MacOS, Unix -> PosixClock {};
+    case Windows -> WindowsClock {};
+};
+```
+
+An interface type is shared by threads like a value (§18) when every class that implements it is: it
+has no fields, or it is synchronized.
+
 ## 20. Platform directives
 
 ```
@@ -1590,7 +1625,7 @@ A directive chooses code when the C is compiled (C's `#if`), not when the progra
 - A later `#when` is the next alternative (C's `#elif`). A branch that an earlier one already covers is
   an error (`#when macos` after `#when unix`).
 - The body is a list of statements of the surrounding block, without braces. At the top level, the body
-  contains only `c_include` and `native` declarations (without members), and `#else` follows only `#when windows` or
+  contains only `cinclude` and `native` declarations (without members), and `#else` follows only `#when windows` or
   `#when unix`.
 - The compiler checks every branch, whatever the platform it runs on.
 - A name declared in every branch, with the same type, exists after `#end`. A name declared in only some
@@ -1752,16 +1787,17 @@ topLevel             = const NAME : Type = expression ;
                      | export function NAME parameters [ : Type ] [ = NAME ] block
                      | struct NAME { ( field | static staticMember | function | operator )* }
                      | [ synchronized ] class NAME [ extends qualifiedName ] [ implements qualifiedName ( , qualifiedName )* ]
-                           { ( field | static staticMember | [ override ] function | native ( nativeFunction | nativeLet ) | operator )* }
+                           { ( field | static staticMember | [ override ] function | native ( nativeFunction | nativeLet ) | operator
+                               | cinclude "TEXT" ; | ccode { C TEXT } )* }
                      | interface NAME { ( function NAME parameters [ : Type ] [ throws Type ] ; )* }
                      | enum NAME { [ variant ( , variant )* [ , ] ] }
                      | native type NAME { ( static staticMember | native ( nativeFunction | nativeLet | nativeOperator ) | function )* }
-                     | c_include "TEXT" ;
-                     | c_code { C TEXT }
+                     | cinclude "TEXT" ;
+                     | ccode { C TEXT }
                      | native cDeclaration
 
 function             = function [ NAME . ] NAME parameters [ : Type ] [ in lives ] [ throws Type ]
-                           [ wait until ( expression ) ] ( block | ; )
+                           [ wait until ( expression ) ] ( block | ccode { C TEXT } | ; )
 parameters           = ( [ parameter ( , parameter )* ] )
 parameter            = NAME : Type [ in lives ]
 lives                = default | self | NAME
@@ -1786,8 +1822,8 @@ cMember              = cField
                      | function
                      | static ( function | native function NAME parameters [ : Type ] = C ; )
 cField               = let NAME : Type [ = NAME ] ;
-C                    = NAME | "TEXT"
-CTYPE                = NAME *... | "TEXT"
+C                    = NAME | c"TEXT"
+CTYPE                = NAME *... | c"TEXT"
 
 platformDeclarations = #when PLATFORM topLevel* ( #when PLATFORM topLevel* )* [ #else topLevel* ] #end
 

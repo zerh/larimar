@@ -10,38 +10,54 @@
 // SHA-1 is broken for signatures: it is here for protocols that need it (the WebSocket handshake). For
 // anything new, SHA-256. The results are new lists, created where the caller puts them.
 
-c_code {
-#if defined(_WIN32)
-    #include <windows.h>
-    BOOLEAN NTAPI SystemFunction036(PVOID buffer, ULONG length);     /* RtlGenRandom, in advapi32 */
-    static int32_t lm_random_fill(uint8_t* items, int32_t length) {
-        return SystemFunction036(items, (ULONG)length) ? 0 : 1;
-    }
-#elif defined(__APPLE__)
-    #include <stdlib.h>
-    void arc4random_buf(void* buffer, size_t length);   /* declared here: -std=c99 hides it in stdlib.h */
-    static int32_t lm_random_fill(uint8_t* items, int32_t length) {
-        arc4random_buf(items, (size_t)length);
-        return 0;
-    }
-#else
-    #include <stdio.h>
-    static int32_t lm_random_fill(uint8_t* items, int32_t length) {
-        FILE* f = fopen("/dev/urandom", "rb");
-        if (!f) return 1;
-        size_t n = fread(items, 1, (size_t)length, f);
-        fclose(f);
-        return n == (size_t)length ? 0 : 1;
-    }
-#endif
+import std.os { platform, Platform, OnUnix, OnMacOS, OnWindows };
+
+/** Where the secure random bytes come from: one class for each system. */
+interface RandomSource {
+    function fill(items: byte[]): bool;
 }
 
-native function lm_random_fill(buffer: byte[]): int32;
+class UrandomSource implements RandomSource, OnUnix {
+    function fill(items: byte[]): bool ccode {
+        FILE* f = fopen("/dev/urandom", "rb");
+        if (!f) return false;
+        size_t n = fread(items, 1, (size_t)items_length, f);
+        fclose(f);
+        return n == (size_t)items_length;
+    }
+}
+
+class MacOSRandomSource implements RandomSource, OnMacOS {
+    ccode {
+        void arc4random_buf(void* buffer, size_t length);   /* declared here: -std=c99 hides it in stdlib.h */
+    }
+
+    function fill(items: byte[]): bool ccode {
+        arc4random_buf(items, (size_t)items_length);
+        return true;
+    }
+}
+
+class WindowsRandomSource implements RandomSource, OnWindows {
+    cinclude "<windows.h>";
+
+    ccode {
+        BOOLEAN NTAPI SystemFunction036(PVOID buffer, ULONG length);     /* RtlGenRandom, in advapi32 */
+    }
+
+    function fill(items: byte[]): bool ccode { return SystemFunction036(items, (ULONG)items_length) != 0; }
+}
+
+let randomSource: RandomSource = switch (platform()) {
+    case Linux, Unix -> UrandomSource {};
+    case MacOS -> MacOSRandomSource {};
+    case Windows -> WindowsRandomSource {};
+};
 
 /** n bytes from the system's secure random source (it panics if there is none: it never gives weak bytes). */
 public function randomBytes(n: int32): byte[*] {
     let out: byte[*] = zeros(n);
-    if (n > 0 && lm_random_fill(out) != 0) { panic("std.crypto: the system gave no random bytes"); }
+    if (n > 0 && !randomSource.fill(out)) { panic("std.crypto: the system gave no random bytes"); }
     return out;
 }
 

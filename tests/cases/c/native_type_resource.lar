@@ -1,7 +1,7 @@
 // A resource with fields and methods: a method whose C function takes the memory of the call first
 // (its String is made there), a static function that makes the resource, a function that returns one
 // (it lives where the caller says), and a C struct with fields renamed and a Larimar method.
-c_code {
+ccode {
     #include <ctype.h>
     typedef struct Doc { int id; char title[32]; } Doc;
     static int closed = 0;

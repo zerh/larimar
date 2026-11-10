@@ -1,5 +1,5 @@
 // Una export function llamada miles de veces desde C: cada llamada libera lo que crea.
-c_code {
+ccode {
     static int32_t call_many(int32_t n) {
         int32_t total = 0;
         for (int32_t i = 0; i < n; i++) total += measure("abc");

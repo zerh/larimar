@@ -28,7 +28,7 @@ import semantics.types {
     externTypes, externTypeIndex, functions, functionIndex, globals, lambdaList, usedTypes, typeOrder, structOf,
     classOf, interfaceOf, enumOf, functionOf, isExternTypeName, structMethod, interfaceMethod, variantOf, parentOf,
     findField, findMethod, isSubclass, implementor, P_GLOBAL, P_RESULT, primByName, ExternTypeInfo, externInfos,
-    isCValue, isExternStruct, cCodeStd, CallInfo, CallK, BK, includeWhens, isResource, externInfoOf, platformWithin, isPtr, nativeOwner,
+    isCValue, isExternStruct, cCodeStd, CallInfo, CallK, BK, includeWhens, isResource, externInfoOf, platformWithin, platformCondition, isPtr, nativeOwner,
     isContextT, contextView, buildingLibrary, libraryRules, libraryPrefix
 };
 import semantics.expressions {
@@ -255,7 +255,7 @@ function collect(program: Program in default): void {
                 includeWhens.push(c.platform);
             }
             case CCodeDecl c -> {
-                cCode.push(c.code);
+                cCode.push(c.platform == "" ? c.code : "#if ${platformCondition(c.platform)}\n${c.code}\n#endif" in default);
                 cCodeStd.push(c.fromStd);
             }
             case ExternTypeDecl t -> {
@@ -3002,7 +3002,24 @@ function sendableIn(t: Type in default, visiting: Any): bool {
         }
         return true;
     }
+    if (t.nk == NamedK.Interface) {             // shared like its classes: every one that implements it
+        for (c in classes) {
+            if (!implementsInterface(c, t.name)) { continue; }
+            if (!(c.sync || stateFields(c.name) == "")) { return false; }
+        }
+        return true;
+    }
     return t.nk == NamedK.Class ? classOf(t.name)!.sync || stateFields(t.name) == "" : false;
+}
+
+/** Class c implements interface i (itself, or a class it extends). */
+function implementsInterface(c: ClassInfo in default, i: String): bool {
+    let at: ClassInfo? = c;
+    while (at != null) {
+        if (at!.interfaces.contains(i)) { return true; }
+        at = at!.superName != "" ? classOf(at!.superName) : null;
+    }
+    return false;
 }
 
 /**

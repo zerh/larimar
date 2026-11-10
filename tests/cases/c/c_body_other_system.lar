@@ -1,0 +1,21 @@
+// A method of a class for another system: its C is not in this build, so calling it panics.
+import std.os { platform, Platform, OnWindows, OnUnix };
+
+class WindowsOnly implements OnWindows {
+    function ticks(): int64 ccode { return (int64_t)GetTickCount64(); }
+}
+
+class UnixOnly implements OnUnix {
+    function pid(): int64 ccode { return (int64_t)getpid(); }
+}
+
+function main(): int32 {
+    if (platform() == Platform.Windows) {
+        let u: UnixOnly = {};
+        println("${u.pid()}");
+    } else {
+        let w: WindowsOnly = {};
+        println("${w.ticks()}");
+    }
+    return 0;
+}

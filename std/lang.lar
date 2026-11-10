@@ -324,7 +324,7 @@ function padded(s: String, width: int32, fill: String, atStart: bool): String {
 }
 
 // Reading a float needs C's strtod.
-c_code {
+ccode {
     #include <stdlib.h>
 
     static bool text_is_float(const char* s, int32_t n) {
@@ -342,7 +342,7 @@ native function text_is_float(s: String, n: int32): bool;
 native function text_to_float(s: String): float64;
 
 // Text built piece by piece in the memory of the builder; toString() is a view of it.
-c_code {
+ccode {
     typedef struct { RtMem* mem; char* buf; int32_t len, cap; } TextBuf;
 
     TextBuf* text_buf_new(RtMem* m) {
@@ -401,7 +401,7 @@ public class StringBuilder {
 }
 
 // ByteText: builds a String from bytes
-c_code {
+ccode {
     typedef struct { RtMem* mem; char* bytes; int32_t length; int32_t capacity; } ByteText;
 
     static ByteText* byte_text_new(RtMem* m) {

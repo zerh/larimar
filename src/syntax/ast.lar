@@ -93,6 +93,7 @@ public class CIncludeDecl extends Node {
 }
 public class CCodeDecl extends Node {
     let code: String;
+    let platform: String = "";          // the ccode of a class for one system (implements OnUnix...): only there
     let fromStd: bool = false;          // the standard library's: only what is used reaches the C
 }
 /** native type X;  = T*;  = "C TYPE";  = (A, B) -> R  (a C function pointer);  ... released by f;  (inside #when for one platform) */
@@ -105,7 +106,7 @@ public class ExternTypeDecl extends Node {
     let fieldsStruct: String = "";      // native type X = T* { let f: ...; }: the struct (made by the parser) X points to
 }
 
-/** cName: the C function called (it stays when a module renames the declaration); prototype: no c_include. A
+/** cName: the C function called (it stays when a module renames the declaration); prototype: no cinclude. A
  *  method of a native type (`native function m() = c_m;`) becomes one of these, with self first. */
 public class ExternFunctionDecl extends Node {
     let name: String;
@@ -116,6 +117,7 @@ public class ExternFunctionDecl extends Node {
     let prototype: bool = false;
     let platform: String = "";
     let releasedBy: String = "";        // ...: String = c_f released by f: C's text is copied, then f releases it
+    let cBody: String = "";             // function f(...): T ccode { C }: the C of its body (the compiler writes the C function)
 }
 
 /** native const NAME: T [= c_name | = "C"];  native let NAME: T [= c_name];  a C constant (or macro) or a C global variable. */

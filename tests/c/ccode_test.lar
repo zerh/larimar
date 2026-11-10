@@ -1,5 +1,5 @@
 // The compiler's tests of c: c code (the programs that run are in tests/cases/c/).
-import tests.support.compiler { failsWith, runs, generatedC, hasWord };
+import tests.support.compiler { failsWith, runs, panics, generatedC, hasWord };
 import std.test { check };
 
 // Names of the C library (log, exit, abs, time...) get a '_' in the C: clang treats them as built-ins.
@@ -11,12 +11,12 @@ test function cLibraryNames(): void {
 
 test function larNameUnknown(): void {
     failsWith(raw"""
-        c_code {
+        ccode {
             static int32_t both(int32_t a) { return lar"nope"(a); }
         }
         native function both(a: int32): int32;
         function main(): int32 { return both(1); }
-        """, "lar\"nope\" in c_code: 'nope' is not a function, type or global of Larimar seen here");
+        """, "lar\"nope\" in ccode: 'nope' is not a function, type or global of Larimar seen here");
 }
 
 test function nativeFunctionBody(): void {
@@ -35,15 +35,15 @@ test function exportKeptWithoutCallers(): void {
     check(hasWord(c, "lm_api_version"), "the generated C should contain lm_api_version");
 }
 
-// lar"name" in c_code: the C name of a Larimar function (a module's: lar"module.name").
+// lar"name" in ccode: the C name of a Larimar function (a module's: lar"module.name").
 test function larNamesInCCode(): void {
-    runs("tests/cases/c/lar_names_in_c_code.lar", [
+    runs("tests/cases/c/lar_names_in_ccode.lar", [
         "25"
     ]);
 }
 
 // Solo llega al C lo que el programa usa: ni los métodos de String que no llama, ni los tipos que solo
-// aparecen en sus firmas, ni el c_code de la biblioteca estándar que nadie usa.
+// aparecen en sus firmas, ni el ccode de la biblioteca estándar que nadie usa.
 test function unusedStdNotEmitted(): void {
     runs("tests/cases/c/unused_std_not_emitted.lar", [
         "HOLA true"
@@ -57,13 +57,35 @@ test function unusedStdNotEmitted(): void {
     check(!hasWord(c, "byte_text_new"), "the generated C should not contain byte_text_new");
 }
 
-// El c_code del programa se copia entero, aunque Larimar no use cada cosa directamente
+// El ccode del programa se copia entero, aunque Larimar no use cada cosa directamente
 // (aquí, un puntero a función global que solo usa otra función de C).
 test function userCCodeStaysWhole(): void {
-    runs("tests/cases/c/user_c_code_stays_whole.lar", [
+    runs("tests/cases/c/user_ccode_stays_whole.lar", [
         "7",
         "12"
     ]);
-    let c: String = generatedC("tests/cases/c/user_c_code_stays_whole.lar");
+    let c: String = generatedC("tests/cases/c/user_ccode_stays_whole.lar");
     check(hasWord(c, "sumar"), "the generated C should contain sumar");
+}
+
+// function f(...): T ccode { C }: methods and functions whose body is C; a class for one system
+// (implements OnUnix, OnWindows...) puts its C only in that system's build.
+test function cBodies(): void {
+    runs("tests/cases/c/c_bodies.lar", [
+        "42 x:3:7 101"
+    ]);
+    let c: String = generatedC("tests/cases/c/c_bodies.lar");
+    check(c.contains("#if defined(_WIN32)\n#include <windows.h>"), "the header of the Windows class only on Windows");
+}
+
+test function cBodyOfAnotherSystem(): void {
+    panics("tests/cases/c/c_body_other_system.lar", "is for");
+}
+
+test function oneSystemPerClass(): void {
+    failsWith(raw"""
+        import std.os { OnUnix, OnWindows };
+        class Both implements OnUnix, OnWindows {}
+        function main(): int32 { return 0; }
+        """, "A class is for one system");
 }

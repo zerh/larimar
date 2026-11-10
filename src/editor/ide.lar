@@ -1176,7 +1176,7 @@ const CK_ENUM_MEMBER: int32 = 20;
 const CK_CONSTANT: int32 = 21;
 const CK_STRUCT: int32 = 22;
 
-const KEYWORDS: String = "let const function return if else while for in is break continue struct class interface enum extends implements override self super native true false null c_include c_code switch case default yield when try catch throw throws heap operator as import public synchronized static export raw";
+const KEYWORDS: String = "let const function return if else while for in is break continue struct class interface enum extends implements override self super native true false null cinclude ccode switch case default yield when try catch throw throws heap operator as import public synchronized static export raw";
 
 class Items {
     let parts: String[*] = [];

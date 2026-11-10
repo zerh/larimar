@@ -53,7 +53,8 @@ let lang: Module? = null;
 /** The words of the program's sources: what it can use from std.lang. */
 let words: Any = {} in default;
 let rootDir: String = "";
-let stdDir: String = "std";
+/** The folder of the standard library (codegen reads the runtime there, std/runtime). */
+public let stdDir: String = "std";
 
 /** The files of the program, by index (for messages and RT_FILES). */
 public let fileNames: String[*] = [] in default;
@@ -436,7 +437,7 @@ function nativeKnown(m: Module in default, name: String): bool {
 }
 
 /**
- * lar"name" in c_code: a function, type or global of Larimar, by its Larimar name (module.name for another
+ * lar"name" in ccode: a function, type or global of Larimar, by its Larimar name (module.name for another
  * module); it becomes lar"its linked name", and the generator writes its C name there.
  */
 function larNames(m: Module in default, code: String, line: int32): String {
@@ -450,13 +451,13 @@ function larNames(m: Module in default, code: String, line: int32): String {
         }
         let close: int32? = code.indexOf("\"", at! + 4);
         if (close == null) {
-            error(line, "lar\" without its closing quote in c_code: lar\"name\"");
+            error(line, "lar\" without its closing quote in ccode: lar\"name\"");
             return code.clone();
         }
         out.add(code.substring(i, at!));
         let name: String = code.substring(at! + 4, close!);
         let linked: String = larName(m, name);
-        if (linked == "") { error(line, "lar\"${name}\" in c_code: '${name}' is not a function, type or global of Larimar seen here."); }
+        if (linked == "") { error(line, "lar\"${name}\" in ccode: '${name}' is not a function, type or global of Larimar seen here."); }
         out.add("lar\"${linked}\"");
         i = close! + 1;
     }
@@ -558,6 +559,7 @@ function rewriteDecl(m: Module in default, d: Node in default): void {
             params(f.params);
             typeRef(f.ret);
             f.prototype = !headers;
+            if (f.cBody.contains("lar\"")) { f.cBody = larNames(m, f.cBody, f.line); }
             if (f.releasedBy != "") {            // what releases its text: a name of this module (or one it sees)
                 let v: String = rm.values[f.releasedBy] as String ?? "";
                 if (v != "") { f.releasedBy = v; }

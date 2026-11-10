@@ -3,7 +3,7 @@
 // runs for hours and its documents change on every key. The linker reads a file from here when it is
 // open in the editor (with its changes not saved yet), and from the disk otherwise.
 
-c_code {
+ccode {
     #include <stdlib.h>
     typedef struct { char* path; char* text; } LmDoc;
     static LmDoc* lm_docs;

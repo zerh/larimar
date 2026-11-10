@@ -19,6 +19,7 @@
 //     a panic happens.
 
 import std.os;
+import std.os { OnUnix, OnWindows };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
@@ -26,208 +27,301 @@ import std.io.console as Console;
 import std.encoding.json as Json;
 import std.encoding.json { JsonError };
 
-c_code {
-    #include <stdlib.h>
-    #include <string.h>
-    #ifdef _WIN32
-    #include <windows.h>
-    #include <io.h>
-    #else
-    #include <unistd.h>
-    #include <poll.h>
-    #include <signal.h>
-    #include <sys/types.h>
-    #include <sys/wait.h>
-    #endif
+/** Dap's C on Unix. */
+class DapUnix implements OnUnix {
+    ccode {
+        #include <stdlib.h>
+        #include <string.h>
+        #include <unistd.h>
+        #include <poll.h>
+        #include <signal.h>
+        #include <sys/types.h>
+        #include <sys/wait.h>
 
-    /* two input streams: 0 the editor (stdin), 1 the backend (lldb-dap's stdout) */
-    typedef struct { char* buf; size_t len, cap; bool eof; } LmDapIn;
-    static LmDapIn lm_dap_in[2];
-    #ifdef _WIN32
-    static HANDLE lm_dap_child_in, lm_dap_child_out, lm_dap_proc;
-    #else
-    static int lm_dap_child_in = -1, lm_dap_child_out = -1;
-    static pid_t lm_dap_pid = -1;
-    #endif
+        /* two input streams: 0 the editor (stdin), 1 the backend (lldb-dap's stdout) */
+        typedef struct { char* buf; size_t len, cap; bool eof; } LmDapIn;
+        static LmDapIn lm_dap_in[2];
+        static int lm_dap_child_in = -1, lm_dap_child_out = -1;
+        static pid_t lm_dap_pid = -1;
 
-    /* starts the backend with pipes for its input and output; false if it cannot */
-    static bool lm_dap_spawn(const char* path) {
-    #ifdef _WIN32
-        SECURITY_ATTRIBUTES sa = { sizeof sa, NULL, TRUE };
-        HANDLE inR, inW, outR, outW;
-        if (!CreatePipe(&inR, &inW, &sa, 0) || !CreatePipe(&outR, &outW, &sa, 0)) return false;
-        SetHandleInformation(inW, HANDLE_FLAG_INHERIT, 0);
-        SetHandleInformation(outR, HANDLE_FLAG_INHERIT, 0);
-        STARTUPINFOA si; PROCESS_INFORMATION pi;
-        memset(&si, 0, sizeof si); memset(&pi, 0, sizeof pi);
-        si.cb = sizeof si;
-        si.dwFlags = STARTF_USESTDHANDLES;
-        si.hStdInput = inR; si.hStdOutput = outW; si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
-        char cmd[4096];
-        snprintf(cmd, sizeof cmd, "\"%s\"", path);
-        if (!CreateProcessA(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) return false;
-        CloseHandle(inR); CloseHandle(outW); CloseHandle(pi.hThread);
-        lm_dap_child_in = inW; lm_dap_child_out = outR; lm_dap_proc = pi.hProcess;
-        _setmode(_fileno(stdin), 0x8000); _setmode(_fileno(stdout), 0x8000);   /* _O_BINARY */
-        return true;
-    #else
-        int in[2], out[2];
-        if (pipe(in) != 0 || pipe(out) != 0) return false;
-        pid_t p = fork();
-        if (p < 0) return false;
-        if (p == 0) {
-            dup2(in[0], 0);
-            dup2(out[1], 1);
-            close(in[0]); close(in[1]); close(out[0]); close(out[1]);
-            execlp(path, path, (char*)NULL);
-            _exit(127);
-        }
-        close(in[0]); close(out[1]);
-        lm_dap_child_in = in[1]; lm_dap_child_out = out[0]; lm_dap_pid = p;
-        signal(SIGPIPE, SIG_IGN);
-        return true;
-    #endif
-    }
-
-    static void lm_dap_kill(void) {
-    #ifdef _WIN32
-        if (lm_dap_proc) TerminateProcess(lm_dap_proc, 0);
-    #else
-        if (lm_dap_pid > 0) { kill(lm_dap_pid, SIGTERM); waitpid(lm_dap_pid, NULL, 0); lm_dap_pid = -1; }
-    #endif
-    }
-
-    static void lm_dap_append(int which, const char* data, size_t n) {
-        LmDapIn* in = &lm_dap_in[which];
-        if (in->len + n + 1 > in->cap) {
-            in->cap = (in->len + n + 1) * 2;
-            in->buf = (char*)realloc(in->buf, in->cap);
-            if (!in->buf) rt_panic("out of memory (larimar dap)", 0);
-        }
-        memcpy(in->buf + in->len, data, n);
-        in->len += n;
-        in->buf[in->len] = 0;
-    }
-
-    /* reads what is ready on either stream, waiting up to ms milliseconds (-1: until something comes) */
-    static void lm_dap_fill(int32_t ms) {
-        char tmp[65536];
-    #ifdef _WIN32
-        HANDLE hs[2] = { GetStdHandle(STD_INPUT_HANDLE), lm_dap_child_out };
-        DWORD waited = 0;
-        for (;;) {
-            bool got = false;
-            for (int i = 0; i < 2; i++) {
-                if (lm_dap_in[i].eof) continue;
-                DWORD avail = 0;
-                if (!PeekNamedPipe(hs[i], NULL, 0, NULL, &avail, NULL)) { lm_dap_in[i].eof = true; got = true; continue; }
-                if (avail > 0) {
-                    DWORD n = 0;
-                    if (ReadFile(hs[i], tmp, avail < sizeof tmp ? avail : sizeof tmp, &n, NULL) && n > 0) lm_dap_append(i, tmp, n);
-                    else lm_dap_in[i].eof = true;
-                    got = true;
-                }
+        /* starts the backend with pipes for its input and output; false if it cannot */
+        static bool lm_dap_spawn(const char* path) {
+            int in[2], out[2];
+            if (pipe(in) != 0 || pipe(out) != 0) return false;
+            pid_t p = fork();
+            if (p < 0) return false;
+            if (p == 0) {
+                dup2(in[0], 0);
+                dup2(out[1], 1);
+                close(in[0]); close(in[1]); close(out[0]); close(out[1]);
+                execlp(path, path, (char*)NULL);
+                _exit(127);
             }
-            if (got || (ms >= 0 && (int32_t)waited >= ms) || (lm_dap_in[0].eof && lm_dap_in[1].eof)) return;
-            Sleep(2);
-            waited += 2;
+            close(in[0]); close(out[1]);
+            lm_dap_child_in = in[1]; lm_dap_child_out = out[0]; lm_dap_pid = p;
+            signal(SIGPIPE, SIG_IGN);
+            return true;
         }
-    #else
-        struct pollfd p[2];
-        p[0].fd = lm_dap_in[0].eof ? -1 : 0;
-        p[1].fd = lm_dap_in[1].eof ? -1 : lm_dap_child_out;
-        p[0].events = p[1].events = POLLIN;
-        p[0].revents = p[1].revents = 0;
-        if (poll(p, 2, ms) <= 0) return;
-        for (int i = 0; i < 2; i++) {
-            if (!(p[i].revents & (POLLIN | POLLHUP | POLLERR))) continue;
-            ssize_t n = read(p[i].fd, tmp, sizeof tmp);
-            if (n > 0) lm_dap_append(i, tmp, (size_t)n); else lm_dap_in[i].eof = true;
-        }
-    #endif
-    }
 
-    static bool lm_dap_eof(int32_t which) { return lm_dap_in[which].eof && lm_dap_in[which].len == 0; }
+        static void lm_dap_kill(void) {
+            if (lm_dap_pid > 0) { kill(lm_dap_pid, SIGTERM); waitpid(lm_dap_pid, NULL, 0); lm_dap_pid = -1; }
+        }
 
-    /* the body of the next complete message of a stream, or "" (and lm_dap_took() false) */
-    static bool lm_dap_got;
-    static const char* lm_dap_take(RtMem* m, int32_t which) {
-        LmDapIn* in = &lm_dap_in[which];
-        lm_dap_got = false;
-        if (in->len == 0) return "";
-        char* end = strstr(in->buf, "\r\n\r\n");
-        if (!end) return "";
-        long length = -1;
-        for (char* h = in->buf; h < end; ) {
-            char* eol = strstr(h, "\r\n");
-            if (!eol || eol > end) eol = end;
-            if (eol - h > 15 && (strncmp(h, "Content-Length:", 15) == 0 || strncmp(h, "content-length:", 15) == 0)) length = atol(h + 15);
-            h = eol + 2;
+        static void lm_dap_append(int which, const char* data, size_t n) {
+            LmDapIn* in = &lm_dap_in[which];
+            if (in->len + n + 1 > in->cap) {
+                in->cap = (in->len + n + 1) * 2;
+                in->buf = (char*)realloc(in->buf, in->cap);
+                if (!in->buf) rt_panic("out of memory (larimar dap)", 0);
+            }
+            memcpy(in->buf + in->len, data, n);
+            in->len += n;
+            in->buf[in->len] = 0;
         }
-        size_t head = (size_t)(end - in->buf) + 4;
-        if (length < 0) {                          /* not a message: drop the header */
-            memmove(in->buf, in->buf + head, in->len - head + 1);
-            in->len -= head;
-            return "";
-        }
-        if (in->len < head + (size_t)length) return "";
-        char* body = (char*)rt_mem_alloc(m, (size_t)length + 1, 0);
-        memcpy(body, in->buf + head, (size_t)length);
-        body[length] = 0;
-        memmove(in->buf, in->buf + head + length, in->len - head - (size_t)length + 1);
-        in->len -= head + (size_t)length;
-        lm_dap_got = true;
-        return body;
-    }
-    static bool lm_dap_took(void) { return lm_dap_got; }
 
-    /* writes one message: 0 to the editor, 1 to the backend */
-    static void lm_dap_write(int32_t which, const char* body, int32_t len) {
-        char head[64];
-        int hn = snprintf(head, sizeof head, "Content-Length: %d\r\n\r\n", len);
-        if (which == 0) {
-            fwrite(head, 1, (size_t)hn, stdout);
-            fwrite(body, 1, (size_t)len, stdout);
-            fflush(stdout);
-            return;
+        /* reads what is ready on either stream, waiting up to ms milliseconds (-1: until something comes) */
+        static void lm_dap_fill(int32_t ms) {
+            char tmp[65536];
+            struct pollfd p[2];
+            p[0].fd = lm_dap_in[0].eof ? -1 : 0;
+            p[1].fd = lm_dap_in[1].eof ? -1 : lm_dap_child_out;
+            p[0].events = p[1].events = POLLIN;
+            p[0].revents = p[1].revents = 0;
+            if (poll(p, 2, ms) <= 0) return;
+            for (int i = 0; i < 2; i++) {
+                if (!(p[i].revents & (POLLIN | POLLHUP | POLLERR))) continue;
+                ssize_t n = read(p[i].fd, tmp, sizeof tmp);
+                if (n > 0) lm_dap_append(i, tmp, (size_t)n); else lm_dap_in[i].eof = true;
+            }
         }
-    #ifdef _WIN32
-        DWORD n;
-        WriteFile(lm_dap_child_in, head, (DWORD)hn, &n, NULL);
-        WriteFile(lm_dap_child_in, body, (DWORD)len, &n, NULL);
-    #else
-        size_t done = 0;
-        while (done < (size_t)hn) { ssize_t k = write(lm_dap_child_in, head + done, (size_t)hn - done); if (k <= 0) return; done += (size_t)k; }
-        done = 0;
-        while (done < (size_t)len) { ssize_t k = write(lm_dap_child_in, body + done, (size_t)len - done); if (k <= 0) return; done += (size_t)k; }
-    #endif
-    }
 
-    /* handles the editor gets for variables: what each one shows (freed at every stop) */
-    typedef struct { int32_t kind, frame, ref; char* expr; char* type; } LmDapHandle;
-    static LmDapHandle* lm_dap_h;
-    static int32_t lm_dap_hn, lm_dap_hcap;
-    static char* lm_dap_dup(const char* s) { size_t n = strlen(s); char* p = (char*)malloc(n + 1); if (p) memcpy(p, s, n + 1); return p; }
-    static int32_t lm_dap_handle(int32_t kind, int32_t frame, int32_t ref, const char* expr, const char* type) {
-        if (lm_dap_hn == lm_dap_hcap) {
-            lm_dap_hcap = lm_dap_hcap ? lm_dap_hcap * 2 : 256;
-            lm_dap_h = (LmDapHandle*)realloc(lm_dap_h, sizeof(LmDapHandle) * (size_t)lm_dap_hcap);
-            if (!lm_dap_h) rt_panic("out of memory (larimar dap)", 0);
+        static bool lm_dap_eof(int32_t which) { return lm_dap_in[which].eof && lm_dap_in[which].len == 0; }
+
+        /* the body of the next complete message of a stream, or "" (and lm_dap_took() false) */
+        static bool lm_dap_got;
+        static const char* lm_dap_take(RtMem* m, int32_t which) {
+            LmDapIn* in = &lm_dap_in[which];
+            lm_dap_got = false;
+            if (in->len == 0) return "";
+            char* end = strstr(in->buf, "\r\n\r\n");
+            if (!end) return "";
+            long length = -1;
+            for (char* h = in->buf; h < end; ) {
+                char* eol = strstr(h, "\r\n");
+                if (!eol || eol > end) eol = end;
+                if (eol - h > 15 && (strncmp(h, "Content-Length:", 15) == 0 || strncmp(h, "content-length:", 15) == 0)) length = atol(h + 15);
+                h = eol + 2;
+            }
+            size_t head = (size_t)(end - in->buf) + 4;
+            if (length < 0) {                          /* not a message: drop the header */
+                memmove(in->buf, in->buf + head, in->len - head + 1);
+                in->len -= head;
+                return "";
+            }
+            if (in->len < head + (size_t)length) return "";
+            char* body = (char*)rt_mem_alloc(m, (size_t)length + 1, 0);
+            memcpy(body, in->buf + head, (size_t)length);
+            body[length] = 0;
+            memmove(in->buf, in->buf + head + length, in->len - head - (size_t)length + 1);
+            in->len -= head + (size_t)length;
+            lm_dap_got = true;
+            return body;
         }
-        LmDapHandle* h = &lm_dap_h[lm_dap_hn++];
-        h->kind = kind; h->frame = frame; h->ref = ref; h->expr = lm_dap_dup(expr); h->type = lm_dap_dup(type);
-        return lm_dap_hn;                          /* from 1: 0 means "no children" */
+        static bool lm_dap_took(void) { return lm_dap_got; }
+
+        /* writes one message: 0 to the editor, 1 to the backend */
+        static void lm_dap_write(int32_t which, const char* body, int32_t len) {
+            char head[64];
+            int hn = snprintf(head, sizeof head, "Content-Length: %d\r\n\r\n", len);
+            if (which == 0) {
+                fwrite(head, 1, (size_t)hn, stdout);
+                fwrite(body, 1, (size_t)len, stdout);
+                fflush(stdout);
+                return;
+            }
+            size_t done = 0;
+            while (done < (size_t)hn) { ssize_t k = write(lm_dap_child_in, head + done, (size_t)hn - done); if (k <= 0) return; done += (size_t)k; }
+            done = 0;
+            while (done < (size_t)len) { ssize_t k = write(lm_dap_child_in, body + done, (size_t)len - done); if (k <= 0) return; done += (size_t)k; }
+        }
+
+        /* handles the editor gets for variables: what each one shows (freed at every stop) */
+        typedef struct { int32_t kind, frame, ref; char* expr; char* type; } LmDapHandle;
+        static LmDapHandle* lm_dap_h;
+        static int32_t lm_dap_hn, lm_dap_hcap;
+        static char* lm_dap_dup(const char* s) { size_t n = strlen(s); char* p = (char*)malloc(n + 1); if (p) memcpy(p, s, n + 1); return p; }
+        static int32_t lm_dap_handle(int32_t kind, int32_t frame, int32_t ref, const char* expr, const char* type) {
+            if (lm_dap_hn == lm_dap_hcap) {
+                lm_dap_hcap = lm_dap_hcap ? lm_dap_hcap * 2 : 256;
+                lm_dap_h = (LmDapHandle*)realloc(lm_dap_h, sizeof(LmDapHandle) * (size_t)lm_dap_hcap);
+                if (!lm_dap_h) rt_panic("out of memory (larimar dap)", 0);
+            }
+            LmDapHandle* h = &lm_dap_h[lm_dap_hn++];
+            h->kind = kind; h->frame = frame; h->ref = ref; h->expr = lm_dap_dup(expr); h->type = lm_dap_dup(type);
+            return lm_dap_hn;                          /* from 1: 0 means "no children" */
+        }
+        static void lm_dap_clear(void) {
+            for (int32_t i = 0; i < lm_dap_hn; i++) { free(lm_dap_h[i].expr); free(lm_dap_h[i].type); }
+            lm_dap_hn = 0;
+        }
+        static bool lm_dap_valid(int32_t id) { return id >= 1 && id <= lm_dap_hn; }
+        static int32_t lm_dap_h_kind(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].kind : 0; }
+        static int32_t lm_dap_h_frame(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].frame : 0; }
+        static int32_t lm_dap_h_ref(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].ref : 0; }
+        static const char* lm_dap_h_expr(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].expr : ""; }
+        static const char* lm_dap_h_type(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].type : ""; }
     }
-    static void lm_dap_clear(void) {
-        for (int32_t i = 0; i < lm_dap_hn; i++) { free(lm_dap_h[i].expr); free(lm_dap_h[i].type); }
-        lm_dap_hn = 0;
+}
+
+/** Dap's C on Windows. */
+class DapWindows implements OnWindows {
+    ccode {
+        #include <stdlib.h>
+        #include <string.h>
+        #include <windows.h>
+        #include <io.h>
+
+        /* two input streams: 0 the editor (stdin), 1 the backend (lldb-dap's stdout) */
+        typedef struct { char* buf; size_t len, cap; bool eof; } LmDapIn;
+        static LmDapIn lm_dap_in[2];
+        static HANDLE lm_dap_child_in, lm_dap_child_out, lm_dap_proc;
+
+        /* starts the backend with pipes for its input and output; false if it cannot */
+        static bool lm_dap_spawn(const char* path) {
+            SECURITY_ATTRIBUTES sa = { sizeof sa, NULL, TRUE };
+            HANDLE inR, inW, outR, outW;
+            if (!CreatePipe(&inR, &inW, &sa, 0) || !CreatePipe(&outR, &outW, &sa, 0)) return false;
+            SetHandleInformation(inW, HANDLE_FLAG_INHERIT, 0);
+            SetHandleInformation(outR, HANDLE_FLAG_INHERIT, 0);
+            STARTUPINFOA si; PROCESS_INFORMATION pi;
+            memset(&si, 0, sizeof si); memset(&pi, 0, sizeof pi);
+            si.cb = sizeof si;
+            si.dwFlags = STARTF_USESTDHANDLES;
+            si.hStdInput = inR; si.hStdOutput = outW; si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+            char cmd[4096];
+            snprintf(cmd, sizeof cmd, "\"%s\"", path);
+            if (!CreateProcessA(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) return false;
+            CloseHandle(inR); CloseHandle(outW); CloseHandle(pi.hThread);
+            lm_dap_child_in = inW; lm_dap_child_out = outR; lm_dap_proc = pi.hProcess;
+            _setmode(_fileno(stdin), 0x8000); _setmode(_fileno(stdout), 0x8000);   /* _O_BINARY */
+            return true;
+        }
+
+        static void lm_dap_kill(void) {
+            if (lm_dap_proc) TerminateProcess(lm_dap_proc, 0);
+        }
+
+        static void lm_dap_append(int which, const char* data, size_t n) {
+            LmDapIn* in = &lm_dap_in[which];
+            if (in->len + n + 1 > in->cap) {
+                in->cap = (in->len + n + 1) * 2;
+                in->buf = (char*)realloc(in->buf, in->cap);
+                if (!in->buf) rt_panic("out of memory (larimar dap)", 0);
+            }
+            memcpy(in->buf + in->len, data, n);
+            in->len += n;
+            in->buf[in->len] = 0;
+        }
+
+        /* reads what is ready on either stream, waiting up to ms milliseconds (-1: until something comes) */
+        static void lm_dap_fill(int32_t ms) {
+            char tmp[65536];
+            HANDLE hs[2] = { GetStdHandle(STD_INPUT_HANDLE), lm_dap_child_out };
+            DWORD waited = 0;
+            for (;;) {
+                bool got = false;
+                for (int i = 0; i < 2; i++) {
+                    if (lm_dap_in[i].eof) continue;
+                    DWORD avail = 0;
+                    if (!PeekNamedPipe(hs[i], NULL, 0, NULL, &avail, NULL)) { lm_dap_in[i].eof = true; got = true; continue; }
+                    if (avail > 0) {
+                        DWORD n = 0;
+                        if (ReadFile(hs[i], tmp, avail < sizeof tmp ? avail : sizeof tmp, &n, NULL) && n > 0) lm_dap_append(i, tmp, n);
+                        else lm_dap_in[i].eof = true;
+                        got = true;
+                    }
+                }
+                if (got || (ms >= 0 && (int32_t)waited >= ms) || (lm_dap_in[0].eof && lm_dap_in[1].eof)) return;
+                Sleep(2);
+                waited += 2;
+            }
+        }
+
+        static bool lm_dap_eof(int32_t which) { return lm_dap_in[which].eof && lm_dap_in[which].len == 0; }
+
+        /* the body of the next complete message of a stream, or "" (and lm_dap_took() false) */
+        static bool lm_dap_got;
+        static const char* lm_dap_take(RtMem* m, int32_t which) {
+            LmDapIn* in = &lm_dap_in[which];
+            lm_dap_got = false;
+            if (in->len == 0) return "";
+            char* end = strstr(in->buf, "\r\n\r\n");
+            if (!end) return "";
+            long length = -1;
+            for (char* h = in->buf; h < end; ) {
+                char* eol = strstr(h, "\r\n");
+                if (!eol || eol > end) eol = end;
+                if (eol - h > 15 && (strncmp(h, "Content-Length:", 15) == 0 || strncmp(h, "content-length:", 15) == 0)) length = atol(h + 15);
+                h = eol + 2;
+            }
+            size_t head = (size_t)(end - in->buf) + 4;
+            if (length < 0) {                          /* not a message: drop the header */
+                memmove(in->buf, in->buf + head, in->len - head + 1);
+                in->len -= head;
+                return "";
+            }
+            if (in->len < head + (size_t)length) return "";
+            char* body = (char*)rt_mem_alloc(m, (size_t)length + 1, 0);
+            memcpy(body, in->buf + head, (size_t)length);
+            body[length] = 0;
+            memmove(in->buf, in->buf + head + length, in->len - head - (size_t)length + 1);
+            in->len -= head + (size_t)length;
+            lm_dap_got = true;
+            return body;
+        }
+        static bool lm_dap_took(void) { return lm_dap_got; }
+
+        /* writes one message: 0 to the editor, 1 to the backend */
+        static void lm_dap_write(int32_t which, const char* body, int32_t len) {
+            char head[64];
+            int hn = snprintf(head, sizeof head, "Content-Length: %d\r\n\r\n", len);
+            if (which == 0) {
+                fwrite(head, 1, (size_t)hn, stdout);
+                fwrite(body, 1, (size_t)len, stdout);
+                fflush(stdout);
+                return;
+            }
+            DWORD n;
+            WriteFile(lm_dap_child_in, head, (DWORD)hn, &n, NULL);
+            WriteFile(lm_dap_child_in, body, (DWORD)len, &n, NULL);
+        }
+
+        /* handles the editor gets for variables: what each one shows (freed at every stop) */
+        typedef struct { int32_t kind, frame, ref; char* expr; char* type; } LmDapHandle;
+        static LmDapHandle* lm_dap_h;
+        static int32_t lm_dap_hn, lm_dap_hcap;
+        static char* lm_dap_dup(const char* s) { size_t n = strlen(s); char* p = (char*)malloc(n + 1); if (p) memcpy(p, s, n + 1); return p; }
+        static int32_t lm_dap_handle(int32_t kind, int32_t frame, int32_t ref, const char* expr, const char* type) {
+            if (lm_dap_hn == lm_dap_hcap) {
+                lm_dap_hcap = lm_dap_hcap ? lm_dap_hcap * 2 : 256;
+                lm_dap_h = (LmDapHandle*)realloc(lm_dap_h, sizeof(LmDapHandle) * (size_t)lm_dap_hcap);
+                if (!lm_dap_h) rt_panic("out of memory (larimar dap)", 0);
+            }
+            LmDapHandle* h = &lm_dap_h[lm_dap_hn++];
+            h->kind = kind; h->frame = frame; h->ref = ref; h->expr = lm_dap_dup(expr); h->type = lm_dap_dup(type);
+            return lm_dap_hn;                          /* from 1: 0 means "no children" */
+        }
+        static void lm_dap_clear(void) {
+            for (int32_t i = 0; i < lm_dap_hn; i++) { free(lm_dap_h[i].expr); free(lm_dap_h[i].type); }
+            lm_dap_hn = 0;
+        }
+        static bool lm_dap_valid(int32_t id) { return id >= 1 && id <= lm_dap_hn; }
+        static int32_t lm_dap_h_kind(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].kind : 0; }
+        static int32_t lm_dap_h_frame(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].frame : 0; }
+        static int32_t lm_dap_h_ref(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].ref : 0; }
+        static const char* lm_dap_h_expr(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].expr : ""; }
+        static const char* lm_dap_h_type(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].type : ""; }
     }
-    static bool lm_dap_valid(int32_t id) { return id >= 1 && id <= lm_dap_hn; }
-    static int32_t lm_dap_h_kind(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].kind : 0; }
-    static int32_t lm_dap_h_frame(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].frame : 0; }
-    static int32_t lm_dap_h_ref(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].ref : 0; }
-    static const char* lm_dap_h_expr(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].expr : ""; }
-    static const char* lm_dap_h_type(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].type : ""; }
 }
 
 native function lm_dap_spawn(path: String): bool;
@@ -1283,9 +1377,9 @@ function findBackend(given: String): String {
     if (given != "") { return given; }
     let env: String = os.env("LARIMAR_LLDB_DAP") ?? "";
     if (env != "") { return env; }
-    let exe: String = os.platform() == "windows" ? ".exe" : "";
+    let exe: String = os.platformName() == "windows" ? ".exe" : "";
     let path: String = os.env("PATH") ?? "";
-    let sep: String = os.platform() == "windows" ? ";" : ":";
+    let sep: String = os.platformName() == "windows" ? ";" : ":";
     let names: String[] = ["lldb-dap", "lldb-dap-20", "lldb-dap-19", "lldb-dap-18", "lldb-vscode"];
     for (name in names) {
         for (dir in path.split(sep)) {
@@ -1294,7 +1388,7 @@ function findBackend(given: String): String {
             if (Files.isFile(candidate)) { return candidate.clone(); }
         }
     }
-    if (os.platform() == "macos") {
+    if (os.platformName() == "macos") {
         let places: String[] = ["/Library/Developer/CommandLineTools/usr/bin/lldb-dap", "/Applications/Xcode.app/Contents/Developer/usr/bin/lldb-dap",
                                 "/opt/homebrew/opt/llvm/bin/lldb-dap", "/usr/local/opt/llvm/bin/lldb-dap"];
         for (candidate in places) {

@@ -1,0 +1,32 @@
+// std.runtime.panic: panics: the message, the line, the exit code.
+// Part of the runtime: the compiler takes from here what a program uses (it is not imported).
+ccode {
+/* ---- runtime: panics -------------------------------------------------- */
+
+static inline void rt_panic(const char* msg, int line) {
+    fflush(stdout);
+#ifdef RT_FILES
+    static const char* const files[] = { RT_FILES };
+    if (line > 0) fprintf(stderr, "panic [%s:%d]: %s\n", files[line / 1000000], line % 1000000, msg);
+#else
+    if (line > 0) fprintf(stderr, "panic [line %d]: %s\n", line, msg);
+#endif
+    else fprintf(stderr, "panic: %s\n", msg);
+    exit(101);
+}
+
+static inline int32_t rt_index(int64_t i, int32_t len, int line) {
+    if (i < 0 || i >= (int64_t)len) {
+        char msg[96];
+        snprintf(msg, sizeof msg, "index %lld out of range (length %d)", (long long)i, (int)len);
+        rt_panic(msg, line);
+    }
+    return (int32_t)i;
+}
+
+static inline int32_t rt_pop(int32_t* length, int line) {
+    if (*length <= 0) rt_panic("pop() on an empty list", line);
+    return --*length;
+}
+
+}

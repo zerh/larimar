@@ -8,7 +8,7 @@ import std.text { isDigit, isIdentifierPart, isUpper, isLower };
 public enum TT {
     Let, Const, Function, Return, If, Else, While, For, In, Is, Break, Continue,
     Struct, Class, Interface, Enum, Extends, Implements, Override, Super, Self, New, Native,
-    True, False, Null, CInclude, CCode, Switch, Case, Default, Yield, When,
+    True, False, Null, CInclude, CCode, CText, Switch, Case, Default, Yield, When,
     Try, Catch, Throw, Throws, Heap, Operator, As, Import, Public, Private, Synchronized, Static,
     Ident, Int, Float, Str,
     Assign, Eq, Ne, Lt, Le, Gt, Ge, Plus, Minus, Star, Slash, Percent,
@@ -55,6 +55,8 @@ public function tokenize(source: String in default, startLine: int32): Token[*] 
             blockComment();
         } else if (c == 'r' && peek(1) == 'a' && peek(2) == 'w' && peek(3) == '"' && peek(4) == '"' && peek(5) == '"') {
             rawTextBlock();
+        } else if (c == 'c' && peek(1) == '"') {
+            cText();
         } else if (isLetter(c) || c == '_') {
             identifier();
         } else if (isDigit(c)) {
@@ -114,7 +116,7 @@ function identifier(): void {
         fail(line, "'${word}': names cannot contain '__' (it is reserved for module names in the generated C).");
         return;
     }
-    if (word == "c_code") {
+    if (word == "ccode") {
         cCode();
         return;
     }
@@ -149,7 +151,7 @@ function keyword(w: String): TT {
         case "true" -> TT.True;
         case "false" -> TT.False;
         case "null" -> TT.Null;
-        case "c_include" -> TT.CInclude;
+        case "cinclude" -> TT.CInclude;
         case "switch" -> TT.Switch;
         case "case" -> TT.Case;
         case "default" -> TT.Default;
@@ -171,7 +173,29 @@ function keyword(w: String): TT {
     };
 }
 
-/** c_code { ... }: the C text up to the matching brace (braces in C strings and comments do not count). */
+/**
+ * c"...": C text in a native declaration (= c"(http_listen)", = c"struct sqlite3*"). It is taken as it is
+ * written up to the closing quote: no escapes of Larimar and no ${...}; a \" is a quote of C.
+ */
+function cText(): void {
+    let start: int32 = line;
+    pos += 2;
+    let begin: int32 = pos;
+    while (pos < src.length && src[pos] != '"' && src[pos] != '\n') {
+        if (src[pos] == '\\' && pos + 1 < src.length) { pos += 1; }
+        pos += 1;
+    }
+    if (pos >= src.length || src[pos] != '"') {
+        fail(start, "c\" without its closing quote: c\"C text\"");
+        return;
+    }
+    toks.push(Token { kind: TT.CText, text: src.substring(begin, pos), line: start } in default);
+    pos += 1;
+}
+
+/**
+ * ccode { ... }: the C text up to the matching brace (braces in C strings and comments do not count).
+ */
 function cCode(): void {
     let startLine: int32 = line;
     while (pos < src.length && (src[pos] == ' ' || src[pos] == '\t' || src[pos] == '\r' || src[pos] == '\n' || src[pos] == 12 || src[pos] == 11)) {
@@ -179,7 +203,7 @@ function cCode(): void {
         pos += 1;
     }
     if (pos >= src.length || src[pos] != '{') {
-        fail(line, "Expected '{' after c_code");
+        fail(line, "Expected '{' after ccode: ccode { C }");
         return;
     }
     pos += 1;
@@ -219,7 +243,7 @@ function cCode(): void {
             pos += 1;
         }
     }
-    fail(startLine, "c_code { is never closed");
+    fail(startLine, "ccode { is never closed");
 }
 
 function digitValue(b: byte): int32 {

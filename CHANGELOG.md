@@ -2,6 +2,31 @@
 
 Each version of the compiler (`larimar --version`) and the version of the language it implements.
 
+## 1.4.0 — 2026-11-10
+
+The language is still 1.0. Its C reads as C, and what each system does differently is Larimar: the
+repository has no `.c` file but the bootstrap, and the modules of the standard library choose their
+system with a `switch`, not with `#if` (only the runtime, the C under every program, keeps its own).
+
+- `c_code` is `ccode`, `c_include` is `cinclude`, and the C text of a native declaration is written
+  `c"..."` (`native function root(x: float64): float64 = c"sqrt";`).
+- A function or method can have a body of C: `function now(): int64 ccode { ... }`. It sees its
+  parameters by name with their C types, and Larimar with `lar"name"`.
+- A class can have its own `cinclude` and `ccode`. A class that implements `OnUnix`, `OnLinux`, `OnMacOS`
+  or `OnWindows` (std.os) is for that system: its C goes only into that system's build, inside the `#if`
+  the compiler writes, so the same generated C still builds on all three.
+- `os.platform()` gives `enum Platform { Linux, MacOS, Windows, Unix }`, for a `switch` that chooses the
+  class of each system (`os.platformName()` is the text it was before).
+- An interface whose classes have no fields (or are synchronized) is shared by threads like a value.
+- The standard library is written that way: `std.os`, `std.time`, `std.io.files`, `std.io.console`,
+  `std.crypto`, `std.net`, `std.net.tls` and `std.os.process`, an interface and a class for each system.
+- The runtime is the `ccode` of `std/runtime/*.lar`, read when a program is generated, instead of text
+  inside the compiler (`src/codegen/runtime.lar` is gone): changing it no longer needs a new bootstrap.
+- `std.thread`: `ThreadPool` (`{ threads: 8, queue: 100 }`, `submit`, `wait`) for a batch of tasks.
+- `std.net`: `EventLoop` (`watch`, `unwatch`, `wait`, `isReady`), the loop that `TcpServer` uses for
+  its listener and its kept connections, with no limit of 1024 sockets; `TcpSocket.number()` and
+  `TcpListener.number()`.
+
 ## 1.3.1 — 2026-11-08
 
 - The repository is reorganized: the manuals and the specification are in `doc/` (`manual.md`,

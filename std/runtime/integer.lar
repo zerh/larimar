@@ -1,0 +1,107 @@
+// std.runtime.integer: integer arithmetic with overflow checks.
+// Part of the runtime: the compiler takes from here what a program uses (it is not imported).
+ccode {
+/* ---- runtime: integer arithmetic without undefined behavior ----------- */
+
+static inline int8_t rt_div_i8(int8_t a, int8_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return (int8_t)(0u - (uint32_t)a);
+    return (int8_t)(a / b);
+}
+
+static inline int8_t rt_mod_i8(int8_t a, int8_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return 0;
+    return (int8_t)(a % b);
+}
+
+static inline int16_t rt_div_i16(int16_t a, int16_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return (int16_t)(0u - (uint32_t)a);
+    return (int16_t)(a / b);
+}
+
+static inline int16_t rt_mod_i16(int16_t a, int16_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return 0;
+    return (int16_t)(a % b);
+}
+
+static inline int32_t rt_div_i32(int32_t a, int32_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return (int32_t)(0u - (uint32_t)a);
+    return (int32_t)(a / b);
+}
+
+static inline int32_t rt_mod_i32(int32_t a, int32_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return 0;
+    return (int32_t)(a % b);
+}
+
+static inline int64_t rt_div_i64(int64_t a, int64_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return (int64_t)(0u - (uint64_t)a);
+    return (int64_t)(a / b);
+}
+
+static inline int64_t rt_mod_i64(int64_t a, int64_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    if (b == -1) return 0;
+    return (int64_t)(a % b);
+}
+
+static inline uint8_t rt_div_u8(uint8_t a, uint8_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint8_t)(a / b);
+}
+
+static inline uint8_t rt_mod_u8(uint8_t a, uint8_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint8_t)(a % b);
+}
+
+static inline uint16_t rt_div_u16(uint16_t a, uint16_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint16_t)(a / b);
+}
+
+static inline uint16_t rt_mod_u16(uint16_t a, uint16_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint16_t)(a % b);
+}
+
+static inline uint32_t rt_div_u32(uint32_t a, uint32_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint32_t)(a / b);
+}
+
+static inline uint32_t rt_mod_u32(uint32_t a, uint32_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint32_t)(a % b);
+}
+
+static inline uint64_t rt_div_u64(uint64_t a, uint64_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint64_t)(a / b);
+}
+
+static inline uint64_t rt_mod_u64(uint64_t a, uint64_t b, int line) {
+    if (b == 0) rt_panic("division by zero", line);
+    return (uint64_t)(a % b);
+}
+
+static inline int64_t rt_f2i(double d, int64_t lo, int64_t hi) {
+    if (d != d) return 0;
+    if (d <= (double)lo) return lo;
+    if (d >= (double)hi) return hi;
+    return (int64_t)d;
+}
+
+static inline uint64_t rt_f2u(double d, uint64_t hi) {
+    if (d != d || d <= 0.0) return 0;
+    if (d >= (double)hi) return hi;
+    return (uint64_t)d;
+}
+
+}

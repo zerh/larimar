@@ -1,0 +1,51 @@
+// std.runtime.string_methods: the methods of String written in C.
+// Part of the runtime: the compiler takes from here what a program uses (it is not imported).
+ccode {
+/* ---- runtime: String methods ------------------------------------------ */
+
+/* Cuts (substring, trim, split) are views: they share the bytes of the original text.
+   Everything the runtime creates ends with a 0 byte, so the byte after a view can always be read. */
+
+/* A NUL-terminated copy for C, only when the text is a view that does not end there. */
+static inline const char* rt_str_cz(RtString s, RtMem* tmp, int line) {
+    if (s.ptr[s.len] == 0) return s.ptr;
+    return rt_str_clone(s, tmp, line).ptr;
+}
+
+static inline uint8_t rt_str_byte(RtString s, int64_t i, int line) { return (uint8_t)s.ptr[rt_index(i, s.len, line)]; }
+
+static inline int32_t rt_str_find(RtString s, RtString t, int64_t from) {
+    if (from < 0) from = 0;
+    if (from > s.len) return -1;
+    for (int64_t i = from; i + t.len <= s.len; i++) {
+        if (memcmp(s.ptr + i, t.ptr, (size_t)t.len) == 0) return (int32_t)i;
+    }
+    return -1;
+}
+
+static inline RtString rt_str_sub(RtString s, int64_t from, int64_t to, int line) {
+    if (from < 0 || to > s.len || from > to) {
+        char msg[128];
+        snprintf(msg, sizeof msg, "substring(%lld, %lld) is out of range (length %d)", (long long)from, (long long)to, (int)s.len);
+        rt_panic(msg, line);
+    }
+    return rt_str(s.ptr + from, (int32_t)(to - from));
+}
+
+static inline int32_t rt_str_cmp(RtString a, RtString b) {
+    int32_t n = a.len < b.len ? a.len : b.len;
+    int c = memcmp(a.ptr, b.ptr, (size_t)n);
+    if (c != 0) return c < 0 ? -1 : 1;
+    return a.len == b.len ? 0 : a.len < b.len ? -1 : 1;
+}
+
+static inline RtString rt_str_join(const RtString* items, int32_t n, RtString sep, RtMem* m, int line) {
+    RtSb sb = rt_sb_mem(m, line);
+    for (int32_t i = 0; i < n; i++) {
+        if (i > 0) rt_sb_str(&sb, sep);
+        rt_sb_str(&sb, items[i]);
+    }
+    return rt_sb_finish(&sb);
+}
+
+}

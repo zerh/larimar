@@ -1,0 +1,46 @@
+// std.thread: ThreadPool runs every task once, on at most `threads` threads; wait() waits for them, and
+// queue bounds the tasks waiting to start.
+import std.test { check, checkInt };
+import std.thread { ThreadPool };
+import std.time as Time;
+
+synchronized class Count {
+    let n: int64 = 0;
+    let now: int32 = 0;            // tasks running at this moment
+    let most: int32 = 0;           // the most that ran at once
+    function add(k: int64): void { self.n += k; }
+    function enter(): void { self.now += 1; if (self.now > self.most) { self.most = self.now; } }
+    function leave(): void { self.now -= 1; }
+    function get(): int64 { return self.n; }
+    function peak(): int32 { return self.most; }
+}
+
+test function everyTaskRunsOnce(): void {
+    let count: Count = {};
+    let pool: ThreadPool = { threads: 4 };
+    for (i in 0..10000) {
+        let k: int64 = i as int64;
+        pool.submit(() -> { count.add(k); });
+    }
+    pool.wait();
+    check(count.get() == 49995000, "the sum of 0..9999 is 49995000, got ${count.get()}");
+    for (i in 0..10) { pool.submit(() -> { count.add(1); }); }     // the threads come back for more
+    pool.wait();
+    check(count.get() == 49995010, "10 more tasks after wait, got ${count.get()}");
+}
+
+test function atMostThreadsAtOnce(): void {
+    let count: Count = {};
+    let pool: ThreadPool = { threads: 3, queue: 2 };
+    for (i in 0..12) {
+        pool.submit(() -> {
+            count.enter();
+            Time.sleep(5);
+            count.leave();
+            count.add(1);
+        });
+    }
+    pool.wait();
+    checkInt(count.get() as int32, 12);
+    check(count.peak() <= 3, "at most 3 tasks at once, there were ${count.peak()}");
+}

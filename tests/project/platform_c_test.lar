@@ -14,7 +14,7 @@ function compiler(): String {
 }
 
 /** Another platform than this one: its [c.<platform>] must not be used here. */
-function otherPlatform(): String { return os.platform() == "linux" ? "macos" : "linux"; }
+function otherPlatform(): String { return os.platformName() == "linux" ? "macos" : "linux"; }
 
 /** Writes a project: its larimar.toml, a main that calls two C functions, and their C files. */
 function writeProject(dir: String, toml: String): void throws IoError {
@@ -51,7 +51,7 @@ test function thisPlatformsSectionIsAdded(): void throws ProcessError {
             [c]
             sources = ["c/common.c"]
 
-            [c.${os.platform()}]
+            [c.${os.platformName()}]
             sources = ["c/here.c"]
 
             [c.${otherPlatform()}]

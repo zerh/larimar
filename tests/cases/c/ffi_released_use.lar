@@ -1,4 +1,4 @@
-c_code {
+ccode {
     static int open_thing(void) { return 1; }
     static void close_thing(int t) { (void)t; }
     static int use_thing(int t) { return t; }

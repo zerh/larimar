@@ -183,7 +183,7 @@ function cCommand(c: String, cFile: String, exe: String): String {
     if (c.contains("#define LM_NET_TLS")) {
         if (windows()) {
             cmd.push("-lsecur32");
-        } else if (os.platform() == "macos") {
+        } else if (os.platformName() == "macos") {
             let frameworks: String[] = ["-framework", "Network", "-framework", "Security"];
             for (f in frameworks) { cmd.push(f); }
         } else {
@@ -241,7 +241,7 @@ function quote(s: String): String {
     return "'${s.replace("'", "'\\''")}'";
 }
 
-function windows(): bool { return os.platform() == "windows"; }
+function windows(): bool { return os.platformName() == "windows"; }
 
 function identifierPart(c: byte): bool {
     return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');

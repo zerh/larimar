@@ -105,16 +105,16 @@ function run(program: String, args: String[*], env: String[*], output: String[*]
 /** The flags and libraries for a program that uses std.net's TLS, here. */
 function cArgs(cFile: String, program: String): String[*] {
     let args: String[*] = ["-std=c99", "-g", "-O1", cFile, "-o", program];
-    if (os.platform() != "windows") {
+    if (os.platformName() != "windows") {
         let sanitizers: String[] = ["-fno-omit-frame-pointer", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined", "-pthread", "-lm"];
         for (f in sanitizers) { args.push(f); }
     }
-    if (os.platform() == "linux") { args.push("-ldl"); }
-    if (os.platform() == "macos") {
+    if (os.platformName() == "linux") { args.push("-ldl"); }
+    if (os.platformName() == "macos") {
         let frameworks: String[] = ["-framework", "Network", "-framework", "Security"];
         for (f in frameworks) { args.push(f); }
     }
-    if (os.platform() == "windows") {
+    if (os.platformName() == "windows") {
         let windowsLibraries: String[] = ["-lsecur32", "-lws2_32"];
         for (f in windowsLibraries) { args.push(f); }
     }
@@ -201,7 +201,7 @@ function lineStartingWith(text: String, start: String): String {
 // =========================================================================================
 
 test function httpsWithTheSystemsTls(): void {
-    if (os.platform() == "windows") {
+    if (os.platformName() == "windows") {
         skip("the TLS server is not on Windows yet");
         return;
     }
@@ -218,7 +218,7 @@ test function httpsWithTheSystemsTls(): void {
 }
 
 test function withoutOpenSslTheMessageSaysSo(): void {
-    if (os.platform() != "linux") {
+    if (os.platformName() != "linux") {
         skip("OpenSSL is loaded by name only on Linux");
         return;
     }

@@ -1,0 +1,48 @@
+// Methods whose body is C, in a class for each system (implements OnUnix / OnWindows), chosen with a
+// switch on os.platform(). The C of the other system never reaches this build.
+import std.os { platform, Platform, OnUnix, OnWindows };
+
+interface Greeter {
+    function twice(x: int32): int32;
+    function label(name: String, items: byte[]): String;
+}
+
+class UnixGreeter implements Greeter, OnUnix {
+    cinclude "<unistd.h>";
+
+    ccode {
+        static int32_t lm_doubled(int32_t x) { return 2 * x; }
+    }
+
+    function twice(x: int32): int32 ccode { return lm_doubled(x); }
+
+    function label(name: String, items: byte[]): String ccode {
+        static char out[64];
+        snprintf(out, sizeof out, "%s:%d:%d", name, (int)items_length, (int)items[0]);
+        return out;
+    }
+}
+
+class WindowsGreeter implements Greeter, OnWindows {
+    cinclude "<windows.h>";
+
+    function twice(x: int32): int32 ccode { return (int32_t)GetTickCount64() * 0 + 2 * x; }
+
+    function label(name: String, items: byte[]): String ccode { return "windows"; }
+}
+
+let greeter: Greeter = switch (platform()) {
+    case Windows -> WindowsGreeter {};
+    case Linux, MacOS, Unix -> UnixGreeter {};
+};
+
+/** A plain function with a C body; lar"name" reaches Larimar from it. */
+function plusBonus(a: int32): int32 ccode { return a + lar"bonus"(); }
+
+function bonus(): int32 { return 100; }
+
+function main(): int32 {
+    let b: byte[*] = [7, 8, 9];
+    println("${greeter.twice(21)} ${greeter.label("x", b)} ${plusBonus(1)}");
+    return 0;
+}

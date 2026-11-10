@@ -1,6 +1,6 @@
 // A C type with members: its fields through its pointer (let), C functions that take it first
 // (native function ... = c_name), a native let, a Larimar method and a static native function.
-c_code {
+ccode {
     typedef struct Counter { int value; const char* name; } Counter;
     static Counter* counter_new(const char* name) { Counter* c = (Counter*)calloc(1, sizeof(Counter)); c->name = name; return c; }
     static void counter_free(Counter* c) { free(c); }
@@ -20,7 +20,7 @@ native type Counter = Counter* {
 }
 
 native function counter_free(c: Counter): void;
-native const ANSWER: int32 = "(6 * 7)";
+native const ANSWER: int32 = c"(6 * 7)";
 native function cTwice(x: int32): int32 = twice;
 
 function main(): int32 {

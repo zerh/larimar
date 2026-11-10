@@ -47,6 +47,9 @@ let readingCastType: bool = false;
 let staticFunctions: FunctionDecl[*] = [] in default;
 /** What a native type with members also declares: its methods, the C functions they call, the struct of its fields. */
 let nativeParts: Node[*] = [] in default;
+/** Reading a class: its name and its system (implements OnUnix, OnLinux, OnMacOS or OnWindows; "" for every one). */
+let cOwner: String = "";
+let cPlatform: String = "";
 
 // =========================================================================================
 // Reading tokens
@@ -202,7 +205,7 @@ function program(startLine: int32): Program {
 /**
  * #when PLATFORM declaration* ( #when PLATFORM declaration* )* [ #else declaration* ] #end
  *
- * Declarations for one platform (each gets that platform). Only c_include and native declarations:
+ * Declarations for one platform (each gets that platform). Only cinclude and native declarations:
  * what changes between platforms is how C is reached. Here #else follows only #when windows or
  * #when unix (the rest is then the other one).
  */
@@ -235,7 +238,7 @@ function platformDeclarations(program: Program in default): void {
                 case ExternValueDecl value -> { value.platform = platform; }
                 default -> { allowed = false; }
             }
-            if (!allowed) { error(start.line, "Outside a function, inside '#when' go only c_include and native declarations"); }
+            if (!allowed) { error(start.line, "Outside a function, inside '#when' go only cinclude and native declarations"); }
             if (nativeParts.length > 0 || staticFunctions.length > 0) {
                 error(start.line, "A native type with members is declared once, outside '#when': inside it, declare its C type for each platform (native type X = T;)");
             }
@@ -302,16 +305,16 @@ function importDeclaration(): ImportDecl {
 }
 
 /**
- * c_code | c_include "HEADER" ; | native ... | test function ... | export function ... | const ... |
+ * ccode { C } | ccode "FILE" ; | cinclude "HEADER" ; | native ... | test function ... | export function ... | const ... |
  * let ... | function ... | struct ... | [synchronized] class ... | interface ... | enum ... | native type ...
  */
 function topLevelDeclaration(): Node {
     let start: Token = current();
     if (optional(TT.CCode)) { return CCodeDecl { line: start.line, code: previous().text } in default; }
     if (optional(TT.CInclude)) {
-        let include: CIncludeDecl = CIncludeDecl { line: start.line, header: expect(TT.Str, "Expected header string after 'c_include'").text } in default;
+        let include: CIncludeDecl = CIncludeDecl { line: start.line, header: expect(TT.Str, "Expected the header after 'cinclude': cinclude \"<math.h>\";").text } in default;
         noWhenSuffix();
-        return endedBySemicolon(include, "'c_include'");
+        return endedBySemicolon(include, "'cinclude'");
     }
     if (atWord("test") && next().kind == TT.Function) {
         advance();
@@ -351,7 +354,7 @@ function topLevelDeclaration(): Node {
         error(start.line, "'${start.text}${next().text}...' is a statement: at top level only declarations are allowed. Move it into a function (main).");
         return BlockStmt { line: start.line } in default;
     }
-    error(start.line, "Only declarations (let, const, function, struct, class, interface, enum, native, c_include, #when) are allowed at top level (got '${start.text}')");
+    error(start.line, "Only declarations (let, const, function, struct, class, interface, enum, native, cinclude, ccode, #when) are allowed at top level (got '${start.text}')");
     return BlockStmt { line: start.line } in default;
 }
 
@@ -407,15 +410,18 @@ function nativeDeclaration(line: int32): Node {
     return nativeCType(name);
 }
 
-/** [ = NAME | = "C" ]: what a native declaration is in C; "" without '='. */
+/** At C text: c"...". */
+function atCText(): bool { return at(TT.CText); }
+
+/** [ = NAME | = c"C" ]: what a native declaration is in C; "" without '='. */
 function cTarget(what: String): String {
     if (!optional(TT.Assign)) { return ""; }
-    if (at(TT.Str)) {
+    if (atCText()) {
         let text: Token = advance();
         if (text.text.trim() == "") { error(text.line, "The C of ${what} is empty"); }
         return text.text;
     }
-    return expect(TT.Ident, "Expected the C name, or \"C text\" in quotes, after '=' in ${what}").text;
+    return expect(TT.Ident, "Expected the C name, or c\"C text\", after '=' in ${what}").text;
 }
 
 /** (after `native function`) NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ; */
@@ -435,7 +441,7 @@ function nativeFunctionOfC(): ExternFunctionDecl {
     }
     expect(TT.RParen, declaration.varargs ? "'...' must be the last parameter" : "Expected ')' after parameters");
     if (optional(TT.Colon)) { declaration.ret = type(); }
-    if (at(TT.Assign) && !(next().kind == TT.Ident || next().kind == TT.Str)) {
+    if (at(TT.Assign) && !(next().kind == TT.Ident || next().kind == TT.Str || next().kind == TT.CText)) {
         error(current().line, "A native function of a module names its C function (= c_name;); to write it in Larimar, write a plain function");
     }
     let target: String = cTarget("native function '${name.text}'");
@@ -460,12 +466,12 @@ function nativeValue(): Node {
     expect(TT.Colon, "Expected ':' and a type after '${name.text}'");
     let declaration: ExternValueDecl = ExternValueDecl { line: name.line, name: name.text, type: type(), isConst, cName: name.text } in default;
     if (optional(TT.Assign)) {
-        if (at(TT.Str)) {                  // what C writes for it: sizeof, a cast, a macro with arguments
+        if (atCText()) {                   // what C writes for it: sizeof, a cast, a macro with arguments
             if (!isConst) { error(current().line, "A native let is a C variable: give its C name (= c_name), not C text"); }
             declaration.cExpr = advance().text;
             if (declaration.cExpr.trim() == "") { error(name.line, "The C of '${name.text}' is empty"); }
         } else {
-            declaration.cName = expect(TT.Ident, "Expected the C name, or \"C text\" in quotes, after '='").text;
+            declaration.cName = expect(TT.Ident, "Expected the C name, or c\"C text\", after '='").text;
         }
     }
     noWhenSuffix();
@@ -518,11 +524,11 @@ function nativeCType(name: Token in default): Node {
         if (at(TT.LParen)) {
             declaration.func = type();
             if (declaration.func!.kind != TK.Func) { error(name.line, "Expected a function type after '=': (int32, int32) -> int32"); }
-        } else if (at(TT.Str)) {
+        } else if (atCText()) {
             declaration.cType = advance().text;
             if (declaration.cType.trim() == "") { error(name.line, "The C type of '${name.text}' is empty"); }
         } else {
-            let cType: String = expect(TT.Ident, "Expected the C type after 'native type ${name.text} =': a name (FILE*), \"C text\" or a function type").text;
+            let cType: String = expect(TT.Ident, "Expected the C type after 'native type ${name.text} =': a name (FILE*), c\"C text\" or a function type").text;
             while (optional(TT.Star)) { cType = "${cType}*"; }
             declaration.cType = cType.clone() in default;
         }
@@ -616,7 +622,7 @@ function nativeMember(owner: String in default, line: int32, property: bool, isS
     }
     expect(TT.Assign, "Expected '=' and its C function (= c_name;) or a Larimar expression");
     let value: Expr? = null;
-    if ((at(TT.Ident) || at(TT.Str)) && (next().kind == TT.Semi || next().kind == TT.Ident && next().text == "released")) {
+    if ((at(TT.Ident) || at(TT.CText)) && (next().kind == TT.Semi || next().kind == TT.Ident && next().text == "released")) {
         let c: Token = advance();
         let cFunction: ExternFunctionDecl = ExternFunctionDecl {
             line: c.line, name: "${owner}__${name.text}" in default, cName: c.text, ret: declaration.ret.clone() in default
@@ -736,7 +742,10 @@ function functionDeclaration(isOverride: bool, withBody: bool): FunctionDecl {
         declaration.waitUntil = expression();
         expect(TT.RParen, "Expected ')' after the condition of 'wait until'");
     }
-    if (withBody) {
+    if (withBody && at(TT.CCode)) {
+        if (declaration.waitUntil != null) { error(waitToken.line, "A method with a C body cannot say 'wait until'"); }
+        cBodied(declaration);
+    } else if (withBody) {
         declaration.body = block("body of '${name.text}'");
         declaration.hasBody = true;
         if (declaration.waitUntil != null) { declaration.body = waitFirst(waitToken.line, declaration.waitUntil!, declaration.body); }
@@ -799,9 +808,25 @@ function classDeclaration(isSynchronized: bool): ClassDecl {
             if (!optional(TT.Comma)) { break; }
         }
     }
+    let platform: String = "";
+    for (i in declaration.interfaces) {
+        let marked: String = markerPlatform(i);
+        if (marked == "") { continue; }
+        if (platform != "") { error(name.line, "A class is for one system: '${declaration.name}' implements more than one of OnUnix, OnLinux, OnMacOS and OnWindows"); }
+        platform = marked;
+    }
+    cOwner = declaration.name;
+    cPlatform = platform;
     expect(TT.LBrace, "Expected '{' to open class body");
     while (!at(TT.RBrace) && !atEnd()) {
-        if (at(TT.Let)) {
+        if (at(TT.CInclude)) {                  // the headers of its C: only on its system
+            let include: CIncludeDecl = CIncludeDecl { line: advance().line, header: expect(TT.Str, "Expected the header after 'cinclude': cinclude \"<math.h>\";").text, platform } in default;
+            expect(TT.Semi, "Expected ';' after the header of 'cinclude'");
+            nativeParts.push(include);
+        } else if (at(TT.CCode)) {              // C its methods share: only on its system
+            let code: Token = advance();
+            nativeParts.push(CCodeDecl { line: code.line, code: code.text, platform } in default);
+        } else if (at(TT.Let)) {
             declaration.fields.push(field());
         } else if (optional(TT.Static)) {
             staticFunction(declaration.name);
@@ -828,9 +853,54 @@ function classDeclaration(isSynchronized: bool): ClassDecl {
             error(current().line, "Expected 'let', 'function' or 'operator' inside class body (got '${current().text}')");
         }
     }
+    cOwner = "";
+    cPlatform = "";
     expect(TT.RBrace, "Expected '}' to close class body");
     optional(TT.Semi);
     return declaration;
+}
+
+/** The system a marker interface of std.os names (OnUnix, OnLinux, OnMacOS, OnWindows), or "". */
+function markerPlatform(name: String): String {
+    let last: String = name.substring((name.lastIndexOf(".") ?? -1) + 1);
+    return switch (last) {
+        case "OnUnix" -> "unix";
+        case "OnLinux" -> "linux";
+        case "OnMacOS" -> "macos";
+        case "OnWindows" -> "windows";
+        default -> "";
+    };
+}
+
+/**
+ * function f(params): T ccode { C }: the body is C. It becomes a C function the compiler writes (its
+ * parameters with their C types and names), and f calls it. In a class for one system, f calls it only
+ * there (elsewhere it panics; the C of that system never reaches the others).
+ */
+function cBodied(declaration: FunctionDecl in default): void {
+    let code: Token = advance();
+    let line: int32 = declaration.line;
+    let owner: String = cOwner != "" ? "${cOwner}_" : "";
+    let cFunction: ExternFunctionDecl = ExternFunctionDecl {
+        line, name: "${owner}c_${declaration.name}", params: declaration.params, ret: declaration.ret,
+        cName: "lm_${owner}${declaration.name}_${line}", platform: cPlatform, cBody: code.text
+    } in default;
+    nativeParts.push(cFunction);
+    let call: Call = Call { line, callee: Ident { line, name: cFunction.name } in default } in default;
+    for (p in declaration.params) { call.args.push(Ident { line, name: p.name } in default); }
+    let run: Stmt = ReturnStmt { line, value: call } in default;
+    if (declaration.ret.kind == TK.Named && declaration.ret.name == "void") { run = ExprStmt { line, expr: call } in default; }
+    if (cPlatform == "") {
+        declaration.body.push(run);
+    } else {
+        let only: IfStmt = IfStmt { line, cond: BoolLit { line, value: true } in default, platform: cPlatform, hasElse: true } in default;
+        only.thenBody.push(run);
+        let panic: Call = Call { line, callee: Ident { line, name: "panic" } in default } in default;
+        panic.args.push(StringLit { line, texts: ["'${cOwner}.${declaration.name}' is for ${cPlatform}, not for this system"] } in default);
+        only.elseBody.push(ExprStmt { line, expr: panic } in default);
+        declaration.body.push(only);
+    }
+    declaration.hasBody = true;
 }
 
 /** A method of a class: in a synchronized class it may say `wait until`. */

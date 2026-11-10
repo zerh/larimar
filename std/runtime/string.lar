@@ -1,0 +1,143 @@
+// std.runtime.string: String: texts and their memory.
+// Part of the runtime: the compiler takes from here what a program uses (it is not imported).
+ccode {
+/* ---- runtime: strings (immutable, always NUL-terminated) -------------- */
+
+typedef struct RtString { const char* ptr; int32_t len; } RtString;
+
+static inline RtString rt_str(const char* p, int32_t len) {
+    RtString s;
+    s.ptr = p;
+    s.len = len;
+    return s;
+}
+
+static inline RtString rt_str_c(const char* p) {
+    return p ? rt_str(p, (int32_t)strlen(p)) : rt_str("", 0);
+}
+
+/* panic("...") written in Larimar */
+static inline void rt_panic_str(RtString msg, int line) {
+    char buf[512];
+    int n = msg.len < (int32_t)sizeof buf - 1 ? msg.len : (int32_t)sizeof buf - 1;
+    memcpy(buf, msg.ptr, (size_t)n);
+    buf[n] = 0;
+    rt_panic(buf, line);
+}
+
+static inline bool rt_str_eq(RtString a, RtString b) {
+    return a.len == b.len && (a.len == 0 || memcmp(a.ptr, b.ptr, (size_t)a.len) == 0);
+}
+
+static inline RtString rt_str_clone(RtString s, RtMem* m, int line) {
+    char* p = (char*)rt_mem_alloc(m, (size_t)s.len + 1, line);
+    memcpy(p, s.ptr, (size_t)s.len);
+    p[s.len] = 0;
+    return rt_str(p, s.len);
+}
+
+static inline void rt_print(RtString s) { fwrite(s.ptr, 1, (size_t)s.len, stdout); }
+static inline void rt_println(RtString s) { rt_print(s); fputc('\n', stdout); }
+
+/* String builder used by interpolation. mem == NULL: fixed buffer, truncates. */
+typedef struct RtSb { RtMem* mem; char* buf; int32_t len; int32_t cap; int line; } RtSb;
+
+static inline RtSb rt_sb_mem(RtMem* m, int line) {
+    RtSb b;
+    b.mem = m;
+    b.len = 0;
+    b.cap = 32;
+    b.line = line;
+    b.buf = (char*)rt_mem_alloc(m, 32, line);
+    return b;
+}
+
+static inline RtSb rt_sb_fixed(char* buf, int32_t cap) {
+    RtSb b;
+    b.mem = NULL;
+    b.buf = buf;
+    b.len = 0;
+    b.cap = cap;
+    b.line = 0;
+    buf[0] = 0;
+    return b;
+}
+
+static inline void rt_sb_add(RtSb* b, const char* s, int32_t n) {
+    if (n <= 0) return;
+    if ((int64_t)b->len + n + 1 > (int64_t)b->cap) {
+        if (b->mem == NULL) {
+            n = b->cap - 1 - b->len;
+            if (n <= 0) return;
+        } else {
+            int32_t nc = b->cap;
+            while ((int64_t)b->len + n + 1 > (int64_t)nc) nc *= 2;
+            char* nb = (char*)rt_mem_try_realloc(b->mem, b->buf, (size_t)b->cap, (size_t)nc);
+            if (!nb) rt_panic("memory is full", b->line);
+            b->buf = nb;
+            b->cap = nc;
+        }
+    }
+    memcpy(b->buf + b->len, s, (size_t)n);
+    b->len += n;
+    b->buf[b->len] = 0;
+}
+
+static inline void rt_sb_str(RtSb* b, RtString s) { rt_sb_add(b, s.ptr, s.len); }
+static inline void rt_sb_cstr(RtSb* b, const char* s) { rt_sb_add(b, s, (int32_t)strlen(s)); }
+
+static inline void rt_sb_i64(RtSb* b, int64_t v) {
+    char t[32];
+    int n = snprintf(t, sizeof t, "%lld", (long long)v);
+    rt_sb_add(b, t, n);
+}
+
+static inline void rt_sb_u64(RtSb* b, uint64_t v) {
+    char t[32];
+    int n = snprintf(t, sizeof t, "%llu", (unsigned long long)v);
+    rt_sb_add(b, t, n);
+}
+
+/* The text of a decimal: the fewest digits that read back as the same value (17 at most for a float64,
+   9 for a float32). From 1e-4 up to 1e15 it is written without an exponent; always with a '.' or an
+   exponent, so that it reads as a decimal: 2.0, 0.1, 0.30000000000000004, 1e+20. */
+static int rt_fmt_float(char* t, size_t size, double v, bool single) {
+    if (v != v) return snprintf(t, size, "nan");
+    if (v - v != 0) return snprintf(t, size, v > 0 ? "inf" : "-inf");
+    int most = single ? 9 : 17;
+    char e[48];
+    int digits = 1;
+    for (; digits < most; digits++) {
+        snprintf(e, sizeof e, "%.*e", digits - 1, v);
+        double back = strtod(e, NULL);
+        if (single ? (float)back == (float)v : back == v) break;
+    }
+    snprintf(e, sizeof e, "%.*e", digits - 1, v);
+    int exponent = atoi(strchr(e, 'e') + 1);
+    int n;
+    if (exponent < -4 || exponent >= 15) {        /* the exponent with at least two digits everywhere (msvcrt writes three) */
+        int mantissa = (int)(strchr(e, 'e') - e);
+        n = snprintf(t, size, "%.*se%c%02d", mantissa, e, exponent < 0 ? '-' : '+', exponent < 0 ? -exponent : exponent);
+    } else {
+        int decimals = digits - 1 - exponent;
+        n = snprintf(t, size, "%.*f", decimals < 0 ? 0 : decimals, v);
+    }
+    if (n > 0 && (size_t)n + 2 < size && strpbrk(t, ".e") == NULL) { t[n++] = '.'; t[n++] = '0'; t[n] = 0; }
+    return n;
+}
+
+static inline void rt_sb_f64(RtSb* b, double v) {
+    char t[64];
+    rt_sb_add(b, t, rt_fmt_float(t, sizeof t, v, false));
+}
+
+static inline void rt_sb_f32(RtSb* b, float v) {
+    char t[64];
+    rt_sb_add(b, t, rt_fmt_float(t, sizeof t, (double)v, true));
+}
+
+static inline void rt_sb_bool(RtSb* b, bool v) { rt_sb_cstr(b, v ? "true" : "false"); }
+
+static inline RtString rt_sb_finish(RtSb* b) { return rt_str(b->buf, b->len); }
+
+}

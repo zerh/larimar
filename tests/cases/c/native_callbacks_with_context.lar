@@ -1,6 +1,6 @@
 // A callback with a Context: a Larimar function (with what it captures) goes to C, which gives the
 // Context back; an export function goes as it is; one that C keeps is declared 'in default'.
-c_code {
+ccode {
     typedef void (*item_fn)(int32_t index, const char* name, void* data);
     static void for_each_name(item_fn f, void* data) {
         const char* names[] = { "uno", "dos", "tres" };

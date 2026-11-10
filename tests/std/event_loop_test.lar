@@ -1,0 +1,29 @@
+// std.net.EventLoop: it says which sockets can be read, and unwatch keeps the others in place.
+import std.test { check, checkInt };
+import std.net { TcpSocket, TcpListener, EventLoop, NetError };
+import std.io { IoError };
+
+test function readySocketsAndUnwatch(): void throws NetError {
+    let listener: TcpListener = TcpListener.bind("127.0.0.1", 0);
+    let loop: EventLoop = {};
+    loop.watch(listener.number());
+    checkInt(loop.wait(20), 0);                              // nobody yet
+    check(!loop.isReady(0), "the listener has no one waiting");
+
+    let a: TcpSocket = TcpSocket.connect("127.0.0.1", listener.port());
+    let b: TcpSocket = TcpSocket.connect("127.0.0.1", listener.port());
+    check(loop.wait(1000) >= 1 && loop.isReady(0), "the listener has a connection waiting");
+    let first: TcpSocket = listener.accept();
+    let second: TcpSocket = listener.accept();
+    loop.watch(first.number());
+    loop.watch(second.number());
+    checkInt(loop.count(), 3);
+
+    try { b.writeText("hi"); } catch (IoError e) { check(false, "the write failed"); }
+    check(loop.wait(1000) == 1 && !loop.isReady(1) && loop.isReady(2), "only the second one has something to read");
+    loop.unwatch(1);                                         // the last one takes place 1
+    checkInt(loop.count(), 2);
+    check(loop.socket(1) == second.number(), "the second one moved to place 1");
+    check(loop.wait(1000) == 1 && loop.isReady(1), "and it is still ready");
+    try { a.close(); } catch (IoError e) {}
+}

@@ -1,0 +1,90 @@
+// std.thread: a pool of threads for a batch of tasks.
+//
+//   import std.thread { ThreadPool };
+//   let pool: ThreadPool = { threads: 8 };
+//   for (file in files) {
+//       let name: String = file;
+//       pool.submit(() -> { resize(name); });          // runs on one of the 8 threads
+//   }
+//   pool.wait();                                       // until every task submitted has finished
+//
+// A task is a function () -> void thread safe: what it captures has to be safe to share (values, and
+// synchronized objects). The threads start as tasks arrive (at most `threads`) and end when there is none
+// left; when the pool's memory goes, they are joined. queue > 0 bounds the tasks waiting: submit waits
+// while that many have not started.
+//
+// The tasks live in the pool's memory until the pool goes: a pool is for a batch (a folder of images, the
+// requests of a test), made where the batch is. For a server that runs forever, std.net.TcpServer has its
+// own workers, which take values and keep nothing.
+
+/** The tasks of a pool and how many threads it has (the lock of the pool). */
+synchronized class TaskQueue {
+    let items: (() -> void thread safe)[*] = [];
+    let head: int32 = 0;
+    let limit: int32 = 0;          // tasks waiting at most (0: no limit)
+    let running: int32 = 0;        // threads alive
+    let pending: int32 = 0;        // tasks submitted and not finished
+
+    function bound(limit: int32): void { self.limit = limit; }
+
+    /** Adds a task, waiting while the queue is full; true when one more thread should start. */
+    function put(task: () -> void thread safe in self, threads: int32): bool wait until (self.limit <= 0 || self.items.length - self.head < self.limit) {
+        self.items.push(task);
+        self.pending += 1;
+        if (self.running < threads) {
+            self.running += 1;
+            return true;
+        }
+        return false;
+    }
+
+    /** The next task, or null when there is none (the thread ends). */
+    function take(): (() -> void thread safe)? {
+        if (self.head == self.items.length) {
+            self.running -= 1;
+            return null;
+        }
+        let task: () -> void thread safe = self.items[self.head];
+        self.head += 1;
+        return task;
+    }
+
+    function done(): void { self.pending -= 1; }
+
+    function idle(): void wait until (self.pending == 0) {}
+}
+
+/**
+ * Runs tasks on up to `threads` threads: let pool: ThreadPool = { threads: 8 }; pool.submit(() -> { ... });
+ * queue > 0: submit waits while that many tasks have not started.
+ */
+public class ThreadPool {
+    let threads: int32 = 4;
+    let queue: int32 = 0;
+    let tasks: TaskQueue = {};
+    let workers: Thread[*] = [];
+    let bounded: bool = false;
+
+    /** Runs the task on one of the pool's threads (it waits first if the queue is full). */
+    function submit(task: () -> void thread safe in self): void {
+        let q: TaskQueue = self.tasks;
+        if (!self.bounded) {
+            q.bound(self.queue);
+            self.bounded = true;
+        }
+        if (q.put(task, self.threads > 0 ? self.threads : 1)) {
+            self.workers.push(Thread { run: () -> {
+                while (true) {
+                    let next: (() -> void thread safe)? = q.take();
+                    if (next == null) { return; }
+                    next!();
+                    q.done();
+                }
+            } });
+            self.workers[self.workers.length - 1].start();
+        }
+    }
+
+    /** Waits until every task submitted so far has finished. */
+    function wait(): void { self.tasks.idle(); }
+}

@@ -1,5 +1,5 @@
 // C que crea texto en la memoria de la llamada (su primer parámetro).
-c_code {
+ccode {
     #include <ctype.h>
     static const char* shout(RtMem* m, const char* text) {
         size_t n = strlen(text);

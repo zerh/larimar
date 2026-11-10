@@ -8,12 +8,9 @@
 
 import std.io { IoError, raise };
 import std.io { InputStream, OutputStream };
+import std.os { platform, Platform, OnWindows };
 
-c_include "<errno.h>";
-#when windows
-    c_include "<io.h>";
-    c_include "<fcntl.h>";
-#end
+cinclude "<errno.h>";
 
 native type CStream = FILE*;
 native const stdin: CStream;
@@ -26,11 +23,16 @@ native function fread(into: byte*, size: uint64, count: uint64, f: CStream): uin
 native function fwrite(from: byte*, size: uint64, count: uint64, f: CStream): uint64;
 native function fflush(f: CStream): int32;
 native function ferror(f: CStream): int32;
-#when windows
-    native function _fileno(f: CStream): int32;
-    native function _setmode(fd: int32, mode: int32): int32;
-    native const _O_BINARY: int32;
-#end
+/** Only Windows turns \n into \r\n on the way out: binary mode there. */
+class WindowsConsole implements OnWindows {
+    cinclude "<io.h>";
+    cinclude "<fcntl.h>";
+
+    function binaryMode(): void ccode {
+        _setmode(_fileno(stdin), _O_BINARY);
+        _setmode(_fileno(stdout), _O_BINARY);
+    }
+}
 
 /** A line of a C stream, without its end; null at its end. */
 function lineOf(f: CStream): String? {
@@ -106,10 +108,10 @@ public function flush(): void { fflush(stdout); }
 
 /** Input and output byte by byte, as they are (on Windows, without turning \n into \r\n). */
 public function binaryMode(): void {
-    #when windows
-        _setmode(_fileno(stdin), _O_BINARY);
-        _setmode(_fileno(stdout), _O_BINARY);
-    #end
+    if (platform() == Platform.Windows) {
+        let console: WindowsConsole = {};
+        console.binaryMode();
+    }
 }
 
 /** Writes a line to the standard error. */

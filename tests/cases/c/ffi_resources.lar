@@ -1,6 +1,6 @@
 // A resource (native type released by f): released when the memory it lives in is freed, or before with
 // release(x) (only once); a C function that fails gives null.
-c_code {
+ccode {
     static int opened = 0, closed = 0;
     static int open_thing(int ok) { if (!ok) return -1; return ++opened; }
     static void close_thing(int t) { (void)t; closed++; }

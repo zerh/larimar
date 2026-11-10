@@ -34,7 +34,7 @@ import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 import std.os.process { Process, ProcessError };
 
-const VERSION: String = "1.3.1";
+const VERSION: String = "1.4.0";
 
 /** The version of the language this compiler implements (doc/spec.md). */
 const LANGUAGE: String = "1.0";
@@ -571,7 +571,7 @@ function project(dir: String, config: Any): Project? {
     // [c] for every platform, then [c.unix] (Linux and macOS) and [c.<this platform>]: their lists are added
     // to [c]'s, and a compiler there replaces [c]'s
     let unix: Any = windows() ? null : c.unix;
-    let here: Any = c[os.platform()];
+    let here: Any = c[os.platformName()];
     let compiler: String = text(here, "compiler", text(unix, "compiler", text(c, "compiler", cc)));
     let flags: String[*] = list(c, "flags", ["-O2"]);
     let staticLibraries: String[*] = list(c, "static_libraries", []);
@@ -604,7 +604,7 @@ function project(dir: String, config: Any): Project? {
             let depConfig: Any = Toml.parse(Files.readString(depToml));
             let dc: Any = depConfig.c;
             let depUnix: Any = windows() ? null : dc.unix;
-            let depHere: Any = dc[os.platform()];
+            let depHere: Any = dc[os.platformName()];
             let depSections: Any[] = [dc, depUnix, depHere];
             for (section in depSections) {
                 if (section != null && (section.libraries != null || section.library_paths != null)) {
@@ -757,7 +757,7 @@ function build(p: Project, debug: bool): String {
     cmd.push(cFile);
     for (s in p.sources) { cmd.push(resolve(dir, s)); }
     for (ip in p.includePaths) { cmd.push("-I${resolve(dir, ip)}"); }
-    for (l in p.larimarLibraries) { cmd.push("-I${l.dir}"); }          // its .h, for the c_include of its .lar
+    for (l in p.larimarLibraries) { cmd.push("-I${l.dir}"); }          // its .h, for the cinclude of its .lar
     let links: String[*] = linkArgs(p, cc.bundled);
     if (toolError != "") { return ""; }
     for (l in links) { cmd.push(l); }
@@ -797,7 +797,7 @@ function linkArgs(p: Project, bundled: bool): String[*] {
         }
         if (found != "") {
             out.push(found.clone());
-        } else if (os.platform() == "linux" && !bundled) {
+        } else if (os.platformName() == "linux" && !bundled) {
             out.push("-Wl,-Bstatic");
             out.push("-l${l}");
             out.push("-Wl,-Bdynamic");

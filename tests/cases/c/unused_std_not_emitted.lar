@@ -1,5 +1,5 @@
 // Solo llega al C lo que el programa usa: ni los métodos de String que no llama, ni los tipos que solo
-// aparecen en sus firmas, ni el c_code de la biblioteca estándar que nadie usa.
+// aparecen en sus firmas, ni el ccode de la biblioteca estándar que nadie usa.
 function main(): int32 {
     let s: String = "hola";
     println("${s.toUpperCase()} ${s.startsWith("ho")}");

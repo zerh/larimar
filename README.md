@@ -38,8 +38,10 @@ C functions, constants, macros, globals, structs, pointers and resources are dec
 `native struct`, `T*` and `&x` (in calls), `native type X = FILE* released by fclose` (released when the memory
 it lives in is freed, or with `release(x)`), C types with fields and methods
 (`native type Db = sqlite3* { native function errmsg(): String = sqlite3_errmsg; }`), callbacks that take
-lambdas when C passes a `Context`, `lar"name"` inside `c_code`, and `#when windows` ... `#else` ... `#end` for
-what changes between platforms (compiled as `#if`, every branch checked). A text that C makes with `malloc`
+lambdas when C passes a `Context`, C text as `c"..."` when it is not a plain name, C written in the file
+(`ccode { ... }`), methods whose body is C, `lar"name"` inside that C, and a class for each system
+(`implements OnUnix` / `OnWindows`, chosen with `switch (os.platform())`) for what changes between them:
+its C reaches only that system's build, and no `#if` is written by hand. A text that C makes with `malloc`
 is copied and freed (`native function strdup(s: String): String released by free`). See [chapter 23 of the manual](doc/manual.md#23-calling-c).
 
 ## Libraries for C and for Larimar
@@ -84,10 +86,10 @@ larimar/
 │   ├── main.lar         the commands
 │   ├── syntax/          lexer, parser, ast
 │   ├── semantics/       linker (modules), types, analyzer, expressions
-│   ├── codegen/         gen, expressions, runtime, runtimeselect, prune, debugmap
+│   ├── codegen/         gen, expressions, runtimeselect, prune, debugmap
 │   ├── editor/          session (larimar check), lsp, ide, docstore, dap
 │   └── project/         cc (the C compiler), testing (larimar test), libraries
-├── std/                 the standard library (io, os, net, encoding, text, time, crypto, test...)
+├── std/                 the standard library (io, os, net, thread, encoding, text, time...); std/runtime: the runtime
 ├── tests/               the tests (tests/run-tests.sh)
 ├── doc/                 manual.md, manual.es.md, spec.md
 ├── bootstrap/           larimarc.c (the compiler in C), build.sh, build.ps1
@@ -162,8 +164,7 @@ checks all of it.
 | semantics/expressions.lar | Expression type checking, method resolution |
 | codegen/gen.lar | C code generation for statements |
 | codegen/expressions.lar | C code generation for expressions |
-| codegen/runtime.lar | Runtime C code (strings, memory, Any) |
-| codegen/runtimeselect.lar | Runtime selection |
+| codegen/runtimeselect.lar | Runtime selection: only the pieces of the runtime (std/runtime) the program uses |
 | codegen/prune.lar | Keeps only the generated C the program reaches |
 | codegen/debugmap.lar | Debug map: C names and types of every variable, for the debugger |
 | editor/session.lar | One analysis without C; larimar check |

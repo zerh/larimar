@@ -3,9 +3,42 @@
 // The runtime is cut into paragraphs (blank lines outside braces and #if blocks; each #include is
 // one). A paragraph is kept when it defines a name the program uses, or a name a kept paragraph uses.
 // #ifdef RT_THREADS and #ifdef RT_FILES are decided here.
+//
+// The runtime itself is C, in the ccode of std/runtime/*.lar (read in the order of runtimeFiles): editing
+// it does not change the compiler, nor the bootstrap.
 
 import std.text { isIdentifierPart, isDigit };
-import codegen.runtime { RUNTIME, RUNTIME_ANY };
+import std.io.path as Paths;
+import std.io.files as Files;
+import std.io { IoError };
+import semantics.linker { stdDir };
+
+/** The runtime's files, in std/runtime, in the order their C is written. */
+let runtimeFiles: String[*] = ["base", "threads", "panic", "memory", "thread", "string", "string_methods", "integer", "class", "any"];
+
+/** The C of a runtime file: between "ccode {" and the last "}" (each file is that one ccode). */
+function runtimeC(file: String): String {
+    let open: int32 = (file.indexOf("ccode {\n") ?? -1) + 8;
+    let close: int32 = file.lastIndexOf("}") ?? 0;
+    return open >= 8 && close > open ? file.substring(open, close) : "";
+}
+
+/** The runtime's C, read once from std/runtime (an #error line for C if a file is missing). */
+let runtimeRead: String? = null;
+function runtimeSource(): String {
+    if (runtimeRead != null) { return runtimeRead!; }
+    let text: String = "";
+    for (name in runtimeFiles) {
+        let path: String = Paths.join(Paths.join(stdDir, "runtime"), "${name}.lar");
+        try {
+            text = "${text}${runtimeC(Files.readString(path))}";
+        } catch (IoError e) {
+            text = "${text}#error \"Larimar's runtime was not found: ${path} (set LARIMAR_HOME to the folder that has std/)\"\n";
+        }
+    }
+    runtimeRead = text.clone() in default;
+    return text;
+}
 
 /** What each standard header gives (enough for the runtime and for the generated code). */
 const HEADER_NAMES: String = "stdint.h stdbool.h stddef.h stdio.h stdlib.h string.h";
@@ -38,10 +71,10 @@ class Unit {
 
 /**
  * The runtime the program needs, in the runtime's order. allHeaders: the program has its own C
- * (c_code, extern), which may count on the standard headers.
+ * (ccode, native), which may count on the standard headers.
  */
 public function selectRuntime(program: String, threads: bool, files: bool, allHeaders: bool): String {
-    let units: Unit[*] = split(resolve("${RUNTIME}${RUNTIME_ANY}", threads, files));
+    let units: Unit[*] = split(resolve(runtimeSource(), threads, files));
     // name -> the paragraphs that define it (a chain through defNext)
     let head: Any = {};
     let defUnit: int32[*] = [];

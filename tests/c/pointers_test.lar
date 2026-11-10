@@ -22,7 +22,7 @@ test function ffiPlatformOnly(): void {
         """, "'only_windows' exists only on windows: call it between '#when windows' and '#end'");
 }
 
-// C without c_code-wrappers: pointers to C structs (a linked list), out parameters (&x), constants and
+// C without ccode-wrappers: pointers to C structs (a linked list), out parameters (&x), constants and
 // macros (native const), a C global (native let), C strings in structs, arrays where C takes T*, `when`.
 test function ffiPointers(): void {
     runs("tests/cases/c/ffi_pointers.lar", [
