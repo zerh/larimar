@@ -1,321 +1,321 @@
 // std.runtime.any: Any: values of any type, tables.
 // Part of the runtime: the compiler takes from here what a program uses (it is not imported).
 ccode {
-/* ---- runtime: Any ---------------------------------------------------- */
+    /* ---- runtime: Any ---------------------------------------------------- */
 
-enum { RT_ANY_NULL, RT_ANY_I8, RT_ANY_I16, RT_ANY_I32, RT_ANY_I64, RT_ANY_U8, RT_ANY_U16, RT_ANY_U32, RT_ANY_U64,
-       RT_ANY_F32, RT_ANY_F64, RT_ANY_BOOL, RT_ANY_STR, RT_ANY_TABLE, RT_ANY_OBJ, RT_ANY_VAL };
+    enum { RT_ANY_NULL, RT_ANY_I8, RT_ANY_I16, RT_ANY_I32, RT_ANY_I64, RT_ANY_U8, RT_ANY_U16, RT_ANY_U32, RT_ANY_U64,
+        RT_ANY_F32, RT_ANY_F64, RT_ANY_BOOL, RT_ANY_STR, RT_ANY_TABLE, RT_ANY_OBJ, RT_ANY_VAL };
 
-static const char* const rt_any_kinds[] = { "null", "int8", "int16", "int32", "int64", "byte", "uint16", "uint32",
-    "uint64", "float32", "float64", "bool", "String", "a table", "an object", "a struct or enum" };
+    static const char* const rt_any_kinds[] = { "null", "int8", "int16", "int32", "int64", "byte", "uint16", "uint32",
+        "uint64", "float32", "float64", "bool", "String", "a table", "an object", "a struct or enum" };
 
-/* A struct or enum stored in an Any is copied into a box; this describes the box. */
-typedef struct RtValType {
-    const char* name;
-    void* (*clone)(const void* v, RtMem* mem, RtCloneMap* cm);
-} RtValType;
+    /* A struct or enum stored in an Any is copied into a box; this describes the box. */
+    typedef struct RtValType {
+        const char* name;
+        void* (*clone)(const void* v, RtMem* mem, RtCloneMap* cm);
+    } RtValType;
 
-typedef struct RtTable RtTable;
-typedef struct RtAny {
-    int32_t kind;
-    union { int64_t i; uint64_t u; double f; bool b; RtString s; RtTable* t; struct { void* ptr; const void* type; } box; } as;
-} RtAny;
+    typedef struct RtTable RtTable;
+    typedef struct RtAny {
+        int32_t kind;
+        union { int64_t i; uint64_t u; double f; bool b; RtString s; RtTable* t; struct { void* ptr; const void* type; } box; } as;
+    } RtAny;
 
-/* Positions (items) and named entries (keys/values, in insertion order, with a hash index). */
-struct RtTable {
-    RtMem* mem;
-    RtAny* items; int32_t length, capacity;
-    RtString* keys; RtAny* values; int32_t count, cap;
-    int32_t* slots; int32_t nslots;          /* slot -> entry + 1; 0 is empty */
-};
+    /* Positions (items) and named entries (keys/values, in insertion order, with a hash index). */
+    struct RtTable {
+        RtMem* mem;
+        RtAny* items; int32_t length, capacity;
+        RtString* keys; RtAny* values; int32_t count, cap;
+        int32_t* slots; int32_t nslots;          /* slot -> entry + 1; 0 is empty */
+    };
 
-static inline RtAny rt_any_null(void) { RtAny a; memset(&a, 0, sizeof a); return a; }
-static inline RtAny rt_any_i(int64_t v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.i = v; return a; }
-static inline RtAny rt_any_u(uint64_t v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.u = v; return a; }
-static inline RtAny rt_any_f(double v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.f = v; return a; }
-static inline RtAny rt_any_b(bool v) { RtAny a = rt_any_null(); a.kind = RT_ANY_BOOL; a.as.b = v; return a; }
-static inline RtAny rt_any_s(RtString v) { RtAny a = rt_any_null(); a.kind = RT_ANY_STR; a.as.s = v; return a; }
-static inline RtAny rt_any_t(RtTable* v) { RtAny a = rt_any_null(); a.kind = RT_ANY_TABLE; a.as.t = v; return a; }
-/* A class object: stored by reference, with its class (for case Dog d). */
-static inline RtAny rt_any_obj(void* o) {
-    RtAny a = rt_any_null();
-    if (!o) return a;
-    a.kind = RT_ANY_OBJ;
-    a.as.box.ptr = o;
-    a.as.box.type = rt_obj_class(o);
-    return a;
-}
-static inline RtAny rt_any_val(void* box, const RtValType* type) {
-    RtAny a = rt_any_null();
-    a.kind = RT_ANY_VAL;
-    a.as.box.ptr = box;
-    a.as.box.type = type;
-    return a;
-}
-static inline bool rt_any_is_obj(RtAny a, const RtClass* c) {
-    return a.kind == RT_ANY_OBJ && rt_is_a((const RtClass*)a.as.box.type, c);
-}
-static inline bool rt_any_is_val(RtAny a, const RtValType* t) { return a.kind == RT_ANY_VAL && a.as.box.type == t; }
-
-static inline RtTable* rt_table_new(RtMem* mem, int line) {
-    RtTable* t = (RtTable*)rt_mem_alloc(mem, sizeof(RtTable), line);
-    t->mem = mem;
-    return t;
-}
-
-static inline RtTable* rt_any_table(RtAny a, int line) {
-    if (a.kind != RT_ANY_TABLE) {
-        char msg[96];
-        snprintf(msg, sizeof msg, "this Any is not a table (it holds %s)", rt_any_kinds[a.kind]);
-        rt_panic(msg, line);
+    static inline RtAny rt_any_null(void) { RtAny a; memset(&a, 0, sizeof a); return a; }
+    static inline RtAny rt_any_i(int64_t v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.i = v; return a; }
+    static inline RtAny rt_any_u(uint64_t v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.u = v; return a; }
+    static inline RtAny rt_any_f(double v, int32_t kind) { RtAny a = rt_any_null(); a.kind = kind; a.as.f = v; return a; }
+    static inline RtAny rt_any_b(bool v) { RtAny a = rt_any_null(); a.kind = RT_ANY_BOOL; a.as.b = v; return a; }
+    static inline RtAny rt_any_s(RtString v) { RtAny a = rt_any_null(); a.kind = RT_ANY_STR; a.as.s = v; return a; }
+    static inline RtAny rt_any_t(RtTable* v) { RtAny a = rt_any_null(); a.kind = RT_ANY_TABLE; a.as.t = v; return a; }
+    /* A class object: stored by reference, with its class (for case Dog d). */
+    static inline RtAny rt_any_obj(void* o) {
+        RtAny a = rt_any_null();
+        if (!o) return a;
+        a.kind = RT_ANY_OBJ;
+        a.as.box.ptr = o;
+        a.as.box.type = rt_obj_class(o);
+        return a;
     }
-    return a.as.t;
-}
-
-static inline RtMem* rt_any_mem(RtAny a, int line) { return rt_any_table(a, line)->mem; }
-
-static inline void rt_table_push(RtTable* t, RtAny v, int line) {
-    if (t->length == t->capacity) {
-        int32_t nc = t->capacity ? t->capacity * 2 : 8;
-        RtAny* ni = (RtAny*)rt_mem_try_realloc(t->mem, t->items, sizeof(RtAny) * (size_t)t->capacity, sizeof(RtAny) * (size_t)nc);
-        if (!ni) rt_panic("memory is full", line);
-        t->items = ni;
-        t->capacity = nc;
+    static inline RtAny rt_any_val(void* box, const RtValType* type) {
+        RtAny a = rt_any_null();
+        a.kind = RT_ANY_VAL;
+        a.as.box.ptr = box;
+        a.as.box.type = type;
+        return a;
     }
-    t->items[t->length++] = v;
-}
-
-static inline uint32_t rt_str_hash(RtString s) {
-    uint32_t h = 2166136261u;
-    for (int32_t i = 0; i < s.len; i++) { h ^= (uint8_t)s.ptr[i]; h *= 16777619u; }
-    return h;
-}
-
-static inline int32_t rt_table_find(const RtTable* t, RtString key) {
-    if (t->nslots == 0) return -1;
-    uint32_t mask = (uint32_t)t->nslots - 1;
-    for (uint32_t i = rt_str_hash(key) & mask;; i = (i + 1) & mask) {
-        int32_t e = t->slots[i];
-        if (e == 0) return -1;
-        if (rt_str_eq(t->keys[e - 1], key)) return e - 1;
+    static inline bool rt_any_is_obj(RtAny a, const RtClass* c) {
+        return a.kind == RT_ANY_OBJ && rt_is_a((const RtClass*)a.as.box.type, c);
     }
-}
+    static inline bool rt_any_is_val(RtAny a, const RtValType* t) { return a.kind == RT_ANY_VAL && a.as.box.type == t; }
 
-static inline void rt_table_index(RtTable* t, int32_t nslots, int line) {
-    int32_t* slots = (int32_t*)rt_mem_alloc(t->mem, sizeof(int32_t) * (size_t)nslots, line);
-    uint32_t mask = (uint32_t)nslots - 1;
-    for (int32_t e = 0; e < t->count; e++) {
-        uint32_t i = rt_str_hash(t->keys[e]) & mask;
-        while (slots[i] != 0) i = (i + 1) & mask;
-        slots[i] = e + 1;
+    static inline RtTable* rt_table_new(RtMem* mem, int line) {
+        RtTable* t = (RtTable*)rt_mem_alloc(mem, sizeof(RtTable), line);
+        t->mem = mem;
+        return t;
     }
-    t->slots = slots;
-    t->nslots = nslots;
-}
 
-/* The key is copied into the table's memory, so it lives as long as the table. */
-static inline void rt_table_set(RtTable* t, RtString key, RtAny v, int line) {
-    int32_t e = rt_table_find(t, key);
-    if (e >= 0) { t->values[e] = v; return; }
-    if (t->count == t->cap) {
-        int32_t nc = t->cap ? t->cap * 2 : 8;
-        RtString* nk = (RtString*)rt_mem_try_realloc(t->mem, t->keys, sizeof(RtString) * (size_t)t->cap, sizeof(RtString) * (size_t)nc);
-        RtAny* nv = nk ? (RtAny*)rt_mem_try_realloc(t->mem, t->values, sizeof(RtAny) * (size_t)t->cap, sizeof(RtAny) * (size_t)nc) : NULL;
-        if (!nk || !nv) rt_panic("memory is full", line);
-        t->keys = nk;
-        t->values = nv;
-        t->cap = nc;
+    static inline RtTable* rt_any_table(RtAny a, int line) {
+        if (a.kind != RT_ANY_TABLE) {
+            char msg[96];
+            snprintf(msg, sizeof msg, "this Any is not a table (it holds %s)", rt_any_kinds[a.kind]);
+            rt_panic(msg, line);
+        }
+        return a.as.t;
     }
-    e = t->count++;
-    t->keys[e] = rt_str_clone(key, t->mem, line);
-    t->values[e] = v;
-    if (t->count * 2 > t->nslots) {
-        rt_table_index(t, t->nslots ? t->nslots * 2 : 16, line);
-    } else {
+
+    static inline RtMem* rt_any_mem(RtAny a, int line) { return rt_any_table(a, line)->mem; }
+
+    static inline void rt_table_push(RtTable* t, RtAny v, int line) {
+        if (t->length == t->capacity) {
+            int32_t nc = t->capacity ? t->capacity * 2 : 8;
+            RtAny* ni = (RtAny*)rt_mem_try_realloc(t->mem, t->items, sizeof(RtAny) * (size_t)t->capacity, sizeof(RtAny) * (size_t)nc);
+            if (!ni) rt_panic("memory is full", line);
+            t->items = ni;
+            t->capacity = nc;
+        }
+        t->items[t->length++] = v;
+    }
+
+    static inline uint32_t rt_str_hash(RtString s) {
+        uint32_t h = 2166136261u;
+        for (int32_t i = 0; i < s.len; i++) { h ^= (uint8_t)s.ptr[i]; h *= 16777619u; }
+        return h;
+    }
+
+    static inline int32_t rt_table_find(const RtTable* t, RtString key) {
+        if (t->nslots == 0) return -1;
         uint32_t mask = (uint32_t)t->nslots - 1;
-        uint32_t i = rt_str_hash(key) & mask;
-        while (t->slots[i] != 0) i = (i + 1) & mask;
-        t->slots[i] = e + 1;
-    }
-}
-
-/* Reading never fails: a missing entry, or reading from something that is not a table, gives null. */
-static inline RtAny rt_any_get(RtAny a, RtString key) {
-    if (a.kind != RT_ANY_TABLE) return rt_any_null();
-    int32_t e = rt_table_find(a.as.t, key);
-    return e < 0 ? rt_any_null() : a.as.t->values[e];
-}
-
-static inline RtAny rt_any_at(RtAny a, int64_t i) {
-    if (a.kind != RT_ANY_TABLE || i < 0 || i >= a.as.t->length) return rt_any_null();
-    return a.as.t->items[i];
-}
-
-static inline void rt_any_set(RtAny a, RtString key, RtAny v, int line) { rt_table_set(rt_any_table(a, line), key, v, line); }
-
-static inline void rt_any_set_at(RtAny a, int64_t i, RtAny v, int line) {
-    RtTable* t = rt_any_table(a, line);
-    t->items[rt_index(i, t->length, line)] = v;
-}
-
-static inline void rt_any_push(RtAny a, RtAny v, int line) { rt_table_push(rt_any_table(a, line), v, line); }
-
-/* Rebuilds the name index in place (after entries were removed). */
-static inline void rt_table_rehash(RtTable* t) {
-    if (t->nslots == 0) return;
-    memset(t->slots, 0, sizeof(int32_t) * (size_t)t->nslots);
-    uint32_t mask = (uint32_t)t->nslots - 1;
-    for (int32_t e = 0; e < t->count; e++) {
-        uint32_t i = rt_str_hash(t->keys[e]) & mask;
-        while (t->slots[i] != 0) i = (i + 1) & mask;
-        t->slots[i] = e + 1;
-    }
-}
-
-/* Removes a named entry, keeping the order of the others. */
-static inline bool rt_any_remove(RtAny a, RtString key, int line) {
-    RtTable* t = rt_any_table(a, line);
-    int32_t e = rt_table_find(t, key);
-    if (e < 0) return false;
-    for (int32_t k = e + 1; k < t->count; k++) { t->keys[k - 1] = t->keys[k]; t->values[k - 1] = t->values[k]; }
-    t->count--;
-    rt_table_rehash(t);
-    return true;
-}
-
-/* Removes a position; the following ones move back by one. */
-static inline void rt_any_remove_at(RtAny a, int64_t i, int line) {
-    RtTable* t = rt_any_table(a, line);
-    int32_t k = rt_index(i, t->length, line);
-    for (; k + 1 < t->length; k++) t->items[k] = t->items[k + 1];
-    t->length--;
-}
-
-static inline void rt_any_clear(RtAny a, int line) {
-    RtTable* t = rt_any_table(a, line);
-    t->length = 0;
-    t->count = 0;
-    rt_table_rehash(t);
-}
-static inline int32_t rt_any_length(RtAny a) { return a.kind == RT_ANY_TABLE ? a.as.t->length : 0; }
-static inline int32_t rt_any_count(RtAny a) { return a.kind == RT_ANY_TABLE ? a.as.t->count : 0; }
-static inline bool rt_any_is_null(RtAny a) { return a.kind == RT_ANY_NULL; }
-
-/* `a as int32`: any integer that fits (as raw bits in *out). */
-static inline bool rt_any_to_int(RtAny a, int64_t lo, uint64_t hi, uint64_t* out) {
-    if (a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_I64) {
-        if (a.as.i < lo || (a.as.i > 0 && (uint64_t)a.as.i > hi)) return false;
-        *out = (uint64_t)a.as.i;
-        return true;
-    }
-    if (a.kind >= RT_ANY_U8 && a.kind <= RT_ANY_U64) {
-        if (a.as.u > hi) return false;
-        *out = a.as.u;
-        return true;
-    }
-    return false;
-}
-
-/* `a as float64`: decimals, and integers converted. */
-static inline bool rt_any_to_float(RtAny a, double* out) {
-    if (a.kind == RT_ANY_F32 || a.kind == RT_ANY_F64) { *out = a.as.f; return true; }
-    if (a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_I64) { *out = (double)a.as.i; return true; }
-    if (a.kind >= RT_ANY_U8 && a.kind <= RT_ANY_U64) { *out = (double)a.as.u; return true; }
-    return false;
-}
-
-/* contains(): numbers by value (1 is 1.0), bool and String by value, the rest by identity. */
-static inline bool rt_any_equals(RtAny a, RtAny b) {
-    bool an = a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_F64, bn = b.kind >= RT_ANY_I8 && b.kind <= RT_ANY_F64;
-    if (an || bn) {
-        if (!an || !bn) return false;
-        if (a.kind >= RT_ANY_F32 || b.kind >= RT_ANY_F32) {
-            double x, y;
-            rt_any_to_float(a, &x);
-            rt_any_to_float(b, &y);
-            return x == y;
-        }
-        bool as = a.kind <= RT_ANY_I64, bs = b.kind <= RT_ANY_I64;
-        if (as == bs) return a.as.u == b.as.u;
-        int64_t i = as ? a.as.i : b.as.i;
-        return i >= 0 && (uint64_t)i == (as ? b.as.u : a.as.u);
-    }
-    if (a.kind != b.kind) return false;
-    switch (a.kind) {
-        case RT_ANY_NULL: return true;
-        case RT_ANY_BOOL: return a.as.b == b.as.b;
-        case RT_ANY_STR: return rt_str_eq(a.as.s, b.as.s);
-        case RT_ANY_TABLE: return a.as.t == b.as.t;
-        default: return a.as.box.ptr == b.as.box.ptr;
-    }
-}
-
-/* x is the name of an entry, or equal to an element by position. */
-static inline bool rt_any_contains(RtAny a, RtAny x) {
-    if (a.kind != RT_ANY_TABLE) return false;
-    const RtTable* t = a.as.t;
-    if (x.kind == RT_ANY_STR && rt_table_find(t, x.as.s) >= 0) return true;
-    for (int32_t i = 0; i < t->length; i++) if (rt_any_equals(t->items[i], x)) return true;
-    return false;
-}
-
-static inline bool rt_any_contains_key(RtAny a, RtString key) { return a.kind == RT_ANY_TABLE && rt_table_find(a.as.t, key) >= 0; }
-
-static inline void rt_sb_any_at(RtSb* b, RtAny a, int depth, bool quoted) {
-    switch (a.kind) {
-        case RT_ANY_NULL: rt_sb_cstr(b, "null"); break;
-        case RT_ANY_I8: case RT_ANY_I16: case RT_ANY_I32: case RT_ANY_I64: rt_sb_i64(b, a.as.i); break;
-        case RT_ANY_U8: case RT_ANY_U16: case RT_ANY_U32: case RT_ANY_U64: rt_sb_u64(b, a.as.u); break;
-        case RT_ANY_F32: rt_sb_f32(b, (float)a.as.f); break;
-        case RT_ANY_F64: rt_sb_f64(b, a.as.f); break;
-        case RT_ANY_BOOL: rt_sb_bool(b, a.as.b); break;
-        case RT_ANY_OBJ: case RT_ANY_VAL:
-            rt_sb_cstr(b, "<");
-            rt_sb_cstr(b, a.kind == RT_ANY_OBJ ? ((const RtClass*)a.as.box.type)->name : ((const RtValType*)a.as.box.type)->name);
-            rt_sb_cstr(b, ">");
-            break;
-        case RT_ANY_STR:
-            if (quoted) rt_sb_cstr(b, "\"");
-            rt_sb_str(b, a.as.s);
-            if (quoted) rt_sb_cstr(b, "\"");
-            break;
-        default: {
-            const RtTable* t = a.as.t;
-            if (depth >= 8) { rt_sb_cstr(b, "{...}"); break; }
-            rt_sb_cstr(b, "{");
-            for (int32_t i = 0; i < t->length; i++) {
-                if (i > 0) rt_sb_cstr(b, ", ");
-                rt_sb_any_at(b, t->items[i], depth + 1, true);
-            }
-            for (int32_t e = 0; e < t->count; e++) {
-                if (e > 0 || t->length > 0) rt_sb_cstr(b, ", ");
-                rt_sb_str(b, t->keys[e]);
-                rt_sb_cstr(b, ": ");
-                rt_sb_any_at(b, t->values[e], depth + 1, true);
-            }
-            rt_sb_cstr(b, "}");
+        for (uint32_t i = rt_str_hash(key) & mask;; i = (i + 1) & mask) {
+            int32_t e = t->slots[i];
+            if (e == 0) return -1;
+            if (rt_str_eq(t->keys[e - 1], key)) return e - 1;
         }
     }
-}
 
-static inline void rt_sb_any(RtSb* b, RtAny a) { rt_sb_any_at(b, a, 0, false); }
+    static inline void rt_table_index(RtTable* t, int32_t nslots, int line) {
+        int32_t* slots = (int32_t*)rt_mem_alloc(t->mem, sizeof(int32_t) * (size_t)nslots, line);
+        uint32_t mask = (uint32_t)nslots - 1;
+        for (int32_t e = 0; e < t->count; e++) {
+            uint32_t i = rt_str_hash(t->keys[e]) & mask;
+            while (slots[i] != 0) i = (i + 1) & mask;
+            slots[i] = e + 1;
+        }
+        t->slots = slots;
+        t->nslots = nslots;
+    }
 
-/* A deep copy; tables that appear several times (or in cycles) are copied once. */
-static inline RtAny rt_any_clone(RtAny a, RtMem* mem, RtCloneMap* cm) {
-    if (a.kind == RT_ANY_STR && rt_clone_keeps(cm, a.as.s.ptr)) return a;
-    if ((a.kind == RT_ANY_OBJ || a.kind == RT_ANY_VAL) && rt_clone_keeps(cm, a.as.box.ptr)) return a;
-    if (a.kind == RT_ANY_TABLE && rt_clone_keeps(cm, a.as.t)) return a;
-    if (a.kind == RT_ANY_STR) { a.as.s = rt_str_clone(a.as.s, mem, 0); return a; }
-    if (a.kind == RT_ANY_OBJ) { a.as.box.ptr = rt_obj_vt(a.as.box.ptr)->clone(a.as.box.ptr, mem, cm); return a; }
-    if (a.kind == RT_ANY_VAL) { a.as.box.ptr = ((const RtValType*)a.as.box.type)->clone(a.as.box.ptr, mem, cm); return a; }
-    if (a.kind != RT_ANY_TABLE) return a;
-    RtTable* done = (RtTable*)rt_clone_get(cm, a.as.t);
-    if (done) return rt_any_t(done);
-    const RtTable* src = a.as.t;
-    RtTable* t = rt_table_new(mem, 0);
-    rt_clone_put(cm, a.as.t, t);
-    for (int32_t i = 0; i < src->length; i++) rt_table_push(t, rt_any_clone(src->items[i], mem, cm), 0);
-    for (int32_t e = 0; e < src->count; e++) rt_table_set(t, src->keys[e], rt_any_clone(src->values[e], mem, cm), 0);
-    return rt_any_t(t);
-}
+    /* The key is copied into the table's memory, so it lives as long as the table. */
+    static inline void rt_table_set(RtTable* t, RtString key, RtAny v, int line) {
+        int32_t e = rt_table_find(t, key);
+        if (e >= 0) { t->values[e] = v; return; }
+        if (t->count == t->cap) {
+            int32_t nc = t->cap ? t->cap * 2 : 8;
+            RtString* nk = (RtString*)rt_mem_try_realloc(t->mem, t->keys, sizeof(RtString) * (size_t)t->cap, sizeof(RtString) * (size_t)nc);
+            RtAny* nv = nk ? (RtAny*)rt_mem_try_realloc(t->mem, t->values, sizeof(RtAny) * (size_t)t->cap, sizeof(RtAny) * (size_t)nc) : NULL;
+            if (!nk || !nv) rt_panic("memory is full", line);
+            t->keys = nk;
+            t->values = nv;
+            t->cap = nc;
+        }
+        e = t->count++;
+        t->keys[e] = rt_str_clone(key, t->mem, line);
+        t->values[e] = v;
+        if (t->count * 2 > t->nslots) {
+            rt_table_index(t, t->nslots ? t->nslots * 2 : 16, line);
+        } else {
+            uint32_t mask = (uint32_t)t->nslots - 1;
+            uint32_t i = rt_str_hash(key) & mask;
+            while (t->slots[i] != 0) i = (i + 1) & mask;
+            t->slots[i] = e + 1;
+        }
+    }
+
+    /* Reading never fails: a missing entry, or reading from something that is not a table, gives null. */
+    static inline RtAny rt_any_get(RtAny a, RtString key) {
+        if (a.kind != RT_ANY_TABLE) return rt_any_null();
+        int32_t e = rt_table_find(a.as.t, key);
+        return e < 0 ? rt_any_null() : a.as.t->values[e];
+    }
+
+    static inline RtAny rt_any_at(RtAny a, int64_t i) {
+        if (a.kind != RT_ANY_TABLE || i < 0 || i >= a.as.t->length) return rt_any_null();
+        return a.as.t->items[i];
+    }
+
+    static inline void rt_any_set(RtAny a, RtString key, RtAny v, int line) { rt_table_set(rt_any_table(a, line), key, v, line); }
+
+    static inline void rt_any_set_at(RtAny a, int64_t i, RtAny v, int line) {
+        RtTable* t = rt_any_table(a, line);
+        t->items[rt_index(i, t->length, line)] = v;
+    }
+
+    static inline void rt_any_push(RtAny a, RtAny v, int line) { rt_table_push(rt_any_table(a, line), v, line); }
+
+    /* Rebuilds the name index in place (after entries were removed). */
+    static inline void rt_table_rehash(RtTable* t) {
+        if (t->nslots == 0) return;
+        memset(t->slots, 0, sizeof(int32_t) * (size_t)t->nslots);
+        uint32_t mask = (uint32_t)t->nslots - 1;
+        for (int32_t e = 0; e < t->count; e++) {
+            uint32_t i = rt_str_hash(t->keys[e]) & mask;
+            while (t->slots[i] != 0) i = (i + 1) & mask;
+            t->slots[i] = e + 1;
+        }
+    }
+
+    /* Removes a named entry, keeping the order of the others. */
+    static inline bool rt_any_remove(RtAny a, RtString key, int line) {
+        RtTable* t = rt_any_table(a, line);
+        int32_t e = rt_table_find(t, key);
+        if (e < 0) return false;
+        for (int32_t k = e + 1; k < t->count; k++) { t->keys[k - 1] = t->keys[k]; t->values[k - 1] = t->values[k]; }
+        t->count--;
+        rt_table_rehash(t);
+        return true;
+    }
+
+    /* Removes a position; the following ones move back by one. */
+    static inline void rt_any_remove_at(RtAny a, int64_t i, int line) {
+        RtTable* t = rt_any_table(a, line);
+        int32_t k = rt_index(i, t->length, line);
+        for (; k + 1 < t->length; k++) t->items[k] = t->items[k + 1];
+        t->length--;
+    }
+
+    static inline void rt_any_clear(RtAny a, int line) {
+        RtTable* t = rt_any_table(a, line);
+        t->length = 0;
+        t->count = 0;
+        rt_table_rehash(t);
+    }
+    static inline int32_t rt_any_length(RtAny a) { return a.kind == RT_ANY_TABLE ? a.as.t->length : 0; }
+    static inline int32_t rt_any_count(RtAny a) { return a.kind == RT_ANY_TABLE ? a.as.t->count : 0; }
+    static inline bool rt_any_is_null(RtAny a) { return a.kind == RT_ANY_NULL; }
+
+    /* `a as int32`: any integer that fits (as raw bits in *out). */
+    static inline bool rt_any_to_int(RtAny a, int64_t lo, uint64_t hi, uint64_t* out) {
+        if (a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_I64) {
+            if (a.as.i < lo || (a.as.i > 0 && (uint64_t)a.as.i > hi)) return false;
+            *out = (uint64_t)a.as.i;
+            return true;
+        }
+        if (a.kind >= RT_ANY_U8 && a.kind <= RT_ANY_U64) {
+            if (a.as.u > hi) return false;
+            *out = a.as.u;
+            return true;
+        }
+        return false;
+    }
+
+    /* `a as float64`: decimals, and integers converted. */
+    static inline bool rt_any_to_float(RtAny a, double* out) {
+        if (a.kind == RT_ANY_F32 || a.kind == RT_ANY_F64) { *out = a.as.f; return true; }
+        if (a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_I64) { *out = (double)a.as.i; return true; }
+        if (a.kind >= RT_ANY_U8 && a.kind <= RT_ANY_U64) { *out = (double)a.as.u; return true; }
+        return false;
+    }
+
+    /* contains(): numbers by value (1 is 1.0), bool and String by value, the rest by identity. */
+    static inline bool rt_any_equals(RtAny a, RtAny b) {
+        bool an = a.kind >= RT_ANY_I8 && a.kind <= RT_ANY_F64, bn = b.kind >= RT_ANY_I8 && b.kind <= RT_ANY_F64;
+        if (an || bn) {
+            if (!an || !bn) return false;
+            if (a.kind >= RT_ANY_F32 || b.kind >= RT_ANY_F32) {
+                double x, y;
+                rt_any_to_float(a, &x);
+                rt_any_to_float(b, &y);
+                return x == y;
+            }
+            bool as = a.kind <= RT_ANY_I64, bs = b.kind <= RT_ANY_I64;
+            if (as == bs) return a.as.u == b.as.u;
+            int64_t i = as ? a.as.i : b.as.i;
+            return i >= 0 && (uint64_t)i == (as ? b.as.u : a.as.u);
+        }
+        if (a.kind != b.kind) return false;
+        switch (a.kind) {
+            case RT_ANY_NULL: return true;
+            case RT_ANY_BOOL: return a.as.b == b.as.b;
+            case RT_ANY_STR: return rt_str_eq(a.as.s, b.as.s);
+            case RT_ANY_TABLE: return a.as.t == b.as.t;
+            default: return a.as.box.ptr == b.as.box.ptr;
+        }
+    }
+
+    /* x is the name of an entry, or equal to an element by position. */
+    static inline bool rt_any_contains(RtAny a, RtAny x) {
+        if (a.kind != RT_ANY_TABLE) return false;
+        const RtTable* t = a.as.t;
+        if (x.kind == RT_ANY_STR && rt_table_find(t, x.as.s) >= 0) return true;
+        for (int32_t i = 0; i < t->length; i++) if (rt_any_equals(t->items[i], x)) return true;
+        return false;
+    }
+
+    static inline bool rt_any_contains_key(RtAny a, RtString key) { return a.kind == RT_ANY_TABLE && rt_table_find(a.as.t, key) >= 0; }
+
+    static inline void rt_sb_any_at(RtSb* b, RtAny a, int depth, bool quoted) {
+        switch (a.kind) {
+            case RT_ANY_NULL: rt_sb_cstr(b, "null"); break;
+            case RT_ANY_I8: case RT_ANY_I16: case RT_ANY_I32: case RT_ANY_I64: rt_sb_i64(b, a.as.i); break;
+            case RT_ANY_U8: case RT_ANY_U16: case RT_ANY_U32: case RT_ANY_U64: rt_sb_u64(b, a.as.u); break;
+            case RT_ANY_F32: rt_sb_f32(b, (float)a.as.f); break;
+            case RT_ANY_F64: rt_sb_f64(b, a.as.f); break;
+            case RT_ANY_BOOL: rt_sb_bool(b, a.as.b); break;
+            case RT_ANY_OBJ: case RT_ANY_VAL:
+                rt_sb_cstr(b, "<");
+                rt_sb_cstr(b, a.kind == RT_ANY_OBJ ? ((const RtClass*)a.as.box.type)->name : ((const RtValType*)a.as.box.type)->name);
+                rt_sb_cstr(b, ">");
+                break;
+            case RT_ANY_STR:
+                if (quoted) rt_sb_cstr(b, "\"");
+                rt_sb_str(b, a.as.s);
+                if (quoted) rt_sb_cstr(b, "\"");
+                break;
+            default: {
+                const RtTable* t = a.as.t;
+                if (depth >= 8) { rt_sb_cstr(b, "{...}"); break; }
+                rt_sb_cstr(b, "{");
+                for (int32_t i = 0; i < t->length; i++) {
+                    if (i > 0) rt_sb_cstr(b, ", ");
+                    rt_sb_any_at(b, t->items[i], depth + 1, true);
+                }
+                for (int32_t e = 0; e < t->count; e++) {
+                    if (e > 0 || t->length > 0) rt_sb_cstr(b, ", ");
+                    rt_sb_str(b, t->keys[e]);
+                    rt_sb_cstr(b, ": ");
+                    rt_sb_any_at(b, t->values[e], depth + 1, true);
+                }
+                rt_sb_cstr(b, "}");
+            }
+        }
+    }
+
+    static inline void rt_sb_any(RtSb* b, RtAny a) { rt_sb_any_at(b, a, 0, false); }
+
+    /* A deep copy; tables that appear several times (or in cycles) are copied once. */
+    static inline RtAny rt_any_clone(RtAny a, RtMem* mem, RtCloneMap* cm) {
+        if (a.kind == RT_ANY_STR && rt_clone_keeps(cm, a.as.s.ptr)) return a;
+        if ((a.kind == RT_ANY_OBJ || a.kind == RT_ANY_VAL) && rt_clone_keeps(cm, a.as.box.ptr)) return a;
+        if (a.kind == RT_ANY_TABLE && rt_clone_keeps(cm, a.as.t)) return a;
+        if (a.kind == RT_ANY_STR) { a.as.s = rt_str_clone(a.as.s, mem, 0); return a; }
+        if (a.kind == RT_ANY_OBJ) { a.as.box.ptr = rt_obj_vt(a.as.box.ptr)->clone(a.as.box.ptr, mem, cm); return a; }
+        if (a.kind == RT_ANY_VAL) { a.as.box.ptr = ((const RtValType*)a.as.box.type)->clone(a.as.box.ptr, mem, cm); return a; }
+        if (a.kind != RT_ANY_TABLE) return a;
+        RtTable* done = (RtTable*)rt_clone_get(cm, a.as.t);
+        if (done) return rt_any_t(done);
+        const RtTable* src = a.as.t;
+        RtTable* t = rt_table_new(mem, 0);
+        rt_clone_put(cm, a.as.t, t);
+        for (int32_t i = 0; i < src->length; i++) rt_table_push(t, rt_any_clone(src->items[i], mem, cm), 0);
+        for (int32_t e = 0; e < src->count; e++) rt_table_set(t, src->keys[e], rt_any_clone(src->values[e], mem, cm), 0);
+        return rt_any_t(t);
+    }
 }

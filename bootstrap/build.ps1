@@ -52,13 +52,16 @@ if ($Verify) {
         New-Item -ItemType Directory -Path "build" | Out-Null
     }
 
+    $stage1Exe = Join-Path $ScriptDir "build\larimarc_stage1.exe"
+    $stage2Exe = Join-Path $ScriptDir "build\larimarc_stage2.exe"
+
     & $Output "src/main.lar" -o "build/stage1.c"
-    & $CC @CFLAGS "build/stage1.c" -o "build/larimarc_stage1.exe"
+    & $CC @CFLAGS "build/stage1.c" -o $stage1Exe
 
-    & "build/larimarc_stage1.exe" "src/main.lar" -o "build/stage2.c"
-    & $CC @CFLAGS "build/stage2.c" -o "build/larimarc_stage2.exe"
+    & $stage1Exe "src/main.lar" -o "build/stage2.c"
+    & $CC @CFLAGS "build/stage2.c" -o $stage2Exe
 
-    & "build/larimarc_stage2.exe" "src/main.lar" -o "build/stage3.c"
+    & $stage2Exe "src/main.lar" -o "build/stage3.c"
 
     $stage2Bytes = Get-FileHash "build/stage2.c" -Algorithm SHA256
     $stage3Bytes = Get-FileHash "build/stage3.c" -Algorithm SHA256
@@ -75,7 +78,7 @@ if ($Verify) {
         Write-Host "  OK: bootstrap/larimarc.c is up to date with src/"
     } else {
         Write-Host "  NOTE: bootstrap/larimarc.c is older than src/; installing the compiler built from src/."
-        Copy-Item "build/larimarc_stage2.exe" $Output -Force
+        Copy-Item $stage2Exe $Output -Force
     }
 }
 
