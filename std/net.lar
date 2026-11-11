@@ -139,7 +139,6 @@ native function sendto(s: Socket, bytes: byte[], flags: int32, to: SockAddr*, le
 native function recvfrom(s: Socket, buffer: byte[], flags: int32, from: SockAddr*, length: Untyped): int64;
 native function getnameinfo(addr: SockAddr*, length: uint32, host: byte[], service: byte[], flags: int32): int32;
 
-
 // For the servers: a copy of a socket (another descriptor for the same connection, which a worker thread
 // owns and closes), taking one back as a Socket, and waiting a while for something to read.
 native function lm_net_dup(s: Socket): int64;
@@ -1279,22 +1278,15 @@ class WindowsTlsServers implements WindowsPlatform {
     }
 }
 
-ccode {
-    static int32_t lm_tlss_context_error(LmTlsCtx* c) { return c->error; }
-    static const char* lm_tlss_context_text(LmTlsCtx* c) { return c->text; }
-    static int32_t lm_ossl_conn_error(LmOsslConn* t) { return t->error; }
-    static const char* lm_ossl_conn_text(LmOsslConn* t) { return t->text; }
-}
-
-native type TlsContextHandle;
-native type TlsSessionHandle;
+native type TlsContextHandle = LmTlsCtx*;
+native type TlsSessionHandle = LmOsslConn*;
 native function lm_tlss_context(m: byte[*], certificate: String, key: String): TlsContextHandle;
 native function lm_tlss_context_number(c: TlsContextHandle): int64;
-native function lm_tlss_context_error(c: TlsContextHandle): int32;
-native function lm_tlss_context_text(c: TlsContextHandle): String;
+native function lm_tlss_context_error(c: TlsContextHandle): int32 { return c->error; }
+native function lm_tlss_context_text(c: TlsContextHandle): String { return c->text; }
 native function lm_tlss_accept(m: byte[*], context: int64, s: Socket): TlsSessionHandle;
-native function lm_ossl_conn_error(t: TlsSessionHandle): int32;
-native function lm_ossl_conn_text(t: TlsSessionHandle): String;
+native function lm_ossl_conn_error(t: TlsSessionHandle): int32 { return t->error; }
+native function lm_ossl_conn_text(t: TlsSessionHandle): String { return t->text; }
 native function lm_ossl_read(t: TlsSessionHandle, buffer: byte[]): int32;
 native function lm_ossl_write(t: TlsSessionHandle, bytes: byte[]): int32;
 native function lm_ossl_close(t: TlsSessionHandle): void;

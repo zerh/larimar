@@ -2,6 +2,16 @@
 
 Each version of the compiler (`larimar --version`) and the version of the language it implements.
 
+## 1.6.1 — 2026-11-11
+
+- The standard library and the compiler use `native function f(...): T { C }` where a C function in a
+  `ccode` was declared again as a native to be called once: one place for each (`StringBuilder`'s text,
+  `ByteText`, the TLS errors, the editor's documents, numbers as text).
+- The handles of `std.net` and `std.net.tls` name their C types (`native type TlsHandle = LmTls*;`), so a
+  body of C reads their fields.
+- `std.lang`: the C of a kept type or body stays with it (a `ccode` that only defines a struct).
+- The lexer: a `native function` right after a class or another body of C is read correctly.
+
 ## 1.6.0 — 2026-11-11
 
 One way to reach C less: what each system does differently is only a class for its platform.

@@ -152,8 +152,16 @@ function loadLang(): void {
         }
     }
     let cSymbols: Any = {} in default;
-    for (i, d in all) {
-        if (kept[i] && d is ExternFunctionDecl f) { cSymbols[f.name] = true; }
+    for (i, d in all) {                         // what the kept C names: its ccode stays
+        if (!kept[i]) { continue; }
+        switch (d) {
+            case ExternFunctionDecl f -> {
+                cSymbols[f.name] = true;
+                cWords(f.cBody, cSymbols);
+            }
+            case ExternTypeDecl t -> cWords(t.cType, cSymbols);
+            default -> {}
+        }
     }
     for (i, d in all) {
         if (d is CCodeDecl c && cCodeUses(c.code, cSymbols)) { kept[i] = true; }
@@ -188,6 +196,20 @@ function addWords(text: String in default): void {
         } else if (isIdentifierPart(text[i]) && !isDigit(text[i])) {
             while (i < text.length && isIdentifierPart(text[i])) { i += 1; }
             words[text.substring(start, i)] = true;
+        } else {
+            i += 1;
+        }
+    }
+}
+
+/** Every name in a piece of C, into names. */
+function cWords(code: String in default, names: Any in default): void {
+    let i: int32 = 0;
+    while (i < code.length) {
+        if (isIdentifierPart(code[i]) && !isDigit(code[i])) {
+            let start: int32 = i;
+            while (i < code.length && isIdentifierPart(code[i])) { i += 1; }
+            names[code.substring(start, i).clone() in default] = true;
         } else {
             i += 1;
         }

@@ -34,7 +34,7 @@ import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 import std.os.process { Process, ProcessError };
 
-const VERSION: String = "1.6.0";
+const VERSION: String = "1.6.1";
 
 /** The version of the language this compiler implements (doc/spec.md). */
 const LANGUAGE: String = "1.0";
@@ -469,7 +469,6 @@ class Project {
     let sources: String[*];
     let larimarLibraries: LarimarLibrary[*];     // the linked libraries written in Larimar (with a .interface)
 }
-
 
 function load(dir: String): Project? {
     let source: String? = readSource(Paths.join(dir, "larimar.toml"));

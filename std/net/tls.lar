@@ -530,18 +530,12 @@ class OpenSslTls implements LinuxPlatform {
     }
 }
 
-ccode {
-
-    static int32_t lm_tls_error(LmTls* t) { return t->error; }
-    static const char* lm_tls_error_text(LmTls* t) { return t->text; }
-}
-
-native type TlsHandle;
+native type TlsHandle = LmTls*;
 native function lm_tls_needs_socket(): bool;
 native function lm_tls_open_socket(m: byte[*], s: Socket, host: String, verify: bool): TlsHandle;
 native function lm_tls_open_host(m: byte[*], host: String, port: int32, verify: bool, timeoutMs: int32): TlsHandle;
-native function lm_tls_error(t: TlsHandle): int32;
-native function lm_tls_error_text(t: TlsHandle): String;
+native function lm_tls_error(t: TlsHandle): int32 { return t->error; }
+native function lm_tls_error_text(t: TlsHandle): String { return t->text; }
 native function lm_tls_read(t: TlsHandle, buffer: byte[]): int32;
 native function lm_tls_write(t: TlsHandle, bytes: byte[]): int32;
 native function lm_tls_close(t: TlsHandle): void;

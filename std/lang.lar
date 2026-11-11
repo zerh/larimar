@@ -326,125 +326,101 @@ function padded(s: String, width: int32, fill: String, atStart: bool): String {
 // Reading a float needs C's strtod.
 ccode {
     #include <stdlib.h>
-
-    static bool text_is_float(const char* s, int32_t n) {
-        char* end = NULL;
-        if (n == 0 || n >= 64 || (int32_t)strlen(s) != n) return false;
-        if (s[0] == ' ' || s[0] == '\t' || s[0] == '\n' || s[0] == '\r' || s[0] == '\f' || s[0] == '\v') return false;
-        (void)strtod(s, &end);
-        return end == s + n;
-    }
-
-    static double text_to_float(const char* s) { return strtod(s, NULL); }
 }
 
-native function text_is_float(s: String, n: int32): bool;
-native function text_to_float(s: String): float64;
+native function text_is_float(s: String, n: int32): bool {
+    char* end = NULL;
+    if (n == 0 || n >= 64 || (int32_t)strlen(s) != n) return false;
+    if (s[0] == ' ' || s[0] == '\t' || s[0] == '\n' || s[0] == '\r' || s[0] == '\f' || s[0] == '\v') return false;
+    (void)strtod(s, &end);
+    return end == s + n;
+}
+native function text_to_float(s: String): float64 { return strtod(s, NULL); }
 
-// Text built piece by piece in the memory of the builder; toString() is a view of it.
+// StringBuilder: text built piece by piece in the memory of the builder; toString() is a view of it.
 ccode {
     typedef struct { RtMem* mem; char* buf; int32_t len, cap; } TextBuf;
-
-    TextBuf* text_buf_new(RtMem* m) {
-        TextBuf* b = (TextBuf*)rt_mem_alloc(m, sizeof(TextBuf), 0);
-        b->mem = m;
-        b->cap = 32;
-        b->buf = (char*)rt_mem_alloc(m, (size_t)b->cap, 0);
-        return b;
-    }
-
-    void text_buf_add(TextBuf* b, const char* text) {
-        int32_t n = (int32_t)strlen(text);
-        if (n > INT32_MAX - b->len) rt_panic("text is too large", 0);
-        int32_t need = b->len + n + 1;
-        if (need > b->cap) {
-            int32_t cap = b->cap;
-            while (cap < need) {
-                if (cap > INT32_MAX / 2) { cap = need; break; }
-                cap *= 2;
-            }
-            char* next = (char*)rt_mem_alloc(b->mem, (size_t)cap, 0);
-            if (b->len > 0) memcpy(next, b->buf, (size_t)b->len);
-            b->buf = next;
-            b->cap = cap;
-        }
-        if (n > 0) memcpy(b->buf + b->len, text, (size_t)n);
-        b->len += n;
-        b->buf[b->len] = 0;
-    }
-
-    void text_buf_add_line(TextBuf* b, const char* text) {
-        text_buf_add(b, text);
-        text_buf_add(b, "\n");
-    }
-
-    int32_t text_buf_length(TextBuf* b) { return b->len; }
-    const char* text_buf_view(TextBuf* b) { return b->buf; }
-    void text_buf_clear(TextBuf* b) { b->len = 0; if (b->buf) b->buf[0] = 0; }
 }
 
-native type TextBuf;
-native function text_buf_new(m: byte[*]): TextBuf;
-native function text_buf_add(b: TextBuf, text: String): void;
-native function text_buf_add_line(b: TextBuf, text: String): void;
-native function text_buf_length(b: TextBuf): int32;
-native function text_buf_view(b: TextBuf): String;
-native function text_buf_clear(b: TextBuf): void;
+native type TextBuf = TextBuf*;
+
+native function text_buf_new(m: byte[*]): TextBuf {
+    TextBuf* b = (TextBuf*)rt_mem_alloc(m, sizeof(TextBuf), 0);
+    b->mem = m;
+    b->cap = 32;
+    b->buf = (char*)rt_mem_alloc(m, (size_t)b->cap, 0);
+    return b;
+}
+
+native function text_buf_add(b: TextBuf, text: String): void {
+    int32_t n = (int32_t)strlen(text);
+    if (n > INT32_MAX - b->len) rt_panic("text is too large", 0);
+    int32_t need = b->len + n + 1;
+    if (need > b->cap) {
+        int32_t cap = b->cap;
+        while (cap < need) {
+            if (cap > INT32_MAX / 2) { cap = need; break; }
+            cap *= 2;
+        }
+        char* next = (char*)rt_mem_alloc(b->mem, (size_t)cap, 0);
+        if (b->len > 0) memcpy(next, b->buf, (size_t)b->len);
+        b->buf = next;
+        b->cap = cap;
+    }
+    if (n > 0) memcpy(b->buf + b->len, text, (size_t)n);
+    b->len += n;
+    b->buf[b->len] = 0;
+}
+
+native function text_buf_length(b: TextBuf): int32 { return b->len; }
+native function text_buf_view(b: TextBuf): String { return b->buf; }
+native function text_buf_clear(b: TextBuf): void { b->len = 0; if (b->buf) b->buf[0] = 0; }
 
 public class StringBuilder {
     let buf: TextBuf = text_buf_new();
     function add(text: String): void { text_buf_add(self.buf, text); }
-    function addLine(text: String): void { text_buf_add_line(self.buf, text); }
+    function addLine(text: String): void {
+        text_buf_add(self.buf, text);
+        text_buf_add(self.buf, "\n");
+    }
     native let length: int32 = text_buf_length(self.buf);
     function toString(): String in self { return text_buf_view(self.buf); }
     function clear(): void { text_buf_clear(self.buf); }
 }
 
-// ByteText: builds a String from bytes
+// ByteText: a String built from bytes, of a size known first (it grows if it has to)
 ccode {
     typedef struct { RtMem* mem; char* bytes; int32_t length; int32_t capacity; } ByteText;
-
-    static ByteText* byte_text_new(RtMem* m) {
-        ByteText* t = (ByteText*)rt_mem_alloc(m, sizeof(ByteText), 0);
-        t->mem = m;
-        t->capacity = 64;
-        t->bytes = (char*)rt_mem_alloc(m, (size_t)t->capacity, 0);
-        return t;
-    }
-
-    /* room for n bytes (and the final 0) from the start: no copies while it fills */
-    static ByteText* byte_text_sized(RtMem* m, int32_t n) {
-        ByteText* t = (ByteText*)rt_mem_alloc(m, sizeof(ByteText), 0);
-        t->mem = m;
-        t->capacity = (n > 0 ? n : 0) + 1;
-        t->bytes = (char*)rt_mem_alloc(m, (size_t)t->capacity, 0);
-        return t;
-    }
-
-    static void byte_text_add(ByteText* t, uint8_t b) {
-        if (t->length + 2 > t->capacity) {                 /* +1 for the byte, +1 for the final 0 */
-            int32_t capacity = t->capacity * 2;
-            char* bytes = (char*)rt_mem_alloc(t->mem, (size_t)capacity, 0);
-            memcpy(bytes, t->bytes, (size_t)t->length);
-            t->bytes = bytes;
-            t->capacity = capacity;
-        }
-        t->bytes[t->length++] = (char)b;
-        t->bytes[t->length] = 0;
-    }
-
-    static const char* byte_text_view(ByteText* t) { return t->bytes; }
 }
 
-native type ByteText;
-native function byte_text_new(m: byte[*]): ByteText;
-native function byte_text_sized(m: byte[*], n: int32): ByteText;
-native function byte_text_add(t: ByteText, b: byte): void;
-native function byte_text_view(t: ByteText): String;
+native type ByteText = ByteText*;
+
+/* room for n bytes (and the final 0) from the start: no copies while it fills */
+native function byte_text_sized(m: byte[*], n: int32): ByteText {
+    ByteText* t = (ByteText*)rt_mem_alloc(m, sizeof(ByteText), 0);
+    t->mem = m;
+    t->capacity = (n > 0 ? n : 0) + 1;
+    t->bytes = (char*)rt_mem_alloc(m, (size_t)t->capacity, 0);
+    return t;
+}
+
+native function byte_text_add(t: ByteText, b: byte): void {
+    if (t->length + 2 > t->capacity) {                 /* +1 for the byte, +1 for the final 0 */
+        int32_t capacity = t->capacity * 2;
+        char* bytes = (char*)rt_mem_alloc(t->mem, (size_t)capacity, 0);
+        memcpy(bytes, t->bytes, (size_t)t->length);
+        t->bytes = bytes;
+        t->capacity = capacity;
+    }
+    t->bytes[t->length++] = (char)b;
+    t->bytes[t->length] = 0;
+}
+
+native function byte_text_view(t: ByteText): String { return t->bytes; }
 
 /** A String with a copy of these bytes (UTF-8 expected, not checked). A byte 0 ends the text. */
 public function stringOf(bytes: byte[]): String {
-    let t: ByteText = byte_text_new();
+    let t: ByteText = byte_text_sized(bytes.length);
     for (b in bytes) { byte_text_add(t, b); }
     return byte_text_view(t);
 }

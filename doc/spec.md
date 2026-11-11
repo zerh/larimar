@@ -7,7 +7,7 @@ document says, and an implementation is correct when it does what this document 
 [Manual](manual.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 1.6.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
+`larimar 1.6.1 (language 1.0)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
