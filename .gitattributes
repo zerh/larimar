@@ -2,3 +2,5 @@
 *.lar linguist-language=ActionScript linguist-detectable=false
 # The compiler already translated to C: generated, so GitHub folds its diffs and does not count it as C
 bootstrap/larimarc.c linguist-generated=true
+# Larimar sources always with \n, on every system: the C inside them (ccode) is read as written
+*.lar text eol=lf

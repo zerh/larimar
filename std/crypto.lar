@@ -10,14 +10,15 @@
 // SHA-1 is broken for signatures: it is here for protocols that need it (the WebSocket handshake). For
 // anything new, SHA-256. The results are new lists, created where the caller puts them.
 
-import std.os { platform, Platform, OnUnix, OnMacOS, OnWindows };
+import std.os;
+import std.os { OS, UnixPlatform, MacOSPlatform, WindowsPlatform };
 
 /** Where the secure random bytes come from: one class for each system. */
 interface RandomSource {
     function fill(items: byte[]): bool;
 }
 
-class UrandomSource implements RandomSource, OnUnix {
+class UrandomSource implements RandomSource, UnixPlatform {
     function fill(items: byte[]): bool ccode {
         FILE* f = fopen("/dev/urandom", "rb");
         if (!f) return false;
@@ -27,7 +28,7 @@ class UrandomSource implements RandomSource, OnUnix {
     }
 }
 
-class MacOSRandomSource implements RandomSource, OnMacOS {
+class MacOSRandomSource implements RandomSource, MacOSPlatform {
     ccode {
         void arc4random_buf(void* buffer, size_t length);   /* declared here: -std=c99 hides it in stdlib.h */
     }
@@ -38,7 +39,7 @@ class MacOSRandomSource implements RandomSource, OnMacOS {
     }
 }
 
-class WindowsRandomSource implements RandomSource, OnWindows {
+class WindowsRandomSource implements RandomSource, WindowsPlatform {
     cinclude "<windows.h>";
 
     ccode {
@@ -48,7 +49,7 @@ class WindowsRandomSource implements RandomSource, OnWindows {
     function fill(items: byte[]): bool ccode { return SystemFunction036(items, (ULONG)items_length) != 0; }
 }
 
-let randomSource: RandomSource = switch (platform()) {
+let randomSource: RandomSource = switch (os.platform()) {
     case Linux, Unix -> UrandomSource {};
     case MacOS -> MacOSRandomSource {};
     case Windows -> WindowsRandomSource {};

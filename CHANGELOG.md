@@ -2,6 +2,20 @@
 
 Each version of the compiler (`larimar --version`) and the version of the language it implements.
 
+## 1.5.0 — 2026-11-10
+
+- The platforms are interfaces of `std.os`, one inside the other: `Platform`, `UnixPlatform`,
+  `LinuxPlatform`, `MacOSPlatform` (both extend `UnixPlatform`) and `WindowsPlatform`. A class is for a
+  platform by implementing it (`class PosixClock implements Clock, UnixPlatform`), and the compiler finds
+  it through the types, aliases and superclasses included, not by its name. They replace `OnUnix`,
+  `OnLinux`, `OnMacOS` and `OnWindows`.
+- `os.platform()` gives `enum OS { Linux, MacOS, Windows, Unix }` (it was `Platform`).
+- Interfaces can extend others: `interface Pet extends Named` has the methods of `Named`, and a class that
+  implements `Pet` is also a `Named`.
+- The compiler: the lexer is a class, `Lexer { src, line }`, with no global state; its main loop is a
+  `switch`.
+- `.gitattributes`: `.lar` files keep `\n` on Windows too (the runtime's C is read from them).
+
 ## 1.4.0 — 2026-11-10
 
 The language is still 1.0. Its C reads as C, and what each system does differently is Larimar: the

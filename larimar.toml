@@ -1,6 +1,6 @@
 [project]
 name = "larimarc"
-version = "1.4.0"
+version = "1.5.0"
 main = "src/main.lar"
 
 [c]

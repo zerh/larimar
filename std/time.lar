@@ -10,7 +10,8 @@
 // now() is the wall clock (it can jump when the system's clock is set); monotonic() only moves forward,
 // so it is the one for measuring time and for deadlines. Dates are UTC.
 
-import std.os { platform, Platform, OnUnix, OnWindows };
+import std.os;
+import std.os { OS, UnixPlatform, WindowsPlatform };
 
 /** What std.time needs of the system: one class for each. */
 interface Clock {
@@ -19,7 +20,7 @@ interface Clock {
     function sleep(ms: int64): void;
 }
 
-class PosixClock implements Clock, OnUnix {
+class PosixClock implements Clock, UnixPlatform {
     cinclude "<time.h>";
     cinclude "<errno.h>";
 
@@ -42,7 +43,7 @@ class PosixClock implements Clock, OnUnix {
     }
 }
 
-class WindowsClock implements Clock, OnWindows {
+class WindowsClock implements Clock, WindowsPlatform {
     cinclude "<windows.h>";
 
     ccode {
@@ -63,7 +64,7 @@ class WindowsClock implements Clock, OnWindows {
     function sleep(ms: int64): void ccode { if (ms > 0) Sleep((DWORD)ms); }
 }
 
-let systemClock: Clock = switch (platform()) {
+let systemClock: Clock = switch (os.platform()) {
     case Linux, MacOS, Unix -> PosixClock {};
     case Windows -> WindowsClock {};
 };

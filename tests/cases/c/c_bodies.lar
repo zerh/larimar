@@ -1,13 +1,14 @@
-// Methods whose body is C, in a class for each system (implements OnUnix / OnWindows), chosen with a
+// Methods whose body is C, in a class for each system (implements UnixPlatform / WindowsPlatform), chosen with a
 // switch on os.platform(). The C of the other system never reaches this build.
-import std.os { platform, Platform, OnUnix, OnWindows };
+import std.os;
+import std.os { OS, UnixPlatform, WindowsPlatform };
 
 interface Greeter {
     function twice(x: int32): int32;
     function label(name: String, items: byte[]): String;
 }
 
-class UnixGreeter implements Greeter, OnUnix {
+class UnixGreeter implements Greeter, UnixPlatform {
     cinclude "<unistd.h>";
 
     ccode {
@@ -23,7 +24,7 @@ class UnixGreeter implements Greeter, OnUnix {
     }
 }
 
-class WindowsGreeter implements Greeter, OnWindows {
+class WindowsGreeter implements Greeter, WindowsPlatform {
     cinclude "<windows.h>";
 
     function twice(x: int32): int32 ccode { return (int32_t)GetTickCount64() * 0 + 2 * x; }
@@ -31,7 +32,7 @@ class WindowsGreeter implements Greeter, OnWindows {
     function label(name: String, items: byte[]): String ccode { return "windows"; }
 }
 
-let greeter: Greeter = switch (platform()) {
+let greeter: Greeter = switch (os.platform()) {
     case Windows -> WindowsGreeter {};
     case Linux, MacOS, Unix -> UnixGreeter {};
 };

@@ -17,7 +17,8 @@
 
 import std.io { IoError, raise, InputStream, OutputStream };
 import std.io as Io;
-import std.os { platform, Platform, OnUnix, OnWindows };
+import std.os;
+import std.os { OS, UnixPlatform, WindowsPlatform };
 
 cinclude "<errno.h>";
 cinclude "<sys/stat.h>";
@@ -51,7 +52,7 @@ interface FolderSystem {
     function listClose(list: int64): void;
 }
 
-class PosixFolders implements FolderSystem, OnUnix {
+class PosixFolders implements FolderSystem, UnixPlatform {
     cinclude "<unistd.h>";
     cinclude "<dirent.h>";
 
@@ -78,7 +79,7 @@ class PosixFolders implements FolderSystem, OnUnix {
     function listClose(list: int64): void ccode { closedir((DIR*)(intptr_t)list); }
 }
 
-class WindowsFolders implements FolderSystem, OnWindows {
+class WindowsFolders implements FolderSystem, WindowsPlatform {
     cinclude "<winsock2.h>";        // before windows.h (it includes it): no clash with the old winsock.h
     cinclude "<windows.h>";
     cinclude "<direct.h>";
@@ -125,7 +126,7 @@ class WindowsFolders implements FolderSystem, OnWindows {
     }
 }
 
-let folders: FolderSystem = switch (platform()) {
+let folders: FolderSystem = switch (os.platform()) {
     case Linux, MacOS, Unix -> PosixFolders {};
     case Windows -> WindowsFolders {};
 };

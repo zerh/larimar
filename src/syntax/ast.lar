@@ -90,10 +90,12 @@ public class ImportDecl extends Node {
 public class CIncludeDecl extends Node {
     let header: String;
     let platform: String = "";
+    let owner: String = "";             // the class it is in ("" at the top level)
 }
 public class CCodeDecl extends Node {
     let code: String;
-    let platform: String = "";          // the ccode of a class for one system (implements OnUnix...): only there
+    let platform: String = "";          // the ccode of a class for one system: only there
+    let owner: String = "";             // the class it is in ("" at the top level)
     let fromStd: bool = false;          // the standard library's: only what is used reaches the C
 }
 /** native type X;  = T*;  = "C TYPE";  = (A, B) -> R  (a C function pointer);  ... released by f;  (inside #when for one platform) */
@@ -118,6 +120,7 @@ public class ExternFunctionDecl extends Node {
     let platform: String = "";
     let releasedBy: String = "";        // ...: String = c_f released by f: C's text is copied, then f releases it
     let cBody: String = "";             // function f(...): T ccode { C }: the C of its body (the compiler writes the C function)
+    let owner: String = "";             // the class of a method with a C body ("" for a function)
 }
 
 /** native const NAME: T [= c_name | = "C"];  native let NAME: T [= c_name];  a C constant (or macro) or a C global variable. */
@@ -155,6 +158,7 @@ public class FunctionDecl extends Node {
     let hasBody: bool = false;
     let returnLives: String = "";
     let isStatic: bool = false;         // static methods don't receive 'self'
+    let cBodied: bool = false;          // a method whose body is C: it calls its C function (in its class's system)
     let typeName: String = "";          // for "function Type.method()" external syntax
     let exportName: String = "";        // export function: its Larimar name (the linker does not rename it)
     let exportC: String = "";           // export function f(...) = c_name { ... }: the C name written for it
@@ -191,6 +195,7 @@ public class ClassDecl extends Node {
 
 public class InterfaceDecl extends Node {
     let name: String;
+    let parents: String[*] = [];        // interface A extends B, C
     let methods: FunctionDecl[*] = [];
 }
 

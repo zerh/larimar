@@ -136,3 +136,21 @@ test function rawText(): void {
         "10 4"
     ]);
 }
+
+// interface A extends B: B's methods are A's, and a class that implements A is a B too.
+test function interfaceExtends(): void {
+    runs("tests/cases/language/interface_extends.lar", [
+        "Rex woof Rex woof Rex"
+    ]);
+    failsWith(raw"""
+        interface A extends B {}
+        interface B extends A {}
+        function main(): int32 { return 0; }
+        """, "extends itself");
+    failsWith(raw"""
+        interface Named { function name(): String; }
+        interface Greeter extends Named { function greet(): String; }
+        class Dog implements Greeter { function greet(): String { return "woof"; } }
+        function main(): int32 { return 0; }
+        """, "name");
+}

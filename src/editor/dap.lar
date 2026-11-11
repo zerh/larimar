@@ -19,7 +19,7 @@
 //     a panic happens.
 
 import std.os;
-import std.os { OnUnix, OnWindows };
+import std.os { UnixPlatform, WindowsPlatform };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
@@ -28,7 +28,7 @@ import std.encoding.json as Json;
 import std.encoding.json { JsonError };
 
 /** Dap's C on Unix. */
-class DapUnix implements OnUnix {
+class DapUnix implements UnixPlatform {
     ccode {
         #include <stdlib.h>
         #include <string.h>
@@ -174,7 +174,7 @@ class DapUnix implements OnUnix {
 }
 
 /** Dap's C on Windows. */
-class DapWindows implements OnWindows {
+class DapWindows implements WindowsPlatform {
     ccode {
         #include <stdlib.h>
         #include <string.h>

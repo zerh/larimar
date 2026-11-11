@@ -929,6 +929,28 @@ a lambda
 
 Whoever receives a `Drawable` does not care which of the three forms is behind it.
 
+An interface can **extend** others: it has their methods too, and a class that implements it is also
+each of them.
+
+```ts
+interface Named {
+    function name(): String;
+}
+
+interface Pet extends Named {
+    function sound(): String;
+}
+
+class Dog implements Pet {
+    function name(): String { return "Rex"; }
+    function sound(): String { return "woof"; }
+}
+
+let n: Named = Dog {};          // a Dog is a Pet, and so a Named
+```
+
+A value whose type is `Pet` does not become a `Named` (only objects of classes do).
+
 ---
 
 ## 12. Enums
@@ -2542,19 +2564,21 @@ small `ccode` only for what needs C (`strtod`, for `toFloat`).
 ### C for each system: classes with C in their methods
 
 What changes between systems is written as **an interface and a class for each system**, whose methods
-have **C as their body** (`ccode { ... }` in place of the Larimar block). Which one runs is chosen with a
+have **C as their body** (`ccode { ... }` in place of the Larimar block). Each class says the platform it
+is for by implementing it (`UnixPlatform`, `WindowsPlatform`...), and which one runs is chosen with a
 `switch` on `os.platform()`. It is how the standard library does it (`std.time`, `std.os`, `std.net`...):
 its modules are only `.lar` files, and no `#if` is written by hand.
 
 ```ts
-import std.os { platform, Platform, OnUnix, OnWindows };
+import std.os;
+import std.os { OS, UnixPlatform, WindowsPlatform };
 
 interface Clock {
     function monotonic(): int64;
     function sleep(ms: int64): void;
 }
 
-class PosixClock implements Clock, OnUnix {
+class PosixClock implements Clock, UnixPlatform {
     cinclude "<time.h>";
 
     ccode {                                   // C its methods share
@@ -2573,7 +2597,7 @@ class PosixClock implements Clock, OnUnix {
     }
 }
 
-class WindowsClock implements Clock, OnWindows {
+class WindowsClock implements Clock, WindowsPlatform {
     cinclude "<windows.h>";
 
     function monotonic(): int64 ccode { return (int64_t)GetTickCount64(); }
@@ -2581,7 +2605,7 @@ class WindowsClock implements Clock, OnWindows {
     function sleep(ms: int64): void ccode { Sleep((DWORD)ms); }
 }
 
-let clock: Clock = switch (platform()) {
+let clock: Clock = switch (os.platform()) {
     case Linux, MacOS, Unix -> PosixClock {};
     case Windows -> WindowsClock {};
 };
@@ -2593,14 +2617,23 @@ let clock: Clock = switch (platform()) {
   (another function, a global of Larimar) is named with `lar"name"`. `self` is not there: what the C needs
   goes as parameters. A function outside a class can have a C body too.
 - **`cinclude` and `ccode` inside a class** are its headers and the C its methods share.
-- **`OnUnix`, `OnLinux`, `OnMacOS`, `OnWindows`** (empty interfaces of `std.os`) say the system of the
-  class: all its C (headers, `ccode`, bodies) goes into the C inside `#if` for that system, which the
-  compiler writes. The same C file builds everywhere, and a build for Linux never sees `<windows.h>`.
-  Called on another system, a method of that class panics: *'WindowsClock.sleep' is for windows, not for
-  this system*. A class is for one system at most; a subclass can be for a narrower one
-  (`class MacOSSystem extends PosixSystem implements OnMacOS` overrides only what changes on macOS).
-- **`os.platform()`** gives `Platform.Linux`, `MacOS`, `Windows` or `Unix` (another Unix). A `switch` on
-  it without `default` has to name every system: a system added later shows every place to port. It is a
+- **The platforms** are interfaces of `std.os`, one inside the other:
+
+  ```ts
+  public interface Platform {}
+  public interface UnixPlatform extends Platform {}       // Linux, macOS and the other Unix
+  public interface LinuxPlatform extends UnixPlatform {}
+  public interface MacOSPlatform extends UnixPlatform {}
+  public interface WindowsPlatform extends Platform {}
+  ```
+
+  A class for a platform puts all its C (headers, `ccode`, bodies) into the C inside the `#if` of that
+  system, which the compiler writes. The same C file builds everywhere, and a build for Linux never sees
+  `<windows.h>`. Called on another system, a method of that class panics: *'WindowsClock.sleep' is for
+  windows, not for this system*. A subclass can be for a narrower platform: `class MacOSSystem extends
+  PosixSystem implements MacOSPlatform` overrides only what changes on macOS.
+- **`os.platform()`** gives `OS.Linux`, `MacOS`, `Windows` or `Unix` (another Unix). A `switch` on it
+  without `default` has to name every system: a system added later shows every place to port. It is a
   constant of the C compiler, so the branch of the other systems disappears from the executable.
 - Implementations kept in a global are shared by threads: an interface whose classes have no fields is
   safe to share (it has no state to change).
@@ -2609,7 +2642,7 @@ Which to use, from less C to more:
 
 1. **`native` declarations**, when C already has the function, type or constant: almost always.
 2. **`ccode { ... }`**, a few lines that C writes better: a cast, a macro, a loop on `EINTR`.
-3. **A class for each system with C in its methods**, when the systems do it differently.
+3. **A class for each platform with C in its methods**, when the systems do it differently.
 4. **`native` + [`#when`](#each-system-its-own-when)**, a short way for one or two declarations that
    change name between systems, in a binding of your own.
 
@@ -3540,7 +3573,7 @@ any function returns; they accept `/` and `\`.
 | `os.run(command): int32` | runs a command with the system's shell and gives its exit code |
 | `os.programDir(): String` | the folder of the executable (`""` if it cannot be known) |
 | `os.programPath(): String` | the full path of the executable (`""` if it cannot be known) |
-| `os.platform(): Platform` | `Platform.Linux`, `MacOS`, `Windows` or `Unix` (another Unix): for a `switch` |
+| `os.platform(): OS` | `OS.Linux`, `MacOS`, `Windows` or `Unix` (another Unix): for a `switch` |
 | `os.platformName(): String` | `"linux"`, `"macos"`, `"windows"` or `"unix"` |
 | `os.exit(code)` | ends the program right away (without freeing memories or waiting for threads) |
 | `os.catchTermination()` | from now on, Ctrl+C and SIGTERM do not end the program: they make `os.terminating()` true |

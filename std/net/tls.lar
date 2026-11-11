@@ -17,7 +17,7 @@
 
 import std.net { Connection, TcpSocket, NetError, Socket };
 import std.io { IoError, InputStream, OutputStream };
-import std.os { OnMacOS, OnLinux, OnWindows };
+import std.os { MacOSPlatform, LinuxPlatform, WindowsPlatform };
 
 /** What gives encrypted connections. */
 public interface TlsProvider {
@@ -41,7 +41,7 @@ ccode {
 }
 
 /** macOS: Network.framework. */
-class MacOSTls implements OnMacOS {
+class MacOSTls implements MacOSPlatform {
     ccode {
         /* ---------------- macOS: Network.framework ---------------------------------------------------
            It makes its own connection (it does not take a socket) and answers in callbacks on a dispatch
@@ -235,7 +235,7 @@ class MacOSTls implements OnMacOS {
 }
 
 /** Windows: SChannel. */
-class WindowsTls implements OnWindows {
+class WindowsTls implements WindowsPlatform {
     ccode {
         /* ---------------- Windows: SChannel ----------------------------------------------------------
            Over the TcpSocket's SOCKET: the handshake with InitializeSecurityContext, then records with
@@ -455,7 +455,7 @@ class WindowsTls implements OnWindows {
 }
 
 /** Linux: OpenSSL, loaded at run time (std.net's, shared with its TLS servers). */
-class OpenSslTls implements OnLinux {
+class OpenSslTls implements LinuxPlatform {
     ccode {
         /* ---------------- Linux and others: OpenSSL ----------------------------------------------------
            Over the TcpSocket's descriptor, with the OpenSSL of std.net (loaded the first time https:// is

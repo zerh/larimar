@@ -221,7 +221,113 @@ function requireAscii(name: String, line: int32, what: String): void {
     if (!isAscii(name)) { error(line, "${what} '${name}' must use ASCII letters for now (variables and fields can use any letter)."); }
 }
 
+// ---- the system of a class: implements UnixPlatform, LinuxPlatform, MacOSPlatform or WindowsPlatform ----
+
+/** The interfaces of the program, to follow `extends`. */
+let interfaceDecls: InterfaceDecl[*] = [] in default;
+let classDecls: ClassDecl[*] = [] in default;
+
+function interfaceDecl(name: String): InterfaceDecl? {
+    for (i in interfaceDecls) { if (i.name == name) { return i; } }
+    return null;
+}
+
+function classDecl(name: String): ClassDecl? {
+    for (c in classDecls) { if (c.name == name) { return c; } }
+    return null;
+}
+
+/** The interfaces given, with every one they extend, each once (in the order found). */
+function withAncestors(names: String[] in default, line: int32): String[*] {
+    let all: String[*] = [] in default;
+    let todo: String[*] = [] in default;
+    for (n in names) { todo.push(n); }
+    let next: int32 = 0;
+    while (next < todo.length) {
+        let n: String = todo[next];
+        next += 1;
+        if (all.contains(n)) { continue; }
+        all.push(n);
+        let i: InterfaceDecl? = interfaceDecl(n);
+        if (i != null) {
+            for (p in i!.parents) { todo.push(p); }
+        }
+    }
+    return all;
+}
+
+/** "linux", "macos", "windows", "unix" or "" (every system), from the interfaces of the class and its superclasses. */
+function platformOfClass(name: String, line: int32): String {
+    let found: String = "";
+    let at: ClassDecl? = classDecl(name);
+    let depth: int32 = 0;
+    while (at != null && depth < 64) {
+        for (i in withAncestors(at!.interfaces, line)) {
+            let p: String = switch (i) {
+                case "std__os__LinuxPlatform" -> "linux";
+                case "std__os__MacOSPlatform" -> "macos";
+                case "std__os__WindowsPlatform" -> "windows";
+                case "std__os__UnixPlatform" -> "unix";
+                default -> "";
+            };
+            found = narrower(found, p, name, line);
+        }
+        at = at!.superName != "" ? classDecl(at!.superName) : null;
+        depth += 1;
+    }
+    return found;
+}
+
+/** Of two systems, the narrower one (linux within unix); two that do not overlap are an error. */
+function narrower(a: String, b: String, owner: String, line: int32): String {
+    if (b == "" || a == b) { return a; }
+    if (a == "") { return b; }
+    if (a == "unix" && (b == "linux" || b == "macos")) { return b; }
+    if (b == "unix" && (a == "linux" || a == "macos")) { return a; }
+    error(line, "A class is for one system: '${owner}' is for ${a} and for ${b}.");
+    return a;
+}
+
+/**
+ * The C of a class for one system goes only there: its cinclude, its ccode and the C functions of its
+ * methods get that system, and each method with a C body calls its function inside a #when of it
+ * (elsewhere it panics).
+ */
+function assignPlatforms(program: Program in default): void {
+    for (d in program.decls) {
+        switch (d) {
+            case InterfaceDecl i -> interfaceDecls.push(i);
+            case ClassDecl c -> classDecls.push(c);
+            default -> {}
+        }
+    }
+    for (d in program.decls) {
+        switch (d) {
+            case CIncludeDecl c when c.owner != "" -> { c.platform = platformOfClass(c.owner, c.line); }
+            case CCodeDecl c when c.owner != "" -> { c.platform = platformOfClass(c.owner, c.line); }
+            case ExternFunctionDecl f when f.owner != "" -> { f.platform = platformOfClass(f.owner, f.line); }
+            case ClassDecl c -> {
+                let system: String = platformOfClass(c.name, c.line);
+                if (system == "") { continue; }
+                for (m in c.methods) {
+                    if (!m.cBodied) { continue; }
+                    let line: int32 = m.line;
+                    let only: IfStmt = IfStmt { line, cond: BoolLit { line, value: true } in default, platform: system, hasElse: true } in default;
+                    for (st in m.body) { only.thenBody.push(st); }
+                    let panic: Call = Call { line, callee: Ident { line, name: "panic" } in default } in default;
+                    let shown: String = c.name.replace("__", ".");
+                    panic.args.push(StringLit { line, texts: ["'${shown}.${m.name}' is for ${system}, not for this system"] } in default);
+                    only.elseBody.push(ExprStmt { line, expr: panic } in default);
+                    m.body = [only] in default;
+                }
+            }
+            default -> {}
+        }
+    }
+}
+
 function collect(program: Program in default): void {
+    assignPlatforms(program);
     for (d in program.decls) {
         switch (d) {
             case StructDecl s -> {
@@ -291,7 +397,7 @@ function collect(program: Program in default): void {
             }
             case ClassDecl c -> {
                 if (!typeNameTaken(c.name, c.line)) {
-                    let ci: ClassInfo = ClassInfo { name: c.name, superName: c.superName, interfaces: c.interfaces, line: c.line, decl: c } in default;
+                    let ci: ClassInfo = ClassInfo { name: c.name, superName: c.superName, interfaces: withAncestors(c.interfaces, c.line), line: c.line, decl: c } in default;
                     ci.sync = c.isSynchronized;
                     ci.thread = c.builtin && c.name == "Thread";
                     ci.builder = false;
@@ -608,6 +714,20 @@ function signatures(program: Program in default): void {
                     let mi: MethodInfo = MethodInfo { name: m.name, owner: id.name, decl: m, isOperator: false, introducer: id.name, own: newOwner() } in default;
                     resolveMethodSig(mi, m);
                     info.methods.push(mi);
+                }
+                if (withAncestors(id.parents, id.line).contains(id.name)) { error(id.line, "Interface '${id.name}' extends itself."); }
+                for (a in withAncestors(id.parents, id.line)) {   // interface A extends B: B's methods too
+                    let parent: InterfaceDecl? = interfaceDecl(a);
+                    if (parent == null) {
+                        error(id.line, "'${a}' is not an interface: interface ${id.name} extends interfaces only.");
+                        continue;
+                    }
+                    for (m in parent!.methods) {
+                        if (interfaceMethod(info, m.name) != null) { continue; }
+                        let mi: MethodInfo = MethodInfo { name: m.name, owner: id.name, decl: m, isOperator: false, introducer: id.name, own: newOwner() } in default;
+                        resolveMethodSig(mi, m);
+                        info.methods.push(mi);
+                    }
                 }
             }
             case NativeTypeDecl nd -> {

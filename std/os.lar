@@ -3,26 +3,31 @@
 //   import std.os;
 //   let home: String = os.env("HOME") ?? "/";
 //
-// The system is platform(): Linux, MacOS, Windows or another Unix. What differs between them is a class
-// for each (implements OnUnix, OnLinux, OnMacOS or OnWindows), with the C of that system in its methods:
-// a class for one system reaches the C only there. switch (platform()) chooses the one that runs.
+// The system is os.platform(): OS.Linux, MacOS, Windows or another Unix. What differs between them is a
+// class for each, marked with the platform it is for (implements UnixPlatform, LinuxPlatform,
+// MacOSPlatform or WindowsPlatform), with the C of that system in its methods: its C reaches only that
+// system's build. A switch on os.platform() chooses the one that runs.
 
 /** The systems Larimar runs on (Unix: another Unix, a BSD). */
-public enum Platform { Linux, MacOS, Windows, Unix }
+public enum OS { Linux, MacOS, Windows, Unix }
 
-/** A class whose C is for one system: its C reaches only that system's build (elsewhere its methods panic). */
-public interface OnUnix {}
-public interface OnLinux {}
-public interface OnMacOS {}
-public interface OnWindows {}
+/**
+ * What a class is for: a class that implements one of these is for that platform. Its C (cinclude, ccode,
+ * the C bodies of its methods) reaches only that system's build; elsewhere its methods with C panic.
+ */
+public interface Platform {}
+public interface UnixPlatform extends Platform {}         // Linux, macOS and the other Unix
+public interface LinuxPlatform extends UnixPlatform {}
+public interface MacOSPlatform extends UnixPlatform {}
+public interface WindowsPlatform extends Platform {}
 
 /** The system this program was compiled for. */
-public function platform(): Platform {
+public function platform(): OS {
     return switch (platformNumber()) {
-        case 1 -> Platform.Windows;
-        case 2 -> Platform.MacOS;
-        case 3 -> Platform.Linux;
-        default -> Platform.Unix;
+        case 1 -> OS.Windows;
+        case 2 -> OS.MacOS;
+        case 3 -> OS.Linux;
+        default -> OS.Unix;
     };
 }
 
@@ -59,7 +64,7 @@ interface System {
     function terminating(): bool;
 }
 
-class PosixSystem implements System, OnUnix {
+class PosixSystem implements System, UnixPlatform {
     cinclude "<unistd.h>";
     cinclude "<signal.h>";
     cinclude "<sys/wait.h>";
@@ -94,7 +99,7 @@ class PosixSystem implements System, OnUnix {
 }
 
 /** macOS is a Unix: only where its executable is changes. */
-class MacOSSystem extends PosixSystem implements OnMacOS {
+class MacOSSystem extends PosixSystem implements MacOSPlatform {
     cinclude "<mach-o/dyld.h>";
 
     override function programPath(into: byte[]): void ccode {
@@ -103,7 +108,7 @@ class MacOSSystem extends PosixSystem implements OnMacOS {
     }
 }
 
-class WindowsSystem implements System, OnWindows {
+class WindowsSystem implements System, WindowsPlatform {
     cinclude "<winsock2.h>";        // before windows.h (it includes it): no clash with the old winsock.h
     cinclude "<windows.h>";
     cinclude "<direct.h>";

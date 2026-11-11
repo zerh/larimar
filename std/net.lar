@@ -34,7 +34,7 @@ import std.io { IoError };
 import std.io { InputStream, OutputStream, Closeable, buffer };
 import std.time as Time;
 import std.os;
-import std.os { platform, Platform, OnUnix, OnLinux, OnMacOS, OnWindows };
+import std.os { OS, UnixPlatform, LinuxPlatform, MacOSPlatform, WindowsPlatform };
 
 /**
  * A connection both ways: a TcpSocket and a TlsSocket are one, and so is what a TlsProvider (std.net.tls)
@@ -162,7 +162,7 @@ interface NetSystem {
     function setTimeout(s: Socket, which: int32, ms: int32): void;
 }
 
-class PosixNet implements NetSystem, OnUnix {
+class PosixNet implements NetSystem, UnixPlatform {
     cinclude "<sys/types.h>";
     cinclude "<sys/socket.h>";
     cinclude "<sys/time.h>";
@@ -224,7 +224,7 @@ class PosixNet implements NetSystem, OnUnix {
     }
 }
 
-class WindowsNet implements NetSystem, OnWindows {
+class WindowsNet implements NetSystem, WindowsPlatform {
     cinclude "<winsock2.h>";
     cinclude "<ws2tcpip.h>";
 
@@ -284,7 +284,7 @@ class WindowsNet implements NetSystem, OnWindows {
     }
 }
 
-let netSystem: NetSystem = switch (platform()) {
+let netSystem: NetSystem = switch (os.platform()) {
     case Linux, MacOS, Unix -> PosixNet {};
     case Windows -> WindowsNet {};
 };
@@ -1002,7 +1002,7 @@ ccode {
 }
 
 /** Where OpenSSL is on Linux, and what to say when it is not there. */
-class LinuxOpenSslNames implements OnLinux {
+class LinuxOpenSslNames implements LinuxPlatform {
     ccode {
         static const char* lm_ossl_names[] = { "libssl.so.3", "libssl.so.1.1", "libssl.so", 0 };
         static const char* lm_ossl_hint = "OpenSSL not found (tried libssl.so.3, libssl.so.1.1, libssl.so)";
@@ -1010,7 +1010,7 @@ class LinuxOpenSslNames implements OnLinux {
 }
 
 /** Where OpenSSL is on macOS (Homebrew), and what to say when it is not there. */
-class MacOSOpenSslNames implements OnMacOS {
+class MacOSOpenSslNames implements MacOSPlatform {
     ccode {
         static const char* lm_ossl_names[] = {
             "libssl.3.dylib", "/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib",
@@ -1020,7 +1020,7 @@ class MacOSOpenSslNames implements OnMacOS {
 }
 
 /** The TLS servers on Unix: OpenSSL, loaded at run time (std.net.tls's client on Linux uses it too). */
-class OpenSslServers implements OnUnix {
+class OpenSslServers implements UnixPlatform {
     ccode {
         #include <dlfcn.h>
         #include <errno.h>
@@ -1253,7 +1253,7 @@ class OpenSslServers implements OnUnix {
 }
 
 /** On Windows there is no TLS server yet: each call says so. */
-class WindowsTlsServers implements OnWindows {
+class WindowsTlsServers implements WindowsPlatform {
     ccode {
         typedef struct { int32_t error; char text[LM_OSSL_TEXT]; long long ctx; } LmTlsCtx;
         typedef struct { int32_t error; char text[LM_OSSL_TEXT]; bool open, eof; } LmOsslConn;

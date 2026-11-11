@@ -7,7 +7,7 @@ document says, and an implementation is correct when it does what this document 
 [Manual](manual.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 1.4.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
+`larimar 1.5.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
@@ -324,7 +324,8 @@ A value of type `V` is **assignable** to a place of type `T` when:
 
 1. `V` and `T` are identical;
 2. `V` is a class and `T` is a class it extends, directly or not;
-3. `V` is a class that implements the interface `T` (directly or through a parent class);
+3. `V` is a class that implements the interface `T` (directly, through a parent class, or through an
+   interface that extends `T`);
 4. `T` is `V?`, or the value is `null` and `T` is optional or a pointer;
 5. `V` is `S[N]`, `T` is `S[M]` and `N <= M` (the elements are copied);
 6. `V` is any array or list of `S` and `T` is the parameter type `S[]`;
@@ -496,17 +497,20 @@ with `in` ([§14](#14-memory)): it lives in its variable.
 ### 9.4 Interfaces
 
 ```
-interface NAME { ( function NAME parameters [ : Type ] [ throws Type ] ; )* }
+interface NAME [ extends qualifiedName ( , qualifiedName )* ] { ( function NAME parameters [ : Type ] [ throws Type ] ; )* }
 ```
 
-An interface has only method signatures. A value of an interface type is one of:
+An interface has only method signatures. `interface A extends B, C` has also the methods of `B` and `C`
+(and of what they extend); an interface that extends itself, directly or not, is an error. A value of an
+interface type is one of:
 
 1. an object of a class that declares `implements` it;
 2. an **interface literal**, `{ method: lambda, ... }`, with a lambda for each method;
 3. a **lambda**, when the interface has exactly one method.
 
 A class that implements an interface defines each of its methods with the same signature, `in` and
-`throws`.
+`throws`. A class that implements `A` implements also every interface `A` extends: its objects convert to
+each of them. A value whose type is the interface `A` does not convert to `B` (only objects of classes do).
 
 ### 9.5 Enums
 
@@ -1590,18 +1594,29 @@ the result of a native function. `self` is not visible; `lar"NAME"` is (§19.2).
 ### 19.12 Classes for one system
 
 A class body can also contain `cinclude "TEXT" ;` and `ccode { C TEXT }`: they are those of §19.1 and
-§19.2. A class that implements one of the interfaces `OnUnix`, `OnLinux`, `OnMacOS` or `OnWindows` of
-`std.os` is **for that system** (`unix`, `linux`, `macos`, `windows`, as in §20): its `cinclude`s, its
-`ccode`s and the C bodies of its methods are compiled only for that system (inside the matching `#if`).
-On another system, calling one of its methods with a C body panics. A class names at most one of the four
-(error otherwise). Its other methods, its fields and its type exist everywhere: the program is checked
-for every system at once.
-
-`std.os.platform()` gives the system as `enum Platform { Linux, MacOS, Windows, Unix }`, from the C
-compiler's macros; a `switch` on it chooses the class:
+§19.2. `std.os` declares the platforms as interfaces:
 
 ```
-let clock: Clock = switch (platform()) {
+public interface Platform {}
+public interface UnixPlatform extends Platform {}
+public interface LinuxPlatform extends UnixPlatform {}
+public interface MacOSPlatform extends UnixPlatform {}
+public interface WindowsPlatform extends Platform {}
+```
+
+A class that implements one of them (itself, or a class it extends) is **for that platform** (`unix`,
+`linux`, `macos`, `windows`, as in §20; the narrowest one when there are several, as `LinuxPlatform`
+under a superclass for `UnixPlatform`): its `cinclude`s, its `ccode`s and the C bodies of its methods
+are compiled only for that system (inside the matching `#if`). On another system, calling one of its
+methods with a C body panics. Platforms that do not contain one another (`UnixPlatform` and
+`WindowsPlatform`) in one class are an error. Its other methods, its fields and its type exist
+everywhere: the program is checked for every system at once.
+
+`std.os.platform()` gives the system as `enum OS { Linux, MacOS, Windows, Unix }`, from the C compiler's
+macros; a `switch` on it chooses the class:
+
+```
+let clock: Clock = switch (os.platform()) {
     case Linux, MacOS, Unix -> PosixClock {};
     case Windows -> WindowsClock {};
 };
@@ -1789,7 +1804,7 @@ topLevel             = const NAME : Type = expression ;
                      | [ synchronized ] class NAME [ extends qualifiedName ] [ implements qualifiedName ( , qualifiedName )* ]
                            { ( field | static staticMember | [ override ] function | native ( nativeFunction | nativeLet ) | operator
                                | cinclude "TEXT" ; | ccode { C TEXT } )* }
-                     | interface NAME { ( function NAME parameters [ : Type ] [ throws Type ] ; )* }
+                     | interface NAME [ extends qualifiedName ( , qualifiedName )* ] { ( function NAME parameters [ : Type ] [ throws Type ] ; )* }
                      | enum NAME { [ variant ( , variant )* [ , ] ] }
                      | native type NAME { ( static staticMember | native ( nativeFunction | nativeLet | nativeOperator ) | function )* }
                      | cinclude "TEXT" ;

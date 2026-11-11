@@ -19,7 +19,7 @@ import syntax.ast {
     Lambda, FieldInit, ObjectLit, ArrayLit, Placed, Pattern, SwitchCase, SwitchExpr,
     PL_MEMORY, PL_HEAP, PL_STACK, PL_DEFAULT, PT_NAME, PT_TYPE, PT_DESTRUCTURE, PT_CONSTANT, PT_NULL
 };
-import syntax.lexer { TT, Token, tokenize, lexError };
+import syntax.lexer { TT, Token, Lexer };
 
 /** The first error: a lexical or a syntax error ("" when there is none). */
 public let parseError: String = "";
@@ -27,9 +27,11 @@ public let parseError: String = "";
 /** The tree of one source file. `startLine` is the number of its first line (it also says the file). */
 public function parseProgram(source: String in default, startLine: int32): Program {
     parseError = "";
-    tokens = tokenize(source, startLine);
+    let lexer: Lexer = { src: source, line: startLine } in default;
+    lexer.run();
+    tokens = lexer.toks;
     position = 0;
-    if (lexError != "") { parseError = lexError; }
+    if (lexer.error != "") { parseError = lexer.error; }
     return program(startLine);
 }
 
@@ -47,9 +49,8 @@ let readingCastType: bool = false;
 let staticFunctions: FunctionDecl[*] = [] in default;
 /** What a native type with members also declares: its methods, the C functions they call, the struct of its fields. */
 let nativeParts: Node[*] = [] in default;
-/** Reading a class: its name and its system (implements OnUnix, OnLinux, OnMacOS or OnWindows; "" for every one). */
+/** The class being read ("" outside one): what its cinclude, ccode and C bodies belong to. */
 let cOwner: String = "";
-let cPlatform: String = "";
 
 // =========================================================================================
 // Reading tokens
@@ -808,24 +809,16 @@ function classDeclaration(isSynchronized: bool): ClassDecl {
             if (!optional(TT.Comma)) { break; }
         }
     }
-    let platform: String = "";
-    for (i in declaration.interfaces) {
-        let marked: String = markerPlatform(i);
-        if (marked == "") { continue; }
-        if (platform != "") { error(name.line, "A class is for one system: '${declaration.name}' implements more than one of OnUnix, OnLinux, OnMacOS and OnWindows"); }
-        platform = marked;
-    }
-    cOwner = declaration.name;
-    cPlatform = platform;
+    cOwner = declaration.name;              // its system (implements UnixPlatform...) is known after linking
     expect(TT.LBrace, "Expected '{' to open class body");
     while (!at(TT.RBrace) && !atEnd()) {
         if (at(TT.CInclude)) {                  // the headers of its C: only on its system
-            let include: CIncludeDecl = CIncludeDecl { line: advance().line, header: expect(TT.Str, "Expected the header after 'cinclude': cinclude \"<math.h>\";").text, platform } in default;
+            let include: CIncludeDecl = CIncludeDecl { line: advance().line, header: expect(TT.Str, "Expected the header after 'cinclude': cinclude \"<math.h>\";").text, owner: declaration.name } in default;
             expect(TT.Semi, "Expected ';' after the header of 'cinclude'");
             nativeParts.push(include);
         } else if (at(TT.CCode)) {              // C its methods share: only on its system
             let code: Token = advance();
-            nativeParts.push(CCodeDecl { line: code.line, code: code.text, platform } in default);
+            nativeParts.push(CCodeDecl { line: code.line, code: code.text, owner: declaration.name } in default);
         } else if (at(TT.Let)) {
             declaration.fields.push(field());
         } else if (optional(TT.Static)) {
@@ -854,28 +847,15 @@ function classDeclaration(isSynchronized: bool): ClassDecl {
         }
     }
     cOwner = "";
-    cPlatform = "";
     expect(TT.RBrace, "Expected '}' to close class body");
     optional(TT.Semi);
     return declaration;
 }
 
-/** The system a marker interface of std.os names (OnUnix, OnLinux, OnMacOS, OnWindows), or "". */
-function markerPlatform(name: String): String {
-    let last: String = name.substring((name.lastIndexOf(".") ?? -1) + 1);
-    return switch (last) {
-        case "OnUnix" -> "unix";
-        case "OnLinux" -> "linux";
-        case "OnMacOS" -> "macos";
-        case "OnWindows" -> "windows";
-        default -> "";
-    };
-}
-
 /**
  * function f(params): T ccode { C }: the body is C. It becomes a C function the compiler writes (its
- * parameters with their C types and names), and f calls it. In a class for one system, f calls it only
- * there (elsewhere it panics; the C of that system never reaches the others).
+ * parameters with their C types and names), and f calls it. In a class for one system (it implements
+ * UnixPlatform...), f calls it only there (elsewhere it panics; the C of that system reaches no other).
  */
 function cBodied(declaration: FunctionDecl in default): void {
     let code: Token = advance();
@@ -883,23 +863,15 @@ function cBodied(declaration: FunctionDecl in default): void {
     let owner: String = cOwner != "" ? "${cOwner}_" : "";
     let cFunction: ExternFunctionDecl = ExternFunctionDecl {
         line, name: "${owner}c_${declaration.name}", params: declaration.params, ret: declaration.ret,
-        cName: "lm_${owner}${declaration.name}_${line}", platform: cPlatform, cBody: code.text
+        cName: "lm_${owner}${declaration.name}_${line}", cBody: code.text, owner: cOwner
     } in default;
     nativeParts.push(cFunction);
     let call: Call = Call { line, callee: Ident { line, name: cFunction.name } in default } in default;
     for (p in declaration.params) { call.args.push(Ident { line, name: p.name } in default); }
     let run: Stmt = ReturnStmt { line, value: call } in default;
     if (declaration.ret.kind == TK.Named && declaration.ret.name == "void") { run = ExprStmt { line, expr: call } in default; }
-    if (cPlatform == "") {
-        declaration.body.push(run);
-    } else {
-        let only: IfStmt = IfStmt { line, cond: BoolLit { line, value: true } in default, platform: cPlatform, hasElse: true } in default;
-        only.thenBody.push(run);
-        let panic: Call = Call { line, callee: Ident { line, name: "panic" } in default } in default;
-        panic.args.push(StringLit { line, texts: ["'${cOwner}.${declaration.name}' is for ${cPlatform}, not for this system"] } in default);
-        only.elseBody.push(ExprStmt { line, expr: panic } in default);
-        declaration.body.push(only);
-    }
+    declaration.body.push(run);                 // in a class for one system, the analyzer puts it in its #when
+    declaration.cBodied = cOwner != "";
     declaration.hasBody = true;
 }
 
@@ -911,10 +883,16 @@ function method(ofSynchronizedClass: bool, isOverride: bool): FunctionDecl {
     return method;
 }
 
-/** (after `interface`) NAME { ( function NAME parameters [ : Type ] ... ; )* } */
+/** (after `interface`) NAME [ extends NAME ( , NAME )* ] { ( function NAME parameters [ : Type ] ... ; )* } */
 function interfaceDeclaration(): InterfaceDecl {
     let name: Token = expect(TT.Ident, "Expected interface name");
     let declaration: InterfaceDecl = InterfaceDecl { line: name.line, name: name.text } in default;
+    if (optional(TT.Extends)) {                 // interface LinuxPlatform extends UnixPlatform
+        while (true) {
+            declaration.parents.push(qualifiedName("Expected the name of the interface it extends"));
+            if (!optional(TT.Comma)) { break; }
+        }
+    }
     expect(TT.LBrace, "Expected '{' to open interface body");
     while (!at(TT.RBrace) && !atEnd()) {
         if (at(TT.Static)) {
@@ -1713,11 +1691,13 @@ function string(token: Token in default): StringLit {
 function interpolation(inner: String in default, line: int32): Expr {
     let savedTokens: Token[*] = tokens;
     let savedPosition: int32 = position;
-    tokens = tokenize(inner, line);
+    let lexer: Lexer = { src: inner, line } in default;
+    lexer.run();
+    tokens = lexer.toks;
     position = 0;
     let value: Expr = NullLit { line } in default;
-    if (lexError != "") {
-        if (parseError == "") { parseError = lexError; }
+    if (lexer.error != "") {
+        if (parseError == "") { parseError = lexer.error; }
     } else {
         value = expression();
         if (!atEnd()) { error(line, "Unexpected '${current().text}' inside '\${...}'"); }

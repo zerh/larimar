@@ -1,0 +1,25 @@
+// interface A extends B: A has B's methods, and a class that implements A is also a B.
+interface Named {
+    function name(): String;
+}
+
+interface Greeter extends Named {
+    function greet(): String;
+}
+
+interface Loud extends Greeter {}
+
+class Dog implements Loud {
+    function name(): String { return "Rex"; }
+    function greet(): String { return "woof"; }
+}
+
+function show(n: Named): String { return n.name(); }
+
+function main(): int32 {
+    let d: Dog = {};
+    let g: Greeter = d;
+    let l: Loud = d;
+    println("${show(d)} ${g.greet()} ${g.name()} ${l.greet()} ${l.name()}");
+    return 0;
+}

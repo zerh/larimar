@@ -69,7 +69,7 @@ test function userCCodeStaysWhole(): void {
 }
 
 // function f(...): T ccode { C }: methods and functions whose body is C; a class for one system
-// (implements OnUnix, OnWindows...) puts its C only in that system's build.
+// (implements UnixPlatform, WindowsPlatform...) puts its C only in that system's build.
 test function cBodies(): void {
     runs("tests/cases/c/c_bodies.lar", [
         "42 x:3:7 101"
@@ -82,10 +82,17 @@ test function cBodyOfAnotherSystem(): void {
     panics("tests/cases/c/c_body_other_system.lar", "is for");
 }
 
+// The platform of a class follows the hierarchy: LinuxPlatform is a UnixPlatform, so both say linux.
+test function narrowerPlatform(): void {
+    let c: String = generatedC("tests/cases/c/platform_narrower.lar");
+    check(c.contains("#if defined(__linux__)"), "the subclass is for linux");
+    check(c.contains("#if !defined(_WIN32)"), "its superclass is for every Unix");
+}
+
 test function oneSystemPerClass(): void {
     failsWith(raw"""
-        import std.os { OnUnix, OnWindows };
-        class Both implements OnUnix, OnWindows {}
+        import std.os { UnixPlatform, WindowsPlatform };
+        class Both implements UnixPlatform, WindowsPlatform {}
         function main(): int32 { return 0; }
         """, "A class is for one system");
 }

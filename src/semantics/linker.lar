@@ -92,7 +92,7 @@ public function link(mainShown: String in default, mainSource: String in default
         for (d in m.program!.decls) {
             if (langItself && m == root) { d.builtin = true; }       // its declarations are the language's
             if (d is CIncludeDecl c) {
-                let key: String = "${c.header}|${c.platform}" in default;
+                let key: String = "${c.header}|${c.platform}|${c.owner != "" ? "${m.path}.${c.owner}" : ""}" in default;   // a class's: its system is known later
                 if (seen[key] != null) { continue; }
                 seen[key] = 1;
             }
@@ -523,6 +523,9 @@ function rewriteDecl(m: Module in default, d: Node in default): void {
         }
         case InterfaceDecl i -> {
             i.name = own;
+            let parents: String[*] = [] in default;
+            for (p in i.parents) { parents.push(typeName(p, i.line)); }
+            i.parents = parents;
             for (f in i.methods) { function_(f, f.name); }
         }
         case NativeTypeDecl t -> {
@@ -536,6 +539,10 @@ function rewriteDecl(m: Module in default, d: Node in default): void {
         case CCodeDecl c -> {
             c.fromStd = (lang != null && m == lang!) || isStd(m.path);
             if (c.code.contains("lar\"")) { c.code = larNames(m, c.code, c.line); }
+            if (c.owner != "") { c.owner = typeName(c.owner, c.line); }
+        }
+        case CIncludeDecl c -> {
+            if (c.owner != "") { c.owner = typeName(c.owner, c.line); }
         }
         case ExternTypeDecl t -> {
             t.name = own;
@@ -560,6 +567,7 @@ function rewriteDecl(m: Module in default, d: Node in default): void {
             typeRef(f.ret);
             f.prototype = !headers;
             if (f.cBody.contains("lar\"")) { f.cBody = larNames(m, f.cBody, f.line); }
+            if (f.owner != "") { f.owner = typeName(f.owner, f.line); }
             if (f.releasedBy != "") {            // what releases its text: a name of this module (or one it sees)
                 let v: String = rm.values[f.releasedBy] as String ?? "";
                 if (v != "") { f.releasedBy = v; }

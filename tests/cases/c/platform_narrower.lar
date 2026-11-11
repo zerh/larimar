@@ -1,0 +1,17 @@
+// The platform of a class follows the hierarchy: LinuxPlatform is a UnixPlatform, and a subclass can be
+// for a narrower platform than its superclass.
+import std.os { UnixPlatform, LinuxPlatform };
+
+class Base implements UnixPlatform {
+    function pid(): int64 ccode { return (int64_t)getpid(); }
+}
+
+class OnlyLinux extends Base implements LinuxPlatform {
+    function tid(): int64 ccode { return 7; }
+}
+
+function main(): int32 {
+    let o: OnlyLinux = {};
+    println("${o.tid()} ${o.pid() > 0}");
+    return 0;
+}

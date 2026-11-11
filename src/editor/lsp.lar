@@ -12,7 +12,7 @@
 // changed last, and published for every file of its program.
 
 import std.os;
-import std.os { OnUnix, OnWindows };
+import std.os { UnixPlatform, WindowsPlatform };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io.console as Console;
@@ -28,7 +28,7 @@ import editor.ide {
 };
 
 /** Lsp's C on Unix. */
-class LspUnix implements OnUnix {
+class LspUnix implements UnixPlatform {
     ccode {
         #include <unistd.h>
         #include <poll.h>
@@ -137,7 +137,7 @@ class LspUnix implements OnUnix {
 }
 
 /** Lsp's C on Windows. */
-class LspWindows implements OnWindows {
+class LspWindows implements WindowsPlatform {
     ccode {
         #include <stdlib.h>
 

@@ -14,7 +14,8 @@
 // with the rest) with `mergeErrors: true`. A Process that is still running when its memory is freed is
 // killed.
 
-import std.os { platform, Platform, OnUnix, OnWindows };
+import std.os;
+import std.os { OS, UnixPlatform, WindowsPlatform };
 
 cinclude "<time.h>";
 cinclude "<errno.h>";
@@ -41,7 +42,7 @@ ccode {
 }
 
 /** Processes on Unix: fork and exec, pipes, poll and waitpid. */
-class PosixProcesses implements OnUnix {
+class PosixProcesses implements UnixPlatform {
     cinclude "<unistd.h>";
     cinclude "<signal.h>";
     cinclude "<poll.h>";
@@ -222,7 +223,7 @@ class PosixProcesses implements OnUnix {
 }
 
 /** Processes on Windows: CreateProcess, pipes and handles. */
-class WindowsProcesses implements OnWindows {
+class WindowsProcesses implements WindowsPlatform {
     cinclude "<windows.h>";
     cinclude "<io.h>";
 
@@ -598,7 +599,7 @@ public class Process {
 
 /** Where a program is found in the PATH (with .exe on Windows), or null. A path with a folder is checked as it is. */
 public function findProgram(name: String): String? {
-    let windows: bool = platform() == Platform.Windows;
+    let windows: bool = os.platform() == OS.Windows;
     if (name.contains("/") || name.contains("\\")) { return isRunnable(name) ? name : null; }
     let path: String = getenv("PATH") ?? "";
     let separator: String = windows ? ";" : ":";
@@ -617,15 +618,15 @@ interface Runnable {
     function check(path: String): bool;
 }
 
-class PosixRunnable implements Runnable, OnUnix {
+class PosixRunnable implements Runnable, UnixPlatform {
     function check(path: String): bool ccode { return access(path, X_OK) == 0; }
 }
 
-class WindowsRunnable implements Runnable, OnWindows {
+class WindowsRunnable implements Runnable, WindowsPlatform {
     function check(path: String): bool ccode { return _access(path, 0) == 0; }
 }
 
-let runnable: Runnable = switch (platform()) {
+let runnable: Runnable = switch (os.platform()) {
     case Linux, MacOS, Unix -> PosixRunnable {};
     case Windows -> WindowsRunnable {};
 };
