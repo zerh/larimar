@@ -161,22 +161,13 @@ function lives(): String {
 // The file
 // =========================================================================================
 
-/** import* ( [public] declaration | #when block )* */
+/** import* ( [public] declaration )* */
 function program(startLine: int32): Program {
     let program: Program = Program { line: startLine } in default;
     while (!atEnd()) {
         if (at(TT.Import)) {
             if (program.decls.length > 0) { error(current().line, "Imports go at the beginning of the file, before any declaration"); }
             program.imports.push(importDeclaration());
-            continue;
-        }
-        if (at(TT.HashWhen)) {
-            platformDeclarations(program);
-            continue;
-        }
-        if (at(TT.HashElse) || at(TT.HashEnd)) {
-            error(current().line, "'#${current().kind == TT.HashElse ? "else" : "end"}' without a '#when' above it");
-            advance();
             continue;
         }
         if (at(TT.Private)) {
@@ -203,79 +194,10 @@ function program(startLine: int32): Program {
     return program;
 }
 
-/**
- * #when PLATFORM declaration* ( #when PLATFORM declaration* )* [ #else declaration* ] #end
- *
- * Declarations for one platform (each gets that platform). Only cinclude and native declarations:
- * what changes between platforms is how C is reached. Here #else follows only #when windows or
- * #when unix (the rest is then the other one).
- */
-function platformDeclarations(program: Program in default): void {
-    let opening: int32 = current().line;
-    let platforms: String[*] = [] in default;
-    let platformLines: int32[*] = [] in default;
-    while (at(TT.HashWhen) || at(TT.HashElse)) {
-        let directive: Token = advance();
-        let platform: String = "";
-        if (directive.kind == TT.HashWhen) {
-            platform = directivePlatform(directive, platforms, platformLines);
-        } else {
-            let onlyWindows: bool = platforms.length == 1 && platforms[0] == "windows";
-            let onlyUnix: bool = platforms.length == 1 && platforms[0] == "unix";
-            platform = onlyWindows ? "unix" : onlyUnix ? "windows" : "";
-            if (platform == "") { error(directive.line, "Outside a function '#else' only follows '#when windows' or '#when unix': name each platform with its own '#when'"); }
-        }
-        platforms.push(platform);
-        platformLines.push(directive.line);
-        while (!atDirective() && !atEnd() && !hasFailed()) {
-            let isPublic: bool = optional(TT.Public);
-            let start: Token = current();
-            let declaration: Node = topLevelDeclaration();
-            let allowed: bool = true;
-            switch (declaration) {
-                case CIncludeDecl include -> { include.platform = platform; }
-                case ExternTypeDecl type -> { type.platform = platform; }
-                case ExternFunctionDecl cFunction -> { cFunction.platform = platform; }
-                case ExternValueDecl value -> { value.platform = platform; }
-                default -> { allowed = false; }
-            }
-            if (!allowed) { error(start.line, "Outside a function, inside '#when' go only cinclude and native declarations"); }
-            if (nativeParts.length > 0 || staticFunctions.length > 0) {
-                error(start.line, "A native type with members is declared once, outside '#when': inside it, declare its C type for each platform (native type X = T;)");
-            }
-            if (isPublic) { program.publics.push(declName(declaration)); }
-            program.decls.push(declaration);
-        }
-        if (directive.kind == TT.HashElse) { break; }
-    }
-    expect(TT.HashEnd, "Expected '#end' to close the '#when' of line ${opening % 1000000}");
-}
-
-/** #when, #else or #end next? */
-function atDirective(): bool { return at(TT.HashWhen) || at(TT.HashElse) || at(TT.HashEnd); }
-
-/**
- * The platform of a #when: windows, macos, linux or unix (every one but Windows). A branch that an
- * earlier one already covers would never be chosen: an error.
- */
-function directivePlatform(directive: Token, earlier: String[*], earlierLines: int32[*]): String {
-    let platform: String = directive.text;
-    if (platform != "windows" && platform != "macos" && platform != "linux" && platform != "unix") {
-        error(directive.line, "Unknown platform '${platform}': the platforms are windows, macos, linux and unix (every one but Windows)");
-        return platform;
-    }
-    for (i, before in earlier) {
-        if (platform == before || (before == "unix" && (platform == "macos" || platform == "linux"))) {
-            error(directive.line, "'#when ${platform}' is never chosen: '#when ${before}' (line ${earlierLines[i] % 1000000}) already covers it");
-        }
-    }
-    return platform;
-}
-
-/** `when` after a declaration was the old way: say the new one. */
+/** `when` after a declaration was an old way: what is for one system goes in a class for its platform. */
 function noWhenSuffix(): void {
     if (at(TT.When)) {
-        error(current().line, "For one platform, put the declaration inside '#when <platform>' ... '#end' (each on its own line)");
+        error(current().line, "For one system, put it in a class for its platform (class X implements UnixPlatform { ... })");
     }
 }
 
@@ -355,7 +277,7 @@ function topLevelDeclaration(): Node {
         error(start.line, "'${start.text}${next().text}...' is a statement: at top level only declarations are allowed. Move it into a function (main).");
         return BlockStmt { line: start.line } in default;
     }
-    error(start.line, "Only declarations (let, const, function, struct, class, interface, enum, native, cinclude, ccode, #when) are allowed at top level (got '${start.text}')");
+    error(start.line, "Only declarations (let, const, function, struct, class, interface, enum, native, cinclude, ccode) are allowed at top level (got '${start.text}')");
     return BlockStmt { line: start.line } in default;
 }
 
@@ -454,8 +376,13 @@ function nativeFunctionOfC(): ExternFunctionDecl {
         declaration.releasedBy = expect(TT.Ident, "Expected the function that releases the result of '${name.text}' after 'released by'").text;
     }
     noWhenSuffix();
-    if (at(TT.LBrace)) { error(current().line, "A native function has no body: it is a function of C (to write one in Larimar, write a plain function)"); }
-    expect(TT.Semi, "Expected ';' after native function");
+    if (at(TT.CCode)) {                         // native function f(...): T { C }: the compiler writes it
+        if (target != "") { error(name.line, "A native function names its C function (= c_name;) or has a body of C, not both"); }
+        declaration.cBody = advance().text;
+        declaration.cName = "lm_${name.text}_${name.line}";
+        return declaration;
+    }
+    expect(TT.Semi, "Expected ';' after native function (or its body of C: native function f(): T { ... })");
     return declaration;
 }
 
@@ -744,8 +671,8 @@ function functionDeclaration(isOverride: bool, withBody: bool): FunctionDecl {
         expect(TT.RParen, "Expected ')' after the condition of 'wait until'");
     }
     if (withBody && at(TT.CCode)) {
-        if (declaration.waitUntil != null) { error(waitToken.line, "A method with a C body cannot say 'wait until'"); }
-        cBodied(declaration);
+        error(current().line, "A body of C belongs to a native function: native function ${name.text}(...): T { ... }");
+        advance();
     } else if (withBody) {
         declaration.body = block("body of '${name.text}'");
         declaration.hasBody = true;
@@ -824,7 +751,12 @@ function classDeclaration(isSynchronized: bool): ClassDecl {
         } else if (optional(TT.Static)) {
             staticFunction(declaration.name);
         } else if (optional(TT.Override)) {
-            if (!at(TT.Function)) {
+            if (optional(TT.Native)) {
+                expect(TT.Function, "Expected 'function' after 'override native'");
+                let m: FunctionDecl = nativeFunction(previous().line);
+                m.isOverride = true;
+                declaration.methods.push(m);
+            } else if (!at(TT.Function)) {
                 error(current().line, "Expected 'function' after 'override'");
             } else {
                 declaration.methods.push(method(isSynchronized, true));
@@ -853,7 +785,7 @@ function classDeclaration(isSynchronized: bool): ClassDecl {
 }
 
 /**
- * function f(params): T ccode { C }: the body is C. It becomes a C function the compiler writes (its
+ * native function f(params): T { C } (a method, a static function): the body is C. It becomes a C function the compiler writes (its
  * parameters with their C types and names), and f calls it. In a class for one system (it implements
  * UnixPlatform...), f calls it only there (elsewhere it panics; the C of that system reaches no other).
  */
@@ -968,6 +900,10 @@ function nativeFunction(line: int32): FunctionDecl {
     if (optional(TT.Colon)) { declaration.ret = type(); }
     if (optional(TT.In)) { declaration.returnLives = lives(); }
     if (optional(TT.Throws)) { declaration.throwsType = type(); }
+    if (at(TT.CCode)) {                         // native function f(...): T { C }
+        cBodied(declaration);
+        return declaration;
+    }
     if (optional(TT.Assign)) {
         let value: Expr = expression();
         if (declaration.ret.kind == TK.Named && declaration.ret.name == "void") {
@@ -1140,7 +1076,7 @@ function block(what: String): Stmt[*] {
 
 /**
  * let ... | return [ expression ] ; | if ... | while ( expression ) block | for ... | break ; | continue ; |
- * throw expression ; | yield expression ; | try ... | #when ... | block | switch ... | assignment or call
+ * throw expression ; | yield expression ; | try ... | block | switch ... | assignment or call
  */
 function statement(): Stmt {
     let start: Token = current();
@@ -1192,9 +1128,6 @@ function statement(): Stmt {
             advance();
             yield tryStatement(line);
         }
-        case HashWhen -> platformStatements();
-        case HashElse -> misplaced(advance(), "'#else' does not line up with an open '#when' above it (the same column), or there is none");
-        case HashEnd -> misplaced(advance(), "'#end' does not line up with an open '#when' above it (the same column), or there is none");
         case LBrace -> BlockStmt { line, body: block("block") } in default;
         case Switch -> {
             advance();
@@ -1245,55 +1178,6 @@ function ifStatement(line: int32): IfStmt {
         }
     }
     return statement;
-}
-
-/**
- * #when PLATFORM statement* ( #when PLATFORM statement* )* [ #else statement* ] #end
- *
- * The platform is chosen when the C is compiled. No braces and no block: the statements belong to the
- * block around, like the lines of C's #if. The directives of one choice start at the same column.
- */
-function platformStatements(): IfStmt {
-    let opening: Token = current();
-    let column: int64 = opening.num;
-    let platforms: String[*] = [] in default;
-    let platformLines: int32[*] = [] in default;
-    let first: IfStmt? = null;
-    let last: IfStmt? = null;
-    while (at(TT.HashWhen) && current().num == column) {
-        let directive: Token = advance();
-        let platform: String = directivePlatform(directive, platforms, platformLines);
-        platforms.push(platform);
-        platformLines.push(directive.line);
-        let branch: IfStmt = IfStmt { line: directive.line, cond: BoolLit { line: directive.line, value: true } in default, platform, chained: first != null } in default;
-        branch.thenBody = directiveBody(column);
-        if (last == null) {
-            first = branch;
-        } else {
-            last.hasElse = true;
-            last.elseBody.push(branch);
-        }
-        last = branch;
-    }
-    if (at(TT.HashElse) && current().num == column) {
-        advance();
-        last!.hasElse = true;
-        last!.elseBody = directiveBody(column);
-    }
-    if (atDirective() && current().num != column) {
-        error(current().line, "'${directiveText(current())}' does not line up with its '#when' (line ${opening.line % 1000000}): #when, #else and #end of one choice start at the same column");
-    }
-    expect(TT.HashEnd, "Expected '#end' to close the '#when' of line ${opening.line % 1000000}");
-    return first!;
-}
-
-/** The statements up to the next #when, #else or #end at `column` or before (a deeper #when is nested). */
-function directiveBody(column: int64): Stmt[*] {
-    let statements: Stmt[*] = [] in default;
-    while (!(atDirective() && current().num <= column) && !at(TT.RBrace) && !atEnd() && !hasFailed()) {
-        statements.push(statement());
-    }
-    return statements;
 }
 
 /** (after `for`) ( [ NAME , ] NAME in expression [ .. expression ] ) block */
@@ -1747,14 +1631,6 @@ function dottedPath(value: Expr): String {
         if (path != "") { return "${path}.${member.name}"; }
     }
     return "";
-}
-
-function directiveText(token: Token): String {
-    return switch (token.kind) {
-        case HashWhen -> "#when ${token.text}";
-        case HashElse -> "#else";
-        default -> "#end";
-    };
 }
 
 /** Where the ${ that starts at `open` (the '{') closes: its '}' (strings inside are skipped). */

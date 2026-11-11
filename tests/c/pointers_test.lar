@@ -11,17 +11,6 @@ test function ffiAddressOnlyInCalls(): void {
         """, "'&' gives a pointer for C: it is only allowed as an argument of a native function");
 }
 
-test function ffiPlatformOnly(): void {
-    failsWith(raw"""
-        #when windows
-            native function only_windows(): int32;
-        #end
-        function main(): int32 {
-            return only_windows();
-        }
-        """, "'only_windows' exists only on windows: call it between '#when windows' and '#end'");
-}
-
 // C without ccode-wrappers: pointers to C structs (a linked list), out parameters (&x), constants and
 // macros (native const), a C global (native let), C strings in structs, arrays where C takes T*, `when`.
 test function ffiPointers(): void {

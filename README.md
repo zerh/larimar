@@ -39,7 +39,7 @@ C functions, constants, macros, globals, structs, pointers and resources are dec
 it lives in is freed, or with `release(x)`), C types with fields and methods
 (`native type Db = sqlite3* { native function errmsg(): String = sqlite3_errmsg; }`), callbacks that take
 lambdas when C passes a `Context`, C text as `c"..."` when it is not a plain name, C written in the file
-(`ccode { ... }`), methods whose body is C, `lar"name"` inside that C, and a class for each system
+(`ccode { ... }`), native functions whose body is C (`native function f(): T { ... }`), `lar"name"` inside that C, and a class for each system
 (`implements UnixPlatform` / `WindowsPlatform`, chosen with `switch (os.platform())`) for what changes between them:
 its C reaches only that system's build, and no `#if` is written by hand. A text that C makes with `malloc`
 is copied and freed (`native function strdup(s: String): String released by free`). See [chapter 23 of the manual](doc/manual.md#23-calling-c).

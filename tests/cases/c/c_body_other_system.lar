@@ -3,11 +3,11 @@ import std.os;
 import std.os { OS, WindowsPlatform, UnixPlatform };
 
 class WindowsOnly implements WindowsPlatform {
-    function ticks(): int64 ccode { return (int64_t)GetTickCount64(); }
+    native function ticks(): int64 { return (int64_t)GetTickCount64(); }
 }
 
 class UnixOnly implements UnixPlatform {
-    function pid(): int64 ccode { return (int64_t)getpid(); }
+    native function pid(): int64 { return (int64_t)getpid(); }
 }
 
 function main(): int32 {

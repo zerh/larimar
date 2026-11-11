@@ -3,11 +3,11 @@
 import std.os { UnixPlatform, LinuxPlatform };
 
 class Base implements UnixPlatform {
-    function pid(): int64 ccode { return (int64_t)getpid(); }
+    native function pid(): int64 { return (int64_t)getpid(); }
 }
 
 class OnlyLinux extends Base implements LinuxPlatform {
-    function tid(): int64 ccode { return 7; }
+    native function tid(): int64 { return 7; }
 }
 
 function main(): int32 {

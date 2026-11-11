@@ -619,11 +619,11 @@ interface Runnable {
 }
 
 class PosixRunnable implements Runnable, UnixPlatform {
-    function check(path: String): bool ccode { return access(path, X_OK) == 0; }
+    native function check(path: String): bool { return access(path, X_OK) == 0; }
 }
 
 class WindowsRunnable implements Runnable, WindowsPlatform {
-    function check(path: String): bool ccode { return _access(path, 0) == 0; }
+    native function check(path: String): bool { return _access(path, 0) == 0; }
 }
 
 let runnable: Runnable = switch (os.platform()) {

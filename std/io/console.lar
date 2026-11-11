@@ -29,7 +29,7 @@ class WindowsConsole implements WindowsPlatform {
     cinclude "<io.h>";
     cinclude "<fcntl.h>";
 
-    function binaryMode(): void ccode {
+    native function binaryMode(): void {
         _setmode(_fileno(stdin), _O_BINARY);
         _setmode(_fileno(stdout), _O_BINARY);
     }

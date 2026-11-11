@@ -577,7 +577,7 @@ function detail(t: Target): String {
             if (t.symbol != null) {
                 let xv: ExternValueDecl? = t.symbol!.externValue;
                 if (xv != null) {                // native const / native let: a name C has
-                    let at: String = xv.platform != "" ? "    // #when ${xv.platform}" : "";
+                    let at: String = xv.platform != "" ? "    // ${xv.platform}" : "";
                     return "native ${xv.isConst ? "const" : "let"} ${t.name}: ${typeText(t.symbol!.type)}${at}";
                 }
                 return "let ${t.name}: ${typeText(t.symbol!.type)}";
@@ -663,21 +663,15 @@ function typeDetail(linked: String): String {
     let xo: ExternTypeInfo? = externInfoOf(linked);
     if (xo != null) {
         if (xo.sig != null) { return "native type ${n} = ${typeText(xo.sig)}"; }
-        let lines: String[*] = [] in default;             // one per platform it is declared for
-        let all: ExternTypeDecl[*] = [xo.decl] in default;
-        for (alt in xo.alts) { all.push(alt); }
-        for (d in all) {
-            let c: String = d.cType != "" ? " = ${cText(d.cType)}" : "";
-            let r: String = d.releasedBy != "" ? " released by ${shortName(d.releasedBy)}" : "";
-            let w: String = d.platform != "" ? "    // #when ${d.platform}" : "";
-            lines.push("native type ${n}${c}${r}${w}");
-        }
-        return lines.join("\n");
+        let d: ExternTypeDecl = xo.decl;
+        let c: String = d.cType != "" ? " = ${cText(d.cType)}" : "";
+        let r: String = d.releasedBy != "" ? " released by ${shortName(d.releasedBy)}" : "";
+        return "native type ${n}${c}${r}";
     }
     return "native type ${n}";
 }
 
-/** C's name or type as a native declaration writes it: a plain name (FILE*) as it is, anything else in quotes. */
+/** C's name or type as a native declaration writes it: a plain name (FILE*) as it is, anything else as c"...". */
 function cText(c: String): String {
     let plain: bool = c.length > 0 && !isDigit(c[0]);
     let stars: bool = false;

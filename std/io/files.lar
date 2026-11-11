@@ -56,27 +56,27 @@ class PosixFolders implements FolderSystem, UnixPlatform {
     cinclude "<unistd.h>";
     cinclude "<dirent.h>";
 
-    function makeDirectory(path: String): int32 ccode { return mkdir(path, 0777); }   /* less what the umask takes away */
+    native function makeDirectory(path: String): int32 { return mkdir(path, 0777); }   /* less what the umask takes away */
 
-    function removeDirectory(path: String): int32 ccode { return rmdir(path); }
+    native function removeDirectory(path: String): int32 { return rmdir(path); }
 
-    function makeWritable(path: String): void ccode { (void)path; }
+    native function makeWritable(path: String): void { (void)path; }
 
-    function copyPermissions(from: String, to: String): void ccode {
+    native function copyPermissions(from: String, to: String): void {
         struct stat st;
         if (stat(from, &st) == 0) chmod(to, st.st_mode & 07777);
     }
 
-    function listOpen(path: String): int64 ccode { return (int64_t)(intptr_t)opendir(path); }
+    native function listOpen(path: String): int64 { return (int64_t)(intptr_t)opendir(path); }
 
-    function listNext(list: int64, into: byte[]): bool ccode {
+    native function listNext(list: int64, into: byte[]): bool {
         struct dirent* e = readdir((DIR*)(intptr_t)list);
         if (e == NULL) return false;
         snprintf((char*)into, (size_t)into_length, "%s", e->d_name);
         return true;
     }
 
-    function listClose(list: int64): void ccode { closedir((DIR*)(intptr_t)list); }
+    native function listClose(list: int64): void { closedir((DIR*)(intptr_t)list); }
 }
 
 class WindowsFolders implements FolderSystem, WindowsPlatform {
@@ -89,15 +89,15 @@ class WindowsFolders implements FolderSystem, WindowsPlatform {
         typedef struct LmFind { HANDLE h; WIN32_FIND_DATAA data; int pending; } LmFind;
     }
 
-    function makeDirectory(path: String): int32 ccode { return _mkdir(path); }
+    native function makeDirectory(path: String): int32 { return _mkdir(path); }
 
-    function removeDirectory(path: String): int32 ccode { return _rmdir(path); }
+    native function removeDirectory(path: String): int32 { return _rmdir(path); }
 
-    function makeWritable(path: String): void ccode { _chmod(path, _S_IWRITE); }
+    native function makeWritable(path: String): void { _chmod(path, _S_IWRITE); }
 
-    function copyPermissions(from: String, to: String): void ccode { (void)from; (void)to; }
+    native function copyPermissions(from: String, to: String): void { (void)from; (void)to; }
 
-    function listOpen(path: String): int64 ccode {
+    native function listOpen(path: String): int64 {
         size_t n = strlen(path);
         char* pattern = (char*)malloc(n + 3);
         LmFind* f = (LmFind*)calloc(1, sizeof(LmFind));
@@ -111,7 +111,7 @@ class WindowsFolders implements FolderSystem, WindowsPlatform {
         return (int64_t)(intptr_t)f;
     }
 
-    function listNext(list: int64, into: byte[]): bool ccode {
+    native function listNext(list: int64, into: byte[]): bool {
         LmFind* f = (LmFind*)(intptr_t)list;
         if (!f->pending && !FindNextFileA(f->h, &f->data)) return false;
         f->pending = 0;
@@ -119,7 +119,7 @@ class WindowsFolders implements FolderSystem, WindowsPlatform {
         return true;
     }
 
-    function listClose(list: int64): void ccode {
+    native function listClose(list: int64): void {
         LmFind* f = (LmFind*)(intptr_t)list;
         FindClose(f->h);
         free(f);

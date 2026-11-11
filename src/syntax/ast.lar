@@ -119,7 +119,7 @@ public class ExternFunctionDecl extends Node {
     let prototype: bool = false;
     let platform: String = "";
     let releasedBy: String = "";        // ...: String = c_f released by f: C's text is copied, then f releases it
-    let cBody: String = "";             // function f(...): T ccode { C }: the C of its body (the compiler writes the C function)
+    let cBody: String = "";             // native function f(...): T { C }: the C of its body (the compiler writes the C function)
     let owner: String = "";             // the class of a method with a C body ("" for a function)
 }
 

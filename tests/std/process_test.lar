@@ -1,15 +1,16 @@
 // std.os.process: starting programs and talking to them (with the programs every Unix has: cat, sh, sleep).
+import std.os;
+import std.os { OS };
 import std.test { check, checkText, checkInt, fail, skip };
 import std.os.process { Process, ProcessError, message, findProgram };
 
 /** The tests use Unix programs; on Windows they are skipped. */
 function unix(): bool {
-    #when windows
+    if (os.platform() == OS.Windows) {
         skip("uses cat, sh and sleep");
         return false;
-    #else
-        return true;
-    #end
+    }
+    return true;
 }
 
 test function readsWhatItWrites(): void throws ProcessError {

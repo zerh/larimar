@@ -2,6 +2,17 @@
 
 Each version of the compiler (`larimar --version`) and the version of the language it implements.
 
+## 1.6.0 — 2026-11-11
+
+One way to reach C less: what each system does differently is only a class for its platform.
+
+- `#when`, `#else` and `#end` are gone from the language (and the types declared once per platform with
+  them). The standard library no longer used them; a class for each platform does the same, checked by
+  the compiler, and `switch (os.platform())` chooses it.
+- A body of C is a native function: `native function f(...): T { C }`, at the top level, in a class (a
+  method of its platform) or static. `function f(): T ccode { C }` is no longer the way.
+- `StringBuilder`'s methods are plain Larimar over its C (no `native ... = expression` left in `std.lang`).
+
 ## 1.5.0 — 2026-11-10
 
 - The platforms are interfaces of `std.os`, one inside the other: `Platform`, `UnixPlatform`,

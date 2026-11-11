@@ -419,7 +419,7 @@ public function generate(): String {
 
     section(out, "Prototypes");
     let declared: Any = {} in default;
-    for (f in functions) {                      // function f(...): T ccode { C }: its C function, here
+    for (f in functions) {                      // native function f(...): T { C }: its C function, here
         if (f.isExtern && f.ext!.cBody != "" && !declared.contains(f.cName)) {
             declared[f.cName] = true;
             let pw: String = f.ext!.platform;
@@ -739,11 +739,9 @@ function methodsOf(cls: String in default): MethodInfo[*] {
     return out;
 }
 
-/** An extern type's declarations: the one for every platform, or one per platform. */
+/** An extern type's declaration, as a list (the code below was written for one per platform). */
 function declsOf(e: ExternTypeInfo in default): ExternTypeDecl[*] {
-    let all: ExternTypeDecl[*] = [e.decl] in default;
-    for (a in e.alts) { all.push(a); }
-    return all;
+    return [e.decl] in default;
 }
 
 /**

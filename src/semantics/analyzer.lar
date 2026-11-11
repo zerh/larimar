@@ -365,11 +365,6 @@ function collect(program: Program in default): void {
                 cCodeStd.push(c.fromStd);
             }
             case ExternTypeDecl t -> {
-                let ex: ExternTypeInfo? = externInfoOf(t.name);
-                if (ex != null && t.platform != "") {        // the same type for another platform
-                    addPlatformType(ex, t);
-                    continue;
-                }
                 if (!typeNameTaken(t.name, t.line)) {
                     externTypes.push(t.name);
                     externInfos.push(ExternTypeInfo { name: t.name, decl: t } in default);
@@ -442,31 +437,6 @@ function collect(program: Program in default): void {
     for (d in program.decls) {          // static functions, once every type is known
         if (d is FunctionDecl f && f.typeName != "") { collectStatic(f); }
     }
-}
-
-/** #when unix: native type X = int;  #when windows: native type X = SOCKET;  one type, per platform. */
-function addPlatformType(ex: ExternTypeInfo in default, t: ExternTypeDecl in default): void {
-    let all: ExternTypeDecl[*] = [ex.decl];
-    for (a in ex.alts) { all.push(a); }
-    for (a in all) {
-        if (a.platform == "" || platformWithin(a.platform, t.platform) || platformWithin(t.platform, a.platform)) {
-            error(t.line, a.platform == ""
-                ? "Type '${t.name}' is already defined for every platform (line ${a.line % 1000000}); declare each one inside its '#when'."
-                : "Type '${t.name}' is already defined for ${a.platform} (line ${a.line % 1000000}).");
-            return;
-        }
-    }
-    if (t.func != null || ex.decl.func != null) { error(t.line, "A pointer to a C function is the same on every platform: declare '${t.name}' once."); }
-    if ((t.releasedBy == "") != (ex.decl.releasedBy == "")) { error(t.line, "'${t.name}' must be a resource (released by) on every platform, or on none."); }
-    ex.alts.push(t);
-}
-
-/** The platforms a type is declared for cover them all? */
-function coversAll(ex: ExternTypeInfo): bool {
-    let ps: Any = {};
-    ps[ex.decl.platform] = true;
-    for (a in ex.alts) { ps[a.platform] = true; }
-    return ps.contains("") || (ps.contains("windows") && (ps.contains("unix") || (ps.contains("macos") && ps.contains("linux"))));
 }
 
 function typeNameTaken(name: String, line: int32): bool {
@@ -833,9 +803,6 @@ function signatures(program: Program in default): void {
         if (d is ExternValueDecl v) { externValue(v); }
     }
     for (e in externInfos) {
-        if ((e.decl.platform != "" || e.alts.length > 0) && !coversAll(e)) {
-            error(e.decl.line, "Type '${e.name}' is declared only for some platforms: declare it for the others too (#when windows / #when unix), or once for all.");
-        }
         externResource(e);
     }
     for (f in functions) {
@@ -868,7 +835,6 @@ function externValue(v: ExternValueDecl in default): void {
 function externResource(e: ExternTypeInfo in default): void {
     if (e.decl.releasedBy == "") { return; }
     let all: ExternTypeDecl[*] = [e.decl];
-    for (a in e.alts) { all.push(a); }
     let self_: Type = named(e.name, NamedK.Extern);
     for (d in all) {
         if (d.func != null) {

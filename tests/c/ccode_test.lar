@@ -19,11 +19,12 @@ test function larNameUnknown(): void {
         """, "lar\"nope\" in ccode: 'nope' is not a function, type or global of Larimar seen here");
 }
 
-test function nativeFunctionBody(): void {
+// The old way to give a function a body of C: now it is native function f(): T { C }.
+test function cBodyNeedsNative(): void {
     failsWith(raw"""
-        native function hack(): void { }
+        function hack(): int32 ccode { return 1; }
         function main(): int32 { return 0; }
-        """, "A native function has no body");
+        """, "A body of C belongs to a native function");
 }
 
 // Una export function se queda aunque nadie la llame desde el programa: es para C de fuera.
@@ -68,7 +69,7 @@ test function userCCodeStaysWhole(): void {
     check(hasWord(c, "sumar"), "the generated C should contain sumar");
 }
 
-// function f(...): T ccode { C }: methods and functions whose body is C; a class for one system
+// native function f(...): T { C }: methods and functions whose body is C; a class for one system
 // (implements UnixPlatform, WindowsPlatform...) puts its C only in that system's build.
 test function cBodies(): void {
     runs("tests/cases/c/c_bodies.lar", [

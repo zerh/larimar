@@ -32,7 +32,7 @@ public function platform(): OS {
 }
 
 /** Where Larimar learns the system: the C compiler's own macros, once. */
-function platformNumber(): int32 ccode {
+native function platformNumber(): int32 {
     #if defined(_WIN32)
     return 1;
     #elif defined(__APPLE__)
@@ -74,19 +74,19 @@ class PosixSystem implements System, UnixPlatform {
         static void lm_os_on_signal(int s) { (void)s; lm_os_terminating = 1; }
     }
 
-    function processId(): int64 ccode { return (int64_t)getpid(); }
+    native function processId(): int64 { return (int64_t)getpid(); }
 
-    function cwd(into: byte[]): bool ccode { return getcwd((char*)into, (size_t)into_length - 1) != NULL; }
+    native function cwd(into: byte[]): bool { return getcwd((char*)into, (size_t)into_length - 1) != NULL; }
 
-    function programPath(into: byte[]): void ccode { readlink("/proc/self/exe", (char*)into, (size_t)into_length - 1); }
+    native function programPath(into: byte[]): void { readlink("/proc/self/exe", (char*)into, (size_t)into_length - 1); }
 
-    function shell(command: String): int32 ccode {
+    native function shell(command: String): int32 {
         int r = system(command);
         if (r != -1 && WIFEXITED(r)) r = WEXITSTATUS(r);          /* the exit status, not the wait status */
         return (int32_t)r;
     }
 
-    function catchTermination(): void ccode {
+    native function catchTermination(): void {
         struct sigaction a;
         memset(&a, 0, sizeof a);
         a.sa_handler = lm_os_on_signal;
@@ -95,14 +95,14 @@ class PosixSystem implements System, UnixPlatform {
         sigaction(SIGTERM, &a, NULL);
     }
 
-    function terminating(): bool ccode { return lm_os_terminating != 0; }
+    native function terminating(): bool { return lm_os_terminating != 0; }
 }
 
 /** macOS is a Unix: only where its executable is changes. */
 class MacOSSystem extends PosixSystem implements MacOSPlatform {
     cinclude "<mach-o/dyld.h>";
 
-    override function programPath(into: byte[]): void ccode {
+    override native function programPath(into: byte[]): void {
         uint32_t size = (uint32_t)into_length - 1;
         _NSGetExecutablePath((char*)into, &size);
     }
@@ -122,17 +122,17 @@ class WindowsSystem implements System, WindowsPlatform {
         }
     }
 
-    function processId(): int64 ccode { return (int64_t)GetCurrentProcessId(); }
+    native function processId(): int64 { return (int64_t)GetCurrentProcessId(); }
 
-    function cwd(into: byte[]): bool ccode { return _getcwd((char*)into, into_length - 1) != NULL; }
+    native function cwd(into: byte[]): bool { return _getcwd((char*)into, into_length - 1) != NULL; }
 
-    function programPath(into: byte[]): void ccode { GetModuleFileNameA(NULL, (char*)into, (DWORD)into_length - 1); }
+    native function programPath(into: byte[]): void { GetModuleFileNameA(NULL, (char*)into, (DWORD)into_length - 1); }
 
     /**
      * cmd.exe removes the first and the last quote of a command that starts with one ("C:\a b\x.exe" "arg"
      * loses both): the command goes inside one more pair of quotes, which cmd removes, so it runs as written.
      */
-    function shell(command: String): int32 ccode {
+    native function shell(command: String): int32 {
         size_t n = strlen(command);
         char* quoted = (char*)malloc(n + 3);
         if (quoted == NULL) return -1;
@@ -145,9 +145,9 @@ class WindowsSystem implements System, WindowsPlatform {
         return (int32_t)r;
     }
 
-    function catchTermination(): void ccode { SetConsoleCtrlHandler(lm_os_on_console, TRUE); }
+    native function catchTermination(): void { SetConsoleCtrlHandler(lm_os_on_console, TRUE); }
 
-    function terminating(): bool ccode { return InterlockedCompareExchange(&lm_os_terminating, 0, 0) != 0; }
+    native function terminating(): bool { return InterlockedCompareExchange(&lm_os_terminating, 0, 0) != 0; }
 }
 
 let host: System = switch (platform()) {

@@ -15,9 +15,9 @@ class UnixGreeter implements Greeter, UnixPlatform {
         static int32_t lm_doubled(int32_t x) { return 2 * x; }
     }
 
-    function twice(x: int32): int32 ccode { return lm_doubled(x); }
+    native function twice(x: int32): int32 { return lm_doubled(x); }
 
-    function label(name: String, items: byte[]): String ccode {
+    native function label(name: String, items: byte[]): String {
         static char out[64];
         snprintf(out, sizeof out, "%s:%d:%d", name, (int)items_length, (int)items[0]);
         return out;
@@ -27,9 +27,9 @@ class UnixGreeter implements Greeter, UnixPlatform {
 class WindowsGreeter implements Greeter, WindowsPlatform {
     cinclude "<windows.h>";
 
-    function twice(x: int32): int32 ccode { return (int32_t)GetTickCount64() * 0 + 2 * x; }
+    native function twice(x: int32): int32 { return (int32_t)GetTickCount64() * 0 + 2 * x; }
 
-    function label(name: String, items: byte[]): String ccode { return "windows"; }
+    native function label(name: String, items: byte[]): String { return "windows"; }
 }
 
 let greeter: Greeter = switch (os.platform()) {
@@ -38,7 +38,7 @@ let greeter: Greeter = switch (os.platform()) {
 };
 
 /** A plain function with a C body; lar"name" reaches Larimar from it. */
-function plusBonus(a: int32): int32 ccode { return a + lar"bonus"(); }
+native function plusBonus(a: int32): int32 { return a + lar"bonus"(); }
 
 function bonus(): int32 { return 100; }
 

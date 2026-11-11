@@ -393,11 +393,11 @@ native function text_buf_clear(b: TextBuf): void;
 
 public class StringBuilder {
     let buf: TextBuf = text_buf_new();
-    native function add(text: String): void = text_buf_add(self.buf, text);
-    native function addLine(text: String): void = text_buf_add_line(self.buf, text);
+    function add(text: String): void { text_buf_add(self.buf, text); }
+    function addLine(text: String): void { text_buf_add_line(self.buf, text); }
     native let length: int32 = text_buf_length(self.buf);
-    native function toString(): String in self = text_buf_view(self.buf);
-    native function clear(): void = text_buf_clear(self.buf);
+    function toString(): String in self { return text_buf_view(self.buf); }
+    function clear(): void { text_buf_clear(self.buf); }
 }
 
 // ByteText: builds a String from bytes

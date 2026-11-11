@@ -7,7 +7,7 @@ document says, and an implementation is correct when it does what this document 
 [Manual](manual.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 1.5.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
+`larimar 1.6.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
@@ -31,7 +31,7 @@ without changing the language; a change to anything in this document is a new la
 17. [Any](#17-any)
 18. [Threads](#18-threads)
 19. [C interoperability](#19-c-interoperability)
-20. [Platform directives](#20-platform-directives)
+20. [Platforms](#20-platforms)
 21. [Modules](#21-modules)
 22. [Tests](#22-tests)
 23. [Predeclared names](#23-predeclared-names)
@@ -114,7 +114,7 @@ Each file is a module ([§21](#21-modules)).
 
 The tokens are identifiers, keywords, operators and punctuation, and literals. Spaces, tabs, line breaks
 and comments separate tokens and are otherwise ignored, except where a rule names the line or the column
-(platform directives, [§20](#20-platform-directives), and text blocks, [§4.8](#48-text-blocks)).
+(text blocks, [§4.8](#48-text-blocks)).
 
 ### 4.3 Identifiers
 
@@ -171,8 +171,6 @@ a phrase; keywords that start a declaration are a single token (`cinclude`, `cco
 =    +=   -=   *=   /=   %=   &=   |=   ^=
 (    )    [    ]    {    }    ,    ;    .    ..
 ```
-
-`#when`, `#else` and `#end` are directives ([§20](#20-platform-directives)).
 
 ### 4.6 Numeric literals
 
@@ -342,7 +340,7 @@ There are no other conversions. Numeric conversions are written with `as` ([§10
 ### 6.1 The file
 
 ```
-program = import* ( [ public ] declaration | #when block )*
+program = import* ( [ public ] declaration )*
 ```
 
 A file is a list of imports followed by declarations. At the top level there are only declarations:
@@ -763,7 +761,7 @@ self :: NAME            a method of self
 
 ```
 statement = let ... | return [ expression ] ; | if ... | while ( expression ) block | for ... |
-            break ; | continue ; | throw expression ; | yield expression ; | try ... | #when ... |
+            break ; | continue ; | throw expression ; | yield expression ; | try ... |
             block | switch ... | expression [ assign-op expression ] ;
 ```
 
@@ -1409,7 +1407,7 @@ doors of §19: `native` declarations (C seen from Larimar), `export function`s (
 ### 19.3 Native functions
 
 ```
-native function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;
+native function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] ( [ = C ] [ released by NAME ] ; | { C TEXT } )
 C = NAME | c"C TEXT"
 ```
 
@@ -1436,8 +1434,8 @@ not a Larimar `String`. Without `=`, the C name is the same.
   callback parameter ([§19.8](#198-c-function-pointers-and-callbacks)).
 - When the module has no `cinclude` and no `ccode`, the compiler writes the C prototype of each native
   function whose C is a plain name.
-- A native function has no body. In the standard library, `std.memory` declares `limit` and `compact` as
-  native functions that the compiler writes itself.
+- A native function names its C function, or has a body of C (§19.11). In the standard library,
+  `std.memory` declares `limit` and `compact` as native functions that the compiler writes itself.
 
 ### 19.4 Native types
 
@@ -1466,7 +1464,7 @@ Each native type is distinct, even when two declarations are equal. The members 
 - **`static native function f(...) = C;`** calls that C function without `self`; `static function` is
   written in Larimar. Both are called as `NAME.f(...)`.
 
-A native type with members is declared outside `#when`. The methods of a type the compiler knows
+The methods of a type the compiler knows
 (`native type String { ... }`, without `=`) are declared only in the standard library ([§9.6](#96-native-types)).
 
 ### 19.5 Native structs, constants and variables
@@ -1582,10 +1580,11 @@ links the library compiles only if the module it imports, the hash and the libra
 ### 19.11 Functions with a body of C
 
 ```
-function NAME parameters [ : Type ] ccode { C text }
+native function NAME parameters [ : Type ] { C text }
 ```
 
-A function, a method or a static function can have C text as its body. The compiler writes a C function
+A native function, method or static function can have C text as its body: after the header of a
+`native function`, the braces hold C, not Larimar. The compiler writes a C function
 with that body: its parameters have the names of the Larimar ones and the C types of §19.3 (a slice
 `T[]` NAME is two parameters, `NAME` and `NAME_length`), and its result is the declared type, converted as
 the result of a native function. `self` is not visible; `lar"NAME"` is (§19.2). Such a method cannot say
@@ -1605,7 +1604,7 @@ public interface WindowsPlatform extends Platform {}
 ```
 
 A class that implements one of them (itself, or a class it extends) is **for that platform** (`unix`,
-`linux`, `macos`, `windows`, as in §20; the narrowest one when there are several, as `LinuxPlatform`
+`linux`, `macos`, `windows`; `unix` is every one but Windows; the narrowest one when there are several, as `LinuxPlatform`
 under a superclass for `UnixPlatform`): its `cinclude`s, its `ccode`s and the C bodies of its methods
 are compiled only for that system (inside the matching `#if`). On another system, calling one of its
 methods with a C body panics. Platforms that do not contain one another (`UnixPlatform` and
@@ -1625,28 +1624,11 @@ let clock: Clock = switch (os.platform()) {
 An interface type is shared by threads like a value (§18) when every class that implements it is: it
 has no fields, or it is synchronized.
 
-## 20. Platform directives
+## 20. Platforms
 
-```
-#when PLATFORM  body  ( #when PLATFORM  body )*  [ #else  body ]  #end
-PLATFORM = windows | macos | linux | unix
-```
-
-A directive chooses code when the C is compiled (C's `#if`), not when the program runs.
-
-- `unix` is every platform but `windows`.
-- Each directive is alone on its line; only a comment can follow it. The `#when`, `#else` and `#end` of
-  one choice start in the same column; a directive further to the right belongs to a nested choice.
-- A later `#when` is the next alternative (C's `#elif`). A branch that an earlier one already covers is
-  an error (`#when macos` after `#when unix`).
-- The body is a list of statements of the surrounding block, without braces. At the top level, the body
-  contains only `cinclude` and `native` declarations (without members), and `#else` follows only `#when windows` or
-  `#when unix`.
-- The compiler checks every branch, whatever the platform it runs on.
-- A name declared in every branch, with the same type, exists after `#end`. A name declared in only some
-  branches exists only inside them; without `#else`, no name survives `#end`.
-- A declaration that exists only on some platforms can be used only inside a `#when` of those platforms.
-- A type can be declared once per platform, when the declarations cover every platform.
+What changes between systems is a class for each platform (§19.12), chosen with a `switch` on
+`std.os.platform()`. There are no directives: the C of each system goes inside the `#if` the compiler
+writes for that class.
 
 ---
 
@@ -1792,7 +1774,7 @@ Other exit codes: 1 for an error that leaves `main` ([§16.2](#162-errors-in-mai
 ## Appendix A. Grammar
 
 ```
-program              = import* ( [ public ] topLevel | platformDeclarations )*
+program              = import* ( [ public ] topLevel )*
 import               = import NAME ( . NAME )* [ as NAME | { NAME ( , NAME )* } ] ;
 
 topLevel             = const NAME : Type = expression ;
@@ -1812,7 +1794,7 @@ topLevel             = const NAME : Type = expression ;
                      | native cDeclaration
 
 function             = function [ NAME . ] NAME parameters [ : Type ] [ in lives ] [ throws Type ]
-                           [ wait until ( expression ) ] ( block | ccode { C TEXT } | ; )
+                           [ wait until ( expression ) ] ( block | ; )
 parameters           = ( [ parameter ( , parameter )* ] )
 parameter            = NAME : Type [ in lives ]
 lives                = default | self | NAME
@@ -1820,11 +1802,11 @@ operator             = operator ( + | - | * | / | % | == | < ) parameters : Type
 field                = let NAME : Type [ = expression ] ;
 variant              = NAME [ parameters ]
 staticMember         = function | native nativeFunction
-nativeFunction       = function NAME parameters [ : Type ] [ in lives ] [ throws Type ] [ = expression ] ;
+nativeFunction       = function NAME parameters [ : Type ] [ in lives ] [ throws Type ] ( [ = expression ] ; | { C TEXT } )
 nativeOperator       = operator ( [ ] | SYMBOL ) parameters : Type ;
 nativeLet            = let NAME : Type [ = expression ] ;
 
-cDeclaration         = function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;
+cDeclaration         = function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] ( [ = C ] [ released by NAME ] ; | { C TEXT } )
                      | type NAME [ released by NAME ] ;
                      | type NAME = CTYPE [ released by NAME ] ( ; | { cMember* } )
                      | type NAME = ( [ Type ( , Type )* ] ) -> Type ;
@@ -1840,7 +1822,6 @@ cField               = let NAME : Type [ = NAME ] ;
 C                    = NAME | c"TEXT"
 CTYPE                = NAME *... | c"TEXT"
 
-platformDeclarations = #when PLATFORM topLevel* ( #when PLATFORM topLevel* )* [ #else topLevel* ] #end
 
 Type                 = ( qualifiedName | ( Type ) | ( [ Type ( , Type )* ] ) -> Type ) suffix* [ thread safe ]
 suffix               = [ ] | [ * ] | [ expression ] | ? | *
@@ -1856,7 +1837,6 @@ statement            = let NAME : Type = expression ;
                      | throw expression ;
                      | yield expression ;
                      | try block ( catch ( qualifiedName NAME ) block )+
-                     | #when PLATFORM statement* ( #when PLATFORM statement* )* [ #else statement* ] #end
                      | block
                      | switch ( expression ) { case* }
                      | expression [ assignOp expression ] ;

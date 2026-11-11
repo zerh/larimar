@@ -9,6 +9,7 @@ import std.io.files as Files;
 import std.io { IoError };
 import std.io.path as Paths;
 import std.os;
+import std.os { OS };
 
 function compiler(): String {
     let fromEnvironment: String = os.env("LARIMARC") ?? "";
@@ -245,9 +246,9 @@ test function languageServer(): void throws ProcessError {
 }
 
 test function languageServerWithoutFork(): void throws ProcessError {
-    #when windows
+    if (os.platform() == OS.Windows) {
         skip("Windows always works without fork()");
         return;
-    #end
+    }
     session(["LARIMAR_LSP_NO_FORK=1"]);
 }

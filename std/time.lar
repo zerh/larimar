@@ -32,11 +32,11 @@ class PosixClock implements Clock, UnixPlatform {
         }
     }
 
-    function now(): int64 ccode { return lm_clock_ms(CLOCK_REALTIME); }
+    native function now(): int64 { return lm_clock_ms(CLOCK_REALTIME); }
 
-    function monotonic(): int64 ccode { return lm_clock_ms(CLOCK_MONOTONIC); }
+    native function monotonic(): int64 { return lm_clock_ms(CLOCK_MONOTONIC); }
 
-    function sleep(ms: int64): void ccode {
+    native function sleep(ms: int64): void {
         if (ms <= 0) return;
         struct timespec t = { (time_t)(ms / 1000), (long)(ms % 1000) * 1000000L };
         while (nanosleep(&t, &t) != 0 && errno == EINTR) { }
@@ -52,16 +52,16 @@ class WindowsClock implements Clock, WindowsPlatform {
         #endif
     }
 
-    function now(): int64 ccode {
+    native function now(): int64 {
         FILETIME f;
         GetSystemTimeAsFileTime(&f);
         uint64_t t = ((uint64_t)f.dwHighDateTime << 32) | f.dwLowDateTime;     /* 100 ns since 1601 */
         return (int64_t)(t / 10000) - 11644473600000LL;
     }
 
-    function monotonic(): int64 ccode { return (int64_t)GetTickCount64(); }
+    native function monotonic(): int64 { return (int64_t)GetTickCount64(); }
 
-    function sleep(ms: int64): void ccode { if (ms > 0) Sleep((DWORD)ms); }
+    native function sleep(ms: int64): void { if (ms > 0) Sleep((DWORD)ms); }
 }
 
 let systemClock: Clock = switch (os.platform()) {

@@ -2408,8 +2408,8 @@ native function create_window(title: String): Window;
 native function close_window(w: Window): void;
 ```
 
-- `cinclude` añade un `#include` al C generado (dentro de `#when unix` ... `#end`, solo en ese sistema:
-  ver [Cada sistema lo suyo: `#when`](#cada-sistema-lo-suyo-when)).
+- `cinclude` añade un `#include` al C generado (dentro de una clase de una plataforma, solo en ese
+  sistema: ver [C de cada sistema](#c-de-cada-sistema-clases-con-c-en-sus-métodos)).
 - Los parámetros de una `native function` solo pueden ser números, `bool`, `String` (llega como
   `const char*`), `String?` (`null` llega como `NULL`), tipos `native` (también opcionales, `T?`, que en C
   son un puntero que puede ser `NULL`), structs de C y punteros de C (`T*`, ver
@@ -2438,8 +2438,9 @@ native function close_window(w: Window): void;
   cabecera, incluye la cabecera.
 - Una función de C que devuelve `String` debe devolver un texto terminado en cero que siga existiendo:
   uno estático, o uno creado en una memoria que recibe (ver más abajo).
-- Una `native function` no tiene cuerpo: es una función de C. Para escribir una en Larimar, se escribe una
-  función normal.
+- Una `native function` es C: o nombra una función de C (`= c_nombre;`), o su cuerpo es C
+  (`native function twice(x: int32): int32 { return 2 * x; }`), que el compilador escribe como una función
+  de C. Para escribir una en Larimar, se escribe una función normal.
 - En un módulo, el nombre de C no cambia: `public native function Beep(...)` en el módulo `win` se usa
   como `win.Beep(...)` y llama a `Beep` de C.
 
@@ -2563,7 +2564,7 @@ solo para lo que necesita C (`strtod`, para `toFloat`).
 ### C de cada sistema: clases con C en sus métodos
 
 Lo que cambia entre sistemas se escribe como **una interfaz y una clase por sistema**, cuyos métodos
-tienen **C como cuerpo** (`ccode { ... }` en lugar del bloque de Larimar). Cada clase dice la plataforma
+son **funciones native con cuerpo de C** (`native function f(): T { C }`). Cada clase dice la plataforma
 para la que es implementándola (`UnixPlatform`, `WindowsPlatform`...), y cuál se usa se elige con un
 `switch` sobre `os.platform()`. Así lo hace la biblioteca estándar (`std.time`, `std.os`, `std.net`...):
 sus módulos son solo archivos `.lar`, y nadie escribe un `#if` a mano.
@@ -2588,9 +2589,9 @@ class PosixClock implements Clock, UnixPlatform {
         }
     }
 
-    function monotonic(): int64 ccode { return ms_of(CLOCK_MONOTONIC); }
+    native function monotonic(): int64 { return ms_of(CLOCK_MONOTONIC); }
 
-    function sleep(ms: int64): void ccode {
+    native function sleep(ms: int64): void {
         struct timespec t = { (time_t)(ms / 1000), (long)(ms % 1000) * 1000000L };
         nanosleep(&t, NULL);
     }
@@ -2599,9 +2600,9 @@ class PosixClock implements Clock, UnixPlatform {
 class WindowsClock implements Clock, WindowsPlatform {
     cinclude "<windows.h>";
 
-    function monotonic(): int64 ccode { return (int64_t)GetTickCount64(); }
+    native function monotonic(): int64 { return (int64_t)GetTickCount64(); }
 
-    function sleep(ms: int64): void ccode { Sleep((DWORD)ms); }
+    native function sleep(ms: int64): void { Sleep((DWORD)ms); }
 }
 
 let clock: Clock = switch (os.platform()) {
@@ -2641,9 +2642,8 @@ Qué usar, de menos C a más:
 
 1. **Declaraciones `native`**, cuando C ya tiene la función, el tipo o la constante: casi siempre.
 2. **`ccode { ... }`**, unas líneas que C escribe mejor: un cast, una macro, un bucle sobre `EINTR`.
-3. **Una clase por plataforma con C en sus métodos**, cuando los sistemas lo hacen distinto.
-4. **`native` + [`#when`](#cada-sistema-lo-suyo-when)**, una forma corta para una o dos declaraciones que
-   cambian de nombre entre sistemas, en un binding propio.
+3. **`native function f(...): T { C }`**, una función cuyo cuerpo es C: cuando ese C es solo para ella.
+4. **Una clase por plataforma con métodos native**, cuando los sistemas lo hacen distinto.
 
 ### Pasar una memoria a C
 
@@ -2808,7 +2808,6 @@ Salida: `clicks: 17 17`
   `native function ok(text: String): void = reply(self, 200, text);`.
 - **`function`** es un método escrito en Larimar, y **`static native function`** llama a una función de C
   sin `self` (`Counter.make(...)`). También vale `static function`.
-- Un tipo con miembros se declara fuera de `#when`; dentro de cada `#when` va, si cambia, su tipo de C.
 
 ### Structs de C: `native struct`
 
@@ -3001,84 +3000,6 @@ Salida: `texto 999`
   compilador la llama. En C se declara con `void*`, como lo están `free(void*)` o `sqlite3_free(void*)`.
 - Un texto que C conserva (uno estático, o uno que pertenece a algo de C, como `sqlite3_errmsg`) no se
   libera: se declara sin `released by`.
-
-### Cada sistema lo suyo: `#when`
-
-Lo que cambia entre sistemas se escribe entre **`#when`** y **`#end`**, que eligen al compilar el C
-(`#if`), no al ejecutar. Empiezan con `#` para que se vean distintos de la lógica del programa:
-
-```ts
-cinclude "<errno.h>";
-#when unix
-    cinclude "<unistd.h>";
-#when windows
-    cinclude "<winsock2.h>";
-    cinclude "<ws2tcpip.h>";
-#end
-
-#when unix
-    native type Socket = int released by close;
-    native function close(s: Socket): int32;
-    native let errno: int32;
-#when windows
-    native type Socket = SOCKET released by closesocket;
-    native function closesocket(s: Socket): int32;
-    native function WSAGetLastError(): int32;
-#end
-
-function lastError(): int32 {
-    #when windows
-        return WSAGetLastError();
-    #else
-        return errno;
-    #end
-}
-```
-
-- Los sistemas son **`windows`**, **`macos`**, **`linux`** y **`unix`** (todos menos Windows).
-- **Cada directiva va sola en su línea**: `#when <sistema>`, `#else` y `#end` (detrás solo cabe un
-  comentario). Un `#when` tras otro es la siguiente opción, como el `#elif` de C.
-- **Sin llaves y sin bloque.** Lo de dentro pertenece al bloque de alrededor, como las líneas de un `#if`
-  de C. La sangría no es obligatoria, pero ayuda a leerlo.
-- **`#when`, `#else` y `#end` de una misma elección empiezan en la misma columna.** Un `#when` con más
-  sangría está anidado dentro de una rama:
-
-  ```ts
-  #when windows
-      return "windows";
-  #else
-      #when macos
-          let what: String = "mac";
-      #else
-          let what: String = "otro unix";
-      #end
-      return what;
-  #end
-  ```
-
-- **Lo que todas las ramas declaran, con el mismo tipo, sigue existiendo después de `#end`**:
-
-  ```ts
-  #when windows
-      let sep: String = "\\";
-  #else
-      let sep: String = "/";
-  #end
-  println(sep);              // sep existe aquí
-  ```
-
-  Lo que declara una rama sola es solo de esa rama. Si las ramas no cubren todos los sistemas (sin
-  `#else`), nada de lo que declaran queda después: algún sistema no lo tendría.
-- **Fuera de las funciones**, dentro de `#when` solo van `cinclude` y declaraciones `native` (sin
-  miembros), y `#else` solo sigue a `#when windows` o a `#when unix` (el resto es entonces el otro).
-- **El compilador comprueba todas las ramas**, así que un error del código de Windows se ve también
-  compilando en un Mac. Una rama que nunca se elegiría (`#when macos` tras `#when unix`) es un error.
-- **Lo que solo existe en un sistema se usa dentro de su `#when`**: llamar a `closesocket` fuera de
-  `#when windows` es un error del compilador (*'closesocket' exists only on windows*).
-- **Un tipo puede declararse una vez por sistema** (`Socket` arriba), siempre que cubra todos.
-
-Así está escrita la red de la biblioteca estándar (`std/net.lar`): sockets de Unix y de Windows, sin una
-línea de `ccode`. También los archivos (`std.io.files`), la consola y `std.os`.
 
 ### Punteros a funciones de C
 
@@ -3721,7 +3642,7 @@ function main(): int32 {
   trabaje sobre una conexión ya abierta, como una de TLS: una función de C que recibe un `Socket` recibe el
   descriptor (un `SOCKET` en Windows). El socket sigue siendo del `TcpSocket`, y se cierra con él.
 - `std.net` está escrito en Larimar sobre las funciones de sockets del sistema, sin `ccode`: es un buen
-  ejemplo de [`when`](#cada-sistema-lo-suyo-when), [punteros](#punteros-de-c-t-y-) y
+  ejemplo de [una clase por plataforma](#c-de-cada-sistema-clases-con-c-en-sus-métodos), [punteros](#punteros-de-c-t-y-) y
   [recursos](#recursos-released-by).
 - `NetError.Tls(reason)` es un fallo del cifrado (un certificado rechazado, un saludo TLS fallido) y
   `NetError.TlsUnavailable(what)` que no hay TLS que usar.
@@ -4419,7 +4340,7 @@ El compilador solo lee los nombres, y hace tres cosas con ellos:
 
 **Por plataforma.** `[c.linux]`, `[c.macos]`, `[c.windows]` y `[c.unix]` (Linux y macOS) llevan las mismas
 claves que `[c]` y solo cuentan en esa plataforma: sus listas se suman a las de `[c]`, y un `compiler` ahí
-reemplaza al de `[c]`. Los nombres son los mismos que en `#when`.
+reemplaza al de `[c]`. Los nombres son los de las plataformas: `windows`, `macos`, `linux`, `unix`.
 
 ```toml
 [c]
@@ -5368,11 +5289,11 @@ prueba y dice qué debe pasar:
 ```ts
 import tests.support.compiler { failsWith, runs };
 
-test function aNativeFunctionHasNoBody(): void {
+test function aBodyOfCIsNative(): void {
     failsWith(raw"""
-        native function hack(): void { }
+        function hack(): int32 ccode { return 1; }
         function main(): int32 { return 0; }
-        """, "A native function has no body");
+        """, "A body of C belongs to a native function");
 }
 
 test function callbacksWithAContext(): void {
@@ -5549,11 +5470,11 @@ native function each(f: ItemFn, data: Context): void;           // each((i) -> {
 ccode { static int twice_all(int x) { return lar"twice"(x); } }   // lar"..." nombra a Larimar desde C
 two_results(&a, &b);                                            // & solo como argumento de C
 release(file);                                                  // soltarlo antes
-#when windows                                                   // elegido al compilar el C; cada directiva
-    let sep: String = "\\";                                     // sola en su línea; #when, #else y #end
-#else                                                           // de una elección, en la misma columna
-    let sep: String = "/";
-#end                                                            // sep sigue: todas las ramas lo declaran
+let sep: String = switch (os.platform()) {                      // el sistema: OS.Linux, MacOS, Windows, Unix
+    case Windows -> "\\";
+    case Linux, MacOS, Unix -> "/";
+};
+native function twice(x: int32): int32 { return 2 * x; }        // una función native con cuerpo de C
 
 // Literales
 let c: byte = 'a';

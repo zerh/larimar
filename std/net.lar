@@ -201,9 +201,9 @@ class PosixNet implements NetSystem, UnixPlatform {
         }
     }
 
-    function start(): void ccode { signal(SIGPIPE, SIG_IGN); }
+    native function start(): void { signal(SIGPIPE, SIG_IGN); }
 
-    function lastError(): int32 ccode {
+    native function lastError(): int32 {
         int e = errno;
         if (e == ECONNREFUSED) return 2;
         if (e == EAGAIN || e == EWOULDBLOCK || e == ETIMEDOUT) return 3;
@@ -212,11 +212,11 @@ class PosixNet implements NetSystem, UnixPlatform {
         return 100 + e;
     }
 
-    function interrupted(): bool ccode { return errno == EINTR; }
+    native function interrupted(): bool { return errno == EINTR; }
 
-    function finishWriting(s: Socket): void ccode { shutdown(s, SHUT_WR); }
+    native function finishWriting(s: Socket): void { shutdown(s, SHUT_WR); }
 
-    function setTimeout(s: Socket, which: int32, ms: int32): void ccode {
+    native function setTimeout(s: Socket, which: int32, ms: int32): void {
         struct timeval tv;
         tv.tv_sec = ms / 1000;
         tv.tv_usec = (ms % 1000) * 1000;
@@ -260,12 +260,12 @@ class WindowsNet implements NetSystem, WindowsPlatform {
         }
     }
 
-    function start(): void ccode {
+    native function start(): void {
         WSADATA data;
         WSAStartup(MAKEWORD(2, 2), &data);
     }
 
-    function lastError(): int32 ccode {
+    native function lastError(): int32 {
         int e = WSAGetLastError();
         if (e == WSAECONNREFUSED) return 2;
         if (e == WSAETIMEDOUT || e == WSAEWOULDBLOCK) return 3;
@@ -274,11 +274,11 @@ class WindowsNet implements NetSystem, WindowsPlatform {
         return 100 + e;
     }
 
-    function interrupted(): bool ccode { return WSAGetLastError() == WSAEINTR; }
+    native function interrupted(): bool { return WSAGetLastError() == WSAEINTR; }
 
-    function finishWriting(s: Socket): void ccode { shutdown(s, SD_SEND); }
+    native function finishWriting(s: Socket): void { shutdown(s, SD_SEND); }
 
-    function setTimeout(s: Socket, which: int32, ms: int32): void ccode {
+    native function setTimeout(s: Socket, which: int32, ms: int32): void {
         DWORD w = (DWORD)ms;
         setsockopt(s, SOL_SOCKET, which, (const char*)&w, (int)sizeof w);
     }

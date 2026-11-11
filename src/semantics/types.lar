@@ -533,14 +533,12 @@ public class FunctionInfo {
 /**
  * A type that comes from C: opaque (void*), a C type (c "T") or a pointer to a C function (sig). With
  * `released by`, a resource: it lives in a memory, and the releaser runs when that memory is freed.
- * alts: the same type for other platforms (#when windows: native type X = SOCKET).
  */
 public class ExternTypeInfo {
     let name: String;
     let decl: ExternTypeDecl;
     let sig: Type? = null;
-    let alts: ExternTypeDecl[*] = [];
-    let releasers: FunctionInfo?[*] = [];    // per declaration (decl, then alts), when released
+    let releasers: FunctionInfo?[*] = [];    // its releaser, when released
     /** A pointer to a C function that gets a Context: the Larimar function it stands for (without the Context). */
     let view: Type? = null;
     let ctxIndex: int32 = -1;

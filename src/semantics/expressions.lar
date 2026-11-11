@@ -625,7 +625,7 @@ function checkIdent(id: Ident in default, expected: Type? in default): Type {
     if (isByteArray(s.type) && s.dataUseLine < 0) { s.dataUseLine = id.line; }
     let xv: ExternValueDecl? = s.externValue;
     if (xv != null && xv.platform != "" && !platformWithin(platformCtx, xv.platform)) {
-        error(id.line, "'${s.name}' exists only on ${xv.platform}: use it between '#when ${xv.platform}' and '#end'.");
+        error(id.line, "'${s.name}' exists only on ${xv.platform}: use it in a class for that platform.");
     }
     if (s.kind == SymK.Global && xv == null) { useGlobal(s, id.line); }
     s.used = true;
@@ -1673,7 +1673,7 @@ function checkFunctionCall(c: Call in default, f: FunctionInfo in default, place
     if (!f.isExtern) { edge(currentOwner(), f.owner); }
     let ext: ExternFunctionDecl? = f.ext;
     if (ext != null && ext.platform != "" && !platformWithin(platformCtx, ext.platform)) {
-        error(c.line, "'${f.name}' exists only on ${ext.platform}: call it between '#when ${ext.platform}' and '#end'.");
+        error(c.line, "'${f.name}' exists only on ${ext.platform}: call it from a class for that platform.");
     }
     if (f.releases == "String") {
         error(c.line, "'${f.name}' releases the texts that C gives: the compiler calls it once it has copied them.");
