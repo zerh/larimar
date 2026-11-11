@@ -1,41 +1,43 @@
 # Contributing to Larimar
 
-Thank you for helping. Bugs, ideas and pull requests are welcome, in English or Spanish.
+How the code is organized, so that it stays easy to read and to change.
 
-## Build and test
+## Modules and their parts
 
-Only a C99 compiler is needed (gcc or clang; on Windows, MinGW's gcc):
+- A file is a module: `std/net.lar` is `std.net`.
+- A module that grows is split by creating **a folder with its name, next to the file**. The file stays
+  as the entry: its public API (or its main class), what the others import. The folder holds its parts:
+  `std/net.lar` and `std/net/posix.lar`, `std/net/windows.lar`; `src/syntax/parser.lar` and
+  `src/syntax/parser/statements.lar`.
+- Import modules with a name: `import std.io.files as Files;` and write `Files.readString(...)`.
 
-```sh
-./bootstrap/build.sh --verify --test     # build, check that it compiles itself, run the tests, install ../out/larimar
-tests/run-tests.sh memory                # only the tests whose path or name has "memory"
-bin/larimarc test tests/std              # only larimarc test, on one folder
-```
+## Platforms
 
-`--verify` compiles `src/` three times; stage 2 and stage 3 must be identical. If it says that
-`bootstrap/larimarc.c` is older than `src/`, update it in the same commit:
+- What changes between systems is a class for each platform, marked with the platform it is for
+  (`implements UnixPlatform`, `LinuxPlatform`, `MacOSPlatform`, `WindowsPlatform`), and chosen with a
+  `switch (os.platform())`. There is no `#if` written by hand.
+- Each platform's class goes in a part of the module (`time/posix.lar`, `time/windows.lar`). The parts
+  reach the C before the module that imports them: C shared by several parts goes in a part of its own
+  that they import (`process/common.lar`).
+- C is written where it is used: `native function f(...): T { C }` for a function whose C is only for it;
+  `ccode { }` only for what several share (a struct, a helper).
+- Names of C helpers: `lm_<module>_<thing>` (`lm_proc_start`).
 
-```sh
-cp build/stage2.c bootstrap/larimarc.c
-```
+## Inside a file
+
+1. The comment of the module (what it is, an example) and the imports.
+2. The public API.
+3. The private details, in Larimar.
+4. At the end, the C: `ccode`, native functions with a body of C.
+
+- `self.` is always written: it shows what is state.
+- `switch` with patterns instead of chains of `if (x is ...)`.
+- Files of a few hundred lines: past ~800, split the module in parts.
+- No mutable globals in the compiler: each phase is a class (`Lexer`, `Parser`, ...).
 
 ## Changes
 
-- **A bug is a test first**: a `test function` in the file of its topic (`tests/c/`, `tests/memory/`,
-  `tests/language/`...). `tests/support/compiler.lar` has what the compiler's tests need:
-  `failsWith(source, error)`, `runs(file, lines)`, `panics(file, text)`, `memoryError(file)`.
-- **A change of the language** goes in `doc/spec.md` and in both manuals (`doc/manual.md`,
-  `doc/manual.es.md`), with an example that runs. Something new in the language goes into the compiler
-  first; `std/` may use it once the bootstrap is regenerated.
-- **Messages and comments** say what happened and what to do, in plain words.
-- One topic per pull request, with the tests passing (`./bootstrap/build.sh --verify --test`).
-
-## Layout
-
-`src/` is the compiler, `std/` the standard library, `tests/` the tests, `doc/` the manuals and the
-specification, `bootstrap/` the compiler in C and the scripts that build it, `tools/` the debugger
-formatters and the tcc of the releases, `docs/` the website. See the README.
-
-## License
-
-By contributing you agree that your contribution is under the [MIT license](LICENSE).
+- `./bootstrap/build.sh --verify --test` must pass: the compiler builds itself (stage 2 == stage 3) and
+  every test passes. A change to the compiler regenerates `bootstrap/larimarc.c`.
+- The language is described in `doc/spec.md` and taught in `doc/manual.md` and `doc/manual.es.md`: a
+  change to the language changes the three.

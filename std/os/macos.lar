@@ -1,0 +1,14 @@
+// std.os.macos: what changes on macOS (where its executable is).
+
+import std.os { MacOSPlatform };
+import std.os.posix { PosixSystem };
+
+/** macOS is a Unix: only where its executable is changes. */
+public class MacOSSystem extends PosixSystem implements MacOSPlatform {
+    cinclude "<mach-o/dyld.h>";
+
+    override native function programPath(into: byte[]): void {
+        uint32_t size = (uint32_t)into_length - 1;
+        _NSGetExecutablePath((char*)into, &size);
+    }
+}

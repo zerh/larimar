@@ -1,0 +1,198 @@
+// std.net.tls.macos: the TLS client on macOS (Network.framework).
+
+import std.net.tls.common;
+import std.os { MacOSPlatform };
+
+/** macOS: Network.framework. */
+public class MacOSTls implements MacOSPlatform {
+    ccode {
+        /* ---------------- macOS: Network.framework ---------------------------------------------------
+           It makes its own connection (it does not take a socket) and answers in callbacks on a dispatch
+           queue; each operation here waits for its callback with a semaphore, so it blocks like a socket.
+           The state shared with the callbacks is malloc'd, and freed by the callback of the cancellation:
+           a late callback never touches freed memory. */
+        #include <Network/Network.h>
+        #include <dispatch/dispatch.h>
+        #include <errno.h>
+
+        #define LM_TLS_RBUF 65536
+        typedef struct {
+            nw_connection_t conn;
+            dispatch_queue_t q;
+            dispatch_semaphore_t sem;
+            volatile int started;           /* the start was answered: ready or failed */
+            volatile int ready;
+            volatile int32_t error;
+            char text[LM_TLS_TEXT];
+            volatile int32_t rlen;          /* the last receive: bytes in rbuf, end, error */
+            volatile int reof, rerr, werr;
+            uint8_t rbuf[LM_TLS_RBUF];
+        } LmTlsMac;
+
+        typedef struct { int32_t error; char text[LM_TLS_TEXT]; bool open, eof; int32_t timeoutMs; LmTlsMac* mac; } LmTls;
+
+        static bool lm_tls_needs_socket(void) { return false; }
+
+        static void lm_tls_nw_error(LmTlsMac* p, nw_error_t err) {
+            if (!err) { p->error = 50; snprintf(p->text, LM_TLS_TEXT, "the connection failed"); return; }
+            nw_error_domain_t d = nw_error_get_error_domain(err);
+            int c = nw_error_get_error_code(err);
+            if (d == nw_error_domain_posix) {
+                p->error = c == ECONNREFUSED ? 2 : c == ETIMEDOUT ? 3 : c == ECONNRESET || c == EPIPE ? 5 : 100 + c;
+                snprintf(p->text, LM_TLS_TEXT, "%s", strerror(c));
+            } else if (d == nw_error_domain_dns) {
+                p->error = 1;
+                snprintf(p->text, LM_TLS_TEXT, "host not found");
+            } else {
+                const char* why = c == -9807 ? "the certificate chain is not valid"
+                    : c == -9808 ? "bad certificate"
+                    : c == -9812 ? "the certificate was signed by an unknown authority"
+                    : c == -9813 ? "no trusted root certificate"
+                    : c == -9814 ? "the certificate has expired"
+                    : c == -9815 ? "the certificate is not yet valid"
+                    : c == -9843 ? "the certificate is not for this host"
+                    : c == -67843 ? "the certificate is not trusted" : NULL;
+                p->error = 50;
+                if (why) snprintf(p->text, LM_TLS_TEXT, "%s", why);
+                else snprintf(p->text, LM_TLS_TEXT, "handshake failed (OSStatus %d)", c);
+            }
+        }
+
+        static long lm_tls_wait(LmTlsMac* p, int32_t ms) {
+            return dispatch_semaphore_wait(p->sem, ms > 0 ? dispatch_time(DISPATCH_TIME_NOW, (int64_t)ms * (int64_t)NSEC_PER_MSEC)
+                                                          : DISPATCH_TIME_FOREVER);
+        }
+
+        static void lm_tls_close(LmTls* t) {
+            if (t->mac) { nw_connection_cancel(t->mac->conn); t->mac = NULL; }   /* the cancelled state frees it */
+            t->open = false;
+        }
+
+        static void lm_tls_final(void* p) { lm_tls_close((LmTls*)p); }
+
+        static void lm_tls_copy_error(LmTls* t, LmTlsMac* p) {
+            t->error = p->error;
+            memcpy(t->text, p->text, LM_TLS_TEXT);
+        }
+
+        static LmTls* lm_tls_open_socket(RtMem* m, int fd, const char* host, bool verify) {   /* not used here */
+            (void)fd; (void)host; (void)verify;
+            LmTls* t = (LmTls*)rt_mem_alloc(m, sizeof(LmTls), 0);
+            memset(t, 0, sizeof *t);
+            t->error = 51;
+            return t;
+        }
+
+        static LmTls* lm_tls_open_host(RtMem* m, const char* host, int32_t port, bool verify, int32_t timeoutMs) {
+            LmTls* t = (LmTls*)rt_mem_alloc(m, sizeof(LmTls), 0);
+            memset(t, 0, sizeof *t);
+            t->timeoutMs = timeoutMs;
+            LmTlsMac* p = (LmTlsMac*)calloc(1, sizeof(LmTlsMac));
+            if (!p) { t->error = 50; snprintf(t->text, LM_TLS_TEXT, "out of memory"); return t; }
+            p->q = dispatch_queue_create("larimar.tls", DISPATCH_QUEUE_SERIAL);
+            p->sem = dispatch_semaphore_create(0);
+            dispatch_queue_t q = p->q;
+            char service[16];
+            snprintf(service, sizeof service, "%d", (int)port);
+            nw_endpoint_t ep = nw_endpoint_create_host(host, service);
+            nw_parameters_t params = nw_parameters_create_secure_tcp(^(nw_protocol_options_t tls) {
+                if (!verify) {                      /* accept any certificate: for local tests */
+                    sec_protocol_options_t sec = nw_tls_copy_sec_protocol_options(tls);
+                    sec_protocol_options_set_verify_block(sec, ^(sec_protocol_metadata_t md, sec_trust_t trust,
+                                                                 sec_protocol_verify_complete_t done) {
+                        (void)md; (void)trust;
+                        done(true);
+                    }, q);
+                    sec_release(sec);
+                }
+            }, NW_PARAMETERS_DEFAULT_CONFIGURATION);
+            p->conn = nw_connection_create(ep, params);
+            nw_release(ep);
+            nw_release(params);
+            nw_connection_set_queue(p->conn, p->q);
+            nw_connection_set_state_changed_handler(p->conn, ^(nw_connection_state_t state, nw_error_t err) {
+                if (state == nw_connection_state_ready) {
+                    if (!p->started) { p->ready = 1; p->started = 1; dispatch_semaphore_signal(p->sem); }
+                } else if (state == nw_connection_state_waiting || state == nw_connection_state_failed) {
+                    if (!p->started) { lm_tls_nw_error(p, err); p->started = 1; dispatch_semaphore_signal(p->sem); }
+                } else if (state == nw_connection_state_cancelled) {
+                    nw_connection_set_state_changed_handler(p->conn, NULL);
+                    nw_release(p->conn);
+                    dispatch_release(p->sem);
+                    dispatch_release(p->q);
+                    free(p);
+                }
+            });
+            t->mac = p;
+            nw_connection_start(p->conn);
+            if (lm_tls_wait(p, timeoutMs) != 0) {
+                t->error = 3;
+                snprintf(t->text, LM_TLS_TEXT, "timed out");
+                lm_tls_close(t);
+                return t;
+            }
+            if (!p->ready) {
+                lm_tls_copy_error(t, p);
+                lm_tls_close(t);
+                return t;
+            }
+            t->open = true;
+            rt_mem_on_free(m, lm_tls_final, t, 0);
+            return t;
+        }
+
+        static int32_t lm_tls_read(LmTls* t, uint8_t* items, int32_t len) {
+            if (!t->open) { if (t->eof) return 0; t->error = 4; return -1; }
+            if (len <= 0) return 0;
+            LmTlsMac* p = t->mac;
+            uint32_t want = (uint32_t)(len < LM_TLS_RBUF ? len : LM_TLS_RBUF);
+          again:
+            p->rlen = 0;
+            p->rerr = 0;
+            nw_connection_receive(p->conn, 1, want, ^(dispatch_data_t content, nw_content_context_t ctx, bool complete, nw_error_t err) {
+                if (content) {
+                    dispatch_data_apply(content, ^bool(dispatch_data_t region, size_t offset, const void* buf, size_t size) {
+                        (void)region;
+                        if (offset + size <= LM_TLS_RBUF) memcpy(p->rbuf + offset, buf, size);
+                        return true;
+                    });
+                    p->rlen = (int32_t)dispatch_data_get_size(content);
+                }
+                if (err) { lm_tls_nw_error(p, err); p->rerr = 1; }
+                else if (complete && ctx && nw_content_context_get_is_final(ctx)) p->reof = 1;   /* the other side closed */
+                dispatch_semaphore_signal(p->sem);
+            });
+            if (lm_tls_wait(p, t->timeoutMs) != 0) {
+                t->error = 3;
+                lm_tls_close(t);
+                return -1;
+            }
+            int32_t n = p->rlen;
+            if (n > 0) memcpy(items, p->rbuf, (size_t)n);
+            if (p->reof) { t->eof = true; if (n == 0) { lm_tls_close(t); return 0; } }
+            if (n > 0) return n;
+            if (p->rerr) { lm_tls_copy_error(t, p); return -1; }
+            goto again;                                  /* nothing yet, and not the end: wait for more */
+        }
+
+        static int32_t lm_tls_write(LmTls* t, const uint8_t* items, int32_t len) {
+            if (!t->open) { t->error = 4; return -1; }
+            if (len <= 0) return 0;
+            LmTlsMac* p = t->mac;
+            dispatch_data_t d = dispatch_data_create(items, (size_t)len, p->q, DISPATCH_DATA_DESTRUCTOR_DEFAULT);  /* a copy */
+            p->werr = 0;
+            nw_connection_send(p->conn, d, NW_CONNECTION_DEFAULT_MESSAGE_CONTEXT, true, ^(nw_error_t err) {
+                if (err) { lm_tls_nw_error(p, err); p->werr = 1; }
+                dispatch_semaphore_signal(p->sem);
+            });
+            dispatch_release(d);
+            if (lm_tls_wait(p, t->timeoutMs) != 0) {
+                t->error = 3;
+                lm_tls_close(t);
+                return -1;
+            }
+            if (p->werr) { lm_tls_copy_error(t, p); return -1; }
+            return 0;
+        }
+    }
+}

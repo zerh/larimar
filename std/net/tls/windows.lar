@@ -1,0 +1,224 @@
+// std.net.tls.windows: the TLS client on Windows (SChannel).
+
+import std.net.tls.common;
+import std.os { WindowsPlatform };
+
+/** Windows: SChannel. */
+public class WindowsTls implements WindowsPlatform {
+    ccode {
+        /* ---------------- Windows: SChannel ----------------------------------------------------------
+           Over the TcpSocket's SOCKET: the handshake with InitializeSecurityContext, then records with
+           EncryptMessage / DecryptMessage. Certificates: the system's store (SCH_CRED_AUTO_CRED_VALIDATION). */
+        #define SECURITY_WIN32
+        #include <winsock2.h>
+        #include <windows.h>
+        #include <security.h>
+        #include <schannel.h>
+        #ifndef SCH_USE_STRONG_CRYPTO
+        #define SCH_USE_STRONG_CRYPTO 0x00400000
+        #endif
+        #ifndef SEC_E_WRONG_PRINCIPAL
+        #define SEC_E_WRONG_PRINCIPAL ((HRESULT)0x80090322L)
+        #endif
+
+        #define LM_TLS_IN 33000             /* encrypted bytes not yet decrypted (a record is at most ~16.7 KB) */
+        #define LM_TLS_OUT 17000            /* one encrypted record to send */
+        typedef struct {
+            int32_t error; char text[LM_TLS_TEXT]; bool open, eof;
+            SOCKET fd;
+            CredHandle cred; CtxtHandle ctx; bool hasCred, hasCtx;
+            SecPkgContext_StreamSizes sizes;
+            int32_t inLen;
+            int32_t plainLen, plainPos;
+            uint8_t in[LM_TLS_IN];
+            uint8_t plain[LM_TLS_IN];
+            uint8_t out[LM_TLS_OUT];
+        } LmTls;
+
+        static bool lm_tls_needs_socket(void) { return true; }
+
+        static void lm_tls_status(LmTls* t, SECURITY_STATUS s) {
+            const char* why = s == SEC_E_UNTRUSTED_ROOT ? "the certificate is not trusted"
+                : s == SEC_E_CERT_EXPIRED ? "the certificate has expired"
+                : s == SEC_E_WRONG_PRINCIPAL || s == (SECURITY_STATUS)CERT_E_CN_NO_MATCH ? "the certificate is not for this host"
+                : s == SEC_E_ILLEGAL_MESSAGE ? "the server did not answer in TLS"
+                : s == SEC_E_ALGORITHM_MISMATCH ? "no cipher in common with the server" : NULL;
+            t->error = 50;
+            if (why) snprintf(t->text, LM_TLS_TEXT, "%s", why);
+            else snprintf(t->text, LM_TLS_TEXT, "TLS failed (0x%08lx)", (unsigned long)s);
+        }
+
+        static void lm_tls_sock_error(LmTls* t) {
+            int e = WSAGetLastError();
+            t->error = e == WSAETIMEDOUT || e == WSAEWOULDBLOCK ? 3 : e == WSAECONNRESET || e == WSAECONNABORTED ? 5 : 100 + e;
+            snprintf(t->text, LM_TLS_TEXT, "socket error %d", e);
+        }
+
+        static bool lm_tls_send_all(LmTls* t, const uint8_t* p, int32_t len) {
+            while (len > 0) {
+                int n = send(t->fd, (const char*)p, len, 0);
+                if (n <= 0) { lm_tls_sock_error(t); return false; }
+                p += n;
+                len -= n;
+            }
+            return true;
+        }
+
+        static void lm_tls_close(LmTls* t) { t->open = false; }
+
+        static void lm_tls_final(void* p) {
+            LmTls* t = (LmTls*)p;
+            t->open = false;
+            if (t->hasCtx) { DeleteSecurityContext(&t->ctx); t->hasCtx = false; }
+            if (t->hasCred) { FreeCredentialsHandle(&t->cred); t->hasCred = false; }
+        }
+
+        static LmTls* lm_tls_open_host(RtMem* m, const char* host, int32_t port, bool verify, int32_t timeoutMs) {   /* not used here */
+            (void)host; (void)port; (void)verify; (void)timeoutMs;
+            LmTls* t = (LmTls*)rt_mem_alloc(m, sizeof(LmTls), 0);
+            memset(t, 0, sizeof *t);
+            t->error = 51;
+            return t;
+        }
+
+        /* over a connected socket, with its timeouts */
+        static LmTls* lm_tls_open_socket(RtMem* m, SOCKET fd, const char* host, bool verify) {
+            LmTls* t = (LmTls*)rt_mem_alloc(m, sizeof(LmTls), 0);
+            memset(t, 0, sizeof *t);
+            t->fd = fd;
+            rt_mem_on_free(m, lm_tls_final, t, 0);
+            SCHANNEL_CRED sc;
+            memset(&sc, 0, sizeof sc);
+            sc.dwVersion = SCHANNEL_CRED_VERSION;
+            sc.dwFlags = SCH_USE_STRONG_CRYPTO | SCH_CRED_NO_DEFAULT_CREDS
+                | (verify ? SCH_CRED_AUTO_CRED_VALIDATION : (SCH_CRED_MANUAL_CRED_VALIDATION | SCH_CRED_NO_SERVERNAME_CHECK));
+            TimeStamp expiry;
+            SECURITY_STATUS s = AcquireCredentialsHandleA(NULL, (LPSTR)UNISP_NAME_A, SECPKG_CRED_OUTBOUND, NULL, &sc,
+                                                          NULL, NULL, &t->cred, &expiry);
+            if (s != SEC_E_OK) { lm_tls_status(t, s); return t; }
+            t->hasCred = true;
+            DWORD flags = ISC_REQ_SEQUENCE_DETECT | ISC_REQ_REPLAY_DETECT | ISC_REQ_CONFIDENTIALITY
+                | ISC_REQ_ALLOCATE_MEMORY | ISC_REQ_STREAM | ISC_REQ_EXTENDED_ERROR
+                | (verify ? 0 : ISC_REQ_MANUAL_CRED_VALIDATION);
+            bool first = true, needRead = false;
+            for (;;) {
+                if (needRead) {
+                    if (t->inLen >= LM_TLS_IN) { t->error = 50; snprintf(t->text, LM_TLS_TEXT, "handshake too big"); return t; }
+                    int n = recv(t->fd, (char*)t->in + t->inLen, LM_TLS_IN - t->inLen, 0);
+                    if (n == 0) { t->error = 50; snprintf(t->text, LM_TLS_TEXT, "the server closed the connection during the handshake"); return t; }
+                    if (n < 0) { lm_tls_sock_error(t); return t; }
+                    t->inLen += n;
+                }
+                needRead = true;
+                SecBuffer inb[2], outb[1];
+                inb[0].cbBuffer = (unsigned long)t->inLen; inb[0].BufferType = SECBUFFER_TOKEN; inb[0].pvBuffer = t->in;
+                inb[1].cbBuffer = 0; inb[1].BufferType = SECBUFFER_EMPTY; inb[1].pvBuffer = NULL;
+                outb[0].cbBuffer = 0; outb[0].BufferType = SECBUFFER_TOKEN; outb[0].pvBuffer = NULL;
+                SecBufferDesc ind = { SECBUFFER_VERSION, 2, inb };
+                SecBufferDesc outd = { SECBUFFER_VERSION, 1, outb };
+                DWORD attrs = 0;
+                s = InitializeSecurityContextA(&t->cred, first ? NULL : &t->ctx, (SEC_CHAR*)host, flags, 0, 0,
+                                               first ? NULL : &ind, 0, first ? &t->ctx : NULL, &outd, &attrs, NULL);
+                if (first && (s == SEC_I_CONTINUE_NEEDED || s == SEC_E_OK)) t->hasCtx = true;
+                first = false;
+                if (outb[0].cbBuffer > 0 && outb[0].pvBuffer) {
+                    bool sent = lm_tls_send_all(t, (const uint8_t*)outb[0].pvBuffer, (int32_t)outb[0].cbBuffer);
+                    FreeContextBuffer(outb[0].pvBuffer);
+                    if (!sent) return t;
+                }
+                if (s == SEC_E_INCOMPLETE_MESSAGE) continue;              /* read more of the same message */
+                if (s == SEC_I_CONTINUE_NEEDED || s == SEC_E_OK) {
+                    if (inb[1].BufferType == SECBUFFER_EXTRA && inb[1].cbBuffer > 0) {
+                        memmove(t->in, t->in + t->inLen - inb[1].cbBuffer, inb[1].cbBuffer);
+                        t->inLen = (int32_t)inb[1].cbBuffer;
+                        needRead = s != SEC_I_CONTINUE_NEEDED;            /* the extra bytes are the next message */
+                    } else {
+                        t->inLen = 0;
+                    }
+                    if (s == SEC_E_OK) break;
+                    continue;
+                }
+                lm_tls_status(t, s);
+                return t;
+            }
+            s = QueryContextAttributesA(&t->ctx, SECPKG_ATTR_STREAM_SIZES, &t->sizes);
+            if (s != SEC_E_OK) { lm_tls_status(t, s); return t; }
+            t->open = true;
+            return t;
+        }
+
+        static int32_t lm_tls_read(LmTls* t, uint8_t* items, int32_t len) {
+            if (len <= 0) return 0;
+            for (;;) {
+                if (t->plainPos < t->plainLen) {
+                    int32_t n = t->plainLen - t->plainPos;
+                    if (n > len) n = len;
+                    memcpy(items, t->plain + t->plainPos, (size_t)n);
+                    t->plainPos += n;
+                    return n;
+                }
+                if (!t->open) { if (t->eof) return 0; t->error = 4; return -1; }
+                if (t->inLen > 0) {
+                    SecBuffer b[4];
+                    b[0].cbBuffer = (unsigned long)t->inLen; b[0].BufferType = SECBUFFER_DATA; b[0].pvBuffer = t->in;
+                    for (int i = 1; i < 4; i++) { b[i].cbBuffer = 0; b[i].BufferType = SECBUFFER_EMPTY; b[i].pvBuffer = NULL; }
+                    SecBufferDesc d = { SECBUFFER_VERSION, 4, b };
+                    SECURITY_STATUS s = DecryptMessage(&t->ctx, &d, 0, NULL);
+                    if (s == SEC_E_OK) {
+                        SecBuffer* data = NULL;
+                        SecBuffer* extra = NULL;
+                        for (int i = 1; i < 4; i++) {
+                            if (b[i].BufferType == SECBUFFER_DATA) data = &b[i];
+                            if (b[i].BufferType == SECBUFFER_EXTRA) extra = &b[i];
+                        }
+                        t->plainLen = 0;
+                        t->plainPos = 0;
+                        if (data && data->cbBuffer > 0) {
+                            memcpy(t->plain, data->pvBuffer, data->cbBuffer);
+                            t->plainLen = (int32_t)data->cbBuffer;
+                        }
+                        if (extra && extra->cbBuffer > 0) {
+                            memmove(t->in, extra->pvBuffer, extra->cbBuffer);
+                            t->inLen = (int32_t)extra->cbBuffer;
+                        } else {
+                            t->inLen = 0;
+                        }
+                        continue;
+                    }
+                    if (s == SEC_I_CONTEXT_EXPIRED) { t->open = false; t->eof = true; return 0; }   /* close_notify */
+                    if (s != SEC_E_INCOMPLETE_MESSAGE) { lm_tls_status(t, s); return -1; }
+                }
+                if (t->inLen >= LM_TLS_IN) { t->error = 50; snprintf(t->text, LM_TLS_TEXT, "TLS record too big"); return -1; }
+                int n = recv(t->fd, (char*)t->in + t->inLen, LM_TLS_IN - t->inLen, 0);
+                if (n == 0) { t->open = false; t->eof = true; return 0; }     /* closed without close_notify: the end */
+                if (n < 0) { lm_tls_sock_error(t); return -1; }
+                t->inLen += n;
+            }
+        }
+
+        static int32_t lm_tls_write(LmTls* t, const uint8_t* items, int32_t len) {
+            if (!t->open) { t->error = 4; return -1; }
+            unsigned long head = t->sizes.cbHeader, tail = t->sizes.cbTrailer;
+            unsigned long most = t->sizes.cbMaximumMessage;
+            if (head + tail >= LM_TLS_OUT) { t->error = 50; snprintf(t->text, LM_TLS_TEXT, "unexpected TLS sizes"); return -1; }
+            if (most > LM_TLS_OUT - head - tail) most = LM_TLS_OUT - head - tail;
+            int32_t done = 0;
+            while (done < len) {
+                unsigned long chunk = (unsigned long)(len - done);
+                if (chunk > most) chunk = most;
+                memcpy(t->out + head, items + done, chunk);
+                SecBuffer b[4];
+                b[0].cbBuffer = head; b[0].BufferType = SECBUFFER_STREAM_HEADER; b[0].pvBuffer = t->out;
+                b[1].cbBuffer = chunk; b[1].BufferType = SECBUFFER_DATA; b[1].pvBuffer = t->out + head;
+                b[2].cbBuffer = tail; b[2].BufferType = SECBUFFER_STREAM_TRAILER; b[2].pvBuffer = t->out + head + chunk;
+                b[3].cbBuffer = 0; b[3].BufferType = SECBUFFER_EMPTY; b[3].pvBuffer = NULL;
+                SecBufferDesc d = { SECBUFFER_VERSION, 4, b };
+                SECURITY_STATUS s = EncryptMessage(&t->ctx, 0, &d, 0);
+                if (s != SEC_E_OK) { lm_tls_status(t, s); return -1; }
+                if (!lm_tls_send_all(t, t->out, (int32_t)(b[0].cbBuffer + b[1].cbBuffer + b[2].cbBuffer))) return -1;
+                done += (int32_t)chunk;
+            }
+            return 0;
+        }
+    }
+}

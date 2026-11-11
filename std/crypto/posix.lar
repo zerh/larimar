@@ -1,0 +1,14 @@
+// std.crypto.posix: secure random bytes on Unix (/dev/urandom).
+
+import std.crypto { RandomSource };
+import std.os { UnixPlatform };
+
+public class UrandomSource implements RandomSource, UnixPlatform {
+    native function fill(items: byte[]): bool {
+        FILE* f = fopen("/dev/urandom", "rb");
+        if (!f) return false;
+        size_t n = fread(items, 1, (size_t)items_length, f);
+        fclose(f);
+        return n == (size_t)items_length;
+    }
+}

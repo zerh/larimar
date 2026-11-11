@@ -18,7 +18,9 @@
 import std.io { IoError, raise, InputStream, OutputStream };
 import std.io as Io;
 import std.os;
-import std.os { OS, UnixPlatform, WindowsPlatform };
+import std.os { OS };
+import std.io.files.posix { PosixFolders };
+import std.io.files.windows { WindowsFolders };
 
 cinclude "<errno.h>";
 cinclude "<sys/stat.h>";
@@ -41,8 +43,8 @@ native struct Stat = c"struct stat" { let st_mode: uint32; let st_size: int64; l
 native function stat(path: String, into: Stat*): int32;
 native function remove(path: String): int32;
 
-/** What std.io.files needs of the system for folders: one class for each. */
-interface FolderSystem {
+/** What std.io.files needs of the system for folders: a class for each platform (std/io/files/posix.lar, windows.lar). */
+public interface FolderSystem {
     function makeDirectory(path: String): int32;         // 0, or -1 (errno says why)
     function removeDirectory(path: String): int32;
     function makeWritable(path: String): void;            // before replacing a read-only file
@@ -50,80 +52,6 @@ interface FolderSystem {
     function listOpen(path: String): int64;               // 0: it could not be opened
     function listNext(list: int64, into: byte[]): bool;   // the next name, ending in a zero byte
     function listClose(list: int64): void;
-}
-
-class PosixFolders implements FolderSystem, UnixPlatform {
-    cinclude "<unistd.h>";
-    cinclude "<dirent.h>";
-
-    native function makeDirectory(path: String): int32 { return mkdir(path, 0777); }   /* less what the umask takes away */
-
-    native function removeDirectory(path: String): int32 { return rmdir(path); }
-
-    native function makeWritable(path: String): void { (void)path; }
-
-    native function copyPermissions(from: String, to: String): void {
-        struct stat st;
-        if (stat(from, &st) == 0) chmod(to, st.st_mode & 07777);
-    }
-
-    native function listOpen(path: String): int64 { return (int64_t)(intptr_t)opendir(path); }
-
-    native function listNext(list: int64, into: byte[]): bool {
-        struct dirent* e = readdir((DIR*)(intptr_t)list);
-        if (e == NULL) return false;
-        snprintf((char*)into, (size_t)into_length, "%s", e->d_name);
-        return true;
-    }
-
-    native function listClose(list: int64): void { closedir((DIR*)(intptr_t)list); }
-}
-
-class WindowsFolders implements FolderSystem, WindowsPlatform {
-    cinclude "<winsock2.h>";        // before windows.h (it includes it): no clash with the old winsock.h
-    cinclude "<windows.h>";
-    cinclude "<direct.h>";
-    cinclude "<io.h>";
-
-    ccode {
-        typedef struct LmFind { HANDLE h; WIN32_FIND_DATAA data; int pending; } LmFind;
-    }
-
-    native function makeDirectory(path: String): int32 { return _mkdir(path); }
-
-    native function removeDirectory(path: String): int32 { return _rmdir(path); }
-
-    native function makeWritable(path: String): void { _chmod(path, _S_IWRITE); }
-
-    native function copyPermissions(from: String, to: String): void { (void)from; (void)to; }
-
-    native function listOpen(path: String): int64 {
-        size_t n = strlen(path);
-        char* pattern = (char*)malloc(n + 3);
-        LmFind* f = (LmFind*)calloc(1, sizeof(LmFind));
-        if (pattern == NULL || f == NULL) { free(pattern); free(f); return 0; }
-        memcpy(pattern, path, n);
-        memcpy(pattern + n, "\\*", 3);
-        f->h = FindFirstFileA(pattern, &f->data);
-        free(pattern);
-        if (f->h == INVALID_HANDLE_VALUE) { free(f); return 0; }
-        f->pending = 1;
-        return (int64_t)(intptr_t)f;
-    }
-
-    native function listNext(list: int64, into: byte[]): bool {
-        LmFind* f = (LmFind*)(intptr_t)list;
-        if (!f->pending && !FindNextFileA(f->h, &f->data)) return false;
-        f->pending = 0;
-        snprintf((char*)into, (size_t)into_length, "%s", f->data.cFileName);
-        return true;
-    }
-
-    native function listClose(list: int64): void {
-        LmFind* f = (LmFind*)(intptr_t)list;
-        FindClose(f->h);
-        free(f);
-    }
 }
 
 let folders: FolderSystem = switch (os.platform()) {

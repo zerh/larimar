@@ -1,0 +1,14 @@
+// std.io.console.windows: the console on Windows.
+
+import std.os { WindowsPlatform };
+
+/** Only Windows turns \n into \r\n on the way out: binary mode there. */
+public class WindowsConsole implements WindowsPlatform {
+    cinclude "<io.h>";
+    cinclude "<fcntl.h>";
+
+    native function binaryMode(): void {
+        _setmode(_fileno(stdin), _O_BINARY);
+        _setmode(_fileno(stdout), _O_BINARY);
+    }
+}

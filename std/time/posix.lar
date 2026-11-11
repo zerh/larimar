@@ -1,0 +1,27 @@
+// std.time.posix: the clock on Unix (Linux, macOS and the others).
+
+import std.time { Clock };
+import std.os { UnixPlatform };
+
+public class PosixClock implements Clock, UnixPlatform {
+    cinclude "<time.h>";
+    cinclude "<errno.h>";
+
+    ccode {
+        static int64_t lm_clock_ms(clockid_t which) {
+            struct timespec t;
+            clock_gettime(which, &t);
+            return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+        }
+    }
+
+    native function now(): int64 { return lm_clock_ms(CLOCK_REALTIME); }
+
+    native function monotonic(): int64 { return lm_clock_ms(CLOCK_MONOTONIC); }
+
+    native function sleep(ms: int64): void {
+        if (ms <= 0) return;
+        struct timespec t = { (time_t)(ms / 1000), (long)(ms % 1000) * 1000000L };
+        while (nanosleep(&t, &t) != 0 && errno == EINTR) { }
+    }
+}

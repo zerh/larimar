@@ -349,6 +349,10 @@ public let showFrom: String = "";
 function visit(m: Module in default): void {
     for (imp in m.program!.imports) {
         if (modIndex[imp.path] != null) { continue; }       // already loaded, or a cycle: fine for declarations
+        if (root.index < filePaths.length && Paths.normalize(Paths.absolute(moduleFile(imp.path))) == Paths.normalize(filePaths[root.index])) {
+            modIndex[imp.path] = 0;                         // the file opened alone (root), imported back by its parts
+            continue;
+        }
         moduleClash = "";
         let source: String? = readSource(moduleFile(imp.path));
         if (moduleClash != "") { error(imp.line, "Module '${imp.path}' is in two dependencies: ${moduleClash}."); }
@@ -580,10 +584,7 @@ function rewriteDecl(m: Module in default, d: Node in default): void {
             typeRef(v.type);
         }
         case ExternFunctionDecl f -> {
-            let headers: bool = false;
-            for (x in m.program!.decls) {
-                if (x is CIncludeDecl || x is CCodeDecl) { headers = true; }
-            }
+            let headers: bool = hasHeaders(m);
             f.name = own;
             params(f.params);
             typeRef(f.ret);
@@ -597,6 +598,22 @@ function rewriteDecl(m: Module in default, d: Node in default): void {
         }
         default -> {}
     }
+}
+
+/**
+ * Whether a module brings its own C headers (cinclude or ccode), itself or in its parts (the modules
+ * of its folder, net/posix.lar for net.lar): then its natives are declared by them, not by us.
+ */
+function hasHeaders(m: Module in default): bool {
+    let parts: String = "${m.path}.";
+    for (x in mods) {
+        if (x != m && (m.path == "" || !x.path.startsWith(parts))) { continue; }
+        if (x.program == null) { continue; }
+        for (d in x.program!.decls) {
+            if (d is CIncludeDecl || d is CCodeDecl) { return true; }
+        }
+    }
+    return false;
 }
 
 function function_(f: FunctionDecl in default, name: String in default): void {

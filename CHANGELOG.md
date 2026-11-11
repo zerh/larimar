@@ -2,6 +2,22 @@
 
 Each version of the compiler (`larimar --version`) and the version of the language it implements.
 
+## 1.7.0 — 2026-11-11
+
+The standard library, organized: each module keeps its API, and the class of each platform goes in a
+part of it, in the folder of its name.
+
+- `std.time`, `std.os`, `std.io.files`, `std.io.console`, `std.crypto`, `std.os.process`, `std.net` and
+  `std.net.tls`: their platform classes moved to `time/posix.lar`, `os/windows.lar`, `net/openssl.lar`,
+  `net/tls/macos.lar`... The interfaces they implement are public (`Clock`, `System`, `NetSystem`...),
+  so a platform of one's own can be added.
+- C that the parts of a module share goes in a part of its own (`process/common.lar`,
+  `net/tls/common.lar`): the parts reach the C before the module.
+- A module whose parts bring the C headers (cinclude, ccode) gets no prototypes of ours for its natives.
+- `std.os.process`: the check of what can be run is `Executables` (`Runnable` is std.lang's).
+- A module opened alone (`larimar check std/time.lar`) is the same module its parts import back.
+- `CONTRIBUTING.md`: how the code is organized (modules and parts, platforms, the order inside a file).
+
 ## 1.6.1 — 2026-11-11
 
 - The standard library and the compiler use `native function f(...): T { C }` where a C function in a

@@ -1,0 +1,25 @@
+// std.time.windows: the clock on Windows.
+
+import std.time { Clock };
+import std.os { WindowsPlatform };
+
+public class WindowsClock implements Clock, WindowsPlatform {
+    cinclude "<windows.h>";
+
+    ccode {
+        #if defined(__TINYC__)          /* the windows.h of tcc predates Vista */
+        ULONGLONG WINAPI GetTickCount64(void);
+        #endif
+    }
+
+    native function now(): int64 {
+        FILETIME f;
+        GetSystemTimeAsFileTime(&f);
+        uint64_t t = ((uint64_t)f.dwHighDateTime << 32) | f.dwLowDateTime;     /* 100 ns since 1601 */
+        return (int64_t)(t / 10000) - 11644473600000LL;
+    }
+
+    native function monotonic(): int64 { return (int64_t)GetTickCount64(); }
+
+    native function sleep(ms: int64): void { if (ms > 0) Sleep((DWORD)ms); }
+}

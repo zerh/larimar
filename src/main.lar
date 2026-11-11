@@ -34,7 +34,7 @@ import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 import std.os.process { Process, ProcessError };
 
-const VERSION: String = "1.6.1";
+const VERSION: String = "1.7.0";
 
 /** The version of the language this compiler implements (doc/spec.md). */
 const LANGUAGE: String = "1.0";

@@ -1,0 +1,66 @@
+// std.net.posix: sockets on Unix (BSD sockets, poll).
+
+import std.net { NetSystem, Socket };
+import std.os { UnixPlatform };
+
+public class PosixNet implements NetSystem, UnixPlatform {
+    cinclude "<sys/types.h>";
+    cinclude "<sys/socket.h>";
+    cinclude "<sys/time.h>";
+    cinclude "<netinet/in.h>";
+    cinclude "<netinet/tcp.h>";
+    cinclude "<arpa/inet.h>";
+    cinclude "<netdb.h>";
+    cinclude "<unistd.h>";
+    cinclude "<errno.h>";
+    cinclude "<signal.h>";
+    cinclude "<poll.h>";
+
+    ccode {
+        typedef int LmSocket;
+        static int32_t lm_socket_close(LmSocket s) { return (int32_t)close(s); }
+        static long long lm_net_dup(int s) { return (long long)dup(s); }
+        static int lm_net_adopt(long long n) { return (int)n; }
+        static int lm_net_readable(int s, int ms) {
+            struct pollfd p;
+            p.fd = s;
+            p.events = POLLIN;
+            p.revents = 0;
+            return poll(&p, 1, ms) > 0;
+        }
+        static long long lm_net_number(int s) { return (long long)s; }
+        /* which of these sockets (numbers) can be read (or were closed) within ms: 1 in ready[i] */
+        static int lm_net_poll(long long* fds, int count, int* ready, int readyCount, int ms) {
+            struct pollfd few[64];
+            struct pollfd* p = count <= 64 ? few : (struct pollfd*)malloc(sizeof(struct pollfd) * (size_t)count);
+            int n = p ? count : 0;
+            for (int i = 0; i < n; i++) { p[i].fd = (int)fds[i]; p[i].events = POLLIN; p[i].revents = 0; }
+            int r = n > 0 ? poll(p, (nfds_t)n, ms) : -1;
+            for (int i = 0; i < readyCount; i++) ready[i] = i < n && r > 0 && p[i].revents != 0;
+            if (p != few) free(p);
+            return r;
+        }
+    }
+
+    native function start(): void { signal(SIGPIPE, SIG_IGN); }
+
+    native function lastError(): int32 {
+        int e = errno;
+        if (e == ECONNREFUSED) return 2;
+        if (e == EAGAIN || e == EWOULDBLOCK || e == ETIMEDOUT) return 3;
+        if (e == ECONNRESET || e == EPIPE) return 5;
+        if (e == EADDRINUSE) return 6;
+        return 100 + e;
+    }
+
+    native function interrupted(): bool { return errno == EINTR; }
+
+    native function finishWriting(s: Socket): void { shutdown(s, SHUT_WR); }
+
+    native function setTimeout(s: Socket, which: int32, ms: int32): void {
+        struct timeval tv;
+        tv.tv_sec = ms / 1000;
+        tv.tv_usec = (ms % 1000) * 1000;
+        setsockopt(s, SOL_SOCKET, which, &tv, (socklen_t)sizeof tv);
+    }
+}

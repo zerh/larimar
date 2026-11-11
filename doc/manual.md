@@ -2434,7 +2434,8 @@ native function close_window(w: Window): void;
   let buf: byte[*] = buffer(4096);
   let n: int32 = fill(buf);                          // a list, a T[N] or a T[] work
   ```
-- If the file has no `cinclude` and no `ccode`, the transpiler writes the C prototype of each
+- If the module has no `cinclude` and no `ccode` (neither it nor the modules of its folder: `net/posix.lar`
+  for `net.lar`), the transpiler writes the C prototype of each
   `native function` itself. That is what is needed for functions of your own written in a separate `.c`
   (see `sources` in [section 26](#26-projects-larimartoml-and-larimar-build)). If the function comes from
   a header, include the header.
@@ -2637,6 +2638,10 @@ let clock: Clock = switch (os.platform()) {
 - **`os.platform()`** gives `OS.Linux`, `MacOS`, `Windows` or `Unix` (another Unix). A `switch` on it
   without `default` has to name every system: a system added later shows every place to port. It is a
   constant of the C compiler, so the branch of the other systems disappears from the executable.
+- **Where they go:** the module (`time.lar`) keeps its API and the interface; each platform's class goes
+  in a module of its folder (`time/posix.lar`, `time/windows.lar`), which the module imports. The parts
+  reach the C before the module, so C that several parts share goes in a part of its own that they
+  import (`process/common.lar`).
 - Implementations kept in a global are shared by threads: an interface whose classes have no fields is
   safe to share (it has no state to change).
 

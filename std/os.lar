@@ -8,6 +8,10 @@
 // MacOSPlatform or WindowsPlatform), with the C of that system in its methods: its C reaches only that
 // system's build. A switch on os.platform() chooses the one that runs.
 
+import std.os.posix { PosixSystem };
+import std.os.macos { MacOSSystem };
+import std.os.windows { WindowsSystem };
+
 /** The systems Larimar runs on (Unix: another Unix, a BSD). */
 public enum OS { Linux, MacOS, Windows, Unix }
 
@@ -54,8 +58,8 @@ public function platformName(): String {
     };
 }
 
-/** What std.os needs of the system. */
-interface System {
+/** What std.os needs of the system: a class for each platform (std/os/posix.lar, macos.lar, windows.lar). */
+public interface System {
     function processId(): int64;
     function cwd(into: byte[]): bool;
     function programPath(into: byte[]): void;
@@ -64,97 +68,14 @@ interface System {
     function terminating(): bool;
 }
 
-class PosixSystem implements System, UnixPlatform {
-    cinclude "<unistd.h>";
-    cinclude "<signal.h>";
-    cinclude "<sys/wait.h>";
-
-    ccode {
-        static volatile sig_atomic_t lm_os_terminating = 0;
-        static void lm_os_on_signal(int s) { (void)s; lm_os_terminating = 1; }
-    }
-
-    native function processId(): int64 { return (int64_t)getpid(); }
-
-    native function cwd(into: byte[]): bool { return getcwd((char*)into, (size_t)into_length - 1) != NULL; }
-
-    native function programPath(into: byte[]): void { readlink("/proc/self/exe", (char*)into, (size_t)into_length - 1); }
-
-    native function shell(command: String): int32 {
-        int r = system(command);
-        if (r != -1 && WIFEXITED(r)) r = WEXITSTATUS(r);          /* the exit status, not the wait status */
-        return (int32_t)r;
-    }
-
-    native function catchTermination(): void {
-        struct sigaction a;
-        memset(&a, 0, sizeof a);
-        a.sa_handler = lm_os_on_signal;
-        sigemptyset(&a.sa_mask);
-        sigaction(SIGINT, &a, NULL);
-        sigaction(SIGTERM, &a, NULL);
-    }
-
-    native function terminating(): bool { return lm_os_terminating != 0; }
-}
-
-/** macOS is a Unix: only where its executable is changes. */
-class MacOSSystem extends PosixSystem implements MacOSPlatform {
-    cinclude "<mach-o/dyld.h>";
-
-    override native function programPath(into: byte[]): void {
-        uint32_t size = (uint32_t)into_length - 1;
-        _NSGetExecutablePath((char*)into, &size);
-    }
-}
-
-class WindowsSystem implements System, WindowsPlatform {
-    cinclude "<winsock2.h>";        // before windows.h (it includes it): no clash with the old winsock.h
-    cinclude "<windows.h>";
-    cinclude "<direct.h>";
-
-    ccode {
-        static volatile LONG lm_os_terminating = 0;
-        static BOOL WINAPI lm_os_on_console(DWORD event) {
-            (void)event;
-            InterlockedExchange(&lm_os_terminating, 1);
-            return TRUE;                                  /* handled: the program ends on its own */
-        }
-    }
-
-    native function processId(): int64 { return (int64_t)GetCurrentProcessId(); }
-
-    native function cwd(into: byte[]): bool { return _getcwd((char*)into, into_length - 1) != NULL; }
-
-    native function programPath(into: byte[]): void { GetModuleFileNameA(NULL, (char*)into, (DWORD)into_length - 1); }
-
-    /**
-     * cmd.exe removes the first and the last quote of a command that starts with one ("C:\a b\x.exe" "arg"
-     * loses both): the command goes inside one more pair of quotes, which cmd removes, so it runs as written.
-     */
-    native function shell(command: String): int32 {
-        size_t n = strlen(command);
-        char* quoted = (char*)malloc(n + 3);
-        if (quoted == NULL) return -1;
-        quoted[0] = '"';
-        memcpy(quoted + 1, command, n);
-        quoted[n + 1] = '"';
-        quoted[n + 2] = 0;
-        int r = system(quoted);
-        free(quoted);
-        return (int32_t)r;
-    }
-
-    native function catchTermination(): void { SetConsoleCtrlHandler(lm_os_on_console, TRUE); }
-
-    native function terminating(): bool { return InterlockedCompareExchange(&lm_os_terminating, 0, 0) != 0; }
-}
-
 let host: System = switch (platform()) {
     case Linux, Unix -> PosixSystem {};
     case MacOS -> MacOSSystem {};
     case Windows -> WindowsSystem {};
 };
+
+cinclude "<stdlib.h>";                 // getenv, exit (C declares them: no prototypes of ours)
+cinclude "<string.h>";                 // strlen
 
 native type CStream = FILE*;
 native const stdout: CStream;

@@ -1,0 +1,45 @@
+// std.os.windows: the process, its folder and the shell on Windows.
+
+import std.os { System, WindowsPlatform };
+
+public class WindowsSystem implements System, WindowsPlatform {
+    cinclude "<winsock2.h>";        // before windows.h (it includes it): no clash with the old winsock.h
+    cinclude "<windows.h>";
+    cinclude "<direct.h>";
+
+    ccode {
+        static volatile LONG lm_os_terminating = 0;
+        static BOOL WINAPI lm_os_on_console(DWORD event) {
+            (void)event;
+            InterlockedExchange(&lm_os_terminating, 1);
+            return TRUE;                                  /* handled: the program ends on its own */
+        }
+    }
+
+    native function processId(): int64 { return (int64_t)GetCurrentProcessId(); }
+
+    native function cwd(into: byte[]): bool { return _getcwd((char*)into, into_length - 1) != NULL; }
+
+    native function programPath(into: byte[]): void { GetModuleFileNameA(NULL, (char*)into, (DWORD)into_length - 1); }
+
+    /**
+     * cmd.exe removes the first and the last quote of a command that starts with one ("C:\a b\x.exe" "arg"
+     * loses both): the command goes inside one more pair of quotes, which cmd removes, so it runs as written.
+     */
+    native function shell(command: String): int32 {
+        size_t n = strlen(command);
+        char* quoted = (char*)malloc(n + 3);
+        if (quoted == NULL) return -1;
+        quoted[0] = '"';
+        memcpy(quoted + 1, command, n);
+        quoted[n + 1] = '"';
+        quoted[n + 2] = 0;
+        int r = system(quoted);
+        free(quoted);
+        return (int32_t)r;
+    }
+
+    native function catchTermination(): void { SetConsoleCtrlHandler(lm_os_on_console, TRUE); }
+
+    native function terminating(): bool { return InterlockedCompareExchange(&lm_os_terminating, 0, 0) != 0; }
+}

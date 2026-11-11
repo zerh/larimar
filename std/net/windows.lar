@@ -1,0 +1,92 @@
+// std.net.windows: sockets on Windows (Winsock), and its TLS servers (not there yet).
+
+import std.net { NetSystem, Socket };
+import std.os { WindowsPlatform };
+
+public class WindowsNet implements NetSystem, WindowsPlatform {
+    cinclude "<winsock2.h>";
+    cinclude "<ws2tcpip.h>";
+
+    ccode {
+        typedef SOCKET LmSocket;
+        static int32_t lm_socket_close(LmSocket s) { return (int32_t)closesocket(s); }
+        static long long lm_net_dup(SOCKET s) {
+            WSAPROTOCOL_INFOW info;
+            SOCKET d;
+            if (WSADuplicateSocketW(s, GetCurrentProcessId(), &info) != 0) return -1;
+            d = WSASocketW(FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, &info, 0, 0);
+            return d == INVALID_SOCKET ? -1 : (long long)d;
+        }
+        static SOCKET lm_net_adopt(long long n) { return (SOCKET)n; }
+        static int lm_net_readable(SOCKET s, int ms) {
+            WSAPOLLFD p;
+            p.fd = s;
+            p.events = POLLRDNORM;
+            p.revents = 0;
+            return WSAPoll(&p, 1, ms) > 0;
+        }
+        static long long lm_net_number(SOCKET s) { return (long long)s; }
+        /* which of these sockets (numbers) can be read (or were closed) within ms: 1 in ready[i] */
+        static int lm_net_poll(long long* fds, int count, int* ready, int readyCount, int ms) {
+            WSAPOLLFD few[64];
+            WSAPOLLFD* p = count <= 64 ? few : (WSAPOLLFD*)malloc(sizeof(WSAPOLLFD) * (size_t)count);
+            int n = p ? count : 0;
+            for (int i = 0; i < n; i++) { p[i].fd = (SOCKET)fds[i]; p[i].events = POLLRDNORM; p[i].revents = 0; }
+            int r = n > 0 ? WSAPoll(p, (ULONG)n, ms) : -1;
+            for (int i = 0; i < readyCount; i++) ready[i] = i < n && r > 0 && p[i].revents != 0;
+            if (p != few) free(p);
+            return r;
+        }
+    }
+
+    native function start(): void {
+        WSADATA data;
+        WSAStartup(MAKEWORD(2, 2), &data);
+    }
+
+    native function lastError(): int32 {
+        int e = WSAGetLastError();
+        if (e == WSAECONNREFUSED) return 2;
+        if (e == WSAETIMEDOUT || e == WSAEWOULDBLOCK) return 3;
+        if (e == WSAECONNRESET || e == WSAECONNABORTED) return 5;
+        if (e == WSAEADDRINUSE) return 6;
+        return 100 + e;
+    }
+
+    native function interrupted(): bool { return WSAGetLastError() == WSAEINTR; }
+
+    native function finishWriting(s: Socket): void { shutdown(s, SD_SEND); }
+
+    native function setTimeout(s: Socket, which: int32, ms: int32): void {
+        DWORD w = (DWORD)ms;
+        setsockopt(s, SOL_SOCKET, which, (const char*)&w, (int)sizeof w);
+    }
+}
+
+/** On Windows there is no TLS server yet: each call says so. */
+public class WindowsTlsServers implements WindowsPlatform {
+    ccode {
+        #define LM_OSSL_TEXT 300
+        typedef struct { int32_t error; char text[LM_OSSL_TEXT]; long long ctx; } LmTlsCtx;
+        typedef struct { int32_t error; char text[LM_OSSL_TEXT]; bool open, eof; } LmOsslConn;
+        static LmTlsCtx* lm_tlss_context(RtMem* m, const char* cert, const char* key) {
+            LmTlsCtx* c = (LmTlsCtx*)rt_mem_alloc(m, sizeof(LmTlsCtx), 0);
+            memset(c, 0, sizeof *c);
+            (void)cert; (void)key;
+            c->error = 51;
+            snprintf(c->text, LM_OSSL_TEXT, "a TLS server is not available on Windows yet");
+            return c;
+        }
+        static long long lm_tlss_context_number(LmTlsCtx* c) { return c->ctx; }
+        static LmOsslConn* lm_tlss_accept(RtMem* m, long long ctx, SOCKET fd) {
+            LmOsslConn* t = (LmOsslConn*)rt_mem_alloc(m, sizeof(LmOsslConn), 0);
+            memset(t, 0, sizeof *t);
+            (void)ctx; (void)fd;
+            t->error = 51;
+            return t;
+        }
+        static int32_t lm_ossl_read(LmOsslConn* t, uint8_t* items, int32_t len) { (void)t; (void)items; (void)len; return -1; }
+        static int32_t lm_ossl_write(LmOsslConn* t, const uint8_t* items, int32_t len) { (void)t; (void)items; (void)len; return -1; }
+        static void lm_ossl_close(LmOsslConn* t) { t->open = false; }
+    }
+}

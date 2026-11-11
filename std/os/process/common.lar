@@ -1,0 +1,21 @@
+// std.os.process.common: the C both systems share (copies of the arguments and the environment).
+// Its own module so that it reaches the C before the classes of each system, which use it.
+
+ccode {
+    static char* lm_proc_copy(const char* s) {
+        size_t n = strlen(s);
+        char* c = (char*)malloc(n + 1);
+        if (!c) rt_panic("out of memory starting a process", 0);
+        memcpy(c, s, n + 1);
+        return c;
+    }
+
+    static void lm_proc_push(char*** list, int* count, const char* s) {
+        char** grown = (char**)realloc(*list, sizeof(char*) * (size_t)(*count + 2));
+        if (!grown) rt_panic("out of memory starting a process", 0);
+        grown[*count] = lm_proc_copy(s);
+        grown[*count + 1] = NULL;
+        *list = grown;
+        *count += 1;
+    }
+}

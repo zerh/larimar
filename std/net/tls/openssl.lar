@@ -1,0 +1,81 @@
+// std.net.tls.openssl: the TLS client on Linux, over the OpenSSL of std.net's servers.
+
+import std.net.tls.common;
+import std.net.openssl;
+import std.os { LinuxPlatform };
+
+/** Linux: OpenSSL, loaded at run time (std.net's, shared with its TLS servers). */
+public class OpenSslTls implements LinuxPlatform {
+    ccode {
+        /* ---------------- Linux and others: OpenSSL ----------------------------------------------------
+           Over the TcpSocket's descriptor, with the OpenSSL of std.net (loaded the first time https:// is
+           used, and shared with its TLS servers): the connection, its reading, writing and errors are
+           std.net's; this is only what a client does differently (its context, the name it checks). */
+        #include <errno.h>
+        #include <arpa/inet.h>
+
+        typedef LmOsslConn LmTls;
+
+        static bool lm_tls_needs_socket(void) { return true; }
+
+        static bool lm_tls_is_ip(const char* host) {
+            unsigned char a[16];
+            return inet_pton(AF_INET, host, a) == 1 || inet_pton(AF_INET6, host, a) == 1;
+        }
+
+        static void lm_tls_close(LmTls* t) { lm_ossl_close(t); }
+
+        static LmTls* lm_tls_open_host(RtMem* m, const char* host, int32_t port, bool verify, int32_t timeoutMs) {   /* not used here */
+            (void)host; (void)port; (void)verify; (void)timeoutMs;
+            LmTls* t = lm_ossl_conn(m);
+            t->error = 51;
+            return t;
+        }
+
+        /* over a connected socket, with its timeouts */
+        static LmTls* lm_tls_open_socket(RtMem* m, int fd, const char* host, bool verify) {
+            LmTls* t = lm_ossl_conn(m);
+            if (!lm_ossl_load()) { t->error = 51; memcpy(t->text, lm_ossl_missing, LM_OSSL_TEXT); return t; }
+            lm_ossl.ERR_clear_error();
+            t->ctx = lm_ossl.SSL_CTX_new(lm_ossl.TLS_client_method());
+            if (!t->ctx) { t->error = 50; lm_ossl_error(t->text, "cannot create a TLS context"); return t; }
+            rt_mem_on_free(m, lm_ossl_final, t, 0);
+            lm_ossl.SSL_CTX_ctrl(t->ctx, 123, 0x0303, NULL);          /* SSL_CTX_set_min_proto_version: TLS 1.2 */
+            if (lm_ossl.OpenSSL_version_num() >= 0x30000000UL) {
+                lm_ossl.SSL_CTX_ctrl(t->ctx, 32, 1L << 7, NULL);        /* SSL_OP_IGNORE_UNEXPECTED_EOF: an end, not an error */
+            }
+            if (verify) {
+                lm_ossl.SSL_CTX_set_default_verify_paths(t->ctx);      /* the system's trusted certificates */
+                lm_ossl.SSL_CTX_set_verify(t->ctx, 1, NULL);           /* SSL_VERIFY_PEER */
+            }
+            t->ssl = lm_ossl.SSL_new(t->ctx);
+            if (!t->ssl) { t->error = 50; lm_ossl_error(t->text, "cannot create a TLS connection"); return t; }
+            lm_ossl.SSL_set_fd(t->ssl, (int)fd);
+            bool ip = lm_tls_is_ip(host);
+            if (!ip) lm_ossl.SSL_ctrl(t->ssl, 55, 0, (void*)host);        /* SNI: SSL_set_tlsext_host_name */
+            if (verify) {
+                if (ip) lm_ossl.X509_VERIFY_PARAM_set1_ip_asc(lm_ossl.SSL_get0_param(t->ssl), host);
+                else lm_ossl.SSL_set1_host(t->ssl, host);
+            }
+            errno = 0;
+            int r = lm_ossl.SSL_connect(t->ssl);
+            if (r != 1) {
+                long v = lm_ossl.SSL_get_verify_result(t->ssl);
+                if (verify && v != 0) {
+                    t->error = 50;
+                    snprintf(t->text, LM_OSSL_TEXT, "certificate rejected: %s", lm_ossl.X509_verify_cert_error_string(v));
+                } else if (lm_ossl_io_error(t, r, "handshake failed") == 0) {
+                    t->eof = false;
+                    t->error = 50;
+                    snprintf(t->text, LM_OSSL_TEXT, "the server closed the connection during the handshake");
+                }
+                return t;
+            }
+            t->open = true;
+            return t;
+        }
+
+        static int32_t lm_tls_read(LmTls* t, uint8_t* items, int32_t len) { return lm_ossl_read(t, items, len); }
+        static int32_t lm_tls_write(LmTls* t, const uint8_t* items, int32_t len) { return lm_ossl_write(t, items, len); }
+    }
+}

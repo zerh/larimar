@@ -11,42 +11,14 @@
 // anything new, SHA-256. The results are new lists, created where the caller puts them.
 
 import std.os;
-import std.os { OS, UnixPlatform, MacOSPlatform, WindowsPlatform };
+import std.os { OS };
+import std.crypto.posix { UrandomSource };
+import std.crypto.macos { MacOSRandomSource };
+import std.crypto.windows { WindowsRandomSource };
 
-/** Where the secure random bytes come from: one class for each system. */
-interface RandomSource {
+/** Where the secure random bytes come from: a class for each platform (std/crypto/posix.lar, macos.lar, windows.lar). */
+public interface RandomSource {
     function fill(items: byte[]): bool;
-}
-
-class UrandomSource implements RandomSource, UnixPlatform {
-    native function fill(items: byte[]): bool {
-        FILE* f = fopen("/dev/urandom", "rb");
-        if (!f) return false;
-        size_t n = fread(items, 1, (size_t)items_length, f);
-        fclose(f);
-        return n == (size_t)items_length;
-    }
-}
-
-class MacOSRandomSource implements RandomSource, MacOSPlatform {
-    ccode {
-        void arc4random_buf(void* buffer, size_t length);   /* declared here: -std=c99 hides it in stdlib.h */
-    }
-
-    native function fill(items: byte[]): bool {
-        arc4random_buf(items, (size_t)items_length);
-        return true;
-    }
-}
-
-class WindowsRandomSource implements RandomSource, WindowsPlatform {
-    cinclude "<windows.h>";
-
-    ccode {
-        BOOLEAN NTAPI SystemFunction036(PVOID buffer, ULONG length);     /* RtlGenRandom, in advapi32 */
-    }
-
-    native function fill(items: byte[]): bool { return SystemFunction036(items, (ULONG)items_length) != 0; }
 }
 
 let randomSource: RandomSource = switch (os.platform()) {

@@ -9,7 +9,8 @@
 import std.io { IoError, raise };
 import std.io { InputStream, OutputStream };
 import std.os;
-import std.os { OS, WindowsPlatform };
+import std.os { OS };
+import std.io.console.windows { WindowsConsole };
 
 cinclude "<errno.h>";
 
@@ -24,16 +25,6 @@ native function fread(into: byte*, size: uint64, count: uint64, f: CStream): uin
 native function fwrite(from: byte*, size: uint64, count: uint64, f: CStream): uint64;
 native function fflush(f: CStream): int32;
 native function ferror(f: CStream): int32;
-/** Only Windows turns \n into \r\n on the way out: binary mode there. */
-class WindowsConsole implements WindowsPlatform {
-    cinclude "<io.h>";
-    cinclude "<fcntl.h>";
-
-    native function binaryMode(): void {
-        _setmode(_fileno(stdin), _O_BINARY);
-        _setmode(_fileno(stdout), _O_BINARY);
-    }
-}
 
 /** A line of a C stream, without its end; null at its end. */
 function lineOf(f: CStream): String? {

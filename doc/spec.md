@@ -7,7 +7,7 @@ document says, and an implementation is correct when it does what this document 
 [Manual](manual.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 1.6.1 (language 1.0)`. A compiler release may add to the standard library and to the tools
+`larimar 1.7.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
@@ -1432,7 +1432,8 @@ not a Larimar `String`. Without `=`, the C name is the same.
   during the call. A memory in another position is passed explicitly.
 - A parameter of type `Context` is not written in the call either: it carries the function given in the
   callback parameter ([§19.8](#198-c-function-pointers-and-callbacks)).
-- When the module has no `cinclude` and no `ccode`, the compiler writes the C prototype of each native
+- When the module has no `cinclude` and no `ccode`, neither it nor its parts (the modules in the folder
+  of its name, `net/posix.lar` for `net.lar`), the compiler writes the C prototype of each native
   function whose C is a plain name.
 - A native function names its C function, or has a body of C (§19.11). In the standard library,
   `std.memory` declares `limit` and `compact` as native functions that the compiler writes itself.

@@ -1,0 +1,10 @@
+// std.net.tls.common: what the TLS client of every system shares in C (its error codes and texts).
+// Its own module so that it reaches the C before the classes of each system, which use it.
+
+ccode {
+    #define LM_NET_TLS              /* larimar build: Network.framework, secur32 or -ldl */
+
+    /* error codes: 1 host not found, 2 refused, 3 timeout, 4 closed, 5 reset, 50 TLS failed (text),
+       51 TLS unavailable (text), 100+ other */
+    #define LM_TLS_TEXT 300
+}

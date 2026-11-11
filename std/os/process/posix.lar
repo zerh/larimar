@@ -1,0 +1,190 @@
+// std.os.process.posix: processes on Unix (fork, exec, pipes, poll, waitpid).
+
+import std.os.process { Executables };
+import std.os.process.common;
+import std.os { UnixPlatform };
+
+/** Processes on Unix: fork and exec, pipes, poll and waitpid. */
+public class PosixProcesses implements UnixPlatform {
+    cinclude "<unistd.h>";
+    cinclude "<signal.h>";
+    cinclude "<poll.h>";
+    cinclude "<fcntl.h>";
+    cinclude "<sys/wait.h>";
+
+    ccode {
+        typedef struct LmProcess {
+            char** args;            /* program and arguments, NULL at the end */
+            int argCount;
+            char** env;             /* "NAME=value" added to this program's environment */
+            int envCount;
+            int quiet;
+            int mergeErrors;        /* its error output goes into its output */
+            int shareConsole;       /* it uses this program's input, output and error output */
+            int started, exited, code;
+            pid_t pid;
+            int input, output;
+        } LmProcess;
+
+        static LmProcess* lm_proc_new(const char* program, int quiet, int mergeErrors, int shareConsole) {
+            LmProcess* p = (LmProcess*)calloc(1, sizeof(LmProcess));
+            if (!p) rt_panic("out of memory starting a process", 0);
+            p->quiet = quiet;
+            p->mergeErrors = mergeErrors;
+            p->shareConsole = shareConsole;
+            p->input = p->output = -1;
+            lm_proc_push(&p->args, &p->argCount, program);
+            return p;
+        }
+        static void lm_proc_arg(LmProcess* p, const char* a) { lm_proc_push(&p->args, &p->argCount, a); }
+        static void lm_proc_env(LmProcess* p, const char* e) { lm_proc_push(&p->env, &p->envCount, e); }
+
+        /* Milliseconds from some fixed moment: for the time a read may still wait. */
+        static long long lm_proc_now(void) {
+            struct timespec t;
+            clock_gettime(CLOCK_MONOTONIC, &t);
+            return (long long)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+        }
+
+        static void lm_proc_close_input(LmProcess* p) {
+            if (p->input >= 0) { close(p->input); p->input = -1; }
+        }
+
+
+        /* Starts it: 0, or the error code of the system (the program was not found, cannot run...). */
+        static int lm_proc_start(LmProcess* p) {
+            int in[2], out[2], report[2];
+            if (pipe(in) != 0) return errno;
+            if (pipe(out) != 0) { close(in[0]); close(in[1]); return errno; }
+            if (pipe(report) != 0) { close(in[0]); close(in[1]); close(out[0]); close(out[1]); return errno; }
+            fcntl(report[1], F_SETFD, FD_CLOEXEC);          /* closed by exec: an empty report means it started */
+            signal(SIGPIPE, SIG_IGN);                       /* writing to one that ended is an error, not the end of this one */
+            fflush(stdout);
+            fflush(stderr);
+            pid_t pid = fork();
+            if (pid < 0) {
+                int e = errno;
+                close(in[0]); close(in[1]); close(out[0]); close(out[1]); close(report[0]); close(report[1]);
+                return e;
+            }
+            if (pid == 0) {                                 /* the new process */
+                if (!p->shareConsole) {
+                    dup2(in[0], 0);
+                    dup2(out[1], 1);
+                }
+                if (p->mergeErrors && !p->shareConsole) {
+                    dup2(out[1], 2);
+                } else if (p->quiet) {
+                    int null = open("/dev/null", O_WRONLY);
+                    if (null >= 0) { dup2(null, 2); close(null); }
+                }
+                close(in[0]); close(in[1]); close(out[0]); close(out[1]); close(report[0]);
+                for (int i = 0; i < p->envCount; i++) putenv(p->env[i]);
+                execvp(p->args[0], p->args);
+                int e = errno;
+                if (write(report[1], &e, sizeof e) < 0) { }
+                _exit(127);
+            }
+            close(in[0]);
+            close(out[1]);
+            close(report[1]);
+            int e = 0;
+            ssize_t n;
+            do { n = read(report[0], &e, sizeof e); } while (n < 0 && errno == EINTR);
+            close(report[0]);
+            if (n > 0) {                                    /* exec failed: the child already ended */
+                int status;
+                waitpid(pid, &status, 0);
+                close(in[1]);
+                close(out[0]);
+                return e != 0 ? e : ENOENT;
+            }
+            p->pid = pid;
+            p->input = in[1];
+            p->output = out[0];
+            p->started = 1;
+            return 0;
+        }
+
+        /* What a start error means, in English. */
+        static const char* lm_proc_error_text(int code) {
+            if (code == ENOENT) return "not found";
+            if (code == EACCES) return "permission denied";
+            return strerror(code);
+        }
+
+        /* Writes all the bytes: 1, or 0 when it stopped reading (it ended, or closed its input). */
+        static int lm_proc_write(LmProcess* p, const char* bytes, long long count) {
+            while (count > 0) {
+                if (p->input < 0) return 0;
+                ssize_t n = write(p->input, bytes, (size_t)count);
+                if (n < 0 && errno == EINTR) continue;
+                if (n <= 0) return 0;
+                bytes += n;
+                count -= n;
+            }
+            return 1;
+        }
+
+        /* Reads what is there, waiting up to `ms`: the count, 0 when nothing came in time, -1 at its end. */
+        static int lm_proc_read(LmProcess* p, char* into, int size, int ms) {
+            struct pollfd w;
+            w.fd = p->output;
+            w.events = POLLIN;
+            w.revents = 0;
+            int r;
+            do { r = poll(&w, 1, ms); } while (r < 0 && errno == EINTR);
+            if (r == 0) return 0;
+            if (r < 0) return -1;
+            ssize_t n;
+            do { n = read(p->output, into, (size_t)size); } while (n < 0 && errno == EINTR);
+            return n > 0 ? (int)n : -1;
+        }
+
+        /* Waits up to `ms` (a negative ms: as long as it takes) for it to end: 1 when it ended, 0 if not yet. */
+        static int lm_proc_wait(LmProcess* p, int ms) {
+            if (p->exited) return 1;
+            long long until = lm_proc_now() + ms;
+            for (;;) {
+                int status = 0;
+                pid_t r = waitpid(p->pid, &status, ms < 0 ? 0 : WNOHANG);
+                if (r == p->pid) {
+                    p->code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+                    p->exited = 1;
+                    return 1;
+                }
+                if (r < 0 && errno != EINTR) { p->exited = 1; p->code = -1; return 1; }
+                if (ms >= 0 && lm_proc_now() >= until) return 0;
+                if (ms >= 0) {
+                    struct timespec t = { 0, 5000000 };
+                    nanosleep(&t, NULL);
+                }
+            }
+        }
+
+        static int lm_proc_code(LmProcess* p) { return p->code; }
+
+        static void lm_proc_kill(LmProcess* p) {
+            if (!p->started || p->exited) return;
+            kill(p->pid, SIGKILL);
+            lm_proc_wait(p, -1);
+        }
+
+        /* When its memory is freed: killed if it still runs, and everything closed. */
+        static void lm_proc_free(LmProcess* p) {
+            if (!p) return;
+            lm_proc_kill(p);
+            lm_proc_close_input(p);
+            if (p->output >= 0) close(p->output);
+            for (int i = 0; i < p->argCount; i++) free(p->args[i]);
+            for (int i = 0; i < p->envCount; i++) free(p->env[i]);
+            free(p->args);
+            free(p->env);
+            free(p);
+        }
+    }
+}
+
+public class PosixExecutables implements Executables, UnixPlatform {
+    native function check(path: String): bool { return access(path, X_OK) == 0; }
+}

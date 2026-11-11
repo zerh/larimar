@@ -1,0 +1,212 @@
+// std.os.process.windows: processes on Windows (CreateProcess, pipes, handles).
+
+import std.os.process { Executables };
+import std.os.process.common;
+import std.os { WindowsPlatform };
+
+/** Processes on Windows: CreateProcess, pipes and handles. */
+public class WindowsProcesses implements WindowsPlatform {
+    cinclude "<windows.h>";
+    cinclude "<io.h>";
+
+    ccode {
+        #if defined(__TINYC__)          /* the windows.h of tcc predates Vista: what this uses of it */
+        ULONGLONG WINAPI GetTickCount64(void);
+        LPCH WINAPI GetEnvironmentStringsA(void);     /* tcc: a macro for GetEnvironmentStrings */
+        #endif
+
+        typedef struct LmProcess {
+            char** args;            /* program and arguments, NULL at the end */
+            int argCount;
+            char** env;             /* "NAME=value" added to this program's environment */
+            int envCount;
+            int quiet;
+            int mergeErrors;        /* its error output goes into its output */
+            int shareConsole;       /* it uses this program's input, output and error output */
+            int started, exited, code;
+            HANDLE process, input, output;
+        } LmProcess;
+
+        static LmProcess* lm_proc_new(const char* program, int quiet, int mergeErrors, int shareConsole) {
+            LmProcess* p = (LmProcess*)calloc(1, sizeof(LmProcess));
+            if (!p) rt_panic("out of memory starting a process", 0);
+            p->quiet = quiet;
+            p->mergeErrors = mergeErrors;
+            p->shareConsole = shareConsole;
+            p->process = p->input = p->output = NULL;
+            lm_proc_push(&p->args, &p->argCount, program);
+            return p;
+        }
+        static void lm_proc_arg(LmProcess* p, const char* a) { lm_proc_push(&p->args, &p->argCount, a); }
+        static void lm_proc_env(LmProcess* p, const char* e) { lm_proc_push(&p->env, &p->envCount, e); }
+
+        /* Milliseconds from some fixed moment: for the time a read may still wait. */
+        static long long lm_proc_now(void) {
+            return (long long)GetTickCount64();
+        }
+
+        static void lm_proc_close_input(LmProcess* p) {
+            if (p->input) { CloseHandle(p->input); p->input = NULL; }
+        }
+
+        /* One argument for CreateProcess's command line, quoted the way the C runtime reads it back. */
+        static void lm_proc_quote(char** line, size_t* len, size_t* cap, const char* a) {
+            size_t need = *len + strlen(a) * 2 + 4;
+            if (need > *cap) {
+                *cap = need * 2;
+                *line = (char*)realloc(*line, *cap);
+                if (!*line) rt_panic("out of memory starting a process", 0);
+            }
+            char* o = *line + *len;
+            if (*len > 0) *o++ = ' ';
+            *o++ = '"';
+            for (const char* c = a; *c; c++) {
+                size_t slashes = 0;
+                while (c[slashes] == '\\') slashes++;
+                if (c[slashes] == '"' || c[slashes] == 0) {
+                    for (size_t i = 0; i < slashes * 2; i++) *o++ = '\\';    /* before a quote, or the end: doubled */
+                    c += slashes;
+                    if (*c == 0) break;
+                    *o++ = '\\';
+                    *o++ = '"';
+                } else {
+                    for (size_t i = 0; i < slashes; i++) *o++ = '\\';
+                    c += slashes;
+                    *o++ = *c;
+                }
+            }
+            *o++ = '"';
+            *o = 0;
+            *len = (size_t)(o - *line);
+        }
+
+        /* Starts it: 0, or the error code of the system (the program was not found, cannot run...). */
+        static int lm_proc_start(LmProcess* p) {
+            SECURITY_ATTRIBUTES sa;
+            HANDLE inRead, inWrite, outRead, outWrite, errTarget = NULL;
+            STARTUPINFOA si;
+            PROCESS_INFORMATION pi;
+            char* line = NULL;
+            size_t len = 0, cap = 0;
+            char* block = NULL;
+            BOOL ok;
+            sa.nLength = sizeof sa;
+            sa.lpSecurityDescriptor = NULL;
+            sa.bInheritHandle = TRUE;
+            if (!CreatePipe(&inRead, &inWrite, &sa, 0)) return (int)GetLastError();
+            if (!CreatePipe(&outRead, &outWrite, &sa, 0)) { CloseHandle(inRead); CloseHandle(inWrite); return (int)GetLastError(); }
+            SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0);          /* this side stays here */
+            SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
+            if (p->quiet) errTarget = CreateFileA("NUL", GENERIC_WRITE, FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);
+            for (int i = 0; i < p->argCount; i++) lm_proc_quote(&line, &len, &cap, p->args[i]);
+            if (p->envCount > 0) {                                          /* this program's environment, and the additions */
+                char* current = GetEnvironmentStringsA();
+                size_t used = 0, size = 0;
+                const char* e = current;
+                while (*e) { size_t n = strlen(e) + 1; used += n; e += n; }
+                size = used + 1;
+                for (int i = 0; i < p->envCount; i++) size += strlen(p->env[i]) + 1;
+                block = (char*)malloc(size);
+                if (!block) rt_panic("out of memory starting a process", 0);
+                memcpy(block, current, used);
+                for (int i = 0; i < p->envCount; i++) {
+                    size_t n = strlen(p->env[i]) + 1;
+                    memcpy(block + used, p->env[i], n);
+                    used += n;
+                }
+                block[used] = 0;
+                FreeEnvironmentStringsA(current);
+            }
+            memset(&si, 0, sizeof si);
+            si.cb = sizeof si;
+            si.dwFlags = STARTF_USESTDHANDLES;
+            si.hStdInput = p->shareConsole ? GetStdHandle(STD_INPUT_HANDLE) : inRead;
+            si.hStdOutput = p->shareConsole ? GetStdHandle(STD_OUTPUT_HANDLE) : outWrite;
+            si.hStdError = p->mergeErrors && !p->shareConsole ? outWrite : p->quiet && errTarget != INVALID_HANDLE_VALUE ? errTarget : GetStdHandle(STD_ERROR_HANDLE);
+            ok = CreateProcessA(NULL, line, NULL, NULL, TRUE, 0, block, NULL, &si, &pi);
+            int error = ok ? 0 : (int)GetLastError();
+            free(line);
+            free(block);
+            CloseHandle(inRead);
+            CloseHandle(outWrite);
+            if (errTarget && errTarget != INVALID_HANDLE_VALUE) CloseHandle(errTarget);
+            if (!ok) { CloseHandle(inWrite); CloseHandle(outRead); return error; }
+            CloseHandle(pi.hThread);
+            p->process = pi.hProcess;
+            p->input = inWrite;
+            p->output = outRead;
+            p->started = 1;
+            return 0;
+        }
+
+        /* What a start error means, in English. */
+        static const char* lm_proc_error_text(int code) {
+            if (code == ERROR_FILE_NOT_FOUND || code == ERROR_PATH_NOT_FOUND) return "not found";
+            if (code == ERROR_ACCESS_DENIED) return "permission denied";
+            return "cannot start it";
+        }
+
+        /* Writes all the bytes: 1, or 0 when it stopped reading (it ended, or closed its input). */
+        static int lm_proc_write(LmProcess* p, const char* bytes, long long count) {
+            while (count > 0) {
+                DWORD wrote = 0;
+                if (!p->input || !WriteFile(p->input, bytes, (DWORD)count, &wrote, NULL)) return 0;
+                bytes += wrote;
+                count -= wrote;
+            }
+            return 1;
+        }
+
+        /* Reads what is there, waiting up to `ms`: the count, 0 when nothing came in time, -1 at its end. */
+        static int lm_proc_read(LmProcess* p, char* into, int size, int ms) {
+            long long until = lm_proc_now() + ms;
+            for (;;) {
+                DWORD ready = 0, got = 0;
+                if (!PeekNamedPipe(p->output, NULL, 0, NULL, &ready, NULL)) return -1;     /* it ended */
+                if (ready > 0) {
+                    if (!ReadFile(p->output, into, ready < (DWORD)size ? ready : (DWORD)size, &got, NULL)) return -1;
+                    return (int)got;
+                }
+                if (lm_proc_now() >= until) return 0;
+                Sleep(5);
+            }
+        }
+
+        /* Waits up to `ms` (a negative ms: as long as it takes) for it to end: 1 when it ended, 0 if not yet. */
+        static int lm_proc_wait(LmProcess* p, int ms) {
+            if (p->exited) return 1;
+            if (WaitForSingleObject(p->process, ms < 0 ? INFINITE : (DWORD)ms) != WAIT_OBJECT_0) return 0;
+            DWORD code = 0;
+            GetExitCodeProcess(p->process, &code);
+            p->code = (int)code;
+            p->exited = 1;
+            return 1;
+        }
+
+        static int lm_proc_code(LmProcess* p) { return p->code; }
+
+        static void lm_proc_kill(LmProcess* p) {
+            if (!p->started || p->exited) return;
+            TerminateProcess(p->process, 137);
+            lm_proc_wait(p, -1);
+        }
+
+        /* When its memory is freed: killed if it still runs, and everything closed. */
+        static void lm_proc_free(LmProcess* p) {
+            if (!p) return;
+            lm_proc_kill(p);
+            lm_proc_close_input(p);
+            if (p->output) CloseHandle(p->output);
+            if (p->process) CloseHandle(p->process);
+            for (int i = 0; i < p->argCount; i++) free(p->args[i]);
+            for (int i = 0; i < p->envCount; i++) free(p->env[i]);
+            free(p->args);
+            free(p->env);
+            free(p);
+        }
+    }
+}
+
+public class WindowsExecutables implements Executables, WindowsPlatform {
+    native function check(path: String): bool { return _access(path, 0) == 0; }
+}
