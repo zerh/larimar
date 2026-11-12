@@ -128,7 +128,7 @@ the debuggers and a client as other programs (`std.os.process`) and talk to them
 ## Plugins and dependencies
 
 Other programs of `$LARIMAR_HOME/bin` answer commands of `larimar`, declared in `$LARIMAR_HOME/plugins/<name>.toml`
-(that is how Minero gives `larimar add` and `larimar fetch`). A project's `[dependencies]` live in
+(a tool can add `larimar hello` that way). A project's `[dependencies]` live in
 `deps/<name>/`: their modules are imported from `deps/<name>/src` and their `[c]` is added to the
 project's. ([manual, chapter 26](docs/manual.md#26-projects-larimartoml-and-larimar-build).)
 

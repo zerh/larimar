@@ -4445,7 +4445,7 @@ que una errata no pase desapercibida.
 sql = "github.com/zerh/sql@v1.2.0"
 ```
 
-Un gestor de dependencias (Minero, con `larimar add` y `larimar fetch`) baja cada una a `deps/<nombre>/`.
+Cada una va en `deps/<nombre>/` (el compilador no las descarga: se copian o se clonan ahí).
 El compilador solo lee los nombres, y hace tres cosas con ellos:
 
 - **Un import busca también en las dependencias**: cuando `import sql.core;` no está en `src/`, se busca en
@@ -4453,7 +4453,7 @@ El compilador solo lee los nombres, y hace tres cosas con ellos:
 - **El C de cada dependencia se suma al del proyecto**: las `static_libraries`, `dynamic_libraries`, sus
   rutas, `include_paths` y `sources` de `deps/<nombre>/larimar.toml` (su `[c]` y las secciones de su plataforma), con sus rutas
   relativas a la carpeta de la dependencia.
-- **Una dependencia que no está en `deps/` es un error**: `'sql' is in [dependencies] but not in deps/: get it with 'larimar fetch' (Minero)`.
+- **Una dependencia que no está en `deps/` es un error**: `'sql' is in [dependencies] but not in deps/: put it in deps/sql`.
 
 **Por plataforma.** `[c.linux]`, `[c.macos]`, `[c.windows]` y `[c.unix]` (Linux y macOS) llevan las mismas
 claves que `[c]` y solo cuentan en esa plataforma: sus listas se suman a las de `[c]`, y un `compiler` ahí
@@ -4751,23 +4751,22 @@ Un programa de `$LARIMAR_HOME/bin` puede añadir comandos a `larimar`, declarado
 `$LARIMAR_HOME/plugins/`, uno por plugin:
 
 ```toml
-# $LARIMAR_HOME/plugins/minero.toml
+# $LARIMAR_HOME/plugins/mytool.toml
 [plugin]
-name = "minero"
-program = "minero"           # en $LARIMAR_HOME/bin, en ningún otro sitio
+name = "mytool"
+program = "mytool"           # en $LARIMAR_HOME/bin, en ningún otro sitio
 version = "1.0.0"
 
 [commands]
-add = ["add"]                # larimar add x  ->  bin/minero add x
-fetch = ["fetch"]
+hello = ["hello"]            # larimar hello x  ->  bin/mytool hello x
 ```
 
-- `larimar add github.com/zerh/sql@v1` ejecuta `bin/minero add github.com/zerh/sql@v1` en la misma
+- `larimar hello world` ejecuta `bin/mytool hello world` en la misma
   consola, con `LARIMAR_HOME` puesto, y su código de salida es el de larimar.
 - Un plugin no puede tomar un comando propio de larimar (`build`, `run`, `test`...), y dos plugins no
   pueden tomar el mismo: los dos casos se avisan, y el comando no se toma.
 - `larimar help` lista los comandos de los plugins y quién los atiende.
-- Si el programa no está, el error lo dice: `'larimar add' is answered by minero (plugins/minero.toml), but bin/minero does not exist`.
+- Si el programa no está, el error lo dice: `'larimar hello' is answered by mytool (plugins/mytool.toml), but bin/mytool does not exist`.
 - Instalar un plugin es poner su programa en `bin/` y su archivo en `plugins/`; quitarlo, borrar los dos.
 
 ### Pruebas: `test function` y `larimar test`

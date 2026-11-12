@@ -267,12 +267,12 @@ function larimarHome(): String { return Paths.parent(stdDir()); }
  * The commands that plugins declare, one file each in $LARIMAR_HOME/plugins:
  *
  *   [plugin]
- *   name = "minero"
- *   program = "minero"             # a program of $LARIMAR_HOME/bin, nowhere else
+ *   name = "mytool"
+ *   program = "mytool"             # a program of $LARIMAR_HOME/bin, nowhere else
  *   version = "1.0.0"
  *
  *   [commands]
- *   add = ["add"]                  # larimar add x  ->  bin/minero add x
+ *   hello = ["hello"]              # larimar hello x  ->  bin/mytool hello x
  *
  * A plugin cannot take a command of larimar itself, and two plugins cannot take the same one: both are
  * problems (and that command is not taken).
@@ -527,7 +527,7 @@ function project(dir: String, config: Any): Project? {
             topKeys.push(sectionName.clone());
             continue;
         }
-        if (sectionName == "dependencies") { continue; }      // the versions are for Minero; the compiler only looks for deps/<name>
+        if (sectionName == "dependencies") { continue; }      // the versions are for whoever fetches them; the compiler only looks for deps/<name>
         if (sectionName != "project" && sectionName != "c" && sectionName != "library") {
             problems.push("unknown section [${sectionName}] (sections: [project], [library], [c], [dependencies])");
             continue;
@@ -601,12 +601,12 @@ function project(dir: String, config: Any): Project? {
         for (x in list(platform, "include_paths", [])) { includePaths.push(x.clone()); }
         for (x in list(platform, "sources", [])) { sources.push(x.clone()); }
     }
-    // [dependencies]: Minero puts each one in deps/<name>; its modules are imported from deps/<name>/src,
+    // [dependencies]: each one is in deps/<name>; its modules are imported from deps/<name>/src,
     // and the C of its [c] (libraries, paths, sources) is added to the project's
     for (depName, _ in config.dependencies.fields) {
         let depDir: String = Paths.join(Paths.join(dir, "deps"), depName);
         if (!Files.isDirectory(depDir)) {
-            problems.push("'${depName}' is in [dependencies] but not in deps/: get it with 'larimar fetch' (Minero)".clone());
+            problems.push("'${depName}' is in [dependencies] but not in deps/: put it in deps/${depName}".clone());
             continue;
         }
         let depToml: String = Paths.join(depDir, "larimar.toml");

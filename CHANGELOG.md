@@ -46,6 +46,8 @@ part of it, in the folder of its name.
 - The result of a method of a struct, or of a class without subclasses or superclass, is read as that of
   a function: it points only to the arguments its body can return. `p.expect(kind, "... ${name} ...")`
   gives a token that lives where `p` lives, whatever the message.
+- The documentation no longer names a dependency manager that does not exist yet: a dependency missing
+  from `deps/` says *put it in deps/<name>*, and the plugin example is a generic `mytool`.
 - The manuals and the specification are in `docs/`, next to the page that shows them (`manual.html`
   reads the ones published with it). The manual explains `native struct` and `native type`, and where
   `c"..."` is needed; the page no longer speaks of `#when`.

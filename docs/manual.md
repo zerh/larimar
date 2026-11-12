@@ -4451,15 +4451,15 @@ not go unnoticed.
 sql = "github.com/zerh/sql@v1.2.0"
 ```
 
-A dependency manager (Minero, with `larimar add` and `larimar fetch`) downloads each one into
-`deps/<name>/`. The compiler reads only the names, and does three things with them:
+Each one goes in `deps/<name>/` (the compiler does not download them: they are copied or cloned
+there). The compiler reads only the names, and does three things with them:
 
 - **An import looks in the dependencies too**: when `import sql.core;` is not in `src/`, it is looked for
   in `deps/*/src/` (`deps/sql/src/sql/core.lar`). A module that is in two dependencies is an error that names both.
 - **The C of each dependency is added to the project's**: the `static_libraries`, `dynamic_libraries`,
   their paths, `include_paths` and `sources` of `deps/<name>/larimar.toml` (its `[c]` and its platform's sections), with their paths
   relative to the dependency's folder.
-- **A dependency that is not in `deps/` is an error**: `'sql' is in [dependencies] but not in deps/: get it with 'larimar fetch' (Minero)`.
+- **A dependency that is not in `deps/` is an error**: `'sql' is in [dependencies] but not in deps/: put it in deps/sql`.
 
 **Per platform.** `[c.linux]`, `[c.macos]`, `[c.windows]` and `[c.unix]` (Linux and macOS) take the same
 keys as `[c]` and count only on that platform: their lists are added to `[c]`'s, and a `compiler` there
@@ -4755,23 +4755,22 @@ A program of `$LARIMAR_HOME/bin` can add commands to `larimar`, declared in a fi
 `$LARIMAR_HOME/plugins/`, one per plugin:
 
 ```toml
-# $LARIMAR_HOME/plugins/minero.toml
+# $LARIMAR_HOME/plugins/mytool.toml
 [plugin]
-name = "minero"
-program = "minero"           # in $LARIMAR_HOME/bin, nowhere else
+name = "mytool"
+program = "mytool"           # in $LARIMAR_HOME/bin, nowhere else
 version = "1.0.0"
 
 [commands]
-add = ["add"]                # larimar add x  ->  bin/minero add x
-fetch = ["fetch"]
+hello = ["hello"]            # larimar hello x  ->  bin/mytool hello x
 ```
 
-- `larimar add github.com/zerh/sql@v1` runs `bin/minero add github.com/zerh/sql@v1` on the same console,
+- `larimar hello world` runs `bin/mytool hello world` on the same console,
   with `LARIMAR_HOME` set, and its exit code is larimar's.
 - A plugin cannot take a command of larimar itself (`build`, `run`, `test`...), and two plugins cannot
   take the same one: both are reported, and the command is not taken.
 - `larimar help` lists the commands of the plugins and who answers them.
-- If the program is not there, the error says so: `'larimar add' is answered by minero (plugins/minero.toml), but bin/minero does not exist`.
+- If the program is not there, the error says so: `'larimar hello' is answered by mytool (plugins/mytool.toml), but bin/mytool does not exist`.
 - Installing a plugin is putting its program in `bin/` and its file in `plugins/`; removing it, deleting both.
 
 ### Tests: `test function` and `larimar test`

@@ -60507,7 +60507,8 @@ Project* project(RtMem* rt_dest, RtString dir, RtAny config) {
                 RtSb sb_9586 = rt_sb_mem(&tmp_9587, 609);
                 rt_sb_add(&sb_9586, "'", 1);
                 rt_sb_str(&sb_9586, depName);
-                rt_sb_add(&sb_9586, "' is in [dependencies] but not in deps/: get it with 'larimar fetch' (Minero)", 77);
+                rt_sb_add(&sb_9586, "' is in [dependencies] but not in deps/: put it in deps/", 56);
+                rt_sb_str(&sb_9586, depName);
                 RtCloneMap clones_9588 = rt_clone_map();
                 RtString copy_9589 = clone_s(rt_sb_finish(&sb_9586), (problems)->mem, &clones_9588);
                 rt_clone_done(&clones_9588);
