@@ -435,7 +435,7 @@ of a struct can modify `self`; the change is made on the variable it was called 
 A static function belongs to a type: it has no `self` and is called as `Type.name(...)` (or
 `module.Type.name(...)`), never through a value. It is declared inside the type with `static function`,
 or outside it, in the same module, as `function Type.name(...)`; the two forms are the same. Static
-functions exist in structs, classes, enums and native types; not in interfaces. They are not virtual and
+functions exist in structs, classes, enums, native types and interfaces (§9.4). They are not virtual and
 cannot be overridden.
 
 ### 8.3 Operators
@@ -495,10 +495,13 @@ with `in` ([§14](#14-memory)): it lives in its variable.
 ### 9.4 Interfaces
 
 ```
-interface NAME [ extends qualifiedName ( , qualifiedName )* ] { ( function NAME parameters [ : Type ] [ throws Type ] ; )* }
+interface NAME [ extends qualifiedName ( , qualifiedName )* ]
+    { ( function NAME parameters [ : Type ] [ throws Type ] ; | static function ... )* }
 ```
 
-An interface has only method signatures. `interface A extends B, C` has also the methods of `B` and `C`
+An interface has method signatures, and static functions (§8.2): functions of the interface itself, with
+a body and no `self`, called as `NAME.function(...)`. It has no fields, and a method that is not static
+has no body. `interface A extends B, C` has also the methods of `B` and `C`
 (and of what they extend); an interface that extends itself, directly or not, is an error. A value of an
 interface type is one of:
 
@@ -1408,7 +1411,7 @@ doors of §19: `native` declarations (C seen from Larimar), `export function`s (
 
 ```
 native function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] ( [ = C ] [ released by NAME ] ; | { C TEXT } )
-C = NAME | c"C TEXT"
+C = NAME | struct NAME | c"C TEXT"
 ```
 
 A `native` declaration names something of C. The name on the left is the Larimar one; after `=` comes
@@ -1444,7 +1447,7 @@ not a Larimar `String`. Without `=`, the C name is the same.
 native type NAME [ released by NAME ] ;                                   an opaque pointer (void*)
 native type NAME = CTYPE [ released by NAME ] ( ; | { member* } )         a C type
 native type NAME = ( Type , ... ) -> Type ;                               a pointer to a C function (§19.8)
-CTYPE  = NAME *...  |  "C TYPE"
+CTYPE  = [ struct ] NAME *...  |  c"C TYPE"
 member = let NAME : Type [ = NAME ] ;
        | native function NAME parameters [ : Type ] [ in lives ] [ throws Type ] = ( C | expression ) ;
        | native let NAME : Type = ( C | expression ) ;
@@ -1612,11 +1615,12 @@ methods with a C body panics. Platforms that do not contain one another (`UnixPl
 `WindowsPlatform`) in one class are an error. Its other methods, its fields and its type exist
 everywhere: the program is checked for every system at once.
 
-`std.os.platform()` gives the system as `enum OS { Linux, MacOS, Windows, Unix }`, from the C compiler's
-macros; a `switch` on it chooses the class:
+`Platform.current()`, a static function of that interface, gives the system as
+`enum OS { Linux, MacOS, Windows, Unix }`, from the C compiler's macros (`Platform.name()`, as text); a
+`switch` on it chooses the class:
 
 ```
-let clock: Clock = switch (os.platform()) {
+let clock: Clock = switch (Platform.current()) {
     case Linux, MacOS, Unix -> PosixClock {};
     case Windows -> WindowsClock {};
 };
@@ -1628,8 +1632,13 @@ has no fields, or it is synchronized.
 ## 20. Platforms
 
 What changes between systems is a class for each platform (§19.12), chosen with a `switch` on
-`std.os.platform()`. There are no directives: the C of each system goes inside the `#if` the compiler
-writes for that class.
+`Platform.current()`. There are no directives: the C of each system goes inside the `#if` the compiler
+writes for that class, so the generated C is the same for every system.
+
+A compiler may also generate the C of one platform only (`larimar --target linux`). The program means
+the same: `Platform.current()` is then that platform, a `switch` on it is its arm, the C of the classes
+for it is written without `#if`, and that of the other platforms is not written. The whole program is
+still checked.
 
 ---
 
@@ -1787,7 +1796,8 @@ topLevel             = const NAME : Type = expression ;
                      | [ synchronized ] class NAME [ extends qualifiedName ] [ implements qualifiedName ( , qualifiedName )* ]
                            { ( field | static staticMember | [ override ] function | native ( nativeFunction | nativeLet ) | operator
                                | cinclude "TEXT" ; | ccode { C TEXT } )* }
-                     | interface NAME [ extends qualifiedName ( , qualifiedName )* ] { ( function NAME parameters [ : Type ] [ throws Type ] ; )* }
+                     | interface NAME [ extends qualifiedName ( , qualifiedName )* ]
+                           { ( function NAME parameters [ : Type ] [ throws Type ] ; | static function )* }
                      | enum NAME { [ variant ( , variant )* [ , ] ] }
                      | native type NAME { ( static staticMember | native ( nativeFunction | nativeLet | nativeOperator ) | function )* }
                      | cinclude "TEXT" ;
@@ -1820,8 +1830,8 @@ cMember              = cField
                      | function
                      | static ( function | native function NAME parameters [ : Type ] = C ; )
 cField               = let NAME : Type [ = NAME ] ;
-C                    = NAME | c"TEXT"
-CTYPE                = NAME *... | c"TEXT"
+C                    = NAME | struct NAME | c"TEXT"
+CTYPE                = [ struct ] NAME *... | c"TEXT"
 
 
 Type                 = ( qualifiedName | ( Type ) | ( [ Type ( , Type )* ] ) -> Type ) suffix* [ thread safe ]

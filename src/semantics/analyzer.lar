@@ -31,6 +31,7 @@ import semantics.types {
     isCValue, isExternStruct, cCodeStd, CallInfo, CallK, BK, includeWhens, isResource, externInfoOf, platformWithin, platformCondition, isPtr, nativeOwner,
     isContextT, contextView, buildingLibrary, libraryRules, libraryPrefix
 };
+import semantics.linker { target, inTarget };
 import semantics.expressions {
     check, coerce, typeOf, regionOf, hasRefs, note, resolveType, resolveTop, resolveValue, evalConst, ConstVal,
     analyzeSwitch, TC_PARAM, TC_LET, TC_OTHER, intFits, namedHasRefs, refText
@@ -289,9 +290,10 @@ function narrower(a: String, b: String, owner: String, line: int32): String {
 }
 
 /**
- * The C of a class for one system goes only there: its cinclude, its ccode and the C functions of its
- * methods get that system, and each method with a C body calls its function inside a #when of it
- * (elsewhere it panics).
+ * The C of a class for one platform goes only there: its cinclude, its ccode and the C functions of its
+ * methods get that platform, and each method with a C body calls its function only there (elsewhere it
+ * panics). With --target nothing is left to the C compiler: the C of the target's classes is plain C,
+ * and that of the others is not generated.
  */
 function assignPlatforms(program: Program in default): void {
     for (d in program.decls) {
@@ -301,28 +303,59 @@ function assignPlatforms(program: Program in default): void {
             default -> {}
         }
     }
+    let kept: Node[*] = [] in default;
     for (d in program.decls) {
+        let owner: String = switch (d) {        // the class whose C this is
+            case CIncludeDecl c -> c.owner;
+            case CCodeDecl c -> c.owner;
+            case ExternFunctionDecl f -> f.owner;
+            default -> "";
+        };
+        let system: String = owner != "" ? platformOfClass(owner, d.line) : "";
+        if (target != "" && !inTarget(system)) { continue; }           // another platform's C: not generated
+        let written: String = target != "" ? "" : system;              // the target's C: no #if around it
         switch (d) {
-            case CIncludeDecl c when c.owner != "" -> { c.platform = platformOfClass(c.owner, c.line); }
-            case CCodeDecl c when c.owner != "" -> { c.platform = platformOfClass(c.owner, c.line); }
-            case ExternFunctionDecl f when f.owner != "" -> { f.platform = platformOfClass(f.owner, f.line); }
-            case ClassDecl c -> {
-                let system: String = platformOfClass(c.name, c.line);
-                if (system == "") { continue; }
-                for (m in c.methods) {
-                    if (!m.cBodied) { continue; }
-                    let line: int32 = m.line;
-                    let only: IfStmt = IfStmt { line, cond: BoolLit { line, value: true } in default, platform: system, hasElse: true } in default;
-                    for (st in m.body) { only.thenBody.push(st); }
-                    let panic: Call = Call { line, callee: Ident { line, name: "panic" } in default } in default;
-                    let shown: String = c.name.replace("__", ".");
-                    panic.args.push(StringLit { line, texts: ["'${shown}.${m.name}' is for ${system}, not for this system"] } in default);
-                    only.elseBody.push(ExprStmt { line, expr: panic } in default);
-                    m.body = [only] in default;
-                }
+            case CIncludeDecl c when owner != "" -> { c.platform = written; }
+            case CCodeDecl c when owner != "" -> { c.platform = written; }
+            case ExternFunctionDecl f when owner != "" -> { f.platform = written; }
+            case ExternFunctionDecl f when target != "" && f.name == "std__os__platformNumber" -> {
+                f.cBody = "return ${platformNumber(target)};" in default;          // what Platform.current() reads
             }
+            case ClassDecl c -> onlyOn(c, platformOfClass(c.name, c.line));
             default -> {}
         }
+        kept.push(d);
+    }
+    program.decls = kept;
+}
+
+/** The number std.os gives each platform (its platformNumber). */
+function platformNumber(platform: String): int32 {
+    return switch (platform) {
+        case "windows" -> 1;
+        case "macos" -> 2;
+        case "linux" -> 3;
+        default -> 0;
+    };
+}
+
+/** The methods with a C body of a class for one platform: they call their C only there; elsewhere they panic. */
+function onlyOn(c: ClassDecl in default, system: String in default): void {
+    if (system == "" || target != "" && inTarget(system)) { return; }
+    for (m in c.methods) {
+        if (!m.cBodied) { continue; }
+        let line: int32 = m.line;
+        let panic: Call = Call { line, callee: Ident { line, name: "panic" } in default } in default;
+        panic.args.push(StringLit { line, texts: ["'${c.name.replace("__", ".")}.${m.name}' is for ${system}, not for this system"] } in default);
+        let stop: Stmt = ExprStmt { line, expr: panic } in default;
+        if (target != "") {
+            m.body = [stop] in default;
+            continue;
+        }
+        let only: IfStmt = IfStmt { line, cond: BoolLit { line, value: true } in default, platform: system, hasElse: true } in default;
+        for (st in m.body) { only.thenBody.push(st); }
+        only.elseBody.push(stop);
+        m.body = [only] in default;
     }
 }
 
@@ -455,11 +488,7 @@ function typeNameTaken(name: String, line: int32): bool {
 function collectStatic(f: FunctionDecl in default): void {
     let t: String = f.typeName;
     let full: String = "${t}.${f.name}" in default;
-    let isType: bool = structOf(t) != null || classOf(t) != null || enumOf(t) != null || primByName(t) != null || isExternTypeName(t);
-    if (interfaceOf(t) != null) {
-        error(f.line, "Interfaces cannot have static functions ('${full}').");
-        return;
-    }
+    let isType: bool = structOf(t) != null || classOf(t) != null || interfaceOf(t) != null || enumOf(t) != null || primByName(t) != null || isExternTypeName(t);
     if (!isType) {
         error(f.line, "'${t}' is not a type, so '${full}' cannot be declared.");
         return;

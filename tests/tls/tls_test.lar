@@ -10,6 +10,7 @@ import std.io.files as Files;
 import std.io { IoError };
 import std.io.path as Paths;
 import std.os;
+import std.os { Platform };
 
 const HTTPS_PORT: int32 = 47841;
 const HTTP_PORT: int32 = 47842;
@@ -105,16 +106,16 @@ function run(program: String, args: String[*], env: String[*], output: String[*]
 /** The flags and libraries for a program that uses std.net's TLS, here. */
 function cArgs(cFile: String, program: String): String[*] {
     let args: String[*] = ["-std=c99", "-g", "-O1", cFile, "-o", program];
-    if (os.platformName() != "windows") {
+    if (Platform.name() != "windows") {
         let sanitizers: String[] = ["-fno-omit-frame-pointer", "-fsanitize=address,undefined", "-fno-sanitize-recover=undefined", "-pthread", "-lm"];
         for (f in sanitizers) { args.push(f); }
     }
-    if (os.platformName() == "linux") { args.push("-ldl"); }
-    if (os.platformName() == "macos") {
+    if (Platform.name() == "linux") { args.push("-ldl"); }
+    if (Platform.name() == "macos") {
         let frameworks: String[] = ["-framework", "Network", "-framework", "Security"];
         for (f in frameworks) { args.push(f); }
     }
-    if (os.platformName() == "windows") {
+    if (Platform.name() == "windows") {
         let windowsLibraries: String[] = ["-lsecur32", "-lws2_32"];
         for (f in windowsLibraries) { args.push(f); }
     }
@@ -201,7 +202,7 @@ function lineStartingWith(text: String, start: String): String {
 // =========================================================================================
 
 test function httpsWithTheSystemsTls(): void {
-    if (os.platformName() == "windows") {
+    if (Platform.name() == "windows") {
         skip("the TLS server is not on Windows yet");
         return;
     }
@@ -218,7 +219,7 @@ test function httpsWithTheSystemsTls(): void {
 }
 
 test function withoutOpenSslTheMessageSaysSo(): void {
-    if (os.platformName() != "linux") {
+    if (Platform.name() != "linux") {
         skip("OpenSSL is loaded by name only on Linux");
         return;
     }

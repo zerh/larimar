@@ -950,6 +950,28 @@ let n: Named = Dog {};          // un Dog es un Pet, y por eso un Named
 
 Un valor cuyo tipo es `Pet` no se vuelve `Named` (solo los objetos de las clases).
 
+Una interfaz también puede tener **funciones estáticas**: funciones de la propia interfaz, con cuerpo y
+sin `self`, que se llaman como `Shape.unit()`. Son el lugar de lo que da una implementación, para que
+quien usa la interfaz lo encuentre ahí:
+
+```ts
+interface Shape {
+    function area(): float64;
+
+    static function unit(): Shape { return Square { side: 1.0 }; }
+}
+
+class Square implements Shape {
+    let side: float64;
+    function area(): float64 { return self.side * self.side; }
+}
+
+let s: Shape = Shape.unit();
+```
+
+Eso es todo lo que tiene una interfaz: firmas y funciones estáticas. No tiene campos, y un método que
+no es estático no tiene cuerpo (*An interface has signatures: only its static functions have a body*).
+
 ---
 
 ## 12. Enums
@@ -2457,7 +2479,7 @@ ccode {
     #define sum(...) sum((struct sum_args){__VA_ARGS__})     /* sum(.a = 1, .b = 2) en C */
 }
 
-native struct SumArgs = c"struct sum_args" { let a: int32; let b: int32; }
+native struct SumArgs = struct sum_args { let a: int32; let b: int32; }
 native function sum(args: SumArgs): int32 = c"(sum)";       // la función, no la macro
 
 function main(): int32 {
@@ -2567,12 +2589,11 @@ solo para lo que necesita C (`strtod`, para `toFloat`).
 Lo que cambia entre sistemas se escribe como **una interfaz y una clase por sistema**, cuyos métodos
 son **funciones native con cuerpo de C** (`native function f(): T { C }`). Cada clase dice la plataforma
 para la que es implementándola (`UnixPlatform`, `WindowsPlatform`...), y cuál se usa se elige con un
-`switch` sobre `os.platform()`. Así lo hace la biblioteca estándar (`std.time`, `std.os`, `std.net`...):
+`switch` sobre `Platform.current()`. Así lo hace la biblioteca estándar (`std.time`, `std.os`, `std.net`...):
 sus módulos son solo archivos `.lar`, y nadie escribe un `#if` a mano.
 
 ```ts
-import std.os;
-import std.os { OS, UnixPlatform, WindowsPlatform };
+import std.os { Platform, UnixPlatform, WindowsPlatform };
 
 interface Clock {
     function monotonic(): int64;
@@ -2606,7 +2627,7 @@ class WindowsClock implements Clock, WindowsPlatform {
     native function sleep(ms: int64): void { Sleep((DWORD)ms); }
 }
 
-let clock: Clock = switch (os.platform()) {
+let clock: Clock = switch (Platform.current()) {
     case Linux, MacOS, Unix -> PosixClock {};
     case Windows -> WindowsClock {};
 };
@@ -2633,9 +2654,11 @@ let clock: Clock = switch (os.platform()) {
   nunca ve `<windows.h>`. Llamado en otro sistema, un método de esa clase da un panic: *'WindowsClock.sleep'
   is for windows, not for this system*. Una subclase puede ser de una plataforma más estrecha: `class
   MacOSSystem extends PosixSystem implements MacOSPlatform` reescribe solo lo que cambia en macOS.
-- **`os.platform()`** da `OS.Linux`, `MacOS`, `Windows` o `Unix` (otro Unix). Un `switch` sobre él sin
-  `default` tiene que nombrar cada sistema: un sistema que se añada después muestra cada sitio que portar.
-  Es una constante del compilador de C, así que la rama de los otros sistemas desaparece del ejecutable.
+- **`Platform.current()`** (una función estática de la interfaz `Platform`) da `OS.Linux`, `MacOS`,
+  `Windows` o `Unix` (otro Unix); `Platform.name()`, lo mismo como texto (`"linux"`...). Un `switch` sobre
+  él sin `default` tiene que nombrar cada sistema: un sistema que se añada después muestra cada sitio que
+  portar. Es una constante del compilador de C, así que la rama de los otros sistemas desaparece del
+  ejecutable.
 - **Dónde van:** el módulo (`time.lar`) guarda su API y la interfaz; la clase de cada plataforma va en un
   módulo de su carpeta (`time/posix.lar`, `time/windows.lar`), que el módulo importa. Las partes llegan al
   C antes que el módulo, así que el C que comparten varias partes va en una parte propia que ellas
@@ -2649,6 +2672,27 @@ Qué usar, de menos C a más:
 2. **`ccode { ... }`**, unas líneas que C escribe mejor: un cast, una macro, un bucle sobre `EINTR`.
 3. **`native function f(...): T { C }`**, una función cuyo cuerpo es C: cuando ese C es solo para ella.
 4. **Una clase por plataforma con métodos native**, cuando los sistemas lo hacen distinto.
+
+### El C de una sola plataforma: `--target`
+
+Por defecto el C generado es **un solo archivo para todos los sistemas**: las clases de cada plataforma
+van dentro del `#if` que escribe el compilador, y el compilador de C de cada sistema toma lo suyo. Es lo
+que permite compilar el mismo C en cualquier parte (el bootstrap de Larimar es eso).
+
+Con **`--target linux`** (o `macos`, `windows`, `unix`) la elección la hace Larimar, al generar:
+
+```sh
+larimar main.lar -o main.c --target windows      # el C de Windows, desde cualquier sistema
+larimar build --target linux
+```
+
+- `switch (Platform.current())` se vuelve su rama: las clases de las otras plataformas ni se crean.
+- El C de las clases de esa plataforma se escribe tal cual, sin `#if`; el de las otras no se escribe.
+- Todo se sigue revisando: una clase de Windows con un error es un error también con `--target linux`.
+
+El resultado es un C más corto, solo de ese sistema: para leerlo, para depurarlo, o para llevarlo a la
+máquina donde se va a compilar (un programa para Windows generado en un Mac). El programa hace lo mismo
+de las dos formas.
 
 ### Pasar una memoria a C
 
@@ -2717,7 +2761,8 @@ Un tipo que viene de C se declara con `native type`. Después del `=` va su tipo
 |---|---|---|
 | `native type Handle;` | un puntero opaco: se recibe, se guarda y se pasa, sin mirar dentro | `void*` |
 | `native type File = FILE*;` | un tipo de C concreto | `FILE*` |
-| `native type Tm = c"struct tm*";` | un tipo de C que no es un nombre simple, como texto de C `c"..."` | `struct tm*` |
+| `native type Tm = struct tm*;` | un struct de C conocido por su etiqueta, por puntero | `struct tm*` |
+| `native type Count = c"unsigned long";` | cualquier otro tipo de C, como texto de C `c"..."` | `unsigned long` |
 | `native type Op = (int32, int32) -> int32;` | un puntero a una función de C | `int32_t (*)(int32_t, int32_t)` |
 
 ```ts
@@ -2849,8 +2894,54 @@ Salida: `2 11 9`
   `String`. Un campo `String` es un texto de C (`char*` o `char[N]`) que **se lee, no se asigna**, y es
   una vista del texto de C: si C lo cambia o lo libera, la vista también. Para guardarlo, `.clone()`.
 - Los campos que no se dan en un literal valen cero, como en C: `{ ai_socktype: 1 }`.
-- Si el nombre en C es otro, va después del `=`: `native struct Rect = rect_t { ... }`, o como texto de C si
-  no es un nombre simple: `native struct AddrInfo = c"struct addrinfo" { ... }`.
+
+**Por qué declararlo, si C ya lo tiene.** Larimar no lee los headers de C: `native struct` es lo que le
+dice qué campos hay y de qué tipo, igual que `native function` le dice la firma de una función que C ya
+tiene. Nada se define dos veces: el struct es de C, y la declaración solo nombra lo que el programa usa
+de él. Los métodos (`length()` arriba) son la parte nueva: código Larimar sobre los datos de C.
+
+**Su nombre en C** va después del `=` cuando no es el mismo:
+
+| En Larimar | Para un struct de C declarado como |
+|---|---|
+| `native struct Span { ... }` | `Span` (el mismo nombre) |
+| `native struct Span = span_t { ... }` | `span_t`, un nombre propio (un `typedef`) |
+| `native struct AddrInfo = struct addrinfo { ... }` | `struct addrinfo`, conocido por su etiqueta |
+
+Se sabe mirando cómo declara el header una variable suya: `span_t s;` o `struct addrinfo hints;`.
+
+**`native struct` o `native type`.** Los dos nombran algo de C; lo que cambia es si Larimar mira dentro:
+
+| | `native type` | `native struct` |
+|---|---|---|
+| Qué hace Larimar con él | lo recibe, lo guarda y se lo devuelve a C | lee y escribe sus campos, lo crea con un literal |
+| Qué es | un handle (normalmente un puntero): `FILE*`, un socket | un valor, que se copia como cualquier struct: `struct timeval` |
+| Quién lo libera | C, cuando se va su memoria (`released by`) | nadie: es un valor |
+
+Si el programa nunca necesita los campos, `native type` es más simple y no depende de cómo esté hecho
+el struct.
+
+**En un cuerpo de C** un parámetro `native struct` es el struct de C (`s: Span` es un `span_t`, una
+copia; `s: Span*`, un puntero a él), y sus campos tienen sus nombres de C:
+
+```ts
+native function widen(s: Span): Span {
+    s.from_ -= 1;
+    s.to_ += 1;
+    return s;
+}
+
+native function grow(s: Span*, by: int32): void { s->to_ += by; }
+
+let s: Span = widen({ from: 3, to: 10 });
+grow(&s, 5);                                  // s vive en esta función; C la tiene solo durante la llamada
+```
+
+**Dónde hace falta `c"..."`.** Un nombre (`span_t`, `sqrt`, `FILE*`, `INT_MAX`) y un struct por su
+etiqueta (`struct stat`) se escriben tal cual. `c"..."` es para lo demás, lo que es texto de C y no un
+nombre: un tipo de varias palabras (`c"unsigned long"`), una expresión (`c"(int)sizeof(void*)"`), un cast
+o una macro con argumentos. En las funciones rara vez hace falta: ese C se escribe en el cuerpo
+(`native function start(x: int32): int32 { return (fio_start)(x); }`).
 
 ### Constantes y variables de C: `native const`, `native let`
 
@@ -3326,6 +3417,7 @@ importa entra en el programa, y el ejecutable no necesita la carpeta `std` para 
 | `std.os.process` | otros programas: `Process`, hablarles por su entrada y su salida |
 | `std.time` | el reloj (`now`, `monotonic`), `sleep`, fechas como texto (HTTP, ISO 8601) |
 | `std.thread` | `ThreadPool`: un lote de tareas en unos pocos hilos |
+| `std.math` | las matemáticas de C por sus nombres (`sqrt`, `pow`, `floor`, `sin`...), `PI`, `E`, y `Random` con semilla |
 | `std.crypto` | SHA-256, SHA-1, HMAC-SHA256 y bytes aleatorios seguros |
 | `std.text` | clasificar bytes (para lexers y parsers) |
 | `std.text.regex` | expresiones regulares: `Regex`, `Match` (escritas en Larimar, sin bibliotecas de C) |
@@ -3496,8 +3588,8 @@ de cualquier función; aceptan `/` y `\`.
 | `os.run(command): int32` | ejecuta un comando con el shell del sistema y da su código de salida |
 | `os.programDir(): String` | la carpeta del ejecutable (`""` si no se puede saber) |
 | `os.programPath(): String` | la ruta completa del ejecutable (`""` si no se puede saber) |
-| `os.platform(): OS` | `OS.Linux`, `MacOS`, `Windows` o `Unix` (otro Unix): para un `switch` |
-| `os.platformName(): String` | `"linux"`, `"macos"`, `"windows"` o `"unix"` |
+| `Platform.current(): OS` | `OS.Linux`, `MacOS`, `Windows` o `Unix` (otro Unix): para un `switch` |
+| `Platform.name(): String` | `"linux"`, `"macos"`, `"windows"` o `"unix"` |
 | `os.exit(code)` | termina el programa ya (sin liberar memorias ni esperar hilos) |
 | `os.catchTermination()` | desde ahí, Ctrl+C y SIGTERM no terminan el programa: ponen `os.terminating()` en `true` |
 | `os.terminating(): bool` | si llegó Ctrl+C o SIGTERM después de `catchTermination()`; los servidores de `std.net` se detienen con él |
@@ -4224,6 +4316,26 @@ conserva. Una clave que se llama como una palabra de Larimar se lee con corchete
 
 ---
 
+### `std.math`: números
+
+```ts
+import std.math as Math;
+import std.math { Random };
+
+function main(): int32 {
+    println("${Math.sqrt(2.0)} ${Math.pow(2.0, 10.0)} ${Math.floor(2.7)} ${Math.PI}");
+    let dice: Random = { seed: 42 };
+    println("${dice.below(6) + 1}");                 // 1..6: la misma secuencia con la misma semilla
+    return 0;
+}
+```
+
+- Las funciones son las de C, sobre `float64`: `sqrt`, `pow`, `exp`, `log` (natural), `log10`, `floor`,
+  `ceil`, `round`, `abs`, `sin`, `cos`, `tan`, `atan2`, y `min` y `max`. Las constantes: `PI`, `E`.
+- **`Random`** es una secuencia rápida que se repite con su semilla: `below(n)` da de 0 a n - 1,
+  `fraction()` de 0.0 hasta 1.0 (sin incluirlo). Es para juegos, simulaciones y pruebas; para claves y
+  tokens, `std.crypto.randomBytes`.
+
 ### `std.time`: el reloj y las fechas
 
 ```ts
@@ -4367,6 +4479,7 @@ dynamic_libraries = ["SDL3", "ws2_32"]
 | `larimar build --debug` | lo mismo, para un depurador (ver [Depurar](#depurar-larimar-build---debug-y-larimar-dap)) |
 | `larimar run [carpeta] [-- args]` | compila y ejecuta, pasándole los argumentos |
 | `larimar build --cc <programa>` | compila con ese compilador de C en lugar del del proyecto (`tcc`: el incluido) |
+| `larimar build --target <plataforma>` | genera el C de una sola plataforma (`linux`, `macos`, `windows`, `unix`): ver [`--target`](#el-c-de-una-sola-plataforma---target) |
 | `larimar test [archivo o carpeta]` | ejecuta las pruebas (ver [Pruebas](#pruebas-test-function-y-larimar-test)) |
 | `larimar <comando de un plugin>` | ejecuta el programa de un plugin (ver [Plugins](#plugins-comandos-de-otros-programas)) |
 | `larimar check [archivo o carpeta] [--json]` | busca los errores sin generar C (ver [El editor](#el-editor-larimar-check-y-larimar-lsp)) |
@@ -5236,7 +5349,7 @@ larimar/
     project/               el compilador de C, larimar test (larimar.toml se lee con std.encoding.toml)
   std/                   la biblioteca estándar (std/runtime: el runtime, el C bajo cada programa)
   tests/                 las pruebas (tests/lsp: check y el servidor de lenguaje)
-  doc/                   el manual (manual.md en inglés; manual.es.md, este) y la especificación (spec.md)
+  docs/                  la página, el manual (manual.md en inglés; manual.es.md, este) y la especificación (spec.md)
   bootstrap/
     larimarc.c           el compilador ya traducido a C, para arrancar sin Larimar
     build.sh, build.ps1  construyen el compilador e instalan la carpeta ../out/larimar
@@ -5465,7 +5578,7 @@ native type CFile = FILE* released by fclose;               // un recurso: se su
 native function fopen(path: String, mode: String): CFile?;
 native function fclose(f: CFile): int32;
 native function strdup(text: String): String released by free;   // un texto de C: se copia y se libera
-native struct Node = c"struct node" { let next: Node*; let name: String; }
+native struct Node = struct node { let next: Node*; let name: String; }
 native type Doc = Doc* released by doc_close {                  // un tipo de C con miembros
     let id: int32;                                              // un campo: d.id es d->id
     native function title(): String = doc_title;                // d.title() es doc_title(d)
@@ -5475,7 +5588,7 @@ native function each(f: ItemFn, data: Context): void;           // each((i) -> {
 ccode { static int twice_all(int x) { return lar"twice"(x); } }   // lar"..." nombra a Larimar desde C
 two_results(&a, &b);                                            // & solo como argumento de C
 release(file);                                                  // soltarlo antes
-let sep: String = switch (os.platform()) {                      // el sistema: OS.Linux, MacOS, Windows, Unix
+let sep: String = switch (Platform.current()) {                      // el sistema: OS.Linux, MacOS, Windows, Unix
     case Windows -> "\\";
     case Linux, MacOS, Unix -> "/";
 };

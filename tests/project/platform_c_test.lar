@@ -6,6 +6,7 @@ import std.io.files as Files;
 import std.io { IoError };
 import std.io.path as Paths;
 import std.os;
+import std.os { Platform };
 
 function compiler(): String {
     let fromEnvironment: String = os.env("LARIMARC") ?? "";
@@ -14,7 +15,7 @@ function compiler(): String {
 }
 
 /** Another platform than this one: its [c.<platform>] must not be used here. */
-function otherPlatform(): String { return os.platformName() == "linux" ? "macos" : "linux"; }
+function otherPlatform(): String { return Platform.name() == "linux" ? "macos" : "linux"; }
 
 /** Writes a project: its larimar.toml, a main that calls two C functions, and their C files. */
 function writeProject(dir: String, toml: String): void throws IoError {
@@ -51,7 +52,7 @@ test function thisPlatformsSectionIsAdded(): void throws ProcessError {
             [c]
             sources = ["c/common.c"]
 
-            [c.${os.platformName()}]
+            [c.${Platform.name()}]
             sources = ["c/here.c"]
 
             [c.${otherPlatform()}]

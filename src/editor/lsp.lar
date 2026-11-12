@@ -12,7 +12,7 @@
 // changed last, and published for every file of its program.
 
 import std.os;
-import std.os { UnixPlatform, WindowsPlatform };
+import std.os { Platform, UnixPlatform, WindowsPlatform };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io.console as Console;
@@ -278,7 +278,7 @@ let forking: bool = true;
 public function serve(): int32 {
     Console.binaryMode();
     lm_lsp_unbuffered();
-    forking = os.platformName() != "windows" && (os.env("LARIMAR_LSP_NO_FORK") ?? "") != "1";
+    forking = Platform.name() != "windows" && (os.env("LARIMAR_LSP_NO_FORK") ?? "") != "1";
     let shutdown: bool = false;
     while (true) {
         // the errors, once the editor stops typing

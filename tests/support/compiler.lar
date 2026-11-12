@@ -14,6 +14,7 @@
 // What each one writes goes to build/test/cases/, and stays there when a test fails.
 
 import std.os;
+import std.os { Platform };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
@@ -109,10 +110,14 @@ public function memoryError(file: String): void {
 }
 
 /** The C the compiler writes for the program ("" when it does not compile: then the test fails). */
-public function generatedC(file: String): String {
-    let c: String = place("${Paths.stem(file)}.c");
+public function generatedC(file: String): String { return generatedFor(file, ""); }
+
+/** The C of a file for one platform (--target), or for every one (""). */
+public function generatedFor(file: String, target: String): String {
+    let c: String = place("${Paths.stem(file)}${target}.c");
     let log: String = place("${Paths.stem(file)}.compile.txt");
-    if (os.run("${quote(compiler())} ${quote(file)} -o ${quote(c)} > ${quote(log)} 2>&1") != 0) {
+    let only: String = target != "" ? " --target ${target}" : "";
+    if (os.run("${quote(compiler())} ${quote(file)} -o ${quote(c)}${only} > ${quote(log)} 2>&1") != 0) {
         fail("did not compile:\n${head(read(log), 20)}");
         return "";
     }
@@ -183,7 +188,7 @@ function cCommand(c: String, cFile: String, exe: String): String {
     if (c.contains("#define LM_NET_TLS")) {
         if (windows()) {
             cmd.push("-lsecur32");
-        } else if (os.platformName() == "macos") {
+        } else if (Platform.name() == "macos") {
             let frameworks: String[] = ["-framework", "Network", "-framework", "Security"];
             for (f in frameworks) { cmd.push(f); }
         } else {
@@ -241,7 +246,7 @@ function quote(s: String): String {
     return "'${s.replace("'", "'\\''")}'";
 }
 
-function windows(): bool { return os.platformName() == "windows"; }
+function windows(): bool { return Platform.name() == "windows"; }
 
 function identifierPart(c: byte): bool {
     return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');

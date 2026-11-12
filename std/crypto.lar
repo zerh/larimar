@@ -10,8 +10,7 @@
 // SHA-1 is broken for signatures: it is here for protocols that need it (the WebSocket handshake). For
 // anything new, SHA-256. The results are new lists, created where the caller puts them.
 
-import std.os;
-import std.os { OS };
+import std.os { Platform, OS };
 import std.crypto.posix { UrandomSource };
 import std.crypto.macos { MacOSRandomSource };
 import std.crypto.windows { WindowsRandomSource };
@@ -21,7 +20,7 @@ public interface RandomSource {
     function fill(items: byte[]): bool;
 }
 
-let randomSource: RandomSource = switch (os.platform()) {
+let randomSource: RandomSource = switch (Platform.current()) {
     case Linux, Unix -> UrandomSource {};
     case MacOS -> MacOSRandomSource {};
     case Windows -> WindowsRandomSource {};

@@ -8,8 +8,7 @@
 
 import std.io { IoError, raise };
 import std.io { InputStream, OutputStream };
-import std.os;
-import std.os { OS };
+import std.os { Platform, OS };
 import std.io.console.windows { WindowsConsole };
 
 cinclude "<errno.h>";
@@ -100,7 +99,7 @@ public function flush(): void { fflush(stdout); }
 
 /** Input and output byte by byte, as they are (on Windows, without turning \n into \r\n). */
 public function binaryMode(): void {
-    if (os.platform() == OS.Windows) {
+    if (Platform.current() == OS.Windows) {
         let console: WindowsConsole = {};
         console.binaryMode();
     }

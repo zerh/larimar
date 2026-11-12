@@ -3,10 +3,10 @@
 //   import std.os;
 //   let home: String = os.env("HOME") ?? "/";
 //
-// The system is os.platform(): OS.Linux, MacOS, Windows or another Unix. What differs between them is a
-// class for each, marked with the platform it is for (implements UnixPlatform, LinuxPlatform,
+// The system is Platform.current(): OS.Linux, MacOS, Windows or another Unix. What differs between them
+// is a class for each, marked with the platform it is for (implements UnixPlatform, LinuxPlatform,
 // MacOSPlatform or WindowsPlatform), with the C of that system in its methods: its C reaches only that
-// system's build. A switch on os.platform() chooses the one that runs.
+// system's build. A switch on Platform.current() chooses the one that runs.
 
 import std.os.posix { PosixSystem };
 import std.os.macos { MacOSSystem };
@@ -19,23 +19,33 @@ public enum OS { Linux, MacOS, Windows, Unix }
  * What a class is for: a class that implements one of these is for that platform. Its C (cinclude, ccode,
  * the C bodies of its methods) reaches only that system's build; elsewhere its methods with C panic.
  */
-public interface Platform {}
+public interface Platform {
+    /** The system this program was compiled for. */
+    static function current(): OS {
+        return switch (platformNumber()) {
+            case 1 -> OS.Windows;
+            case 2 -> OS.MacOS;
+            case 3 -> OS.Linux;
+            default -> OS.Unix;
+        };
+    }
+
+    /** Its name: "linux", "macos", "windows" or "unix". */
+    static function name(): String {
+        return switch (Platform.current()) {
+            case Linux -> "linux";
+            case MacOS -> "macos";
+            case Windows -> "windows";
+            case Unix -> "unix";
+        };
+    }
+}
 public interface UnixPlatform extends Platform {}         // Linux, macOS and the other Unix
 public interface LinuxPlatform extends UnixPlatform {}
 public interface MacOSPlatform extends UnixPlatform {}
 public interface WindowsPlatform extends Platform {}
 
-/** The system this program was compiled for. */
-public function platform(): OS {
-    return switch (platformNumber()) {
-        case 1 -> OS.Windows;
-        case 2 -> OS.MacOS;
-        case 3 -> OS.Linux;
-        default -> OS.Unix;
-    };
-}
-
-/** Where Larimar learns the system: the C compiler's own macros, once. */
+/** Where Larimar learns the system: the C compiler's own macros (with --target, the compiler writes it). */
 native function platformNumber(): int32 {
     #if defined(_WIN32)
     return 1;
@@ -48,16 +58,6 @@ native function platformNumber(): int32 {
     #endif
 }
 
-/** "windows", "linux", "macos" or "unix". */
-public function platformName(): String {
-    return switch (platform()) {
-        case Windows -> "windows";
-        case MacOS -> "macos";
-        case Linux -> "linux";
-        case Unix -> "unix";
-    };
-}
-
 /** What std.os needs of the system: a class for each platform (std/os/posix.lar, macos.lar, windows.lar). */
 public interface System {
     function processId(): int64;
@@ -68,7 +68,7 @@ public interface System {
     function terminating(): bool;
 }
 
-let host: System = switch (platform()) {
+let host: System = switch (Platform.current()) {
     case Linux, Unix -> PosixSystem {};
     case MacOS -> MacOSSystem {};
     case Windows -> WindowsSystem {};

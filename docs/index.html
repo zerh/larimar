@@ -453,7 +453,7 @@
             <div class="eyebrow"><span style="width:0.375rem; height:0.375rem; border-radius:50%; background:var(--larimar);"></span><span data-i18n="hero.eyebrow">v1.1 · language 1.0 · transpiles to C99</span></div>
             <h1 style="font-size: clamp(2.25rem, 4.5vw, 3.75rem); font-weight: 700; line-height: 1.1; margin-top: 1.5rem; letter-spacing: -0.025em;" data-i18n-html="hero.title.html">A small language that <span class="gradient-text">compiles to C</span>.</h1>
             <p style="color: var(--text-muted); font-size: 1.125rem; line-height: 1.625; margin-top: 1.5rem;" data-i18n="hero.body">Larimar transpiles to a single C99 file, has no garbage collector (memory is freed in blocks, at points you can see in the code), and its compiler is written in Larimar itself.</p>
-            <div class="status-note" data-i18n-html="hero.status.html"><strong>Status:</strong> 222 tests: memory, threads, network, debugger, editor and standard library. Language specification 1.0.</div>
+            <div class="status-note" data-i18n-html="hero.status.html"><strong>Status:</strong> 226 tests: memory, threads, network, debugger, editor and standard library. Language specification 1.0.</div>
             <!-- the install command for the visitor's system (install.sh / install.ps1, next to this page) -->
             <div id="get" class="install-box">
               <div class="install-tabs" role="tablist">
@@ -883,19 +883,20 @@ server.<span class="tok-fn">run</span>();</pre>
 
 <span class="tok-kw">native</span> <span class="tok-kw">function</span> <span class="tok-fn">printf</span>(format: <span class="tok-type">String</span>, ...): <span class="tok-type">int32</span>;
 <span class="tok-kw">native</span> <span class="tok-kw">function</span> <span class="tok-fn">sqrt</span>(x: <span class="tok-type">float64</span>): <span class="tok-type">float64</span>;
+<span class="tok-kw">native</span> <span class="tok-kw">function</span> <span class="tok-fn">twice</span>(x: <span class="tok-type">float64</span>): <span class="tok-type">float64</span> { return 2 * x; }   <span class="tok-com">// a body of C</span>
 
 <span class="tok-kw">function</span> <span class="tok-fn">main</span>(): <span class="tok-type">int32</span> {
-    <span class="tok-fn">printf</span>(<span class="tok-str">"sqrt(2) = %f\n"</span>, <span class="tok-fn">sqrt</span>(<span class="tok-num">2.0</span>));
+    <span class="tok-fn">printf</span>(<span class="tok-str">"2 * sqrt(2) = %f\n"</span>, <span class="tok-fn">twice</span>(<span class="tok-fn">sqrt</span>(<span class="tok-num">2.0</span>)));
     <span class="tok-kw">return</span> <span class="tok-num">0</span>;
 }</pre>
             </div>
             <div class="pairs">
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">cinclude</div><div class="pair-v" data-i18n="i1">Adds a C #include.</div></div>
-              <div class="card" style="padding: 0.75rem;"><div class="pair-k">native function</div><div class="pair-v" data-i18n="i2">Declares a C function.</div></div>
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">native function</div><div class="pair-v" data-i18n="i2">Declares a C function, or writes one: its body is C.</div></div>
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">native type</div><div class="pair-v" data-i18n="i3">An opaque pointer, a C type or a C struct.</div></div>
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">export function</div><div class="pair-v" data-i18n="i4">Makes a function callable from C.</div></div>
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">released by</div><div class="pair-v" data-i18n="i5">A C resource (FILE*, a socket) is released with its memory.</div></div>
-              <div class="card" style="padding: 0.75rem;"><div class="pair-k">#when windows</div><div class="pair-v" data-i18n="i6">What each system needs, chosen at compile time; every branch is checked.</div></div>
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">implements WindowsPlatform</div><div class="pair-v" data-i18n="i6">What each system does differently: a class for its platform, with its C inside. All are checked.</div></div>
             </div>
           </div>
 
@@ -958,7 +959,7 @@ server.<span class="tok-fn">run</span>();</pre>
           <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n="t3.title">Readable C and AddressSanitizer</h3><p class="card-body" data-i18n="t3.body">The generated C compiles with no warnings under -Wall -Wextra -pedantic, and the runtime teaches AddressSanitizer to see inside memories.</p></div>
           <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n="t4.title">Standard library</h3><p class="card-body" data-i18n="t4.body">Files, console, streams, paths, other programs, time, hashes, JSON, TOML, base64, URLs, regular expressions, tests, TCP and UDP with their servers (https too), and an HTTP and HTTPS client. Almost all written in Larimar.</p></div>
           <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n="t5.title">VS Code extension</h3><p class="card-body" data-i18n="t5.body">Highlighting, live errors, debugging with breakpoints and the tests in the Testing view, on top of larimar lsp, larimar dap and larimar test.</p></div>
-          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n="t6.title">Linux, macOS and Windows</h3><p class="card-body" data-i18n="t6.body">Meant for all three; what differs between them is written with #when. For now, the tests run mostly on Linux.</p></div>
+          <div class="card" style="padding: 1.5rem;"><h3 class="card-title" data-i18n="t6.title">Linux, macOS and Windows</h3><p class="card-body" data-i18n="t6.body">Meant for all three: what differs between them is a class for each platform, chosen with a switch. The same generated C builds on every one, or --target gives the C of one. For now, the tests run mostly on Linux.</p></div>
         </div>
 
         <div style="margin-top: 4rem;" class="split">
@@ -1085,7 +1086,7 @@ dynamic_libraries = [<span class="tok-str">"m"</span>]</pre>
           <h4 class="footer-h" data-i18n="footer.resources">Resources</h4>
           <ul class="footer-list">
             <li><a href="manual.html" data-i18n="footer.manual">Manual</a></li>
-            <li><a href="https://github.com/zerh/larimar/blob/main/doc/spec.md" data-i18n="footer.spec">Specification</a></li>
+            <li><a href="https://github.com/zerh/larimar/blob/main/docs/spec.md" data-i18n="footer.spec">Specification</a></li>
             <li><a href="manual.html#25-standard-library" data-i18n="footer.std">Standard library</a></li>
             <li><a href="https://github.com/zerh/larimar">GitHub</a></li>
             <li><a href="https://github.com/zerh/larimar/tree/main/tests" data-i18n="footer.examples">Examples</a></li>

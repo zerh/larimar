@@ -34,7 +34,7 @@ import std.io { IoError };
 import std.io { InputStream, OutputStream, Closeable, buffer };
 import std.time as Time;
 import std.os;
-import std.os { OS };
+import std.os { Platform, OS };
 import std.net.posix { PosixNet };
 import std.net.windows { WindowsNet, WindowsTlsServers };
 import std.net.openssl { LinuxOpenSslNames, MacOSOpenSslNames, OpenSslServers };
@@ -98,7 +98,7 @@ public function message(e: NetError): String {
 public native type Socket = c"LmSocket" released by lm_socket_close;
 native function lm_socket_close(s: Socket): int32;
 
-native struct AddrInfo = c"struct addrinfo" {
+native struct AddrInfo = struct addrinfo {
     let ai_flags: int32;
     let ai_family: int32;
     let ai_socktype: int32;
@@ -107,9 +107,9 @@ native struct AddrInfo = c"struct addrinfo" {
     let ai_addr: SockAddr*;
     let ai_next: AddrInfo*;
 };
-native struct SockAddr = c"struct sockaddr" { let sa_family: uint16; };
+native struct SockAddr = struct sockaddr { let sa_family: uint16; };
 /** Big enough for an IPv4 or IPv6 address; the port is at the same place in both. */
-native struct SockAddrIn6 = c"struct sockaddr_in6" { let sin6_port: uint16; };
+native struct SockAddrIn6 = struct sockaddr_in6 { let sin6_port: uint16; };
 /** What setsockopt and getsockname take as "a pointer to anything". */
 native type Untyped;
 native const AF_UNSPEC: int32;
@@ -164,7 +164,7 @@ public interface NetSystem {
     function setTimeout(s: Socket, which: int32, ms: int32): void;
 }
 
-let netSystem: NetSystem = switch (os.platform()) {
+let netSystem: NetSystem = switch (Platform.current()) {
     case Linux, MacOS, Unix -> PosixNet {};
     case Windows -> WindowsNet {};
 };

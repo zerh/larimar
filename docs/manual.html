@@ -531,11 +531,11 @@
   </div>
 
   <script>
-    // The manual is doc/manual.md (English) or doc/manual.es.md (Spanish), read from the repository and shown here
+    // The manual is manual.md (English) or manual.es.md (Spanish), next to this page (docs/), shown here
     // with the style of the page: what is in main is what this page shows. The language is the one of the
     // page (ES / EN, remembered in 'larimar-lang'), then the browser's, then English.
     (function () {
-      var REPO = 'https://raw.githubusercontent.com/zerh/larimar/main/doc/';
+      var REPO = 'https://raw.githubusercontent.com/zerh/larimar/main/docs/';
       var FILES = { en: 'manual.md', es: 'manual.es.md' };
       var KEY = 'larimar-lang';
       var WORDS = {
@@ -645,7 +645,7 @@
             var url = href || '';
             var other = url.match(/^(?:\.\/)?(manual(?:\.es)?\.md)(#.*)?$/);       // the other language: this page
             if (other) { return '<a href="manual.html?lang=' + (other[1] === 'manual.md' ? 'en' : 'es') + (other[2] || '') + '">' + text + '</a>'; }
-            if (!/^(https?:|mailto:|#)/.test(url)) { url = 'https://github.com/zerh/larimar/blob/main/doc/' + url.replace(/^\.\//, ''); }   // relative to doc/
+            if (!/^(https?:|mailto:|#)/.test(url)) { url = 'https://github.com/zerh/larimar/blob/main/docs/' + url.replace(/^\.\//, ''); }   // relative to docs/
             var outside = /^https?:/.test(url) ? ' target="_blank" rel="noopener"' : '';
             return '<a href="' + url + '"' + (title ? ' title="' + title + '"' : '') + outside + '>' + text + '</a>';
           }
@@ -731,8 +731,7 @@
 
       // ---- loading -------------------------------------------------------------------------------
       function sources(file) {
-        var local = location.protocol === 'file:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-        return local ? ['../' + file, REPO + file] : [REPO + file];
+        return [file, REPO + file];            // the one published with this page; if it cannot be read, the repository's
       }
 
       function fetchFirst(urls) {
@@ -782,7 +781,7 @@
           }
         }).catch(function () {
           article.innerHTML = '<p class="manual-status">' + WORDS[lang].failed +
-            '<a href="https://github.com/zerh/larimar/blob/main/doc/' + file + '">' + file + '</a></p>';
+            '<a href="https://github.com/zerh/larimar/blob/main/docs/' + file + '">' + file + '</a></p>';
         });
       }
 

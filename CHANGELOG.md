@@ -17,6 +17,21 @@ part of it, in the folder of its name.
 - `std.os.process`: the check of what can be run is `Executables` (`Runnable` is std.lang's).
 - A module opened alone (`larimar check std/time.lar`) is the same module its parts import back.
 - `CONTRIBUTING.md`: how the code is organized (modules and parts, platforms, the order inside a file).
+- Interfaces can have static functions (`static function unit(): Shape { ... }`, called `Shape.unit()`):
+  with a body and no `self`. Their other methods are signatures, as before.
+- `Platform.current()` and `Platform.name()`, static functions of the interface `Platform`, replace
+  `os.platform()` and `os.platformName()`.
+- `--target <platform>` (`linux`, `macos`, `windows`, `unix`): the C of one platform only. A `switch` on
+  `Platform.current()` becomes its arm, the C of that platform's classes has no `#if`, and that of the
+  others is not written. Without it, as before, the same C builds on every system.
+- A C struct known by its tag is named without `c"..."`: `native struct AddrInfo = struct addrinfo { ... }`,
+  `native type Tm = struct tm*;`.
+- `std.math`: C's math by its names (`sqrt`, `pow`, `floor`, `sin`...), `PI`, `E`, `min`, `max`, and
+  `Random`, a fast sequence that repeats with its seed.
+- `larimar`: its commands are a `switch`, and its help a text block.
+- The manuals and the specification are in `docs/`, next to the page that shows them (`manual.html`
+  reads the ones published with it). The manual explains `native struct` and `native type`, and where
+  `c"..."` is needed; the page no longer speaks of `#when`.
 
 ## 1.6.1 — 2026-11-11
 

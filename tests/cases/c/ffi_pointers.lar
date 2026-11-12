@@ -1,4 +1,4 @@
-import std.os;
+import std.os { Platform };
 // C without ccode-wrappers: pointers to C structs (a linked list), out parameters (&x), constants and
 // macros (native const), a C global (native let), C strings in structs, arrays where C takes T*, `when`.
 ccode {
@@ -57,7 +57,7 @@ function main(): int32 {
     let bytes: byte[4] = [1, 2, 3, 4];
     println("array as pointer: ${sum_bytes(bytes, bytes.length)}");
 
-    let platform: String = os.platformName();
+    let platform: String = Platform.name();
     println("platform: ${platform != "" ? "ok" : "?"}");
     println("renamed: ${square(3)}");
     println("maybe: ${maybe_text(0) == null ? "null" : "?"} and \"${maybe_text(1) ?? ""}\"");

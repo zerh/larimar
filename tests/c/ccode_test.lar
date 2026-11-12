@@ -1,5 +1,5 @@
 // The compiler's tests of c: c code (the programs that run are in tests/cases/c/).
-import tests.support.compiler { failsWith, runs, panics, generatedC, hasWord };
+import tests.support.compiler { failsWith, runs, panics, generatedC, generatedFor, hasWord };
 import std.test { check };
 
 // Names of the C library (log, exit, abs, time...) get a '_' in the C: clang treats them as built-ins.
@@ -96,4 +96,16 @@ test function oneSystemPerClass(): void {
         class Both implements UnixPlatform, WindowsPlatform {}
         function main(): int32 { return 0; }
         """, "A class is for one system");
+}
+
+// --target: the C of one platform only. No #if around its classes, nothing of the others, and the
+// switch on Platform.current() is its arm.
+test function targetPlatform(): void {
+    let all: String = generatedC("tests/cases/c/c_bodies.lar");
+    check(all.contains("<windows.h>") && all.contains("#if defined(_WIN32)"), "without a target, every platform's C, each in its #if");
+    let linux: String = generatedFor("tests/cases/c/c_bodies.lar", "linux");
+    check(!linux.contains("<windows.h>") && !linux.contains("GetTickCount64"), "nothing of Windows in the C for linux");
+    check(linux.contains("<unistd.h>") && !linux.contains("#if !defined(_WIN32)\n#include <unistd.h>"), "the header of the Unix class, with no #if");
+    let windows: String = generatedFor("tests/cases/c/c_bodies.lar", "windows");
+    check(windows.contains("<windows.h>") && !windows.contains("<unistd.h>"), "and the other way for windows");
 }

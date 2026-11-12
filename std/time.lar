@@ -10,8 +10,7 @@
 // now() is the wall clock (it can jump when the system's clock is set); monotonic() only moves forward,
 // so it is the one for measuring time and for deadlines. Dates are UTC.
 
-import std.os;
-import std.os { OS };
+import std.os { Platform, OS };
 import std.time.posix { PosixClock };
 import std.time.windows { WindowsClock };
 
@@ -22,7 +21,7 @@ public interface Clock {
     function sleep(ms: int64): void;
 }
 
-let systemClock: Clock = switch (os.platform()) {
+let systemClock: Clock = switch (Platform.current()) {
     case Linux, MacOS, Unix -> PosixClock {};
     case Windows -> WindowsClock {};
 };

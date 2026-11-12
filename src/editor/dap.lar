@@ -19,7 +19,7 @@
 //     a panic happens.
 
 import std.os;
-import std.os { UnixPlatform, WindowsPlatform };
+import std.os { Platform, UnixPlatform, WindowsPlatform };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
@@ -1377,9 +1377,9 @@ function findBackend(given: String): String {
     if (given != "") { return given; }
     let env: String = os.env("LARIMAR_LLDB_DAP") ?? "";
     if (env != "") { return env; }
-    let exe: String = os.platformName() == "windows" ? ".exe" : "";
+    let exe: String = Platform.name() == "windows" ? ".exe" : "";
     let path: String = os.env("PATH") ?? "";
-    let sep: String = os.platformName() == "windows" ? ";" : ":";
+    let sep: String = Platform.name() == "windows" ? ";" : ":";
     let names: String[] = ["lldb-dap", "lldb-dap-20", "lldb-dap-19", "lldb-dap-18", "lldb-vscode"];
     for (name in names) {
         for (dir in path.split(sep)) {
@@ -1388,7 +1388,7 @@ function findBackend(given: String): String {
             if (Files.isFile(candidate)) { return candidate.clone(); }
         }
     }
-    if (os.platformName() == "macos") {
+    if (Platform.name() == "macos") {
         let places: String[] = ["/Library/Developer/CommandLineTools/usr/bin/lldb-dap", "/Applications/Xcode.app/Contents/Developer/usr/bin/lldb-dap",
                                 "/opt/homebrew/opt/llvm/bin/lldb-dap", "/usr/local/opt/llvm/bin/lldb-dap"];
         for (candidate in places) {

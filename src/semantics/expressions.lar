@@ -695,7 +695,7 @@ function variantFieldNames(v: VariantInfo in default): String {
 function typeNamed(e: Expr): String {
     if (!(e is Ident id) || lookup(id.name) != null) { return ""; }
     let n: String = id.name;
-    return structOf(n) != null || classOf(n) != null || enumOf(n) != null || primByName(n) != null || isExternTypeName(n) ? n : "";
+    return structOf(n) != null || classOf(n) != null || interfaceOf(n) != null || enumOf(n) != null || primByName(n) != null || isExternTypeName(n) ? n : "";
 }
 
 function enumNamed(e: Expr): EnumInfo? {

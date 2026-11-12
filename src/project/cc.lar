@@ -1,12 +1,13 @@
 // project.cc: calling the C compiler and other programs (larimar build, larimar test).
 
 import std.os;
+import std.os { Platform };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
 
-public function windows(): bool { return os.platformName() == "windows"; }
-public function mac(): bool { return os.platformName() == "macos"; }
+public function windows(): bool { return Platform.name() == "windows"; }
+public function mac(): bool { return Platform.name() == "macos"; }
 
 /** Quotes an argument for the shell. */
 public function quote(a: String): String {

@@ -15,7 +15,7 @@
 // killed.
 
 import std.os;
-import std.os { OS };
+import std.os { Platform, OS };
 import std.os.process.posix { PosixProcesses, PosixExecutables };
 import std.os.process.windows { WindowsProcesses, WindowsExecutables };
 
@@ -196,7 +196,7 @@ public class Process {
 
 /** Where a program is found in the PATH (with .exe on Windows), or null. A path with a folder is checked as it is. */
 public function findProgram(name: String): String? {
-    let windows: bool = os.platform() == OS.Windows;
+    let windows: bool = Platform.current() == OS.Windows;
     if (name.contains("/") || name.contains("\\")) { return isRunnable(name) ? name : null; }
     let path: String = getenv("PATH") ?? "";
     let separator: String = windows ? ";" : ":";
@@ -215,7 +215,7 @@ public interface Executables {
     function check(path: String): bool;
 }
 
-let executables: Executables = switch (os.platform()) {
+let executables: Executables = switch (Platform.current()) {
     case Linux, MacOS, Unix -> PosixExecutables {};
     case Windows -> WindowsExecutables {};
 };

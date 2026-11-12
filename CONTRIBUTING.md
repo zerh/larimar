@@ -15,7 +15,7 @@ How the code is organized, so that it stays easy to read and to change.
 
 - What changes between systems is a class for each platform, marked with the platform it is for
   (`implements UnixPlatform`, `LinuxPlatform`, `MacOSPlatform`, `WindowsPlatform`), and chosen with a
-  `switch (os.platform())`. There is no `#if` written by hand.
+  `switch (Platform.current())`. There is no `#if` written by hand.
 - Each platform's class goes in a part of the module (`time/posix.lar`, `time/windows.lar`). The parts
   reach the C before the module that imports them: C shared by several parts goes in a part of its own
   that they import (`process/common.lar`).
@@ -31,6 +31,8 @@ How the code is organized, so that it stays easy to read and to change.
 4. At the end, the C: `ccode`, native functions with a body of C.
 
 - `self.` is always written: it shows what is state.
+- What gives an implementation of an interface is a static function of it (`Platform.current()`).
+- Text of several lines is a text block (`"""`), not a line after another.
 - `switch` with patterns instead of chains of `if (x is ...)`.
 - Files of a few hundred lines: past ~800, split the module in parts.
 - No mutable globals in the compiler: each phase is a class (`Lexer`, `Parser`, ...).
@@ -39,5 +41,5 @@ How the code is organized, so that it stays easy to read and to change.
 
 - `./bootstrap/build.sh --verify --test` must pass: the compiler builds itself (stage 2 == stage 3) and
   every test passes. A change to the compiler regenerates `bootstrap/larimarc.c`.
-- The language is described in `doc/spec.md` and taught in `doc/manual.md` and `doc/manual.es.md`: a
+- The language is described in `docs/spec.md` and taught in `docs/manual.md` and `docs/manual.es.md` (the page, `docs/manual.html`, shows them): a
   change to the language changes the three.

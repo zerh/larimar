@@ -1,6 +1,5 @@
 // A method of a class for another system: its C is not in this build, so calling it panics.
-import std.os;
-import std.os { OS, WindowsPlatform, UnixPlatform };
+import std.os { Platform, OS, WindowsPlatform, UnixPlatform };
 
 class WindowsOnly implements WindowsPlatform {
     native function ticks(): int64 { return (int64_t)GetTickCount64(); }
@@ -11,7 +10,7 @@ class UnixOnly implements UnixPlatform {
 }
 
 function main(): int32 {
-    if (os.platform() == OS.Windows) {
+    if (Platform.current() == OS.Windows) {
         let u: UnixOnly = {};
         println("${u.pid()}");
     } else {

@@ -154,3 +154,14 @@ test function interfaceExtends(): void {
         function main(): int32 { return 0; }
         """, "name");
 }
+
+// static function in an interface: Shape.unit(). Its other methods are signatures: a body is an error.
+test function interfaceStatic(): void {
+    runs("tests/cases/language/interface_static.lar", [
+        "1.0 4.0 true"
+    ]);
+    failsWith(raw"""
+        interface Named { function name(): String { return "x"; } }
+        function main(): int32 { return 0; }
+        """, "only its static functions have a body");
+}

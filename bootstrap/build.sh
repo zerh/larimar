@@ -44,7 +44,7 @@ for arg in "$@"; do
     esac
 done
 
-for f in bootstrap/larimarc.c std/lang.lar doc/manual.md bin/larimar; do
+for f in bootstrap/larimarc.c std/lang.lar docs/manual.md bin/larimar; do
     if [ ! -e "$f" ]; then
         echo "ERROR: $f not found in $HERE"
         exit 1
@@ -112,7 +112,8 @@ if [ "$INSTALL" = 1 ]; then
     rm -rf "$PREFIX/std"
     cp -R std "$PREFIX/std"
     rm -rf "$PREFIX/doc" "$PREFIX/MANUAL.md"
-    cp -R doc "$PREFIX/doc"
+    mkdir -p "$PREFIX/doc"
+    cp docs/*.md "$PREFIX/doc/"
     rm -rf "$PREFIX/debug"
     cp -R tools/debuggers "$PREFIX/debug"
     PREFIX_ABS="$(cd "$PREFIX" && pwd)"

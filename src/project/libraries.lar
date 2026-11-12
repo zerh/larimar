@@ -10,7 +10,7 @@
 // ("larimar-interface:<hash>"). A program that links the library builds only when the three agree: a .lar
 // edited by hand, or copied from another build, is found out before the C compiler runs.
 
-import std.os;
+import std.os { Platform };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
@@ -37,8 +37,8 @@ public function interfaceHash(module: String): String {
 /** The file of a library: lib<name>.a, or the dynamic one of this platform. */
 public function libraryFile(name: String, kind: String): String {
     if (kind == "static") { return "lib${name}.a"; }
-    if (os.platformName() == "windows") { return "${name}.dll"; }
-    return os.platformName() == "macos" ? "lib${name}.dylib" : "lib${name}.so";
+    if (Platform.name() == "windows") { return "${name}.dll"; }
+    return Platform.name() == "macos" ? "lib${name}.dylib" : "lib${name}.so";
 }
 
 /** The marker the library has inside, with its hash. */
@@ -52,7 +52,7 @@ public function interfaceMarker(hash: String): String { return "larimar-interfac
 public function larimarLibraries(dir: String, config: Any, verify: bool, problems: String[*]): LarimarLibrary[*] {
     let out: LarimarLibrary[*] = [];
     let c: Any = config.c;
-    let sections: Any[] = [c, os.platformName() == "windows" ? null : c.unix, c[os.platformName()]];
+    let sections: Any[] = [c, Platform.name() == "windows" ? null : c.unix, c[Platform.name()]];
     let kinds: String[] = ["static", "dynamic"];
     for (kind in kinds) {
         let names: String[*] = [];

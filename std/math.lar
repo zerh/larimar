@@ -1,0 +1,52 @@
+// std.math: the numbers every program ends up needing.
+//
+//   import std.math as Math;
+//   import std.math { Random };
+//   let side: float64 = Math.sqrt(2.0);
+//   let dice: Random = { seed: 42 };
+//   let roll: int32 = dice.below(6) + 1;                // 1..6, the same sequence for the same seed
+//
+// The functions are C's (<math.h>), by their names. Random is for games and simulations: for secrets,
+// std.crypto.randomBytes.
+
+cinclude "<math.h>";
+
+public const PI: float64 = 3.141592653589793;
+public const E: float64 = 2.718281828459045;
+
+public native function sqrt(x: float64): float64;
+public native function pow(base: float64, exponent: float64): float64;
+public native function exp(x: float64): float64;
+public native function log(x: float64): float64;             // natural
+public native function log10(x: float64): float64;
+public native function floor(x: float64): float64;
+public native function ceil(x: float64): float64;
+public native function round(x: float64): float64;           // halves away from zero
+public native function abs(x: float64): float64 = fabs;
+public native function sin(x: float64): float64;
+public native function cos(x: float64): float64;
+public native function tan(x: float64): float64;
+public native function atan2(y: float64, x: float64): float64;
+
+public function min(a: float64, b: float64): float64 { return a < b ? a : b; }
+public function max(a: float64, b: float64): float64 { return a > b ? a : b; }
+
+/** A fast sequence of random numbers: the same for the same seed (xorshift64). */
+public class Random {
+    let seed: uint64 = 88172645463325252;
+
+    function next(): uint64 {
+        let x: uint64 = self.seed != 0 ? self.seed : 88172645463325252;
+        x = x ^ (x << 13);
+        x = x ^ (x >> 7);
+        x = x ^ (x << 17);
+        self.seed = x;
+        return x;
+    }
+
+    /** 0 <= it < n */
+    function below(n: int32): int32 { return (self.next() % (n as uint64)) as int32; }
+
+    /** 0.0 <= it < 1.0 */
+    function fraction(): float64 { return (self.next() >> 11) as float64 / 9007199254740992.0; }
+}

@@ -8,6 +8,7 @@ import std.io.files as Files;
 import std.io { IoError };
 import std.io.path as Paths;
 import std.os;
+import std.os { Platform };
 import tests.support.compiler { compiler, failsWith, runs, caseFile };
 
 /** The library of the tests: texts, a class whose objects C keeps as handles, a text that may be null. */
@@ -160,7 +161,7 @@ function buildLibrary(dir: String, args: String[*]): String {
 const LARIMAR_OUTPUT: String = "3 Larimar two 3 three 42\n3 mine (copy)\nnull\nX0\nX1\nX2\n";
 
 function onlyLinuxOrMac(): bool {
-    if (os.platformName() == "windows") {
+    if (Platform.name() == "windows") {
         skip("the libraries are tested on Linux and macOS");
         return false;
     }
@@ -203,7 +204,7 @@ test function aDynamicLibrary(): void throws IoError {
     if (!onlyLinuxOrMac()) { return; }
     let lib: String = buildLibrary(writeLibrary("lib-dynamic", ""), ["--dynamic"]);
     if (lib == "") { return; }
-    let file: String = os.platformName() == "macos" ? "libtextkit.dylib" : "libtextkit.so";
+    let file: String = Platform.name() == "macos" ? "libtextkit.dylib" : "libtextkit.so";
     check(Files.isFile(Paths.join(lib, file)), "${file} is there");
     check(!Files.isFile(Paths.join(lib, "libtextkit.a")), "and no static library of another build");
     let app: String = writeProgram("lib-dynamic-app", lib, "dynamic_libraries = [\"textkit\"]\ndynamic_library_paths = [\"libs/textkit\"]\n");

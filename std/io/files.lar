@@ -17,8 +17,7 @@
 
 import std.io { IoError, raise, InputStream, OutputStream };
 import std.io as Io;
-import std.os;
-import std.os { OS };
+import std.os { Platform, OS };
 import std.io.files.posix { PosixFolders };
 import std.io.files.windows { WindowsFolders };
 
@@ -39,7 +38,7 @@ native function fgets(into: byte*, size: int32, f: FileHandle): Untyped?;
 native function strlen(text: byte*): uint64;
 native const EOF: int32;
 
-native struct Stat = c"struct stat" { let st_mode: uint32; let st_size: int64; let st_mtime: int64; };
+native struct Stat = struct stat { let st_mode: uint32; let st_size: int64; let st_mtime: int64; };
 native function stat(path: String, into: Stat*): int32;
 native function remove(path: String): int32;
 
@@ -54,7 +53,7 @@ public interface FolderSystem {
     function listClose(list: int64): void;
 }
 
-let folders: FolderSystem = switch (os.platform()) {
+let folders: FolderSystem = switch (Platform.current()) {
     case Linux, MacOS, Unix -> PosixFolders {};
     case Windows -> WindowsFolders {};
 };

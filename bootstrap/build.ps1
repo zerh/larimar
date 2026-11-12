@@ -25,7 +25,7 @@ if (!(Test-Path "bin")) {
 }
 
 # Validación adaptada para incluir larimar.cmd en lugar del script bash
-$requiredFiles = @("bootstrap/larimarc.c", "std/lang.lar", "doc/manual.md", "bin/larimar.cmd")
+$requiredFiles = @("bootstrap/larimarc.c", "std/lang.lar", "docs/manual.md", "bin/larimar.cmd")
 foreach ($f in $requiredFiles) {
     if (!(Test-Path $f)) {
         Write-Error "ERROR: $f not found in $ScriptDir"
@@ -133,7 +133,8 @@ if (-not $NoInstall) {
     $docDir = Join-Path $PREFIX "doc"
     if (Test-Path $docDir) { Remove-Item $docDir -Recurse -Force }
     if (Test-Path "$PREFIX/MANUAL.md") { Remove-Item "$PREFIX/MANUAL.md" -Force }
-    Copy-Item "doc" $docDir -Recurse -Force
+    New-Item -ItemType Directory -Force -Path $docDir | Out-Null
+    Copy-Item "docs/*.md" $docDir -Force
 
     if (Test-Path $debugDir) { Remove-Item $debugDir -Recurse -Force }
     if (Test-Path "tools/debuggers") { Copy-Item "tools/debuggers" $debugDir -Recurse -Force }

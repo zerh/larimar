@@ -53,6 +53,17 @@ let lang: Module? = null;
 /** The words of the program's sources: what it can use from std.lang. */
 let words: Any = {} in default;
 let rootDir: String = "";
+/**
+ * --target: the one platform the C is generated for (linux, macos, windows, unix); "" for every one,
+ * chosen when the C is compiled. With a target, switch (Platform.current()) is its arm.
+ */
+public let target: String = "";
+
+/** Whether what is for `platform` ("": every one) is for the target. */
+public function inTarget(platform: String): bool {
+    return platform == "" || platform == target || platform == "unix" && target != "windows";
+}
+
 /** The folder of the standard library (codegen reads the runtime there, std/runtime). */
 public let stdDir: String = "std";
 
@@ -820,10 +831,44 @@ function expr(e: Expr in default): Expr {
             p.memory = exprOpt(p.memory);
             typeRef(p.buffer);
         }
-        case SwitchExpr sw -> switchExpr(sw);
+        case SwitchExpr sw -> {
+            switchExpr(sw);
+            if (chosen(sw) && sw.cases[0].expr != null) { return sw.cases[0].expr!; }
+        }
         default -> {}
     }
     return e;
+}
+
+/** Platform.current(), as the linker leaves it. */
+function asksPlatform(e: Expr in default): bool {
+    return e is Call c && c.args.length == 0 && c.callee is Member m && m.name == "current"
+        && m.object is Ident t && t.name == "std__os__Platform";
+}
+
+/** A switch on the platform that --target reduced to its arm. */
+function chosen(sw: SwitchExpr in default): bool {
+    return target != "" && sw.cases.length == 1 && sw.cases[0].isDefault && asksPlatform(sw.subject);
+}
+
+/** With --target, a switch on Platform.current() keeps only the arm of that platform, as its default. */
+function choosePlatform(sw: SwitchExpr in default): void {
+    if (target == "" || !asksPlatform(sw.subject)) { return; }
+    let variant: String = switch (target) {
+        case "linux" -> "Linux";
+        case "macos" -> "MacOS";
+        case "windows" -> "Windows";
+        default -> "Unix";
+    };
+    for (c in sw.cases) {
+        let named: bool = false;
+        for (p in c.patterns) { named = named || p.name == variant || p.name.endsWith(".${variant}"); }
+        if (c.guard != null || !(c.isDefault || named)) { continue; }
+        c.isDefault = true;
+        c.patterns = [] in default;
+        sw.cases = [c] in default;
+        return;
+    }
 }
 
 function switchExpr(sw: SwitchExpr in default): void {
@@ -837,6 +882,7 @@ function switchExpr(sw: SwitchExpr in default): void {
         if (c.throwStmt != null) { c.throwStmt!.value = expr(c.throwStmt!.value); }
         pop();
     }
+    choosePlatform(sw);
 }
 
 function isAlias(n: String): bool {

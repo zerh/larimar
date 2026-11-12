@@ -26,9 +26,9 @@ their own C compiler (tcc), so `larimar hello.lar` runs a file at once.
 
 ## Documentation
 
-- [Manual](doc/manual.md) ([en español](doc/manual.es.md)): the language with examples, projects,
+- [Manual](docs/manual.md) ([en español](docs/manual.es.md)): the language with examples, projects,
   C, libraries, the editor and the tests.
-- [Specification](doc/spec.md) (language 1.0): when it and the manual disagree, it wins.
+- [Specification](docs/spec.md) (language 1.0): when it and the manual disagree, it wins.
 - [Changelog](CHANGELOG.md) and [how to contribute](CONTRIBUTING.md).
 
 ## Calling C
@@ -40,9 +40,10 @@ it lives in is freed, or with `release(x)`), C types with fields and methods
 (`native type Db = sqlite3* { native function errmsg(): String = sqlite3_errmsg; }`), callbacks that take
 lambdas when C passes a `Context`, C text as `c"..."` when it is not a plain name, C written in the file
 (`ccode { ... }`), native functions whose body is C (`native function f(): T { ... }`), `lar"name"` inside that C, and a class for each system
-(`implements UnixPlatform` / `WindowsPlatform`, chosen with `switch (os.platform())`) for what changes between them:
-its C reaches only that system's build, and no `#if` is written by hand. A text that C makes with `malloc`
-is copied and freed (`native function strdup(s: String): String released by free`). See [chapter 23 of the manual](doc/manual.md#23-calling-c).
+(`implements UnixPlatform` / `WindowsPlatform`, chosen with `switch (Platform.current())`) for what changes between them:
+its C reaches only that system's build, and no `#if` is written by hand. The generated C is the same for
+every system; `--target linux` gives the C of one platform only. A text that C makes with `malloc`
+is copied and freed (`native function strdup(s: String): String released by free`). See [chapter 23 of the manual](docs/manual.md#23-calling-c).
 
 ## Libraries for C and for Larimar
 
@@ -54,7 +55,7 @@ inside, so a program that links it (`static_libraries` or `dynamic_libraries` in
 `import <name>`) builds only with files of one build. The library's classes go to C as handles, with
 their fields and methods (`tk_Counter_add(c, "x")` in C, `c.add("x")` in Larimar), its texts as copies to
 free; everything else of its C is static, so libraries and programs do not clash. See
-[chapter 27 of the manual](doc/manual.md#27-libraries-written-in-larimar).
+[chapter 27 of the manual](docs/manual.md#27-libraries-written-in-larimar).
 
 ## Building from source
 
@@ -91,13 +92,12 @@ larimar/
 │   └── project/         cc (the C compiler), testing (larimar test), libraries
 ├── std/                 the standard library (io, os, net, thread, encoding, text, time...); std/runtime: the runtime
 ├── tests/               the tests (tests/run-tests.sh)
-├── doc/                 manual.md, manual.es.md, spec.md
 ├── bootstrap/           larimarc.c (the compiler in C), build.sh, build.ps1
 ├── bin/                 the launchers installed as larimar/bin/larimar(.cmd)
 ├── tools/
 │   ├── debuggers/       lldb and gdb formatters (installed as larimar/debug)
 │   └── tcc/             build the tcc that the releases bring (Linux, Windows)
-├── docs/                the website (GitHub Pages)
+├── docs/                the website (GitHub Pages), with manual.md, manual.es.md and spec.md
 └── larimar.toml
 ```
 
@@ -113,7 +113,7 @@ tests/run-tests.sh memory     # only the tests whose path or name contains "memo
 bin/larimarc test tests/std   # only larimarc test, on one folder
 ```
 
-Tests are `test function`s with `std.test` checks ([manual, chapter 26](doc/manual.md#tests-test-function-and-larimar-test)), grouped one file per topic
+Tests are `test function`s with `std.test` checks ([manual, chapter 26](docs/manual.md#tests-test-function-and-larimar-test)), grouped one file per topic
 (`tests/c/callbacks_test.lar`, `tests/language/when_test.lar`...), run with AddressSanitizer and UBSan. The
 ones that test the compiler itself use `tests/support/compiler.lar`: `failsWith(raw"""...""", "error")` for a
 program the compiler must reject, and `runs("tests/cases/...", [lines])`, `panics(...)`, `memoryError(...)`
@@ -130,12 +130,12 @@ the debuggers and a client as other programs (`std.os.process`) and talk to them
 Other programs of `$LARIMAR_HOME/bin` answer commands of `larimar`, declared in `$LARIMAR_HOME/plugins/<name>.toml`
 (that is how Minero gives `larimar add` and `larimar fetch`). A project's `[dependencies]` live in
 `deps/<name>/`: their modules are imported from `deps/<name>/src` and their `[c]` is added to the
-project's. ([manual, chapter 26](doc/manual.md#26-projects-larimartoml-and-larimar-build).)
+project's. ([manual, chapter 26](docs/manual.md#26-projects-larimartoml-and-larimar-build).)
 
 ## Editor support
 
 `larimar check [file|folder] [--json]` reports the errors without generating C. `larimar lsp` is the
-language server (see "The editor" in chapter 26 of the [manual](doc/manual.md)): the server keeps the open documents
+language server (see "The editor" in chapter 26 of the [manual](docs/manual.md)): the server keeps the open documents
 (`editor/docstore.lar`) and answers each request in a forked process that links and analyzes the program
 (`editor/session.lar`) and answers from the analysis (`editor/ide.lar`).
 

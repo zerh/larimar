@@ -1,0 +1,24 @@
+// An interface can have static functions: they have a body and no self, and usually give an implementation.
+interface Shape {
+    function area(): float64;
+
+    static function unit(): Shape { return Square { side: 1.0 }; }
+
+    static function named(kind: String): Shape? {
+        return switch (kind) {
+            case "square" -> Square { side: 2.0 };
+            default -> null;
+        };
+    }
+}
+
+class Square implements Shape {
+    let side: float64;
+    function area(): float64 { return self.side * self.side; }
+}
+
+function main(): int32 {
+    let s: Shape = Shape.unit();
+    println("${s.area()} ${Shape.named("square")!.area()} ${Shape.named("circle") == null}");
+    return 0;
+}

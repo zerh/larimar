@@ -1,7 +1,6 @@
 // Methods whose body is C, in a class for each system (implements UnixPlatform / WindowsPlatform), chosen with a
-// switch on os.platform(). The C of the other system never reaches this build.
-import std.os;
-import std.os { OS, UnixPlatform, WindowsPlatform };
+// switch on Platform.current(). The C of the other system never reaches this build.
+import std.os { Platform, OS, UnixPlatform, WindowsPlatform };
 
 interface Greeter {
     function twice(x: int32): int32;
@@ -32,7 +31,7 @@ class WindowsGreeter implements Greeter, WindowsPlatform {
     native function label(name: String, items: byte[]): String { return "windows"; }
 }
 
-let greeter: Greeter = switch (os.platform()) {
+let greeter: Greeter = switch (Platform.current()) {
     case Windows -> WindowsGreeter {};
     case Linux, MacOS, Unix -> UnixGreeter {};
 };

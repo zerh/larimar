@@ -336,7 +336,7 @@ function nativeDeclaration(line: int32): Node {
 /** At C text: c"...". */
 function atCText(): bool { return at(TT.CText); }
 
-/** [ = NAME | = c"C" ]: what a native declaration is in C; "" without '='. */
+/** [ = NAME | = struct NAME | = c"C" ]: what a native declaration is in C; "" without '='. */
 function cTarget(what: String): String {
     if (!optional(TT.Assign)) { return ""; }
     if (atCText()) {
@@ -344,7 +344,10 @@ function cTarget(what: String): String {
         if (text.text.trim() == "") { error(text.line, "The C of ${what} is empty"); }
         return text.text;
     }
-    return expect(TT.Ident, "Expected the C name, or c\"C text\", after '=' in ${what}").text;
+    if (optional(TT.Struct)) {                  // = struct addrinfo: a C struct known by its tag
+        return "struct ${expect(TT.Ident, "Expected the name of the C struct after 'struct' in ${what}").text}" in default;
+    }
+    return expect(TT.Ident, "Expected the C name, 'struct' and its name, or c\"C text\", after '=' in ${what}").text;
 }
 
 /** (after `native function`) NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ; */
@@ -444,7 +447,7 @@ function cField(): FieldDecl {
 
 /**
  * (after `native type NAME`) [ = CTYPE | = ( Type, ... ) -> Type ] [ released by NAME ] ( ; | { member* } )
- *     CTYPE: NAME *...  or "C TYPE";  without '=' it is opaque (void*)
+ *     CTYPE: [ struct ] NAME *...  or c"C TYPE";  without '=' it is opaque (void*)
  */
 function nativeCType(name: Token in default): Node {
     let declaration: ExternTypeDecl = ExternTypeDecl { line: name.line, name: name.text } in default;
@@ -456,7 +459,8 @@ function nativeCType(name: Token in default): Node {
             declaration.cType = advance().text;
             if (declaration.cType.trim() == "") { error(name.line, "The C type of '${name.text}' is empty"); }
         } else {
-            let cType: String = expect(TT.Ident, "Expected the C type after 'native type ${name.text} =': a name (FILE*), c\"C text\" or a function type").text;
+            let tagged: String = optional(TT.Struct) ? "struct " : "";             // = struct tm*
+            let cType: String = "${tagged}${expect(TT.Ident, "Expected the C type after 'native type ${name.text} =': a name (FILE*, struct tm*), c\"C text\" or a function type").text}";
             while (optional(TT.Star)) { cType = "${cType}*"; }
             declaration.cType = cType.clone() in default;
         }
@@ -678,6 +682,7 @@ function functionDeclaration(isOverride: bool, withBody: bool): FunctionDecl {
         declaration.hasBody = true;
         if (declaration.waitUntil != null) { declaration.body = waitFirst(waitToken.line, declaration.waitUntil!, declaration.body); }
     } else {
+        if (at(TT.LBrace)) { error(current().line, "An interface has signatures: only its static functions have a body (static function ${name.text}(...) { ... })"); }
         expect(TT.Semi, "Expected ';' after the method signature");
     }
     return declaration;
@@ -815,7 +820,7 @@ function method(ofSynchronizedClass: bool, isOverride: bool): FunctionDecl {
     return method;
 }
 
-/** (after `interface`) NAME [ extends NAME ( , NAME )* ] { ( function NAME parameters [ : Type ] ... ; )* } */
+/** (after `interface`) NAME [ extends NAME ( , NAME )* ] { ( function NAME parameters [ : Type ] ... ; | static function ... )* } */
 function interfaceDeclaration(): InterfaceDecl {
     let name: Token = expect(TT.Ident, "Expected interface name");
     let declaration: InterfaceDecl = InterfaceDecl { line: name.line, name: name.text } in default;
@@ -827,9 +832,8 @@ function interfaceDeclaration(): InterfaceDecl {
     }
     expect(TT.LBrace, "Expected '{' to open interface body");
     while (!at(TT.RBrace) && !atEnd()) {
-        if (at(TT.Static)) {
-            error(current().line, "Interfaces cannot have static functions; declare them in a type or as plain functions");
-            advance();
+        if (optional(TT.Static)) {              // static function system(): Clock { ... }: gives an implementation
+            staticFunction(declaration.name);
         } else if (at(TT.Let)) {
             error(current().line, "Interfaces only declare methods; fields belong in classes or structs");
         } else {
