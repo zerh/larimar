@@ -1,0 +1,144 @@
+// semantics.analyzer.order: orders that must exist: globals get their values in order, C structs are defined before they are embedded.
+
+import semantics.types {
+    ArrK, classes, ClassInfo, classOf, cTypeOf, enumOf, enums, globals, hasThreadSafe, interfaces, isArray, isError,
+    lambdaList, named, NamedK, optIsPointer, Owner, structOf, structs, Symbol, TyK, Type, typeOrder, usedTypes
+};
+import semantics.analyzer { error };
+import semantics.analyzer.threads { markRound };
+
+/**
+ * The initial value of a global, and every function it calls however deep, cannot use a global that is
+ * initialized after it (or itself): it would find it without its value.
+ */
+public function checkGlobalOrder(initializers: Owner[*] in default): void {
+    for (k, v in globals) {
+        markRound += 1;
+        let todo: Owner[*] = [initializers[k]] in default;
+        let found: bool = false;
+        let i: int32 = 0;
+        while (i < todo.length && !found) {
+            let o: Owner = todo[i];
+            i += 1;
+            if (o.mark == markRound) { continue; }
+            o.mark = markRound;
+            for (u, g in o.uses) {
+                if (found || !initializedFrom(g, k)) { continue; }
+                found = true;
+                let same: bool = v.symbol != null && v.symbol! == g;
+                error(v.line, same
+                    ? "The initial value of '${v.name}' calls code that uses '${v.name}' itself (line ${o.useLines[u]}), before it has a value."
+                    : "The initial value of '${v.name}' calls code that uses global '${g.name}' (line ${o.useLines[u]}), which gets its value later. Declare '${g.name}' before '${v.name}', or give '${v.name}' its value in main.");
+            }
+            for (e in o.edges) { todo.push(e); }
+        }
+    }
+}
+
+/** Whether global `g` is the k-th one or one initialized after it. */
+function initializedFrom(g: Symbol in default, k: int32): bool {
+    let j: int32 = k;
+    while (j < globals.length) {
+        let s: Symbol? = globals[j].symbol;
+        if (s != null && s! == g) { return true; }
+        j += 1;
+    }
+    return false;
+}
+
+// =====================================================================================
+// C structs must be defined before they are embedded by value; that order must exist.
+// =====================================================================================
+
+public function computeTypeOrder(): void {
+    let nodes: Type[*] = [] in default;
+    for (s in structs) { nodes.push(named(s.name, NamedK.Struct)); }
+    for (e in enums) { nodes.push(named(e.name, NamedK.Enum)); }
+    for (c in classes) { nodes.push(named(c.name, NamedK.Class)); }
+    for (i in interfaces) { nodes.push(named(i.name, NamedK.Interface)); }
+    let snapshot: Type[*] = [] in default;
+    for (t in usedTypes) { snapshot.push(t); }
+    for (t in snapshot) {
+        if (t.kind == TyK.Func || t.kind == TyK.Array || t.kind == TyK.Opt) { nodes.push(t); }
+    }
+    let path: Type[*] = [] in default;
+    for (t in nodes) { visitType(t, path); }
+}
+
+function visitType(t: Type in default, path: Type[*] in default): void {
+    if (hasThreadSafe(t)) {                     // C uses the type without `thread safe`
+        visitType(cTypeOf(t), path);
+        return;
+    }
+    if (t.order == 2) { return; }
+    if (t.order == 1) {
+        let cycle: StringBuilder = {} in default;
+        let on: bool = false;
+        for (n in path) {
+            if (n == t) { on = true; }
+            if (on) { cycle.add("${display(n)} -> "); }
+        }
+        cycle.add(display(t));
+        error(typeLine(t), "Type cycle detected: ${cycle.toString()}. A value cannot contain itself; use a class (a reference) or an optional class field.");
+        return;
+    }
+    t.order = 1;
+    path.push(t);
+    for (d in valueDeps(t)) { visitType(d, path); }
+    path.pop();
+    t.order = 2;
+    typeOrder.push(t);
+}
+
+function display(t: Type): String { return t.kind == TyK.Func ? "closure ${t.text}" : t.text; }
+
+function typeLine(t: Type): int32 {
+    if (t.kind == TyK.Named) {
+        if (t.nk == NamedK.Struct) { return structOf(t.name)!.line; }
+        if (t.nk == NamedK.Class) { return classOf(t.name)!.line; }
+        return t.nk == NamedK.Enum ? enumOf(t.name)!.line : 0;
+    }
+    if (t.kind == TyK.Func) {
+        for (l in lambdaList) {
+            if (l.type == t && l.captures.length > 0) { return l.node.line; }
+        }
+    }
+    return 0;
+}
+
+/** Types that t's C definition embeds by value. */
+function valueDeps(t: Type in default): Type[*] {
+    let out: Type[*] = [] in default;
+    if (t.kind == TyK.Named) {
+        if (t.nk == NamedK.Struct) {
+            for (f in structOf(t.name)!.fields) { addValueDep(out, f.type); }
+        } else if (t.nk == NamedK.Enum) {
+            for (v in enumOf(t.name)!.variants) {
+                for (f in v.fields) { addValueDep(out, f.type); }
+            }
+        } else if (t.nk == NamedK.Class) {
+            let c: ClassInfo = classOf(t.name)!;
+            if (c.valid && c.superName != "") { out.push(named(c.superName, NamedK.Class)); }
+            for (f in c.fields) { addValueDep(out, f.type); }
+        }
+    } else if (t.kind == TyK.Array) {
+        if (t.ak == ArrK.Fixed) { addValueDep(out, t.elem!); }
+    } else if (t.kind == TyK.Opt) {
+        if (!optIsPointer(t)) { addValueDep(out, t.elem!); }
+    } else if (t.kind == TyK.Func) {
+        for (l in lambdaList) {
+            if (l.type == t) {
+                for (s in l.captures) { addValueDep(out, s.type); }
+            }
+        }
+    }
+    return out;
+}
+
+function addValueDep(out: Type[*] in default, t: Type in default): void {
+    if (isError(t) || t.kind == TyK.Prim || t.kind == TyK.Ptr) { return; }                   // T*: a C pointer
+    if (t.kind == TyK.Named && (t.nk == NamedK.Class || t.nk == NamedK.Extern)) { return; }    // pointers
+    if (isArray(t, ArrK.Growable)) { return; }                                                // pointer
+    if (t.kind == TyK.Opt && optIsPointer(t)) { return; }
+    out.push(t);
+}

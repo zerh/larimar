@@ -1,0 +1,199 @@
+// codegen.expressions.lambdas: lambdas and literal objects.
+
+import syntax.ast { ArrayLit, Expr, Lambda, ObjectLit };
+import semantics.types {
+    ArrK, ClassInfo, classOf, Conversion, FieldInfo, hasCapture, InterfaceInfo, interfaceOf, LambdaInfo, NamedK,
+    parentOf, StructInfo, structOf, Symbol, SymK, syncField, T_ANY, T_VOID, Type, VariantInfo
+};
+import codegen.gen {
+    Block, counter, fn, lambdaDefs, lambdaDone, line, literalPrototypes, literalTables, literalThunks, literalTypes,
+    loopBlock, samInterfaces, samSeen, tmp
+};
+import codegen.gen.classes { lambdaHeader, paramCTypes };
+import codegen.gen.statements { body };
+import codegen.gen.types { envField };
+import codegen.expressions {
+    cType, fieldC, forget, hoist, inOrder, placeMem, structName, tname, value, writtenValues
+};
+import codegen.expressions.strings { stringLiteral };
+
+public function lambdaValue(l: Lambda in default): String {
+    let li: LambdaInfo = l.lambda!;
+    genLambda(li);
+    let fid: int32 = li.type.funcId;
+    if (li.captures.length == 0) { return "((Closure_${fid}){ .fn = lambda_${li.id} })"; }
+    let env: String[*] = [] in default;
+    for (s in li.captures) { env.push(".${envField(s)} = ${captureValue(s)}"); }
+    return "((Closure_${fid}){ .fn = lambda_${li.id}, .env = { .l_${li.id} = { ${env.join(", ")} } } })";
+}
+
+function captureValue(s: Symbol): String {
+    let l: LambdaInfo? = fn.lambda;
+    if (l != null && hasCapture(l, s)) { return "env->${envField(s)}"; }
+    return s.kind == SymK.Self ? "self" : s.cName;
+}
+
+function genLambda(li: LambdaInfo in default): void {
+    if (lambdaDone[li.id]) { return; }
+    lambdaDone[li.id] = true;
+    let savedLoop: Block? = loopBlock;
+    loopBlock = null;
+    let sb: StringBuilder = {} in default;
+    sb.add(lambdaHeader(li));
+    sb.add(" {\n");
+    sb.add(li.captures.length == 0 ? "    (void)env_;\n" : "    Env_${li.id}* env = (Env_${li.id}*)env_;\n");
+    sb.add(body(li.node.body, li.type.elem!, false, li, li.params, "", li.node.line));
+    sb.add("}\n\n");
+    loopBlock = savedLoop;
+    lambdaDefs[li.id] = sb.toString();
+}
+
+/** A lambda used as a single-method interface: a small object holding the closure. */
+public function sam(l: Lambda in default, c: Conversion in default): String {
+    let i: InterfaceInfo = c.iface!;
+    if (!samSeen.contains(i.name)) {
+        samSeen[i.name] = true;
+        samInterfaces.push(i.name);
+    }
+    let closure: String = lambdaValue(l);
+    let mem: String = placeMem(l);
+    let o: String = tmp("sam");
+    line("${i.name}__Sam* ${o} = (${i.name}__Sam*)rt_mem_alloc(${mem}, sizeof(${i.name}__Sam), ${l.line});");
+    line("${o}->fn = ${closure};");
+    return "((${i.name}){ (void*)${o}, &${i.name}__sam_table })";
+}
+
+function givenValue(o: ObjectLit, name: String): Expr? {
+    let found: Expr? = null;
+    for (fi in o.fields) {
+        if (fi.name == name) { found = fi.value; }
+    }
+    return found;
+}
+
+public function objectLit(o: ObjectLit in default, t: Type in default): String {
+    if (t == T_ANY) {
+        let tb: String = tmp("table");
+        line("RtTable* ${tb} = rt_table_new(${placeMem(o)}, ${o.line});");
+        for (fi in o.fields) {
+            let v: String = value(fi.value);
+            if (fi.name == "" || fi.shorthand) {
+                line("rt_table_push(${tb}, ${v}, ${fi.line});");
+            } else {
+                line("rt_table_set(${tb}, ${stringLiteral(fi.name)}, ${v}, ${fi.line});");
+            }
+        }
+        return "rt_any_t(${tb})";
+    }
+    let variant: VariantInfo? = o.variant;
+    if (variant != null) {
+        let tag: String = "${t.name}_${variant.name}";
+        if (variant.fields.length == 0) { return "((${tname(t.name)}){ .tag = ${tag} })"; }
+        let held: Expr[*] = inOrder(writtenValues(o));
+        let v: String = "((${tname(t.name)}){ .tag = ${tag}, .as.${variant.name} = { ${fieldInits(variant.fields, o, "")} } })";
+        forget(held);
+        return v;
+    }
+    if (t.nk == NamedK.Struct) {
+        let s: StructInfo = structOf(t.name)!;
+        let sn: String = cType(t);              // a C struct has its own name
+        if (s.fields.length == 0) { return s.decl.cName != "" ? "((${sn}){ 0 })" : "((${sn}){ ._none = 0 })"; }
+        let held: Expr[*] = inOrder(writtenValues(o));
+        let inits: String = fieldInits(s.fields, o, "");
+        forget(held);
+        return "((${sn}){ ${inits == "" ? "0" : inits} })";            // {0}: a C struct with nothing given
+    }
+    if (t.nk != NamedK.Class) { return interfaceLit(o, interfaceOf(t.name)!); }
+    let c: ClassInfo = classOf(t.name)!;
+    let mem: String = hoist("RtMem*", placeMem(o)) in default;      // (field defaults are created there)
+    let obj: String = tmp("obj");
+    line("${c.name}* ${obj} = (${c.name}*)rt_mem_alloc(${mem}, sizeof(${c.name}), ${o.line});");
+    let sync: String = "";
+    if (c.sync) {       // its fields live in its own memory, used only under its lock
+        sync = tmp("sync");
+        line("RtSync* ${sync} = rt_sync_new(${mem}, ${o.line});");
+        mem = "(&${sync}->own)" in default;
+    }
+    let held: Expr[*] = inOrder(writtenValues(o));
+    let init: String = classInit(c, c.name, o, mem);
+    forget(held);
+    line("*${obj} = (${c.name}){ ${init} };");
+    if (sync != "") { line("${obj}->${syncField(c)} = ${sync};"); }
+    return obj;
+}
+
+function fieldInits(fields: FieldInfo[*] in default, o: ObjectLit in default, mem: String in default): String {
+    let out: String[*] = [] in default;
+    for (f in fields) {
+        let g: Expr? = givenValue(o, f.name);
+        let v: String = "";
+        if (g != null) {
+            v = value(g);
+        } else if (f.defaultValue == null) {
+            continue;                        // a field of a C struct that was not given: zero
+        } else {
+            let saved: String = fn.placeOverride;
+            if (mem != "") { fn.placeOverride = mem; }
+            v = value(f.defaultValue!);
+            fn.placeOverride = saved;
+        }
+        out.push(".${fieldC(f)} = ${v}");
+    }
+    return out.join(", ");
+}
+
+function classInit(level: ClassInfo in default, concrete: String, o: ObjectLit in default, mem: String in default): String {
+    let parts: String[*] = [] in default;
+    if (level.superName == "") {
+        parts.push("._h = { (const void*)&vtable_${concrete}, ${mem} }");
+    } else {
+        parts.push("._super = { ${classInit(parentOf(level)!, concrete, o, mem)} }");
+    }
+    if (level.fields.length > 0) { parts.push(fieldInits(level.fields, o, mem)); }
+    return parts.join(", ");
+}
+
+function interfaceLit(o: ObjectLit in default, i: InterfaceInfo in default): String {
+    let id: int32 = counter;
+    counter += 1;
+    let sn: String = "ILit_${id}";
+    literalTypes.add("typedef struct ${sn} {");
+    for (m in i.methods) { literalTypes.add(" ${cType(m.sig!)} ${m.name};"); }
+    literalTypes.add(" } ${sn};\n");
+    for (m in i.methods) {
+        let ps: StringBuilder = {} in default;
+        let asb: StringBuilder = {} in default;
+        for (k, p in paramCTypes(m)) {
+            ps.add(", ${p} a${k}");
+            asb.add(", a${k}");
+        }
+        let head: String = "static ${cType(m.sig!.elem!)} ${sn}__${m.name}(void* self${ps.toString()})";
+        literalPrototypes.add("${head};\n");
+        let ret: String = m.sig!.elem! == T_VOID ? "" : "return ";
+        literalThunks.add("${head} { ${ret}call_Closure_${m.sig!.funcId}(((${sn}*)self)->${m.name}${asb.toString()}); }\n");
+    }
+    literalTables.add("const ${i.name}_Table ${sn}_table = { NULL");
+    for (m in i.methods) { literalTables.add(", ${sn}__${m.name}"); }
+    literalTables.add(" };\n");
+    let mem: String = placeMem(o);
+    let obj: String = tmp("iobj");
+    line("${sn}* ${obj} = (${sn}*)rt_mem_alloc(${mem}, sizeof(${sn}), ${o.line});");
+    for (m in i.methods) { line("${obj}->${m.name} = ${value(givenValue(o, m.name)!)};"); }
+    return "((${i.name}){ (void*)${obj}, &${sn}_table })";
+}
+
+public function arrayLit(a: ArrayLit in default, t: Type): String {
+    if (t.ak == ArrK.Growable) {
+        let mem: String = placeMem(a);
+        let l: String = tmp("list");
+        line("${cType(t)} ${l} = ${structName(t)}_new(${mem}, ${a.line});");
+        for (x in a.elems) { line("${structName(t)}_add(${l}, ${value(x)}, ${a.line});"); }
+        return l;
+    }
+    if (a.elems.length == 0) { return "((${cType(t)}){ .length = 0 })"; }
+    let held: Expr[*] = inOrder(a.elems);
+    let vs: String[*] = [] in default;
+    for (x in a.elems) { vs.push(value(x)); }
+    forget(held);
+    return "((${cType(t)}){ .length = ${a.elems.length}, .items = { ${vs.join(", ")} } })";
+}

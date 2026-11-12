@@ -1,0 +1,267 @@
+// codegen.gen.library: a library's interface: its .h (C) and its .lar (Larimar), from its export functions.
+
+import semantics.types {
+    classOf, escapeName, FieldInfo, FunctionInfo, functions, isOpt, libraryPrefix, MethodInfo, optT, T_STRING,
+    T_VOID, Type
+};
+import semantics.linker { FILE_LINES, fileSources };
+import codegen.expressions { cType };
+import codegen.gen { handleClasses, handleClassNames, LibraryMember, libraryMembers, line, memberSkips };
+import codegen.gen.classes { params };
+import codegen.gen.statements { ret };
+import codegen.gen.types { define, isHandle };
+
+/** The name a class or function has in Larimar's own code, without its module (the linker's a__b). */
+public function plainName(n: String): String {
+    let at: int32? = n.lastIndexOf("__");
+    return at != null ? n.substring(at + 2) : n;
+}
+
+/** The export functions of the library, in the order they are declared. */
+public function exports(): FunctionInfo[*] {
+    let out: FunctionInfo[*] = [] in default;
+    for (f in functions) {
+        if (!f.isExtern && f.exportName != "" && f.sig != null) { out.push(f); }
+    }
+    return out;
+}
+
+/** What is wrong with the library's interface (two exports or classes with the same name): one message each. */
+public function libraryProblems(): String[*] {
+    let out: String[*] = [] in default;
+    let seen: Any = {} in default;
+    for (f in exports()) {
+        let n: String = plainName(f.name);
+        if (seen.contains(n)) { out.push("two export functions are called '${n}': the library's .lar would have both (give one another name)"); }
+        seen[n] = true;
+    }
+    for (c in handleClasses()) {
+        if (seen.contains(c)) { out.push("'${c}' is the name of a class and of an export function of the library: rename one"); }
+        seen[c] = true;
+    }
+    if (exports().length == 0) { out.push("the library has no export functions: mark the functions C calls with 'export function'"); }
+    let names: Any = {} in default;
+    for (f in exports()) { names[f.exportName] = true; }
+    for (cls in handleClassNames()) {
+        for (m in libraryMembers(cls)) {
+            if (names.contains(m.cName)) { out.push("'${m.cName}' is an export function and a member of ${plainName(cls)} in C: rename one (export function ... = c_name)"); }
+            names[m.cName] = true;
+        }
+    }
+    return out;
+}
+
+/** The doc comment (a doc block or // lines) right above a declaration, one line each. */
+function docAbove(encoded: int32): String[*] {
+    let out: String[*] = [];
+    let index: int32 = encoded / FILE_LINES;
+    if (index < 0 || index >= fileSources.length) { return out; }
+    let lines: String[*] = fileSources[index].split("\n");
+    let l: int32 = encoded % FILE_LINES - 2;
+    let found: String[*] = [];
+    while (l >= 0) {
+        let t: String = lines[l].trim();
+        if (!(t.startsWith("//") || t.startsWith("*") || t.startsWith("/*"))) { break; }
+        let clean: String = t;
+        if (clean.startsWith("/**")) { clean = clean.substring(3); }
+        else if (clean.startsWith("/*")) { clean = clean.substring(2); }
+        else if (clean.startsWith("//")) { clean = clean.substring(2); }
+        else if (clean.startsWith("*") && !clean.startsWith("*/")) { clean = clean.substring(1); }
+        if (clean.endsWith("*/")) { clean = clean.substring(0, clean.length - 2); }
+        if (clean.startsWith("*/")) { clean = ""; }
+        found.push(clean.trim().clone());
+        l -= 1;
+    }
+    let i: int32 = found.length - 1;
+    while (i >= 0) {
+        if (found[i] != "" || out.length > 0) { out.push(found[i].clone()); }
+        i -= 1;
+    }
+    while (out.length > 0 && out[out.length - 1] == "") { out.pop(); }
+    return out;
+}
+
+/** A doc comment for the .h or the .lar ("" when there is none). */
+function docBlock(lines: String[*], indent: String): String {
+    if (lines.length == 0) { return ""; }
+    if (lines.length == 1) { return "${indent}/** ${lines[0]} */\n"; }
+    let sb: StringBuilder = {} in default;
+    sb.add("${indent}/**\n");
+    for (l in lines) { sb.add(l == "" ? "${indent} *\n" : "${indent} * ${l}\n"); }
+    sb.add("${indent} */\n");
+    return sb.toString();
+}
+
+/** A type of an export function in the library's .h. */
+function headerType(t: Type, result: bool): String {
+    if (t == T_STRING || t == optT(T_STRING)) { return result ? "char*" : "const char*"; }
+    if (isHandle(t)) { return "${libraryPrefix != "" ? "${libraryPrefix}_" : ""}${plainName((isOpt(t) ? t.elem! : t).name)}*"; }
+    return t == T_VOID ? "void" : cType(t);
+}
+
+/** The C prototype of an export function in the .h. */
+function headerPrototype(f: FunctionInfo): String {
+    let ps: String[*] = [] in default;
+    for (i, p in f.sig!.params) { ps.push("${headerType(p, false)} ${escapeName(f.params[i].name)}"); }
+    if (ps.length == 0) { ps.push("void"); }
+    return "${headerType(f.sig!.elem!, true)} ${f.exportName}(${ps.join(", ")})";
+}
+
+/** What the .h says a result is, after its doc comment. */
+function resultNote(f: FunctionInfo): String { return typeNote(f.sig!.elem!); }
+
+function typeNote(r: Type): String {
+    let p: String = libraryPrefix != "" ? "${libraryPrefix}_" : "";
+    if (r == T_STRING) { return "The text is yours: free it with ${p}free."; }
+    if (r == optT(T_STRING)) { return "NULL, or a text that is yours: free it with ${p}free."; }
+    if (isHandle(r)) {
+        let c: String = plainName((isOpt(r) ? r.elem! : r).name);
+        return isOpt(r) ? "NULL, or a new ${c} that is yours: give it back with ${p}${c}_release." : "A new ${c} that is yours: give it back with ${p}${c}_release.";
+    }
+    return "";
+}
+
+/** The library's header for C: its handles, its export functions, how to free what they give. */
+public function libraryHeader(name: String, version: String, kind: String, hash: String, made: String): String {
+    let p: String = libraryPrefix != "" ? "${libraryPrefix}_" : "";
+    let guard: String = "${name.toUpperCase()}_H";
+    let sb: StringBuilder = {} in default;
+    sb.add("/*\n * ${name}.h: ${name} ${version}, a ${kind} library written in Larimar (${made}).\n");
+    sb.add(" * Written by larimar build from the export functions: do not edit it.\n *\n");
+    sb.add(" * - A text it returns (char*) is yours: free it with ${p}free.\n");
+    let hs: String[*] = handleClasses();
+    if (hs.length > 0) { sb.add(" * - A handle (${p}${hs[0]}*...) is an object of the library: give it back with its _release.\n"); }
+    sb.add(" * - The texts it receives are copied when it keeps them; NULL is an error, except for a String? (may be NULL).\n");
+    sb.add(" * - A panic inside the library (a bug: an index out of range, a NULL handle) prints it and ends the program.\n */\n");
+    sb.add("#ifndef ${guard}\n#define ${guard}\n\n#include <stdint.h>\n#include <stdbool.h>\n\n");
+    sb.add("/* The interface it was built with: ${p}interface() gives the one of the library linked. */\n");
+    sb.add("#define ${name.toUpperCase()}_INTERFACE \"${hash}\"\n\n");
+    sb.add("#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
+    for (c in hs) { sb.add("typedef struct ${p}${c} ${p}${c};\n"); }
+    if (hs.length > 0) { sb.add("\n"); }
+    for (cls in handleClassNames()) {                // the members of each class: its fields (read) and methods
+        let c: String = plainName(cls);
+        sb.add("/* ${c}: its fields (to read) and its methods; self is the handle. */\n\n");
+        for (m in libraryMembers(cls)) {
+            let doc: String[*] = docAbove(m.field != null ? m.field!.line : m.method!.decl.line);
+            let r: Type = m.field != null ? m.field!.type : m.method!.sig!.elem!;
+            let note: String = typeNote(r);
+            if (note != "") {
+                if (doc.length > 0) { doc.push(""); }
+                doc.push(note);
+            }
+            sb.add(docBlock(doc, ""));
+            let ps: String[*] = ["${p}${c}* self"];
+            if (m.method != null) {
+                for (i, t in m.method!.sig!.params) { ps.push("${headerType(t, false)} ${escapeName(m.method!.decl.params[i].name)}"); }
+            }
+            sb.add("${headerType(r, true)} ${m.cName}(${ps.join(", ")});\n\n");
+        }
+    }
+    for (f in exports()) {
+        let doc: String[*] = docAbove(f.line);
+        let note: String = resultNote(f);
+        if (note != "") {
+            if (doc.length > 0) { doc.push(""); }
+            doc.push(note);
+        }
+        sb.add(docBlock(doc, ""));
+        sb.add("${headerPrototype(f)};\n\n");
+    }
+    for (c in hs) { sb.add("/** Gives back a ${c} (NULL does nothing). */\nvoid ${p}${c}_release(${p}${c}* handle);\n\n"); }
+    sb.add("/** Frees a text the library returned (NULL does nothing). */\nvoid ${p}free(void* text);\n\n");
+    sb.add("/** The interface hash of the library (as in ${name}.interface): compare it with ${name.toUpperCase()}_INTERFACE. */\n");
+    sb.add("const char* ${p}interface(void);\n\n");
+    sb.add("#ifdef __cplusplus\n}\n#endif\n\n#endif\n");
+    return sb.toString();
+}
+
+/**
+ * A class of the library in its .lar: a resource (the handle) with its fields as `native let` and its
+ * methods as `native function`, so a program uses it as in the library: c.add("x"), c.words.
+ */
+function bindingClass(cls: String in default, p: String): String {
+    let c: String = plainName(cls);
+    let sb: StringBuilder = {} in default;
+    sb.add(docBlock(docAbove(classOf(cls)!.line), ""));
+    let members: LibraryMember[*] = libraryMembers(cls);
+    let skips: String[*] = memberSkips(cls);
+    if (members.length == 0 && skips.length == 0) {
+        sb.add("public native type ${c} = ${p}${c}* released by ${p}${c}_release;\n\n");
+        return sb.toString();
+    }
+    sb.add("public native type ${c} = ${p}${c}* released by ${p}${c}_release {\n");
+    if (skips.length > 0) { sb.add("    // not given to C (they do not cross): ${skips.join(", ")}\n"); }
+    for (m in members) {
+        if (m.field != null) {
+            let f: FieldInfo = m.field!;
+            sb.add(docBlock(docAbove(f.line), "    "));
+            let released: String = f.type == T_STRING || f.type == optT(T_STRING) ? " released by ${p}free" : "";
+            sb.add("    native let ${f.name}: ${bindingType(f.type)} = ${m.cName}${released};\n");
+            continue;
+        }
+        let mi: MethodInfo = m.method!;
+        let ps: String[*] = [];
+        let names: String[*] = [];
+        for (i, t in mi.sig!.params) {
+            ps.push("${mi.decl.params[i].name}: ${bindingType(t)}");
+            names.push(mi.decl.params[i].name);
+        }
+        let r: Type = mi.sig!.elem!;
+        sb.add(docBlock(docAbove(mi.decl.line), "    "));
+        if (isHandle(r) && !isOpt(r)) {        // C gives a handle that is never NULL: the same type as in the library
+            sb.add("    function ${m.name}(${ps.join(", ")}): ${bindingType(r)} { return self.${m.name}_c(${names.join(", ")})!; }\n");
+            sb.add("    native function ${m.name}_c(${ps.join(", ")}): ${bindingType(r)}? = ${m.cName};\n");
+            continue;
+        }
+        let released: String = r == T_STRING || r == optT(T_STRING) ? " released by ${p}free" : "";
+        sb.add("    native function ${m.name}(${ps.join(", ")}): ${r == T_VOID ? "void" : bindingType(r)} = ${m.cName}${released};\n");
+    }
+    sb.add("}\n\n");
+    return sb.toString();
+}
+
+/** A type of an export function in the library's .lar. */
+function bindingType(t: Type): String {
+    if (isHandle(t)) { return isOpt(t) ? "${plainName(t.elem!.name)}?" : plainName(t.name); }
+    return t.text;
+}
+
+/**
+ * The library's module for Larimar: native declarations of its export functions, with the C names of
+ * the .h. A text is copied into the caller's memory and freed; a class is a resource that gives the handle back.
+ */
+public function libraryModule(name: String, version: String, kind: String, made: String): String {
+    let p: String = libraryPrefix != "" ? "${libraryPrefix}_" : "";
+    let sb: StringBuilder = {} in default;
+    sb.add("// ${name} ${version}: a ${kind} library written in Larimar (${made}).\n");
+    sb.add("// Written by larimar build from the export functions: do not edit it. ${name}.interface has the hash\n");
+    sb.add("// of this file, and so does the library inside: a program builds only when they agree.\n\n");
+    sb.add("cinclude \"${name}.h\";\n\n");
+    for (cls in handleClassNames()) { sb.add(bindingClass(cls, p)); }
+    for (f in exports()) {
+        let ps: String[*] = [] in default;
+        let names: String[*] = [] in default;
+        for (i, t in f.sig!.params) {
+            ps.push("${f.params[i].name}: ${bindingType(t)}");
+            names.push(f.params[i].name);
+        }
+        let n: String = plainName(f.name);
+        let r: Type = f.sig!.elem!;
+        let ret: String = ": ${r == T_VOID ? "void" : bindingType(r)}";
+        let released: String = r == T_STRING || r == optT(T_STRING) ? " released by ${p}free" : "";
+        sb.add(docBlock(docAbove(f.line), ""));
+        if (isHandle(r) && !isOpt(r)) {         // C gives a handle that is never NULL: the same type as in the library
+            sb.add("public function ${n}(${ps.join(", ")}): ${bindingType(r)} { return ${n}_c(${names.join(", ")})!; }\n");
+            sb.add("native function ${n}_c(${ps.join(", ")}): ${bindingType(r)}? = ${f.exportName};\n\n");
+        } else if (isHandle(r)) {
+            sb.add("public native function ${n}(${ps.join(", ")})${ret} = ${f.exportName};\n\n");
+        } else {
+            sb.add("public native function ${n}(${ps.join(", ")})${ret} = ${f.exportName}${released};\n\n");
+        }
+    }
+    sb.add("// what gives back the texts and objects of the library (only the compiler calls them)\n");
+    sb.add("native function ${p}free(text: String): void = ${p}free;\n");
+    for (c in handleClasses()) { sb.add("native function ${p}${c}_release(handle: ${c}): void = ${p}${c}_release;\n"); }
+    return sb.toString();
+}

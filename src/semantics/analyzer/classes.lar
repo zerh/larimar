@@ -1,0 +1,240 @@
+// semantics.analyzer.classes: classes and interfaces: fields, methods, what a class inherits and what it implements.
+
+import syntax.ast {
+    ArrayLit, BoolLit, Expr, FloatLit, Ident, IntLit, Member, NullLit, ObjectLit, Param, StringLit, Unary
+};
+import semantics.types {
+    ArrK, buildingLibrary, classes, ClassInfo, classOf, enumOf, FieldInfo, findField, findMethod, FunctionInfo,
+    functionOf, functions, InterfaceInfo, interfaceOf, interfaces, isArray, isError, MethodInfo, P_TEMP, parentOf,
+    structs, Symbol, SymK, T_INT32, T_STRING, T_VOID, Type
+};
+import semantics.expressions.conversions { coerce };
+import semantics.analyzer { declare, error, lookup };
+
+public function validateClasses(): void {
+    let inCycle: Any = {} in default;
+    for (start in classes) {
+        let path: String[*] = [] in default;
+        let cur: String = start.name;
+        while (cur != "" && classOf(cur) != null) {
+            let idx: int32 = -1;
+            for (i, p in path) {
+                if (p == cur && idx < 0) { idx = i; }
+            }
+            if (idx >= 0) {
+                let disjoint: bool = true;
+                let i: int32 = idx;
+                while (i < path.length) {
+                    if (inCycle[path[i]] != null) { disjoint = false; }
+                    i += 1;
+                }
+                if (disjoint) {
+                    let shown: StringBuilder = {} in default;
+                    i = idx;
+                    while (i < path.length) {
+                        shown.add("${path[i]} -> ");
+                        i += 1;
+                    }
+                    shown.add(cur);
+                    error(classOf(cur)!.line, "Cyclic inheritance detected: ${shown.toString()}.");
+                }
+                i = idx;
+                while (i < path.length) {
+                    inCycle[path[i]] = 1;
+                    i += 1;
+                }
+                break;
+            }
+            path.push(cur);
+            cur = classOf(cur)!.superName;
+        }
+    }
+    for (c in classes) {
+        if (inCycle[c.name] != null) {
+            c.valid = false;
+        } else if (c.superName != "" && classOf(c.superName) == null) {
+            let what: String = interfaceOf(c.superName) != null ? " It is an interface: use 'implements'." : "";
+            error(c.line, "Class '${c.name}' extends '${c.superName}', but that class was not found.${what}");
+            c.valid = false;
+        }
+    }
+    let done: Any = {} in default;
+    for (c in classes) { processClass(c, done); }
+}
+
+function processClass(c: ClassInfo in default, done: Any): void {
+    if (done.contains(c.name)) { return; }
+    done[c.name] = true;
+    let parent: ClassInfo? = c.valid ? parentOf(c) : null;
+    if (parent != null) {
+        processClass(parent, done);
+        if (!parent.valid) { c.valid = false; }
+    }
+    let own: Any = {} in default;
+    for (f in c.fields) {
+        if (own.contains(f.name)) {
+            error(f.line, "Field '${f.name}' is declared twice in class '${c.name}'.");
+            continue;
+        }
+        own[f.name] = true;
+        if (parent != null) {
+            let pf: FieldInfo? = findField(parent.name, f.name);
+            if (pf != null) { error(f.line, "Field '${f.name}' in class '${c.name}' is already defined in superclass '${pf.owner}'."); }
+        }
+    }
+    let seen: MethodInfo[*] = [] in default;
+    for (m in c.methods) {
+        let line: int32 = m.decl.line;
+        if (!m.decl.hasBody && !(c.thread && (m.name == "start" || m.name == "join"))) {
+            error(line, "Native method '${c.name}.${m.name}' needs an implementation.");
+        }
+        let dup: bool = false;
+        for (x in seen) {
+            if (x.name == m.name && x.isOperator == m.isOperator && (!m.isOperator || x.sig!.params.length == m.sig!.params.length)) { dup = true; }
+        }
+        if (dup) {
+            error(line, "${m.isOperator ? "Operator" : "Method"} '${m.name}' is declared twice in class '${c.name}'.");
+            continue;
+        }
+        seen.push(m);
+        if (!m.isOperator && (own[m.name] != null || (parent != null && findField(parent.name, m.name) != null))) {
+            error(line, "'${m.name}' in class '${c.name}' is both a field and a method.");
+        }
+        let isOverride: bool = m.decl.isOverride;
+        if (c.superName == "") {
+            if (isOverride) { error(line, "Method '${m.name}' in class '${c.name}' has 'override' but the class has no superclass."); }
+            continue;
+        }
+        if (parent == null) { continue; }
+        let pm: MethodInfo? = findMethod(parent.name, m.name, m.isOperator, m.sig!.params.length);
+        if (m.isOperator) {
+            if (pm != null) {
+                m.introducer = pm.introducer;
+                checkSameSig(c, m, pm, line);
+            }
+            continue;
+        }
+        if (isOverride && pm == null) {
+            error(line, "Method '${m.name}' in class '${c.name}' has 'override' but does not exist in '${c.superName}'.");
+        } else if (!isOverride && pm != null) {
+            error(line, "Method '${m.name}' in class '${c.name}' overrides '${c.superName}' and REQUIRES the 'override' keyword.");
+        }
+        if (pm != null) {
+            m.introducer = pm.introducer;
+            checkSameSig(c, m, pm, line);
+        }
+    }
+}
+
+function sameLives(a: Param[*], b: Param[*]): bool {
+    if (a.length != b.length) { return false; }
+    for (i, p in a) {
+        if (p.lives != b[i].lives) { return false; }
+    }
+    return true;
+}
+
+function sameThrows(a: Type?, b: Type?): bool { return a == null ? b == null : b != null && a == b; }
+
+function throwsText(t: Type?): String { return t == null ? "" : " throws ${t.text}"; }
+
+function checkSameSig(c: ClassInfo, m: MethodInfo, pm: MethodInfo, line: int32): void {
+    if (m.sig! != pm.sig!) {
+        error(line, "Method '${c.name}.${m.name}' must keep the signature of '${pm.owner}.${m.name}': expected ${pm.sig!.text}, got ${m.sig!.text}.");
+    }
+    if (!sameThrows(m.throwsType, pm.throwsType)) {
+        error(line, "Method '${c.name}.${m.name}' must declare the same 'throws' as '${pm.owner}.${m.name}'.");
+    }
+    if (!sameLives(m.decl.params, pm.decl.params)) {
+        error(line, "Method '${c.name}.${m.name}' must say 'in ...' on the same parameters as '${pm.owner}.${m.name}'.");
+    }
+}
+
+public function validateInterfaces(): void {
+    for (c in classes) {
+        let seen: Any = {} in default;
+        for (iname in c.interfaces) {
+            if (seen.contains(iname)) {
+                error(c.line, "Class '${c.name}' lists interface '${iname}' twice.");
+                continue;
+            }
+            seen[iname] = true;
+            let io: InterfaceInfo? = interfaceOf(iname);
+            if (io == null) {
+                let what: String = classOf(iname) != null ? " It is a class: use 'extends'." : "";
+                error(c.line, "Class '${c.name}' implements '${iname}', but that interface was not found.${what}");
+                continue;
+            }
+            if (!c.valid) { continue; }
+            for (im in io.methods) {
+                let m: MethodInfo? = findMethod(c.name, im.name, false, 0);
+                if (m == null) {
+                    error(c.line, "Class '${c.name}' implements '${iname}' but has no method '${im.name}${im.sig!.text}'.");
+                } else if (m.sig! != im.sig! || !sameThrows(m.throwsType, im.throwsType) || !sameLives(m.decl.params, im.decl.params)) {
+                    error(m.decl.line, "Method '${m.owner}.${m.name}' does not match '${iname}.${im.name}': expected ${im.sig!.text}${throwsText(im.throwsType)}.");
+                }
+            }
+        }
+    }
+}
+
+public function checkFieldDefaults(): void {
+    let all: FieldInfo[*] = [] in default;
+    for (s in structs) {
+        for (f in s.fields) { all.push(f); }
+    }
+    for (c in classes) {
+        for (f in c.fields) { all.push(f); }
+    }
+    for (f in all) {
+        let d: Expr? = f.defaultValue;
+        if (d == null || isError(f.type)) { continue; }
+        if (!isConstantExpr(d) && classOf(f.owner) == null) {
+            error(f.line, "Default value of field '${f.name}' must be a constant (literals, null, [], or literals of structs).");
+            continue;
+        }
+        coerce(d, f.type, P_TEMP, "Default value of field '${f.name}'");
+    }
+}
+
+function isConstantExpr(e: Expr): bool {
+    return switch (e) {
+        case IntLit, FloatLit, BoolLit, NullLit -> true;
+        case StringLit s -> s.exprs.length == 0;
+        case Ident id -> {
+            let s: Symbol? = lookup(id.name);
+            yield s != null && s.kind == SymK.Const;
+        }
+        case Unary u -> isConstantExpr(u.operand);
+        case ObjectLit o -> {
+            if (o.typeName != "" && classOf(o.typeName) != null) { yield false; }
+            for (f in o.fields) {
+                if (!isConstantExpr(f.value)) { yield false; }
+            }
+            yield true;
+        }
+        case ArrayLit a -> {
+            for (x in a.elems) {
+                if (!isConstantExpr(x)) { yield false; }
+            }
+            yield true;
+        }
+        case Member m -> m.object is Ident id && enumOf(id.name) != null && lookup(id.name) == null;
+        default -> false;
+    };
+}
+
+public function checkMain(): void {
+    let m: FunctionInfo? = functionOf("main");
+    if (m == null || m.sig == null) { return; }
+    if (buildingLibrary && !m.isExtern) {
+        error(m.line, "A library has no main: C (or the program that uses it) calls its export functions. Remove main, or build a program ([project] kind = \"program\").");
+        return;
+    }
+    let ps: Type[*] = m.sig!.params;
+    let params: bool = ps.length == 0 || (ps.length == 1 && isArray(ps[0], ArrK.Slice) && ps[0].elem! == T_STRING);
+    let r: Type = m.sig!.elem!;
+    if (m.isExtern || !params || !(r == T_INT32 || r == T_VOID)) {
+        error(m.line, "'main' must be declared as function main(): int32 (or void), or function main(args: String[]): int32 to receive the program's arguments.");
+    }
+}

@@ -35,6 +35,17 @@ part of it, in the folder of its name.
 - A file of a copy of the standard library (a repository's `std/crypto.lar`, open in an editor whose
   installed Larimar is another) is checked against that copy: it showed *Switch value: expected
   RandomSource but got std.crypto.posix.UrandomSource*.
+- The parser is a class, `Parser` (the tokens and where it reads), with no state outside it: two can read
+  at once (the one of a `${...}` inside the one of its file). Its grammar is in `syntax/parser/`:
+  `declarations`, `natives`, `types`, `statements`, `expressions`.
+- The compiler's longest files are split by theme, each with the folder of its name:
+  `semantics/analyzer/` (declarations, classes, statements, flow, compact, narrowing, threads, order),
+  `semantics/expressions/` (constants, conversions, literals, operators, calls, switches), `codegen/gen/`
+  (types, classes, statements, library) and `codegen/expressions/` (strings, operators, calls, clone,
+  lambdas, patterns). No file of them passes 900 lines; the generated C is the same.
+- The result of a method of a struct, or of a class without subclasses or superclass, is read as that of
+  a function: it points only to the arguments its body can return. `p.expect(kind, "... ${name} ...")`
+  gives a token that lives where `p` lives, whatever the message.
 - The manuals and the specification are in `docs/`, next to the page that shows them (`manual.html`
   reads the ones published with it). The manual explains `native struct` and `native type`, and where
   `c"..."` is needed; the page no longer speaks of `#when`.

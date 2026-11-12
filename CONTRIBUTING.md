@@ -8,7 +8,7 @@ How the code is organized, so that it stays easy to read and to change.
 - A module that grows is split by creating **a folder with its name, next to the file**. The file stays
   as the entry: its public API (or its main class), what the others import. The folder holds its parts:
   `std/net.lar` and `std/net/posix.lar`, `std/net/windows.lar`; `src/syntax/parser.lar` and
-  `src/syntax/parser/statements.lar`.
+  `src/syntax/parser/statements.lar`; `src/semantics/analyzer.lar` and `src/semantics/analyzer/flow.lar`.
 - Import modules with a name: `import std.io.files as Files;` and write `Files.readString(...)`.
 
 ## Platforms

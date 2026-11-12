@@ -1,0 +1,227 @@
+// semantics.expressions.conversions: when a value of one type can be used as another: coercion and conversions.
+
+import syntax.ast { Expr, Lambda, Node, NullLit, Placed, SwitchExpr };
+import semantics.types {
+    ArrK, Conversion, ConvK, cTypeOf, EnumInfo, enumOf, Frame, FrameK, hasThreadSafe, implementor, InterfaceInfo,
+    interfaceOf, isClass, isEnumT, isError, isInterface, isNumeric, isOpt, isPtr, isStruct, isSubclass, meet,
+    MethodInfo, NamedK, P_TEMP, Place, PlaceK, R_STATIC, Region, rLocal, rResult, Scope, StructInfo, structOf,
+    Symbol, SymK, T_ANY, T_BOOL, T_ERROR, T_STRING, T_VOID, TyK, Type
+};
+import semantics.analyzer { block, error, frame, scope, wrong };
+import semantics.analyzer.flow { blockRegion, lifetime };
+import semantics.analyzer.threads { checkThreadSafeLambda };
+import semantics.expressions { check, note, resolvePlacement };
+import semantics.expressions.operators { lt, optional, withoutThreadSafe };
+
+public function typeOf(e: Node): Type { return e.ty ?? T_ERROR; }
+public function regionOf(e: Node): Region { return e.region ?? R_STATIC; }
+public function setRegion(e: Node in default, r: Region in default): void { e.region = r; }
+
+let blockMemories: int32 = 0;
+
+public function placeRegion(p: Place in default): Region {
+    switch (p.kind) {
+        case Memory -> { return p.memory!.memRegion!; }
+        case Stack -> { return frame().kind == FrameK.Global ? R_STATIC : rLocal(block(), "a temporary buffer of this block"); }
+        case OfObject, OfList, OfAny -> { return regionOf(p.expr!); }
+        case Temp -> { return tempRegion("a temporary of this statement"); }
+        case Block -> {
+            let b: Scope = p.scope!;
+            if (b.memory == "") {               // the block gets a memory: its first statement says so
+                b.memory = "mem_${blockMemories}" in default;
+                blockMemories += 1;
+                b.body![0].blockMemory = b.memory;
+            }
+            return blockRegion(b);
+        }
+        case Result -> {
+            let f: Frame = frame();
+            if (f.result == null) {
+                f.result = Symbol { name: "result", kind: SymK.Local, type: T_VOID, line: 0, frame: f, scope: f.root!, id: -1,
+                    cName: "result", region: R_STATIC, argsOutlive: f.returnsArgs } in default;
+            }
+            return rResult(f.result!);
+        }
+        default -> { return R_STATIC; }
+    }
+}
+
+/** The current statement's temporaries (none at the top level: there it is the whole program). */
+function tempRegion(label: String in default): Region {
+    let c: Scope? = scope;
+    while (c != null && c.frame == frame()) {
+        if (c.statement) { return rLocal(c, label); }
+        c = c.parent;
+    }
+    return R_STATIC;
+}
+
+public function hasRefs(t: Type): bool {
+    let visiting: Any = {};
+    return hasRefsIn(t, visiting);
+}
+
+/** Has a struct or an enum (by name) references to memory? */
+public function namedHasRefs(name: String, nk: NamedK): bool {
+    let visiting: Any = {};
+    return namedRefsIn(name, nk, visiting);
+}
+
+function hasRefsIn(t: Type, visiting: Any): bool {
+    if (t == T_STRING || t == T_ANY) { return true; }
+    return switch (t.kind) {
+        case Prim, Null, Ptr, Err -> false;                  // a C pointer: C owns what it points to
+        case Func -> true;
+        case Opt -> hasRefsIn(t.elem!, visiting);
+        case Array -> t.ak != ArrK.Fixed || hasRefsIn(t.elem!, visiting);
+        case Named -> switch (t.nk) {
+            case Class, Interface -> true;
+            case Extern -> true;                             // a C value may point to memory (a handle made in a memory)
+            case Struct, Enum -> namedRefsIn(t.name, t.nk, visiting);
+        };
+    };
+}
+
+function namedRefsIn(name: String, nk: NamedK, visiting: Any): bool {
+    if (visiting.contains(name)) { return false; }
+    visiting[name] = true;
+    if (nk == NamedK.Struct) {
+        let s: StructInfo? = structOf(name);
+        if (s == null) { return false; }
+        for (f in s.fields) {
+            if (hasRefsIn(f.type, visiting)) { return true; }
+        }
+        return false;
+    }
+    if (nk == NamedK.Enum) {
+        let e: EnumInfo? = enumOf(name);
+        if (e == null) { return false; }
+        for (v in e.variants) {
+            for (f in v.fields) {
+                if (hasRefsIn(f.type, visiting)) { return true; }
+            }
+        }
+    }
+    return false;
+}
+
+public function conv(kind: ConvK, from: Type in default, to: Type in default): Conversion {
+    return Conversion { kind, from, to } in default;
+}
+
+// =====================================================================================
+// Coercion and conversions
+// =====================================================================================
+
+/** Checks `e` where a value of type `target` is needed, applying implicit conversions. Returns the target type, or ERROR. */
+public function coerce(e: Expr in default, target: Type in default, place: Place in default, ctx: String in default): Type {
+    if (isError(target)) {
+        check(e, null, place);
+        return T_ERROR;
+    }
+    // A lambda where a single-method interface is expected (optionally `in` a memory).
+    if (e is Placed p && p.expr is Lambda && isInterface(target)) {
+        let t: Type = coerce(p.expr, target, resolvePlacement(p) ?? P_TEMP, ctx);
+        e.ty = t;
+        setRegion(e, regionOf(p.expr));
+        return t;
+    }
+    if (e is Lambda && isInterface(target)) {
+        let ii: InterfaceInfo = interfaceOf(target.name)!;
+        if (ii.methods.length != 1) { return wrong(e.line, "A lambda can only be used as '${ii.name}' if the interface has exactly one method."); }
+        let m: MethodInfo = ii.methods[0];
+        if (m.throwsType != null) { return wrong(e.line, "'${ii.name}.${m.name}' can throw, and lambdas cannot."); }
+        let lt: Type = check(e, m.sig, place);
+        if (isError(lt)) { return T_ERROR; }
+        let c: Conversion = conv(ConvK.SamLambda, lt, target);
+        c.iface = ii;
+        e.conv = c;
+        e.place = place;
+        let pr: Region = placeRegion(place);
+        lifetime(regionOf(e), pr, e.line, "This lambda uses data from {v}, but it is stored in {st}, which lives longer.");
+        e.region = pr;
+        note(m.sig!);
+        return target;
+    }
+    // A lambda where a `thread safe` function is expected: checked like the run of a Thread.
+    let bare: Type = withoutThreadSafe(target);
+    if (bare != target) {
+        let inner: Expr = e is Placed pl ? pl.expr : e;
+        if (inner is Lambda l) {
+            let lt: Type = coerce(e, bare, place, ctx);
+            if (isError(lt)) { return T_ERROR; }
+            if (l.lambda != null) { checkThreadSafeLambda(l.lambda!, e.line); }
+            note(target);
+            return target;
+        }
+    }
+    // A switch gets the optional type itself: its arms can be null or a value.
+    let hint: Type = isOpt(target) && !(e is NullLit) && !(e is SwitchExpr) ? target.elem! : target;
+    let t: Type = check(e, hint, place);
+    if (isError(t)) { return T_ERROR; }
+    let c: Conversion? = conversion(t, target);
+    if (c == null) {
+        let extra: String = "";
+        if (isClass(t) && isClass(target) && isSubclass(target.name, t.name)) {
+            extra = " A superclass value is not always a subclass; use a switch with a type pattern (case ${target.text} x -> ...).";
+        } else if (isOpt(t) && !isOpt(target)) {
+            extra = " The value may be null: use ?? to give a default, ! to assert it is not null, or check it with != null first.";
+        } else if (t.kind == TyK.Null) {
+            extra = " Only optional types (T?) can be null.";
+        }
+        return wrong(e.line, "${ctx}: expected ${target.text} but got ${t.text}.${extra}");
+    }
+    if (c.kind != ConvK.None) { e.conv = c; }
+    if (c.kind == ConvK.ToAny && (isStruct(t) || isEnumT(t))) { box(e, t, place); }
+    note(target);
+    return target;
+}
+
+/** A struct or enum put in an Any is copied into a memory: the one written with `in`, or the table's. */
+function box(e: Expr in default, t: Type, place: Place in default): void {
+    let bp: Place = e is Placed p && p.expr.place != null ? p.expr.place! : place;
+    if (bp.kind == PlaceK.Stack) {
+        error(e.line, "A value put in an Any is copied into a memory, not into a temporary buffer.");
+        return;
+    }
+    e.boxPlace = bp;
+    setRegion(e, meet(regionOf(e), placeRegion(bp)));
+}
+
+public function conversion(from: Type in default, to: Type in default): Conversion? {
+    if (from == to) { return conv(ConvK.None, from, to); }
+    if (hasThreadSafe(from) && cTypeOf(from) == to) { return conv(ConvK.None, from, to); }    // drops `thread safe`
+    if (to == T_ANY) {
+        let inner: Type = isOpt(from) ? from.elem! : from;
+        let ok: bool = from.kind == TyK.Null || isNumeric(inner) || inner == T_BOOL || inner == T_STRING
+            || isClass(inner) || (!isOpt(from) && (isStruct(inner) || isEnumT(inner)));
+        return ok ? conv(ConvK.ToAny, from, to) : null;
+    }
+    if (from.kind == TyK.Null && isOpt(to)) { return conv(ConvK.NullToOptional, from, to); }
+    if (from.kind == TyK.Null && isPtr(to)) { return conv(ConvK.None, from, to); }        // NULL
+    if (isOpt(to) && !isOpt(from)) {
+        let inner: Conversion? = conversion(from, to.elem!);
+        if (inner == null) { return null; }
+        let c: Conversion = conv(ConvK.WrapOptional, from, to);
+        c.implClass = inner.implClass;
+        c.iface = inner.iface;
+        return c;
+    }
+    if (isOpt(from) && isOpt(to) && isClass(from.elem!) && isClass(to.elem!) && isSubclass(from.elem!.name, to.elem!.name)) {
+        return conv(ConvK.Upcast, from, to);
+    }
+    if (isClass(from) && isClass(to) && isSubclass(from.name, to.name)) { return conv(ConvK.Upcast, from, to); }
+    if (isClass(from) && isInterface(to)) {
+        let impl: String = implementor(from.name, to.name);
+        if (impl == "") { return null; }
+        let c: Conversion = conv(ConvK.ClassToInterface, from, to);
+        c.implClass = impl;
+        c.iface = interfaceOf(to.name);
+        return c;
+    }
+    if (from.kind == TyK.Array && to.kind == TyK.Array && from.elem! == to.elem!) {
+        if (from.ak == ArrK.Fixed && to.ak == ArrK.Fixed && from.size <= to.size) { return conv(ConvK.ResizeFixed, from, to); }
+        if (to.ak == ArrK.Slice && from.ak != ArrK.Slice) { return conv(ConvK.ToSlice, from, to); }
+    }
+    return null;
+}

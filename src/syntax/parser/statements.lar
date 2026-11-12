@@ -1,0 +1,171 @@
+// syntax.parser.statements: statements and blocks.
+// Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
+
+import syntax.ast {
+    AssignStmt, Binary, BlockStmt, BreakStmt, CatchClause, ContinueStmt, Expr, ExprStmt, ForStmt, Ident, IfStmt,
+    ReturnStmt, Stmt, SwitchExpr, SwitchStmt, ThrowStmt, TryStmt, VarDecl, WhileStmt, YieldStmt
+};
+import syntax.lexer { Token, TT };
+import syntax.parser { Parser, qualifiedName };
+import syntax.parser.expressions { coalesce, expression, switchExpression };
+import syntax.parser.types { type };
+
+/** let NAME : Type [ = expression ] ; */
+public function variable(p: Parser in default): VarDecl {
+    let keyword: Token = p.expect(TT.Let, "Expected 'let'");
+    let name: Token = p.expect(TT.Ident, "Expected variable name");
+    p.expect(TT.Colon, "Expected ':' and a type after variable '${name.text}'");
+    let declaration: VarDecl = VarDecl { line: keyword.line, name: name.text, type: type(p) } in default;
+    if (p.optional(TT.Assign)) { declaration.init = expression(p); }
+    p.expect(TT.Semi, "Expected ';' after variable declaration");
+    return declaration;
+}
+
+/** { statement* } */
+public function block(p: Parser in default, what: String): Stmt[*] {
+    p.expect(TT.LBrace, "Expected '{' to open ${what}");
+    let statements: Stmt[*] = [] in default;
+    while (!p.at(TT.RBrace) && !p.atEnd()) { statements.push(statement(p)); }
+    p.expect(TT.RBrace, "Expected '}' to close ${what}");
+    return statements;
+}
+
+/**
+ * let ... | return [ expression ] ; | if ... | while ( expression ) block | for ... | break ; | continue ; |
+ * throw expression ; | yield expression ; | try ... | block | switch ... | assignment or call
+ */
+function statement(p: Parser in default): Stmt {
+    let start: Token = p.current();
+    let line: int32 = start.line;
+    return switch (start.kind) {
+        case Let -> variable(p);
+        case Const -> misplaced(p, start, "Constants are declared at top level");
+        case Function -> misplaced(p, start, "Functions are declared at top level or in a class; use a lambda inside a body");
+        case Return -> {
+            p.advance();
+            let statement: ReturnStmt = ReturnStmt { line } in default;
+            if (!p.at(TT.Semi)) { statement.value = expression(p); }
+            p.expect(TT.Semi, "Expected ';' after return");
+            yield statement;
+        }
+        case If -> {
+            p.advance();
+            yield ifStatement(p, line);
+        }
+        case While -> {
+            p.advance();
+            p.expect(TT.LParen, "Expected '(' after 'while'");
+            let condition: Expr = expression(p);
+            p.expect(TT.RParen, "Expected ')' after while condition");
+            yield WhileStmt { line, cond: condition, body: block(p, "while body") } in default;
+        }
+        case For -> {
+            p.advance();
+            yield forStatement(p, line);
+        }
+        case Break, Continue -> {
+            p.advance();
+            p.expect(TT.Semi, "Expected ';' after ${start.text}");
+            yield start.kind == TT.Break ? (BreakStmt { line } in default) : (ContinueStmt { line } in default);
+        }
+        case Throw -> {
+            p.advance();
+            let value: Expr = expression(p);
+            p.expect(TT.Semi, "Expected ';' after throw");
+            yield ThrowStmt { line, value } in default;
+        }
+        case Yield -> {
+            p.advance();
+            let value: Expr = expression(p);
+            p.expect(TT.Semi, "Expected ';' after yield");
+            yield YieldStmt { line, value } in default;
+        }
+        case Try -> {
+            p.advance();
+            yield tryStatement(p, line);
+        }
+        case LBrace -> BlockStmt { line, body: block(p, "block") } in default;
+        case Switch -> {
+            p.advance();
+            let switchExpression: SwitchExpr = switchExpression(p, line);
+            p.optional(TT.Semi);
+            yield SwitchStmt { line, switchExpr: switchExpression } in default;
+        }
+        default -> assignmentOrCall(p, line);
+    };
+}
+
+/** expression [ ( = | += | -= | ... ) expression ] ;      (a += b is a = a + b) */
+function assignmentOrCall(p: Parser in default, line: int32): Stmt {
+    let target: Expr = expression(p);
+    let statement: Stmt = ExprStmt { line, expr: target } in default;
+    let what: String = "expression";
+    if (p.optional(TT.Assign)) {
+        statement = AssignStmt { line, target, value: expression(p) } in default;
+        what = "assignment";
+    } else if (p.optional(TT.OpAssign)) {
+        let operatorToken: Token = p.previous();
+        let value: Expr = Binary { line: operatorToken.line, op: operatorToken.text, left: target, right: expression(p) } in default;
+        statement = AssignStmt { line, target, value } in default;
+        what = "assignment";
+    }
+    p.expect(TT.Semi, "Expected ';' after ${what}");
+    return statement;
+}
+
+/** Something that does not go here: the error, and an empty statement. */
+function misplaced(p: Parser in default, token: Token, message: String): Stmt {
+    p.error(token.line, message);
+    return BlockStmt { line: token.line } in default;
+}
+
+/** (after `if`) ( expression ) block [ else ( if ... | block ) ] */
+function ifStatement(p: Parser in default, line: int32): IfStmt {
+    p.expect(TT.LParen, "Expected '(' after 'if'");
+    let condition: Expr = expression(p);
+    p.expect(TT.RParen, "Expected ')' after if condition");
+    let statement: IfStmt = IfStmt { line, cond: condition, thenBody: block(p, "if body") } in default;
+    if (p.optional(TT.Else)) {
+        statement.hasElse = true;
+        if (p.at(TT.If)) {
+            statement.elseBody.push(ifStatement(p, p.advance().line));
+        } else {
+            statement.elseBody = block(p, "else body");
+        }
+    }
+    return statement;
+}
+
+/** (after `for`) ( [ NAME , ] NAME in expression [ .. expression ] ) block */
+function forStatement(p: Parser in default, line: int32): ForStmt {
+    p.expect(TT.LParen, "Expected '(' after 'for'");
+    let firstName: String = p.expect(TT.Ident, "Expected loop variable").text;
+    let indexName: String = "";
+    let valueName: String = firstName;
+    if (p.optional(TT.Comma)) {
+        indexName = firstName;
+        valueName = p.expect(TT.Ident, "Expected value variable after ','").text;
+    }
+    p.expect(TT.In, "Expected 'in' in for loop");
+    let loop: ForStmt = ForStmt { line, indexName, varName: valueName, iterable: expression(p) } in default;
+    if (p.optional(TT.DotDot)) { loop.rangeEnd = coalesce(p); }
+    p.expect(TT.RParen, "Expected ')' after for header");
+    loop.body = block(p, "for body");
+    if (loop.indexName != "" && loop.rangeEnd != null) { p.error(line, "A range loop has a single variable: for (i in a..b)"); }
+    return loop;
+}
+
+/** (after `try`) block ( catch ( qualified NAME NAME ) block )+ */
+function tryStatement(p: Parser in default, line: int32): TryStmt {
+    let statement: TryStmt = TryStmt { line, body: block(p, "try body") } in default;
+    while (p.at(TT.Catch)) {
+        let catchToken: Token = p.advance();
+        p.expect(TT.LParen, "Expected '(' after 'catch'");
+        let typeName: String = qualifiedName(p, "Expected the error type in catch");
+        let variableName: String = p.expect(TT.Ident, "Expected a variable name after the error type").text;
+        p.expect(TT.RParen, "Expected ')' after catch");
+        statement.catches.push(CatchClause { line: catchToken.line, typeName, varName: variableName, body: block(p, "catch body") } in default);
+    }
+    if (statement.catches.length == 0) { p.error(line, "A 'try' needs at least one 'catch'"); }
+    return statement;
+}

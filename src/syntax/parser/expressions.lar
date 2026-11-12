@@ -1,0 +1,442 @@
+// syntax.parser.expressions: expressions, from the lowest precedence to the highest.
+// Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
+
+import syntax.ast {
+    ArrayLit, Binary, BoolLit, Call, Cast, Expr, ExprStmt, FieldInit, FloatLit, Ident, Index, IntLit, IsExpr,
+    Lambda, Member, NullLit, ObjectLit, Pattern, PL_DEFAULT, PL_HEAP, PL_MEMORY, PL_STACK, Placed, PT_CONSTANT,
+    PT_DESTRUCTURE, PT_NAME, PT_NULL, PT_TYPE, ReturnStmt, SelfExpr, Stmt, StringLit, SuperMember, SwitchCase,
+    SwitchExpr, Ternary, ThrowStmt, TypeRef, Unary, Unwrap, WhileStmt
+};
+import syntax.lexer { Lexer, Token, TT };
+import syntax.parser { looseList, Parser, qualifiedName, strictList };
+import syntax.parser.declarations { field, parameter };
+import syntax.parser.statements { block };
+import syntax.parser.types { type };
+
+/** ternary [ in ( heap | default | byte[N] | expression ) ]: where a created value lives */
+public function expression(p: Parser in default): Expr {
+    let value: Expr = ternary(p);
+    if (!p.optional(TT.In)) { return value; }
+    let line: int32 = p.previous().line;
+    if (p.optional(TT.Heap)) { return Placed { line, expr: value, mode: PL_HEAP } in default; }
+    if (p.optional(TT.Default)) { return Placed { line, expr: value, mode: PL_DEFAULT } in default; }
+    if (p.atWord("byte") && p.next().kind == TT.LBracket) {
+        return Placed { line, expr: value, mode: PL_STACK, buffer: type(p) } in default;
+    }
+    return Placed { line, expr: value, mode: PL_MEMORY, memory: coalesce(p) } in default;
+}
+
+/** coalesce [ ? ternary : ternary ]      (right to left) */
+function ternary(p: Parser in default): Expr {
+    let condition: Expr = coalesce(p);
+    if (!p.optional(TT.Question)) { return condition; }
+    let line: int32 = p.previous().line;
+    let then: Expr = ternary(p);
+    p.expect(TT.Colon, "Expected ':' in the conditional expression (condition ? a : b)");
+    return Ternary { line, cond: condition, then, otherwise: ternary(p) } in default;
+}
+
+/** binary operators [ ?? coalesce ] */
+public function coalesce(p: Parser in default): Expr {
+    let left: Expr = binaryFrom(p, 1);
+    if (!p.optional(TT.QQ)) { return left; }
+    let line: int32 = p.previous().line;
+    return binary("??", left, coalesce(p), line);
+}
+
+/**
+ * The level of a binary operator, from the loosest (1) to the tightest; 0: not one.
+ *     ||   &&   == != < <= > >= (and `is`)   |   ^   &   << >>   + -   * / %
+ */
+public function level(kind: TT): int32 {
+    return switch (kind) {
+        case Or -> 1;
+        case And -> 2;
+        case Eq, Ne, Lt, Le, Gt, Ge -> 3;
+        case Pipe -> 4;
+        case Caret -> 5;
+        case Amp -> 6;
+        case Shl, Shr -> 7;
+        case Plus, Minus -> 8;
+        case Star, Slash, Percent -> 9;
+        default -> 0;
+    };
+}
+
+/**
+ * cast ( OPERATOR cast ... | is qualified NAME [ NAME ] )*: the operators of level `minimum` or tighter,
+ * each one left-associative (precedence climbing: the right side takes only tighter operators).
+ */
+function binaryFrom(p: Parser in default, minimum: int32): Expr {
+    let left: Expr = cast(p);
+    while (!p.hasFailed()) {
+        if (minimum <= 3 && p.optional(TT.Is)) {             // x is Dog, x is Dog d: a comparison
+            let line: int32 = p.previous().line;
+            let typeName: String = p.expect(TT.Ident, "Expected a class name after 'is'").text;
+            while (p.optional(TT.Dot)) { typeName = "${typeName}.${p.expect(TT.Ident, "Expected a name after '.'").text}" in default; }
+            left = IsExpr { line, expr: left, typeName, binding: p.at(TT.Ident) ? p.advance().text : "" } in default;
+            continue;
+        }
+        let tight: int32 = level(p.current().kind);
+        if (tight == 0 || tight < minimum) { break; }
+        let operatorToken: Token = p.advance();
+        left = binary(operatorToken.text, left, binaryFrom(p, tight + 1), operatorToken.line);
+    }
+    return left;
+}
+
+/** unary ( as Type )* */
+function cast(p: Parser in default): Expr {
+    let value: Expr = unary(p);
+    while (p.optional(TT.As)) {
+        let line: int32 = p.previous().line;
+        let wasReadingCastType: bool = p.readingCastType;
+        p.readingCastType = true;
+        let castType: TypeRef = type(p);
+        p.readingCastType = wasReadingCastType;
+        value = Cast { line, expr: value, type: castType } in default;
+    }
+    return value;
+}
+
+/** ( - | ! | ~ | & ) unary | postfix */
+function unary(p: Parser in default): Expr {
+    if (!(p.at(TT.Minus) || p.at(TT.Not) || p.at(TT.Tilde) || p.at(TT.Amp))) { return postfix(p); }
+    let operatorToken: Token = p.advance();
+    return Unary { line: operatorToken.line, op: operatorToken.text, operand: unary(p) } in default;
+}
+
+/** primary ( ( arguments ) | . NAME | . NAME { fields } | [ expression ] | ! )* */
+function postfix(p: Parser in default): Expr {
+    let value: Expr = primary(p);
+    while (!p.hasFailed()) {
+        if (p.optional(TT.LParen)) {
+            let call: Call = Call { line: p.previous().line, callee: value } in default;
+            strictList(p, TT.RParen, () -> { call.args.push(expression(p)); });
+            p.expect(TT.RParen, "Expected ')' after arguments");
+            value = call;
+        } else if (p.optional(TT.Dot)) {
+            let name: Token = p.expect(TT.Ident, "Expected a name after '.'");
+            let path: String = dottedPath(value);
+            if (path != "" && p.at(TT.LBrace)) {        // Enum.Variant { field: value }, module.Type { ... }
+                value = objectLiteral(p, "${path}.${name.text}" in default, name.line);
+            } else {
+                value = Member { line: name.line, object: value, name: name.text } in default;
+            }
+        } else if (p.optional(TT.ColonColon)) {
+            value = methodReference(p, value);
+        } else if (p.optional(TT.LBracket)) {
+            let line: int32 = p.previous().line;
+            value = Index { line, object: value, index: expression(p) } in default;
+            p.expect(TT.RBracket, "Expected ']' after index");
+        } else if (p.at(TT.Not)) {
+            value = Unwrap { line: p.advance().line, expr: value } in default;
+        } else {
+            return value;
+        }
+    }
+    return value;
+}
+
+/**
+ * Module::function, variable::method, self::method: a lambda that calls it with its own parameters. The
+ * parameters come from the function type expected there (the analyzer adds them).
+ */
+function methodReference(p: Parser in default, target: Expr in default): Expr {
+    let name: Token = p.expect(TT.Ident, "Expected a function or method name after '::'");
+    if (!(target is Ident || target is SelfExpr || dottedPath(target) != "")) {
+        p.error(name.line, "'::' goes after a module, a variable or 'self' (like Pages::show or panel::create)");
+    }
+    return referenceLambda(Member { line: name.line, object: target, name: name.text } in default);
+}
+
+/** The lambda of a reference: its body calls `callee` (the analyzer adds the parameters). */
+function referenceLambda(callee: Expr in default): Lambda {
+    let call: Call = Call { line: callee.line, callee } in default;
+    return Lambda { line: callee.line, body: [ReturnStmt { line: callee.line, value: call } in default], ref: call } in default;
+}
+
+/**
+ * NUMBER | "TEXT" | true | false | null | self | super . NAME | { fields } | [ expressions ] | switch ... |
+ * NAME [ { fields } ] | lambda | ( expression )
+ */
+function primary(p: Parser in default): Expr {
+    let start: Token = p.current();
+    let line: int32 = start.line;
+    if (p.optional(TT.Int)) { return IntLit { line, num: start.num, big: start.big, huge: start.huge, text: start.text } in default; }
+    if (p.optional(TT.Float)) { return FloatLit { line, text: start.text } in default; }
+    if (p.optional(TT.Str)) { return string(p, start); }
+    if (p.optional(TT.True) || p.optional(TT.False)) { return BoolLit { line, value: start.kind == TT.True } in default; }
+    if (p.optional(TT.Null)) { return NullLit { line } in default; }
+    if (p.optional(TT.Self)) { return SelfExpr { line } in default; }
+    if (p.optional(TT.ColonColon)) {             // ::name: a function of this module
+        let name: Token = p.expect(TT.Ident, "Expected a function name after '::'");
+        return referenceLambda(Ident { line: name.line, name: name.text } in default);
+    }
+    if (p.optional(TT.Super)) {
+        p.expect(TT.Dot, "Expected '.' after 'super'");
+        let name: Token = p.expect(TT.Ident, "Expected method name after 'super.'");
+        return SuperMember { line: name.line, name: name.text } in default;
+    }
+    if (p.optional(TT.New)) {
+        let className: String = p.at(TT.Ident) ? qualifiedName(p, "") : "Type";
+        p.error(line, "Larimar creates objects without 'new': write ${className} { field: value } in memory");
+        return NullLit { line } in default;
+    }
+    if (p.at(TT.LBrace)) { return objectLiteral(p, "", line); }
+    if (p.optional(TT.LBracket)) {
+        let array: ArrayLit = ArrayLit { line } in default;
+        while (!p.at(TT.RBracket)) {                   // a trailing comma is fine
+            array.elems.push(expression(p));
+            if (!p.optional(TT.Comma)) { break; }
+        }
+        p.expect(TT.RBracket, "Expected ']' to close array literal");
+        return array;
+    }
+    if (p.optional(TT.Switch)) { return switchExpression(p, line); }
+    if (p.optional(TT.Ident)) { return p.at(TT.LBrace) ? objectLiteral(p, start.text, line) : (Ident { line, name: start.text } in default); }
+    if (p.at(TT.LParen)) {
+        if (lambdaAhead(p)) { return lambda(p); }
+        p.advance();
+        let inner: Expr = expression(p);
+        p.expect(TT.RParen, "Expected ')'");
+        return inner;
+    }
+    p.error(line, "Unexpected '${start.text}' in expression");
+    return NullLit { line } in default;
+}
+
+/** { [ field ( , field )* [ , ] ] }      field: NAME : expression | NAME | expression */
+function objectLiteral(p: Parser in default, typeName: String in default, line: int32): ObjectLit {
+    let literal: ObjectLit = ObjectLit { line, typeName } in default;
+    p.expect(TT.LBrace, "Expected '{' to open object literal");
+    looseList(p, TT.RBrace, () -> {
+        let start: Token = p.current();
+        if (p.at(TT.Ident) && p.next().kind == TT.Colon) {                  // name: value
+            p.advance();
+            p.advance();
+            literal.fields.push(FieldInit { line: start.line, name: start.text, value: expression(p) } in default);
+        } else if (p.at(TT.Ident) && (p.next().kind == TT.Comma || p.next().kind == TT.RBrace)) {
+            p.advance();                                                         // { x } = { x: x }
+            literal.fields.push(FieldInit { line: start.line, name: start.text, shorthand: true, value: Ident { line: start.line, name: start.text } in default } in default);
+        } else {
+            literal.fields.push(FieldInit { line: start.line, value: expression(p) } in default);    // positional (Any)
+        }
+    });
+    p.expect(TT.RBrace, "Expected '}' to close object literal");
+    return literal;
+}
+
+/** Is a lambda next: ( ... ) followed by -> ? */
+function lambdaAhead(p: Parser in default): bool {
+    let depth: int32 = 0;
+    let i: int32 = p.position;
+    while (i < p.tokens.length) {
+        let kind: TT = p.tokens[i].kind;
+        if (kind == TT.LParen) {
+            depth += 1;
+        } else if (kind == TT.RParen) {
+            depth -= 1;
+            if (depth == 0) { return i + 1 < p.tokens.length && p.tokens[i + 1].kind == TT.Arrow; }
+        } else if (kind == TT.Eof) {
+            return false;
+        }
+        i += 1;
+    }
+    return false;
+}
+
+/** ( [ parameter ( , parameter )* ] ) -> block */
+function lambda(p: Parser in default): Lambda {
+    let lambda: Lambda = Lambda { line: p.expect(TT.LParen, "Expected '('").line } in default;
+    strictList(p, TT.RParen, () -> { lambda.params.push(parameter(p, false)); });
+    p.expect(TT.RParen, "Expected ')' after lambda parameters");
+    p.expect(TT.Arrow, "Expected '->' after lambda parameters");
+    lambda.body = block(p, "lambda body");
+    return lambda;
+}
+
+/**
+ * (after `switch`) ( expression ) { case* }
+ *     case: ( case pattern ( , pattern )* | default ) [ when expression ] -> ( block | throw expression ; | expression ; )
+ */
+public function switchExpression(p: Parser in default, line: int32): SwitchExpr {
+    p.expect(TT.LParen, "Expected '(' after 'switch'");
+    let switchNode: SwitchExpr = SwitchExpr { line, subject: expression(p) } in default;
+    p.expect(TT.RParen, "Expected ')' after switch subject");
+    p.expect(TT.LBrace, "Expected '{' to open switch");
+    while (!p.at(TT.RBrace) && !p.atEnd()) {
+        let caseToken: Token = p.current();
+        let switchCase: SwitchCase = SwitchCase { line: caseToken.line } in default;
+        if (p.optional(TT.Default)) {
+            switchCase.isDefault = true;
+        } else {
+            p.expect(TT.Case, "Expected 'case' or 'default' in switch");
+            while (true) {
+                switchCase.patterns.push(pattern(p));
+                if (!p.optional(TT.Comma)) { break; }
+            }
+        }
+        if (p.optional(TT.When)) {
+            if (switchCase.isDefault) { p.error(caseToken.line, "'default' cannot have a 'when' condition"); }
+            switchCase.guard = expression(p);
+        }
+        p.expect(TT.Arrow, "Expected '->' after the case (this switch uses arrows, like Java)");
+        if (p.at(TT.LBrace)) {
+            switchCase.hasBlock = true;
+            switchCase.block = block(p, "case body");
+        } else if (p.at(TT.Throw)) {
+            let throwToken: Token = p.advance();
+            switchCase.throwStmt = ThrowStmt { line: throwToken.line, value: expression(p) } in default;
+            p.expect(TT.Semi, "Expected ';' after throw");
+        } else {
+            switchCase.expr = expression(p);
+            p.expect(TT.Semi, "Expected ';' after the case value");
+        }
+        switchNode.cases.push(switchCase);
+    }
+    p.expect(TT.RBrace, "Expected '}' to close switch");
+    return switchNode;
+}
+
+/**
+ * null | constant | qualified NAME [ NAME ] | qualified NAME { [ NAME [ : NAME ] ( , ... )* ] } [ NAME ]
+ *     (a value, a type with its binding, or an enum variant with its fields)
+ */
+function pattern(p: Parser in default): Pattern {
+    let start: Token = p.current();
+    if (p.optional(TT.Null)) { return Pattern { line: start.line, kind: PT_NULL } in default; }
+    if (p.at(TT.Int) || p.at(TT.Float) || p.at(TT.Str) || p.at(TT.True) || p.at(TT.False) || p.at(TT.Minus)) {
+        return Pattern { line: start.line, kind: PT_CONSTANT, constant: unary(p) } in default;
+    }
+    let pattern: Pattern = Pattern { line: start.line, kind: PT_NAME, name: qualifiedName(p, "Expected a pattern (a value, an enum variant or a type)") } in default;
+    if (p.at(TT.LParen)) {
+        p.error(pattern.line, "Patterns take their fields by name with braces: case ${pattern.name} { campo } or case ${pattern.name} { campo: nombre }");
+        return pattern;
+    }
+    if (p.optional(TT.LBrace)) {
+        pattern.kind = PT_DESTRUCTURE;
+        looseList(p, TT.RBrace, () -> {
+            let fieldName: String = p.expect(TT.Ident, "Expected a field name").text;
+            pattern.fields.push(fieldName);
+            pattern.bindings.push(p.optional(TT.Colon) ? p.expect(TT.Ident, "Expected a name after ':'").text : fieldName);
+        });
+        p.expect(TT.RBrace, "Expected '}' after the fields of the pattern");
+        if (p.at(TT.Ident)) { pattern.binding = p.advance().text; }
+    } else if (p.at(TT.Ident)) {
+        pattern.kind = PT_TYPE;
+        pattern.binding = p.advance().text;
+    }
+    return pattern;
+}
+
+/** "Hello ${name}": the texts, and the parsed expressions between them. */
+function string(p: Parser in default, token: Token in default): StringLit {
+    let literal: StringLit = StringLit { line: token.line } in default;
+    let raw: String = token.text;
+    let textStart: int32 = 0;
+    let line: int32 = token.line;
+    let i: int32 = 0;
+    while (i < raw.length && !p.hasFailed()) {
+        let character: byte = raw[i];
+        if (character == '\\' && i + 1 < raw.length) {
+            i += 2;
+        } else if (character == '$' && i + 1 < raw.length && raw[i + 1] == '{') {
+            let closing: int32 = interpolationEnd(raw, i + 1);
+            let inner: String = raw.substring(i + 2, closing);
+            if (inner.isBlank()) {
+                p.error(line, "Empty '\${}' in string");
+                return literal;
+            }
+            literal.texts.push(raw.substring(textStart, i));
+            literal.exprs.push(interpolation(p, inner, line));
+            let k: int32 = i;
+            while (k <= closing && k < raw.length) {
+                if (raw[k] == '\n') { line += 1; }
+                k += 1;
+            }
+            i = closing + 1;
+            textStart = i;
+        } else {
+            if (character == '\n') { line += 1; }
+            i += 1;
+        }
+    }
+    literal.texts.push(raw.substring(textStart));
+    return literal;
+}
+
+/** The expression inside ${...}: its own tokens, read with this parser, then back to the string's. */
+function interpolation(p: Parser in default, inner: String in default, line: int32): Expr {
+    let lexer: Lexer = { src: inner, line } in default;
+    lexer.run();
+    let within: Parser = Parser { tokens: lexer.toks, failed: lexer.error } in default;    // a parser of its own
+    let value: Expr = NullLit { line } in default;
+    if (within.failed == "") {
+        value = expression(within);
+        if (!within.atEnd()) { within.error(line, "Unexpected '${within.current().text}' inside '\${...}'"); }
+    }
+    if (p.failed == "") { p.failed = within.failed; }
+    return value;
+}
+
+function binary(operatorText: String in default, left: Expr in default, right: Expr in default, line: int32): Expr {
+    return Binary { line, op: operatorText, left, right } in default;
+}
+
+/**
+ * wait until (cond): the body starts with `while (!(cond)) { self.__wait(); }`. The lock is held when
+ * the body starts; __wait (a name no program can write) lets it go while waiting, and every method of
+ * the object that ends wakes the waiters to look at their condition again.
+ */
+public function waitFirst(line: int32, condition: Expr in default, body: Stmt[*] in default): Stmt[*] {
+    let wait: Expr = Call { line, callee: Member { line, object: SelfExpr { line } in default, name: "__wait" } in default } in default;
+    let loop: Stmt = WhileStmt { line, cond: Unary { line, op: "!", operand: condition, waitUntil: true } in default, body: [ExprStmt { line, expr: wait } in default] } in default;
+    let statements: Stmt[*] = [loop] in default;
+    for (statement in body) { statements.push(statement); }
+    return statements;
+}
+
+/**
+ * After `as T`, a '?' makes T optional only when what follows can come after a type (x as int64? ?? 0,
+ * (x as T?), x as T?;). Followed by the start of an expression it is a ternary: x as int64 ? a : b.
+ */
+public function optionalFollows(next: TT): bool {
+    switch (next) {
+        case RParen, Semi, Comma, RBracket, RBrace, LBracket, QQ, Eq, Ne, Colon, As, Is, And, Or, In, Question, Eof -> { return true; }
+        default -> { return false; }
+    }
+}
+
+/** a, a.b, a.b.c (only names), or "". */
+function dottedPath(value: Expr): String {
+    if (value is Ident identifier) { return identifier.name; }
+    if (value is Member member) {
+        let path: String = dottedPath(member.object);
+        if (path != "") { return "${path}.${member.name}"; }
+    }
+    return "";
+}
+
+/** Where the ${ that starts at `open` (the '{') closes: its '}' (strings inside are skipped). */
+function interpolationEnd(raw: String, open: int32): int32 {
+    let depth: int32 = 0;
+    let j: int32 = open;
+    while (j < raw.length) {
+        let character: byte = raw[j];
+        if (character == '"') {
+            j += 1;
+            while (j < raw.length && raw[j] != '"') {
+                if (raw[j] == '\\') { j += 1; }
+                j += 1;
+            }
+        } else if (character == '{') {
+            depth += 1;
+        } else if (character == '}') {
+            depth -= 1;
+            if (depth == 0) { return j; }
+        }
+        j += 1;
+    }
+    return j;
+}

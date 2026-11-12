@@ -1,0 +1,274 @@
+// semantics.analyzer.narrowing: where a T? variable is known not to be null.
+
+import syntax.ast {
+    allStmts, AssignStmt, Binary, BlockStmt, BreakStmt, ContinueStmt, Expr, ForStmt, Ident, IfStmt, IntLit, IsExpr,
+    Lambda, NullLit, Param, Stmt, ThrowStmt, TryStmt, Unary, YieldStmt
+};
+import semantics.types {
+    CatchInfo, EnumInfo, enumOf, enums, ForInfo, Frame, FrameK, isEnumT, isError, isInteger, isOpt, meet, named,
+    NamedK, P_GLOBAL, P_RESULT, P_TEMP, R_STATIC, SwitchInfo, Symbol, SymK, T_ANY, T_BYTE, T_ERROR, T_INT32,
+    T_STRING, TyK, Type
+};
+import semantics.linker { target };
+import semantics.expressions { check };
+import semantics.expressions.conversions { coerce, hasRefs, regionOf };
+import semantics.analyzer {
+    anyFieldsLoop, block, declare, error, frame, FrameState, HandledSet, lookup, popScope, pushScope, scope, state
+};
+import semantics.analyzer.flow { lifetimeOf };
+import semantics.analyzer.statements { alwaysExits, analyzeBlock, analyzeStmts };
+
+/** The optional locals that are not null when `c` evaluates to `onTrue` (and the names after `is`). */
+public function nonNull(c: Expr in default, onTrue: bool): Symbol[*] {
+    let out: Symbol[*] = [] in default;
+    facts(c, onTrue, out);
+    return out;
+}
+
+function facts(c: Expr in default, onTrue: bool, out: Symbol[*] in default): void {
+    switch (c) {
+        case Unary u -> {
+            if (u.op == "!") { facts(u.operand, !onTrue, out); }
+        }
+        case IsExpr x -> {
+            let b: Symbol? = x.symbol;
+            if (onTrue && b != null && !hasSymbol(out, b)) { out.push(b); }
+        }
+        case Binary b -> {
+            if (b.op == "&&" && onTrue) {
+                facts(b.left, true, out);
+                facts(b.right, true, out);
+            } else if (b.op == "||" && !onTrue) {
+                facts(b.left, false, out);
+                facts(b.right, false, out);
+            } else if ((b.op == "!=" || b.op == "==") && (b.op == "!=") == onTrue) {
+                let other: Expr? = b.left is NullLit ? b.right : b.right is NullLit ? b.left : null;
+                let s: Symbol? = other is Ident oi ? oi.symbol : null;
+                if (s != null && (s.kind == SymK.Local || s.kind == SymK.Param) && isOpt(s.type) && !hasSymbol(out, s)) { out.push(s); }
+            }
+        }
+        default -> {}
+    }
+}
+
+public function hasSymbol(list: Symbol[*], s: Symbol): bool {
+    for (x in list) {
+        if (x == s) { return true; }
+    }
+    return false;
+}
+
+/** Narrows in the current scope; an assignment to the variable ends it (see analyzeStmts). */
+public function narrow(syms: Symbol[*] in default): void {
+    for (s in syms) {
+        if (s.binding) {           // the name after `is` becomes visible
+            let existing: Symbol? = lookup(s.name);
+            if (existing == s) { continue; }
+            if (existing != null) {
+                error(s.line, "'${s.name}' is already declared (line ${existing.line}); give the name after 'is' another name.");
+                continue;
+            }
+            scope.names[s.name] = s.id;
+        } else if (!hasSymbol(scope.narrowSyms, s)) {
+            scope.narrowSyms.push(s);
+            scope.narrowTypes.push(s.type.elem!);
+        }
+    }
+}
+
+public function unnarrow(syms: Symbol[*]): void {
+    if (syms.length == 0) { return; }
+    let keepS: Symbol[*] = [] in default;
+    let keepT: Type[*] = [] in default;
+    for (i, s in scope.narrowSyms) {
+        if (!hasSymbol(syms, s)) {
+            keepS.push(s);
+            keepT.push(scope.narrowTypes[i]);
+        }
+    }
+    scope.narrowSyms = keepS;
+    scope.narrowTypes = keepT;
+}
+
+/** Does the block always leave (return, throw, break, continue)? */
+public function leaves(body: Stmt[*]): bool {
+    if (body.length == 0) { return false; }
+    return switch (body[body.length - 1]) {
+        case BreakStmt, ContinueStmt -> true;
+        case IfStmt i -> i.hasElse && leaves(i.thenBody) && leaves(i.elseBody);
+        case BlockStmt b -> leaves(b.body);
+        default -> alwaysExits(body);
+    };
+}
+
+/** The variables a body assigns somewhere (not inside lambdas). */
+public function reassignedNames(body: Stmt[*] in default): Any {
+    let out: Any = {} in default;
+    let ss: Stmt[*] = [] in default;
+    allStmts(body, ss);
+    for (s in ss) {
+        if (s is AssignStmt a && a.target is Ident id) { out[id.name] = 1; }
+    }
+    return out;
+}
+
+public function assigns(body: Stmt[*] in default, name: String): bool {
+    let ss: Stmt[*] = [] in default;
+    allStmts(body, ss);
+    for (s in ss) {
+        if (s is AssignStmt a && a.target is Ident id && id.name == name) { return true; }
+    }
+    return false;
+}
+
+public function analyzeFor(f: ForStmt in default): void {
+    let info: ForInfo = ForInfo {} in default;
+    f.forInfo = info;
+    let end: Expr? = f.rangeEnd;
+    if (end != null) {
+        info.range = true;
+        let a: Type = check(f.iterable, null, P_TEMP);
+        let b: Type = coerce(end, isInteger(a) ? a : T_INT32, P_TEMP, "End of range");
+        if (f.iterable is IntLit && isInteger(b) && a != b) { a = check(f.iterable, b, P_TEMP); }
+        if (!isError(a) && !isInteger(a)) { error(f.line, "A range needs integers, got ${a.text}."); }
+        info.elemType = isInteger(a) ? a : T_INT32;
+        pushScope();
+        let v: Symbol = declare(f.varName, SymK.Local, info.elemType!, f.line);
+        v.immutable = true;
+        info.value = v;
+        loopBody(f.body);
+        popScope();
+        return;
+    }
+    anyFieldsLoop = f.iterable;
+    // what the loop variable gives may be returned: then the list is created where the result goes
+    let t: Type = check(f.iterable, null, state().returned.contains(f.varName) ? P_RESULT : P_TEMP);
+    anyFieldsLoop = null;
+    if (t == T_ANY) {
+        info.any = f.iterable.anyFields ? 2 : 1;
+        info.elemType = T_ANY;
+        pushScope();
+        if (f.indexName != "") {
+            let idx: Symbol = declare(f.indexName, SymK.Local, info.any == 2 ? T_STRING : T_INT32, f.line);
+            idx.immutable = true;
+            if (info.any == 2) { idx.region = regionOf(f.iterable); }
+            info.index = idx;
+        }
+        let v: Symbol = declare(f.varName, SymK.Local, T_ANY, f.line);
+        v.immutable = true;
+        v.region = regionOf(f.iterable);
+        info.value = v;
+        loopBody(f.body);
+        popScope();
+        return;
+    }
+    let elem: Type = T_ERROR;
+    if (t.kind == TyK.Array) {
+        elem = t.elem!;
+    } else if (t == T_STRING) {
+        elem = T_BYTE;
+    } else if (!isError(t)) {
+        error(f.line, "Cannot iterate over a value of type ${t.text}.");
+    }
+    info.elemType = elem;
+    pushScope();
+    if (f.indexName != "") {
+        let idx: Symbol = declare(f.indexName, SymK.Local, T_INT32, f.line);
+        idx.immutable = true;
+        info.index = idx;
+    }
+    scope.iterating = f.rangeEnd == null;
+    let v: Symbol = declare(f.varName, SymK.Local, elem, f.line);
+    v.immutable = true;
+    v.region = hasRefs(elem) ? regionOf(f.iterable) : R_STATIC;
+    info.value = v;
+    loopBody(f.body);
+    popScope();
+}
+
+function loopBody(body: Stmt[*] in default): void {
+    state().loopDepth += 1;
+    pushScope();
+    scope.loop = true;              // its memory is freed on every turn
+    analyzeStmts(body);
+    popScope();
+    state().loopDepth -= 1;
+}
+
+public function analyzeThrow(t: ThrowStmt in default): void {
+    let vt: Type = check(t.value, null, P_GLOBAL);
+    if (isError(vt)) { return; }
+    if (!isEnumT(vt)) {
+        error(t.line, "Only enum values can be thrown, got ${vt.text}.");
+        return;
+    }
+    let ei: EnumInfo = enumOf(vt.name)!;
+    ei.thrown = true;
+    lifetimeOf(t.value, R_STATIC, t.line, "A thrown error cannot carry data from {v} (it could be freed while the error travels); use .clone() to copy it to the default memory.", "throw");
+    requireHandled(ei, t.line, "This 'throw'");
+}
+
+public function requireHandled(e: EnumInfo, line: int32, what: String): void {
+    for (h in state().handled) {
+        for (x in h.enums) {
+            if (x == e) { return; }
+        }
+    }
+    let f: Frame = frame();
+    if (f.throwsType != null && f.throwsType!.name == e.name) { return; }
+    if (f.kind == FrameK.Global) {
+        error(line, "${what} can throw ${e.name}, which is not allowed in a global initializer.");
+        return;
+    }
+    let where: String = f.kind == FrameK.Lambda ? "Lambdas cannot throw: handle it with try/catch inside the lambda." : "Handle it with try/catch, or declare 'throws ${e.name}'.";
+    error(line, "${what} can throw ${e.name}. ${where}");
+}
+
+public function analyzeYield(y: YieldStmt in default): void {
+    let st: FrameState = state();
+    if (st.yields.length == 0) {
+        error(y.line, "'yield' can only be used inside a block of a switch expression.");
+        check(y.value, null, P_TEMP);
+        return;
+    }
+    let si: SwitchInfo = st.yields[st.yields.length - 1];
+    coerce(y.value, si.resultType ?? T_ERROR, si.place, "Switch value");
+    si.region = meet(si.region, regionOf(y.value));
+}
+
+public function analyzeTry(t: TryStmt in default): void {
+    let caught: HandledSet = HandledSet {} in default;
+    let resolved: EnumInfo?[*] = [] in default;
+    for (c in t.catches) {
+        let e: EnumInfo? = enumOf(c.typeName);
+        if (e == null) {
+            error(c.line, "'${c.typeName}' is not an enum; only enums can be caught.");
+        } else if (hasEnum(caught.enums, e)) {
+            error(c.line, "${e.name} is caught twice.");
+        } else {
+            caught.enums.push(e);
+            e.thrown = true;
+        }
+        resolved.push(e);
+    }
+    state().handled.push(caught);
+    analyzeBlock(t.body);
+    state().handled.pop();
+    for (i, c in t.catches) {
+        let ci: CatchInfo = CatchInfo { error: resolved[i] } in default;
+        c.catchInfo = ci;
+        pushScope();
+        let v: Symbol = declare(c.varName, SymK.Local, resolved[i] != null ? named(resolved[i]!.name, NamedK.Enum) : T_ERROR, c.line);
+        v.immutable = true;
+        ci.variable = v;
+        analyzeStmts(c.body);
+        popScope();
+    }
+}
+
+function hasEnum(list: EnumInfo[*], e: EnumInfo): bool {
+    for (x in list) {
+        if (x == e) { return true; }
+    }
+    return false;
+}

@@ -1,0 +1,340 @@
+// semantics.expressions.operators: ? :, is, and the unary and binary operators.
+
+import syntax.ast { Binary, Expr, FloatLit, Ident, IntLit, IsExpr, NullLit, Param, Ternary, Unary };
+import semantics.types {
+    chain, ClassInfo, classOf, Conversion, ConvK, enumOf, enumSimple, findMethod, FrameK, implementor, isClass,
+    isEnumT, isError, isExternT, isInteger, isInterface, isMemory, isNumeric, isOpt, isPtr, isStruct, isSubclass,
+    meet, MethodInfo, named, NamedK, optT, P_TEMP, Place, pointable, ptrT, R_STATIC, structMethod, structOf, Symbol,
+    SymK, T_ANY, T_BOOL, T_ERROR, T_STRING, TyK, Type
+};
+import semantics.analyzer {
+    bindingSymbol, declare, error, frame, frameTop, lookup, Mutation, mutations, MutK, noteCapture, wrong
+};
+import semantics.analyzer.narrowing { nonNull };
+import semantics.analyzer.statements { requireBool };
+import semantics.analyzer.threads { currentOwner, edge };
+import semantics.expressions { check, checkIntValue, note, noted };
+import semantics.expressions.calls { madeBy, same };
+import semantics.expressions.constants { literalValue };
+import semantics.expressions.conversions { coerce, conv, conversion, regionOf, setRegion };
+import semantics.expressions.literals { checkWith, coerceWith };
+
+/**
+ * c ? a : b. The side that is not a bare literal (a number or null) gives the type, and the other side
+ * takes it. Two classes meet in their nearest common ancestor.
+ */
+public function checkTernary(t: Ternary in default, expected: Type? in default, place: Place in default): Type {
+    requireBool(t.cond, "?:");
+    let yes: Symbol[*] = nonNull(t.cond, true);
+    let no: Symbol[*] = nonNull(t.cond, false);
+    let swap: bool = loose(t.then) && !loose(t.otherwise);
+    let first: Expr = swap ? t.otherwise : t.then;
+    let second: Expr = swap ? t.then : t.otherwise;
+    let firstFacts: Symbol[*] = swap ? no : yes;
+    let secondFacts: Symbol[*] = swap ? yes : no;
+    let tf: Type = checkWith(firstFacts, first, expected, place);
+    if (isError(tf)) {
+        checkWith(secondFacts, second, null, place);
+        return T_ERROR;
+    }
+    let result: Type = tf;
+    if (loose(second)) {
+        let base: Type? = tf.kind == TyK.Null ? expected : tf;
+        if (base == null) { return wrong(t.line, "Cannot infer the type of '?:' when both values are null; give the variable a type."); }
+        result = second is NullLit || tf.kind == TyK.Null ? optional(base) : base;
+        if (isError(coerceWith(secondFacts, second, result, place, "Value of '?:'"))) { return T_ERROR; }
+    } else {
+        let ts: Type = checkWith(secondFacts, second, expected, place);
+        if (isError(ts)) { return T_ERROR; }
+        let u: Type? = unify(tf, ts);
+        if (u == null) {
+            let a: Type = swap ? ts : tf;
+            let b: Type = swap ? tf : ts;
+            return wrong(t.line, "The two values of '?:' have different types (${a.text} and ${b.text}); give the variable a type.");
+        }
+        result = u;
+        convertTo(second, ts, result);
+    }
+    convertTo(first, tf, result);
+    setRegion(t, meet(regionOf(t.then), regionOf(t.otherwise)));
+    return noted(result);
+}
+
+/** x is Dog [d]: the binding is declared where the test is known to be true (see facts). */
+public function checkIs(x: IsExpr in default): Type {
+    let t: Type = check(x.expr, null, P_TEMP);
+    if (isError(t)) { return T_BOOL; }
+    let inner: Type = isOpt(t) ? t.elem! : t;
+    let target: ClassInfo? = classOf(x.typeName);
+    if (target == null) {
+        error(x.line, "'is' tests for a class, and '${x.typeName}' is not one.");
+        return T_BOOL;
+    }
+    if (!isClass(inner) && !isInterface(inner)) {
+        error(x.line, "'is' needs an object (a class or interface value), got ${t.text}.");
+        return T_BOOL;
+    }
+    if (!related(target, inner)) {
+        error(x.line, "A ${t.text} can never be a ${target.name}.");
+        return T_BOOL;
+    }
+    x.tested = target;
+    if (x.binding != "") {
+        if (frame().kind == FrameK.Global) {
+            error(x.line, "A name after 'is' can only be used inside a function.");
+            return T_BOOL;
+        }
+        let s: Symbol = bindingSymbol(x.binding, named(target.name, NamedK.Class), x.line, regionOf(x.expr));
+        x.symbol = s;
+        note(s.type);
+    }
+    return T_BOOL;
+}
+
+/** Can a value of class or interface type `t` be a `cls`? */
+public function related(cls: ClassInfo in default, t: Type in default): bool {
+    return isClass(t) ? isSubclass(cls.name, t.name) || isSubclass(t.name, cls.name) : implementor(cls.name, t.name) != "";
+}
+
+/** A number or null literal: it takes the type of the other side of ?:. */
+function loose(e: Expr): bool { return isIntLiteral(e) || e is FloatLit || e is NullLit; }
+
+/** A type without `thread safe` (also inside an optional), or the type itself. */
+public function withoutThreadSafe(t: Type in default): Type {
+    if (t.kind == TyK.Func && t.safe) { return t.plain!; }
+    if (t.kind == TyK.Opt && t.elem!.kind == TyK.Func && t.elem!.safe) { return optional(t.elem!.plain!); }
+    return t;
+}
+
+public function optional(t: Type in default): Type {
+    return isOpt(t) || t == T_ANY ? t : optT(t);
+}
+
+function unify(a: Type in default, b: Type in default): Type? {
+    if (a == b) { return a; }
+    if (a.kind == TyK.Null) { return optional(b); }
+    if (b.kind == TyK.Null) { return optional(a); }
+    if (isOpt(a) && a.elem! == b) { return a; }
+    if (isOpt(b) && b.elem! == a) { return b; }
+    if (isClass(a) && isClass(b)) {
+        let up: ClassInfo[*] = chain(a.name);
+        let i: int32 = up.length - 1;
+        while (i >= 0) {        // nearest first
+            if (isSubclass(b.name, up[i].name)) { return named(up[i].name, NamedK.Class); }
+            i -= 1;
+        }
+    }
+    return null;
+}
+
+function convertTo(e: Expr in default, from: Type in default, to: Type in default): void {
+    if (from == to) { return; }
+    let c: Conversion? = conversion(from, to);
+    if (c != null && c.kind != ConvK.None) { e.conv = c; }
+}
+
+/** Checking an argument of an extern function: there `&x` is allowed (C may write into x). */
+public let externArg: bool = false;
+
+public function checkUnary(u: Unary in default, expected: Type? in default, place: Place in default): Type {
+    if (u.op == "&") { return checkAddress(u); }
+    if (u.op == "!") {
+        let t: Type = check(u.operand, T_BOOL, P_TEMP);
+        if (!isError(t) && t != T_BOOL && u.waitUntil) { return wrong(u.line, "The condition of 'wait until' must be bool, got ${t.text}."); }
+        return !isError(t) && t != T_BOOL ? wrong(u.line, "Operator '!' needs a bool, got ${t.text}.") : T_BOOL;
+    }
+    if (u.op == "~") {
+        let t: Type = check(u.operand, expected != null && isInteger(expected) ? expected : null, P_TEMP);
+        return !isError(t) && !isInteger(t) ? wrong(u.line, "Operator '~' needs an integer, got ${t.text}.") : t;
+    }
+    if (u.operand is IntLit n) {       // -2147483648 must be checked already negated
+        let t: Type = checkIntValue(literalValue(n, true), n.line, expected);
+        n.ty = t;
+        return t;
+    }
+    let t: Type = check(u.operand, expected != null && isNumeric(expected) ? expected : null, P_TEMP);
+    if (isError(t)) { return T_ERROR; }
+    if (isNumeric(t)) { return t; }
+    let op: MethodInfo? = operatorOf(t, "-", 0);
+    if (op == null) { return wrong(u.line, "Operator '-' needs a number, got ${t.text}."); }
+    u.opMethod = op;
+    edge(currentOwner(), op.own);
+    setRegion(u, meet(regionOf(u.operand), madeBy(u, op, place)));
+    return op.sig!.elem!;
+}
+
+/**
+ * &x: a pointer to the variable x, for C to read or write (getaddrinfo(..., &list), accept(fd, &addr, &len)).
+ * Only as an argument of an extern function, so it never outlives the call; x is a variable whose type
+ * a C pointer can point to.
+ */
+function checkAddress(u: Unary in default): Type {
+    if (!externArg) {
+        check(u.operand, null, P_TEMP);
+        return wrong(u.line, "'&' gives a pointer for C: it is only allowed as an argument of a native function, f(&x).");
+    }
+    externArg = false;                       // not inside: &(&x) or f(&g(&x))
+    if (!(u.operand is Ident id)) {
+        check(u.operand, null, P_TEMP);
+        return wrong(u.line, "'&' takes a variable: &x (to give C a field, copy it to a variable first).");
+    }
+    let s: Symbol? = lookup(id.name);
+    if (s == null) { return wrong(id.line, "Use of undeclared variable '${id.name}'."); }
+    let t: Type = check(u.operand, null, P_TEMP);
+    if (isError(t)) { return T_ERROR; }
+    if (s.kind != SymK.Local && s.kind != SymK.Param && s.kind != SymK.Global) { return wrong(u.line, "'&' takes a variable, and '${id.name}' is not one."); }
+    if (s.kind == SymK.Global && s.externValue != null) { return wrong(u.line, "'${id.name}' is a C global: C already has its address."); }
+    if (isMemory(s)) { return wrong(u.line, "'${id.name}' is a memory: a C function receives it as a memory parameter (byte[*]), not with '&'."); }
+    if (s.immutable) { return wrong(u.line, "'${id.name}' cannot change, and C could write through &${id.name}."); }
+    if (!pointable(t)) { return wrong(u.line, "C cannot get a pointer to a ${t.text}: '&' is for numbers, bool, C structs, native types and pointers."); }
+    noteCapture(s, id.line);
+    if (s.kind == SymK.Global) {
+        s.mutatedGlobal = true;
+    } else {
+        mutations.push(Mutation { line: u.line, root: s, frame: frameTop - 1, kind: MutK.Reassign } in default);   // C may write into it
+    }
+    setRegion(u, R_STATIC);
+    return noted(ptrT(t));
+}
+
+function operatorOf(t: Type in default, op: String, arity: int32): MethodInfo? {
+    if (isStruct(t)) { return structMethod(structOf(t.name)!, op, true, arity); }
+    return isClass(t) ? findMethod(t.name, op, true, arity) : null;
+}
+
+function isIntLiteral(e: Expr): bool {
+    return e is IntLit || (e is Unary u && u.op == "-" && u.operand is IntLit);
+}
+
+/** The two operand types (in lt and rt). */
+public let lt: Type = T_ERROR;
+let rt: Type = T_ERROR;
+
+public function checkBinary(b: Binary in default, expected: Type? in default, place: Place in default): Type {
+    let op: String = b.op;
+    switch (op) {
+        case "??" -> {
+            let l: Type = check(b.left, expected != null ? optT(expected) : null, place);
+            if (isError(l)) {
+                check(b.right, null, place);
+                return T_ERROR;
+            }
+            if (!isOpt(l)) {
+                error(b.line, "'??' is for optional values (T?), but the left side is ${l.text} and can never be null.");
+                check(b.right, null, place);
+                return T_ERROR;
+            }
+            coerce(b.right, l.elem!, place, "Right side of '??'");
+            setRegion(b, meet(regionOf(b.left), regionOf(b.right)));
+            return l.elem!;
+        }
+        case "&&", "||" -> {
+            let l: Type = check(b.left, T_BOOL, P_TEMP);
+            let r: Type = checkWith(nonNull(b.left, op == "&&"), b.right, T_BOOL, P_TEMP);
+            if ((!isError(l) && l != T_BOOL) || (!isError(r) && r != T_BOOL)) {
+                error(b.line, "Operator '${op}' needs two bool values (got ${l.text} and ${r.text}).");
+            }
+            return T_BOOL;
+        }
+        case "==", "!=" -> {
+            checkEquality(b);
+            return T_BOOL;
+        }
+        case "<", "<=", ">", ">=" -> {
+            if (!operands(b, null)) { return T_BOOL; }
+            if (isStruct(lt) || isClass(lt)) {
+                overloaded(b, lt, "<");
+            } else if (!(lt == T_STRING && rt == T_STRING) && (lt != rt || !isNumeric(lt))) {
+                error(b.line, "Operator '${op}' needs two numbers of the same type (got ${lt.text} and ${rt.text}).");
+            }
+            return T_BOOL;
+        }
+        case "<<", ">>" -> {
+            let l: Type = check(b.left, expected != null && isInteger(expected) ? expected : null, P_TEMP);
+            let r: Type = check(b.right, null, P_TEMP);
+            if (isError(l) || isError(r)) { return T_ERROR; }
+            return !isInteger(l) || !isInteger(r) ? wrong(b.line, "Operator '${op}' needs integers (got ${l.text} and ${r.text}).") : l;
+        }
+        default -> {}
+    }
+    // + - * / % & | ^
+    let hint: Type? = expected != null && (isNumeric(expected) || isStruct(expected)) ? expected : null;
+    if (!operands(b, hint)) { return T_ERROR; }
+    let t0: Type = lt;
+    let t1: Type = rt;
+    let bitwise: bool = op == "&" || op == "|" || op == "^";
+    if ((isStruct(t0) || isClass(t0)) && !bitwise) {
+        let m: MethodInfo? = operatorOf(t0, op, 1);
+        if (m != null) {
+            if (!overloaded(b, t0, op)) { return T_ERROR; }
+            setRegion(b, meet(meet(regionOf(b.left), regionOf(b.right)), madeBy(b, m, place)));
+            return m.sig!.elem!;
+        }
+    }
+    if (t0 != t1 || !(bitwise ? isInteger(t0) : isNumeric(t0))) {
+        let h: String = op == "+" && (t0 == T_STRING || t1 == T_STRING) ? " To join text use interpolation: \"\${a}\${b}\"." : "";
+        return wrong(b.line, "Operator '${op}' needs two ${bitwise ? "integers" : "numbers"} of the same type (got ${t0.text} and ${t1.text}).${h}");
+    }
+    if (op == "%" && !isInteger(t0)) { return wrong(b.line, "Operator '%' needs integers."); }
+    return t0;
+}
+
+function checkEquality(b: Binary in default): void {
+    if (b.left is NullLit || b.right is NullLit) {
+        let other: Expr = b.left is NullLit ? b.right : b.left;
+        let nul: Expr = b.left is NullLit ? b.left : b.right;
+        let t: Type = check(other, null, P_TEMP);
+        check(nul, null, P_TEMP);
+        if (!isError(t) && !isOpt(t) && t != T_ANY && !isPtr(t)) { error(b.line, "A value of type ${t.text} can never be null."); }
+        return;
+    }
+    if (!operands(b, null)) { return; }
+    let t0: Type = lt;
+    let t1: Type = rt;
+    if (isStruct(t0) || (isClass(t0) && operatorOf(t0, "==", 1) != null)) {
+        overloaded(b, t0, "==");
+        return;
+    }
+    let ok: bool = t0 == t1 && (isNumeric(t0) || t0 == T_BOOL || t0 == T_STRING
+        || (isEnumT(t0) && enumSimple(enumOf(t0.name)!)) || isExternT(t0) || isPtr(t0));
+    // objects compare by identity; an optional object (T?) can be compared with a T
+    let c0: Type = isOpt(t0) && isClass(t0.elem!) ? t0.elem! : t0;
+    let c1: Type = isOpt(t1) && isClass(t1.elem!) ? t1.elem! : t1;
+    let refs: bool = isClass(c0) && isClass(c1) && (isSubclass(c0.name, c1.name) || isSubclass(c1.name, c0.name));
+    if (!ok && !refs) {
+        let hint: String = isEnumT(t0) && t0 == t1 ? " Enums with data are compared with a switch." : "";
+        error(b.line, "Cannot compare ${t0.text} with ${t1.text} using '${b.op}'.${hint}");
+    }
+}
+
+/** Checks both sides (into lt and rt); integer literals adapt to the other side. Returns false when one is an error. */
+function operands(b: Binary in default, hint: Type? in default): bool {
+    let l: Type = check(b.left, hint, P_TEMP);
+    let opm: MethodInfo? = null;
+    if (isStruct(l) || isClass(l)) {
+        let name: String = switch (b.op) {
+            case "!=" -> "==";
+            case "<=", ">", ">=" -> "<";
+            default -> b.op;
+        };
+        opm = operatorOf(l, name, 1);
+    }
+    let r: Type = opm != null ? coerce(b.right, opm.sig!.params[0], P_TEMP, "Right side of '${b.op}'")
+        : check(b.right, isNumeric(l) ? l : hint, P_TEMP);
+    if (isIntLiteral(b.left) && isNumeric(r) && r != l) { l = check(b.left, r, P_TEMP); }
+    lt = l;
+    rt = r;
+    return !isError(l) && !isError(r);
+}
+
+function overloaded(b: Binary in default, t0: Type in default, op: String in default): bool {
+    let m: MethodInfo? = operatorOf(t0, op, 1);
+    if (m == null) {
+        let ret: String = op == "==" || op == "<" ? "bool" : t0.text;
+        error(b.line, "'${t0.text}' has no operator '${op}'; declare it with: operator ${op}(otro: ${t0.text}): ${ret} { ... }");
+        return false;
+    }
+    b.opMethod = m;
+    edge(currentOwner(), m.own);
+    return true;
+}

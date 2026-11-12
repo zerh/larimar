@@ -5344,9 +5344,10 @@ The Larimar compiler, **larimarc**, and the `larimar` tool are written in Larima
 larimar/
   src/                   the compiler (Larimar), one folder per stage:
     main.lar               the commands (new, build, run, test, check, lsp, dap)
-    syntax/                from text to tree: lexer, parser, ast
-    semantics/             understanding the program: modules (linker), types, analysis, expressions
-    codegen/               from tree to C: gen, expressions, prune, debug map
+    syntax/                from text to tree: lexer, parser (parser/: its grammar by theme), ast
+    semantics/             understanding the program: modules (linker), types, analyzer and expressions
+                           (analyzer/, expressions/: their parts by theme)
+    codegen/               from tree to C: gen, expressions (gen/, expressions/: their parts), prune, debug map
     editor/                larimar check, lsp and dap
     project/               the C compiler, larimar test (larimar.toml is read with std.encoding.toml)
   std/                   the standard library (std/runtime: the runtime, the C under every program)

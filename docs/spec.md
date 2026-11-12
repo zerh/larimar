@@ -1155,10 +1155,15 @@ A value does not create when it is a literal without interpolation, `null`, a co
 variable, a parameter, `self`, a field or an element (outside an `Any`), or a value placed with `in`
 (it says where it lives). The property is computed again until nothing changes.
 
+A method of a struct, and one of a class outside those of the fixed answers, is read as a function:
+its result flows from the parameters its body can return, and from `self` when it can return its data.
+
 Fixed answers:
 
 - a method of an interface: flows from every argument and from `self`, and creates (any class may
   implement it);
+- a method of a class that extends another, or that another extends: when its result flows from one
+  argument or from `self`, it flows from every one (a subclass may write it again);
 - a native function: when its first parameter is a memory ([§19.3](#193-native-functions)), it
   creates and its result flows from nothing; otherwise it does not create, and its result may flow from
   every argument (C may return a pointer into one of them);

@@ -12,7 +12,7 @@ import syntax.ast { Program };
 import semantics.linker { link, linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES, libraryRoots };
 import project.libraries { LarimarLibrary, larimarLibraries };
 import semantics.types { files, libraryRules, libraryPrefix };
-import semantics.analyzer { analyze, analysisErrors };
+import semantics.analyzer { analysisErrors, analyze };
 import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 

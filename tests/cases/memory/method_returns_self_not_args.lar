@@ -1,0 +1,20 @@
+// El resultado de un método apunta a self y no al mensaje que recibe: el mensaje puede ser un temporal.
+class Words {
+    let items: String[*] = [];
+    let missing: String = "";
+    function find(n: int32, complaint: String): String {
+        if (n < self.items.length) { return self.items[n]; }
+        println(complaint);
+        return self.missing;
+    }
+}
+let kept: String[*] = [] in default;
+function main(): int32 {
+    let w: Words = Words { items: ["uno", "dos"], missing: "-" } in default;
+    for (i in 0..3) {
+        let found: String = w.find(i, "no hay ${i}");       // lives where w lives, not in this block
+        kept.push(found);
+    }
+    println(kept.join(","));
+    return 0;
+}

@@ -1,0 +1,335 @@
+// semantics.expressions.switches: switch: its patterns and what they cover.
+
+import syntax.ast {
+    BlockStmt, BoolLit, Call, Expr, Ident, IfStmt, Pattern, PT_CONSTANT, PT_DESTRUCTURE, PT_NAME, PT_NULL, PT_TYPE,
+    Stmt, SwitchCase, SwitchExpr, ThrowStmt, TryStmt, YieldStmt
+};
+import semantics.types {
+    ClassInfo, classOf, EnumInfo, enumOf, isClass, isEnumT, isError, isInterface, isNumeric, isOpt, meet, named,
+    NamedK, P_TEMP, PatK, PatternInfo, Place, primByName, R_STATIC, structOf, SwitchInfo, Symbol, SymK, T_ANY,
+    T_BOOL, T_ERROR, T_STRING, T_VOID, TyK, Type, VariantInfo, variantOf
+};
+import semantics.analyzer { block, declare, error, FrameState, lookup, popScope, pushScope, state };
+import semantics.analyzer.narrowing { analyzeThrow };
+import semantics.analyzer.statements { analyzeBlock, requireBool };
+import semantics.expressions { check, note, variantFieldNames };
+import semantics.expressions.calls { all };
+import semantics.expressions.conversions { coerce, hasRefs, regionOf, setRegion };
+import semantics.expressions.operators { related };
+
+public function analyzeSwitch(sw: SwitchExpr in default, isExpr: bool, expected: Type? in default, place: Place in default): Type {
+    let st: Type = check(sw.subject, null, P_TEMP);
+    let si: SwitchInfo = SwitchInfo { subjectType: st, isExpression: isExpr, region: R_STATIC, place } in default;
+    sw.sw = si;
+    let inner: Type = isOpt(st) ? st.elem! : st;
+
+    if (isExpr) {
+        si.resultType = expected;
+        if (si.resultType == null) {
+            for (c in sw.cases) {
+                if (c.expr != null) {
+                    pushScope();
+                    bindPatternsForInference(c, inner);
+                    si.resultType = check(c.expr!, null, place);
+                    popScope();
+                    break;
+                }
+            }
+            if (si.resultType == null) {
+                error(sw.line, "Cannot infer the type of this switch; give the variable a type.");
+                si.resultType = T_ERROR;
+            }
+        }
+        note(si.resultType!);
+    }
+
+    let covered: Any = {} in default;
+    let hasDefault: bool = false;
+    let coversNull: bool = false;
+    let coversTrue: bool = false;
+    let coversFalse: bool = false;
+    let coversAll: bool = false;
+    for (c in sw.cases) {
+        pushScope();
+        let pis: PatternInfo[*] = [] in default;
+        if (c.isDefault) {
+            pis.push(PatternInfo { kind: PatK.Default } in default);
+            hasDefault = true;
+        } else {
+            if (c.patterns.length > 1) {
+                for (p in c.patterns) {
+                    if (p.kind == PT_TYPE || p.kind == PT_DESTRUCTURE) {
+                        error(c.line, "A case with several patterns cannot bind names.");
+                        break;
+                    }
+                }
+            }
+            for (p in c.patterns) {
+                let pi: PatternInfo? = resolvePattern(p, st, inner, sw.subject);
+                if (pi == null) { continue; }
+                pis.push(pi);
+                if (c.guard != null) { continue; }
+                switch (pi.kind) {
+                    case Variant -> { covered[pi.variant!.name] = 1; }
+                    case Null -> { coversNull = true; }
+                    case Class -> {
+                        if (inner.kind == TyK.Named && pi.cls!.name == inner.name) { coversAll = true; }
+                    }
+                    case Constant -> {
+                        if (pi.constant is BoolLit b) {
+                            if (b.value) { coversTrue = true; } else { coversFalse = true; }
+                        }
+                    }
+                    default -> {}
+                }
+            }
+        }
+        c.patternInfos = pis;
+        if (c.guard != null) { requireBool(c.guard!, "when"); }
+        analyzeArm(c, si, isExpr, place);
+        popScope();
+    }
+    let exhaustive: bool = false;
+    if (hasDefault) {
+        exhaustive = true;
+    } else if (isEnumT(inner)) {
+        let missing: String[*] = [] in default;
+        for (v in enumOf(inner.name)!.variants) {
+            if (covered[v.name] == null) { missing.push(v.name); }
+        }
+        exhaustive = missing.length == 0 && (!isOpt(st) || coversNull);
+        if (!exhaustive && !isError(st)) {
+            error(sw.line, "This switch does not cover every case of ${st.text}: missing ${missing.length > 0 ? missing.join(", ") : "null"}. Add the cases or a 'default'.");
+        }
+    } else if (inner == T_BOOL) {
+        exhaustive = coversTrue && coversFalse && (!isOpt(st) || coversNull);
+    } else {
+        exhaustive = coversAll && (!isOpt(st) || coversNull);
+    }
+    if (isExpr && !exhaustive && !isEnumT(inner) && !isError(st)) {
+        error(sw.line, "A switch expression must cover every case; add a 'default'.");
+    }
+    si.exhaustive = exhaustive;
+    if (!isExpr) { return T_VOID; }
+    setRegion(sw, si.region);
+    return si.resultType!;
+}
+
+function namedTypeByName(name: String in default): Type? {
+    let p: Type? = primByName(name);
+    if (p != null) { return p; }
+    if (classOf(name) != null) { return named(name, NamedK.Class); }
+    if (structOf(name) != null) { return named(name, NamedK.Struct); }
+    return enumOf(name) != null ? named(name, NamedK.Enum) : null;
+}
+
+/** An immutable name bound by a pattern. */
+function bind(name: String in default, t: Type in default, line: int32): Symbol {
+    let s: Symbol = declare(name, SymK.Local, t, line);
+    s.immutable = true;
+    return s;
+}
+
+/** Declares pattern bindings before inferring the switch type from the first arm. */
+function bindPatternsForInference(c: SwitchCase in default, inner: Type in default): void {
+    for (p in c.patterns) {
+        if (inner == T_ANY && p.kind == PT_TYPE) {
+            let bt: Type? = namedTypeByName(p.name);
+            if (bt != null) { bind(p.binding, bt, p.line); }
+            continue;
+        }
+        if (p.kind == PT_TYPE && classOf(p.name) != null) {
+            bind(p.binding, named(p.name, NamedK.Class), p.line);
+        } else if ((p.kind == PT_DESTRUCTURE || p.kind == PT_TYPE) && isEnumT(inner)) {
+            let v: VariantInfo? = variantOf(enumOf(inner.name)!, p.name);
+            if (v == null) { continue; }
+            for (i, fname in p.fields) {
+                for (f in v.fields) {
+                    if (f.name == fname) {
+                        bind(p.bindings[i], f.type, p.line);
+                        break;
+                    }
+                }
+            }
+            if (p.binding != "") { bind(p.binding, inner, p.line); }
+        }
+    }
+}
+
+/** A name bound to (part of) the subject: it shares the subject's memory when it references any. */
+function bindPart(name: String in default, t: Type in default, line: int32, subject: Expr in default): Symbol {
+    let s: Symbol = bind(name, t, line);
+    s.region = hasRefs(t) ? regionOf(subject) : R_STATIC;
+    return s;
+}
+
+function resolvePattern(p: Pattern in default, st: Type in default, inner: Type in default, subject: Expr in default): PatternInfo? {
+    let pi: PatternInfo = PatternInfo { kind: PatK.Default } in default;
+    if (isError(st)) { return null; }
+    if (st == T_ANY) { return anyPattern(p, subject, pi); }
+    if (p.kind == PT_NULL) {
+        if (!isOpt(st)) {
+            error(p.line, "A value of type ${st.text} can never be null.");
+            return null;
+        }
+        pi.kind = PatK.Null;
+        return pi;
+    }
+    if (p.kind == PT_CONSTANT) {
+        if (isError(coerce(p.constant!, inner, P_TEMP, "Case value"))) { return null; }
+        if (!(isNumeric(inner) || inner == T_BOOL || inner == T_STRING)) {
+            error(p.line, "Values of type ${inner.text} cannot be matched against constants.");
+            return null;
+        }
+        pi.kind = PatK.Constant;
+        pi.constant = p.constant;
+        return pi;
+    }
+    if (isEnumT(inner)) {
+        let e: EnumInfo = enumOf(inner.name)!;
+        let v: VariantInfo? = variantOf(e, p.name);
+        if (v == null) {
+            error(p.line, "Enum '${e.name}' has no variant '${p.name}'.");
+            return null;
+        }
+        pi.kind = PatK.Variant;
+        pi.variant = v;
+        if (p.kind == PT_TYPE) {      // case Rect r: the variant, with the whole value bound
+            for (f in v.fields) { pi.bindings.push(null); }
+            pi.whole = bindPart(p.binding, inner, p.line, subject);
+            return pi;
+        }
+        if (p.kind == PT_DESTRUCTURE) {
+            for (f in v.fields) { pi.bindings.push(null); }
+            let seen: Any = {} in default;
+            for (i, fname in p.fields) {
+                let idx: int32 = -1;
+                for (k, f in v.fields) {
+                    if (f.name == fname) { idx = k; }
+                }
+                if (idx < 0) {
+                    error(p.line, "${e.name}.${v.name} has no field '${fname}' (fields: ${v.fields.length > 0 ? variantFieldNames(v) : "none"}).");
+                } else if (seen.contains(fname)) {
+                    error(p.line, "Field '${fname}' is bound twice.");
+                } else {
+                    seen[fname] = true;
+                    pi.bindings[idx] = bindPart(p.bindings[i], v.fields[idx].type, p.line, subject);
+                }
+            }
+        }
+        if (p.binding != "") { pi.whole = bindPart(p.binding, inner, p.line, subject); }
+        return pi;
+    }
+    if (p.kind == PT_TYPE) {
+        if (!(isClass(inner) || isInterface(inner))) {
+            error(p.line, "Type patterns (case ${p.name} ${p.binding}) are for class and interface values, not ${st.text}.");
+            return null;
+        }
+        if (classOf(p.name) == null) {
+            error(p.line, "'${p.name}' is not a class.");
+            return null;
+        }
+        return classPattern(p, inner, pi, p.binding, subject);
+    }
+    if (p.kind == PT_NAME && (isClass(inner) || isInterface(inner)) && classOf(p.name) != null) {
+        return classPattern(p, inner, pi, "", subject);
+    }
+    if (p.kind == PT_NAME) {
+        let s: Symbol? = lookup(p.name);
+        if (s != null && s.kind == SymK.Const) {
+            let id: Ident = Ident { line: p.line, name: p.name } in default;
+            if (isError(coerce(id, inner, P_TEMP, "Case value"))) { return null; }
+            pi.kind = PatK.Constant;
+            pi.constant = id;
+            return pi;
+        }
+    }
+    error(p.line, "'${p.name}' is not a valid pattern for a value of type ${st.text}.");
+    return null;
+}
+
+/** case int64 n, case String s, case Any t (a table), case null. */
+function anyPattern(p: Pattern in default, subject: Expr in default, pi: PatternInfo in default): PatternInfo? {
+    if (p.kind == PT_NULL) {
+        pi.kind = PatK.Null;
+        return pi;
+    }
+    let t: Type? = p.kind != PT_CONSTANT ? namedTypeByName(p.name) : null;
+    if (p.kind == PT_CONSTANT || p.kind == PT_DESTRUCTURE || t == null || t == T_VOID) {
+        error(p.line, "The cases of an Any are kinds of value: case int64 n, case String s, case Any table, case Point p, case Dog d, case null.");
+        return null;
+    }
+    pi.kind = PatK.AnyType;
+    pi.anyType = t;
+    if (p.binding != "") { pi.bindings.push(bindPart(p.binding, t, p.line, subject)); }
+    return pi;
+}
+
+function classPattern(p: Pattern in default, inner: Type in default, pi: PatternInfo in default, binding: String in default, subject: Expr in default): PatternInfo? {
+    let cls: ClassInfo = classOf(p.name)!;
+    if (!related(cls, inner)) {
+        error(p.line, "A ${inner.text} can never be a ${cls.name}.");
+        return null;
+    }
+    pi.kind = PatK.Class;
+    pi.cls = cls;
+    if (binding != "") {
+        let s: Symbol = bind(binding, named(cls.name, NamedK.Class), p.line);
+        s.region = regionOf(subject);
+        pi.bindings.push(s);
+    }
+    return pi;
+}
+
+function analyzeArm(c: SwitchCase in default, si: SwitchInfo in default, isExpr: bool, place: Place in default): void {
+    if (c.throwStmt != null) {
+        analyzeThrow(c.throwStmt!);
+        return;
+    }
+    let e: Expr? = c.expr;
+    if (e != null) {
+        if (isExpr) {
+            coerce(e, si.resultType!, place, "Switch value");
+            si.region = meet(si.region, regionOf(e));
+        } else {
+            if (!(e is Call)) { error(e.line, "In a switch statement, a case without braces must be a call; use { } for other statements."); }
+            check(e, null, P_TEMP);
+        }
+        return;
+    }
+    let st: FrameState = state();
+    if (isExpr) {
+        st.yields.push(si);
+        st.exprSwitchDepth += 1;
+        let savedLoop: int32 = st.loopDepth;
+        st.loopDepth = 0;
+        analyzeBlock(c.block);
+        st.loopDepth = savedLoop;
+        st.exprSwitchDepth -= 1;
+        st.yields.pop();
+        if (!alwaysYields(c.block)) { error(c.line, "This case must end with 'yield value;' (or throw)."); }
+    } else {
+        // A block in a switch statement shares the enclosing yield context (none).
+        let saved: SwitchInfo[*] = st.yields;
+        st.yields = [] in default;
+        analyzeBlock(c.block);
+        st.yields = saved;
+    }
+}
+
+function alwaysYields(body: Stmt[*]): bool {
+    if (body.length == 0) { return false; }
+    return switch (body[body.length - 1]) {
+        case YieldStmt, ThrowStmt -> true;
+        case IfStmt i -> i.hasElse && alwaysYields(i.thenBody) && alwaysYields(i.elseBody);
+        case TryStmt t -> {
+            let all: bool = alwaysYields(t.body);
+            for (c in t.catches) {
+                if (!alwaysYields(c.body)) { all = false; }
+            }
+            yield all;
+        }
+        case BlockStmt b -> alwaysYields(b.body);
+        default -> false;
+    };
+}

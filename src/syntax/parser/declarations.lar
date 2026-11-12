@@ -1,0 +1,366 @@
+// syntax.parser.declarations: what a file declares (functions, structs, classes, interfaces, enums, constants).
+// Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
+
+import syntax.ast {
+    BlockStmt, Call, CCodeDecl, CIncludeDecl, ClassDecl, ConstDecl, EnumDecl, EnumVariant, ExprStmt,
+    ExternFunctionDecl, FieldDecl, FunctionDecl, Ident, InterfaceDecl, Node, Param, ReturnStmt, Stmt, StructDecl,
+    TK, typeNamed, TypeRef
+};
+import syntax.lexer { Token, TT };
+import syntax.parser { endedBySemicolon, lives, looseList, Parser, qualifiedName, strictList };
+import syntax.parser.expressions { expression, level, waitFirst };
+import syntax.parser.natives { nativeDeclaration, nativeFunction, nativeProperty };
+import syntax.parser.statements { block, variable };
+import syntax.parser.types { type };
+
+/**
+ * ccode { C } | ccode "FILE" ; | cinclude "HEADER" ; | native ... | test function ... | export function ... | const ... |
+ * let ... | function ... | struct ... | [synchronized] class ... | interface ... | enum ... | native type ...
+ */
+public function topLevelDeclaration(p: Parser in default): Node {
+    let start: Token = p.current();
+    if (p.optional(TT.CCode)) { return CCodeDecl { line: start.line, code: p.previous().text } in default; }
+    if (p.optional(TT.CInclude)) {
+        let include: CIncludeDecl = CIncludeDecl { line: start.line, header: p.expect(TT.Str, "Expected the header after 'cinclude': cinclude \"<math.h>\";").text } in default;
+        return endedBySemicolon(p, include, "'cinclude'");
+    }
+    if (p.atWord("test") && p.next().kind == TT.Function) {
+        p.advance();
+        return testFunction(p);
+    }
+    if (p.atWord("export") && p.next().kind == TT.Function) {
+        p.advance();
+        p.parsingExport = true;
+        let exported: FunctionDecl = functionDeclaration(p, false, true);
+        p.parsingExport = false;
+        if (exported.typeName != "") { p.error(exported.line, "Only plain functions can be exported, not '${exported.typeName}.${exported.name}'"); }
+        exported.exportName = exported.name;
+        return exported;
+    }
+    if (p.optional(TT.Const)) { return constant(p); }
+    if (p.at(TT.Let)) { return variable(p); }
+    if (p.at(TT.Function)) { return functionDeclaration(p, false, true); }
+    if (p.optional(TT.Struct)) { return structDeclaration(p); }
+    if (p.optional(TT.Class)) { return classDeclaration(p, false); }
+    if (p.optional(TT.Synchronized)) {
+        p.expect(TT.Class, "Expected 'class' after 'synchronized'");
+        return classDeclaration(p, true);
+    }
+    if (p.optional(TT.Interface)) { return interfaceDeclaration(p); }
+    if (p.optional(TT.Enum)) { return enumDeclaration(p); }
+    if (p.optional(TT.Native)) { return nativeDeclaration(p, start.line); }
+    if (p.at(TT.Override)) {
+        p.error(start.line, "'override' is only valid inside a class");
+        return BlockStmt { line: start.line } in default;
+    }
+    if (start.kind == TT.Ident && (p.next().kind == TT.Assign || p.next().kind == TT.OpAssign)) {
+        let op: String = p.next().kind == TT.OpAssign ? "${p.next().text}=" : "=";
+        p.error(start.line, "'${start.text} ${op} ...' is a statement: at top level only declarations are allowed. Move it into a function (main), or give the value where '${start.text}' is declared: let ${start.text}: T = ...;");
+        return BlockStmt { line: start.line } in default;
+    }
+    if (start.kind == TT.Ident && (p.next().kind == TT.LParen || p.next().kind == TT.Dot)) {
+        p.error(start.line, "'${start.text}${p.next().text}...' is a statement: at top level only declarations are allowed. Move it into a function (main).");
+        return BlockStmt { line: start.line } in default;
+    }
+    p.error(start.line, "Only declarations (let, const, function, struct, class, interface, enum, native, cinclude, ccode) are allowed at top level (got '${start.text}')");
+    return BlockStmt { line: start.line } in default;
+}
+
+/** (after `test`) function NAME ( [ NAME : Type ] ) : void block */
+function testFunction(p: Parser in default): FunctionDecl {
+    let test: FunctionDecl = functionDeclaration(p, false, true);
+    if (test.typeName != "") {
+        p.error(test.line, "A test function is a plain function, not '${test.typeName}.${test.name}'");
+    } else if (test.params.length > 1) {
+        p.error(test.line, "A test function takes nothing, or one setup: test function ${test.name}(s: MySetup)");
+    } else if (test.ret.kind != TK.Named || test.ret.name != "void") {
+        p.error(test.line, "A test function returns nothing: test function ${test.name}(): void");
+    } else if (test.returnLives != "") {
+        p.error(test.line, "A test function returns nothing, so it has no 'in ${test.returnLives}'");
+    }
+    test.isTest = true;
+    return test;
+}
+
+/** (after `const`) NAME : Type = expression ; */
+function constant(p: Parser in default): Node {
+    let name: Token = p.expect(TT.Ident, "Expected constant name");
+    p.expect(TT.Colon, "Expected ':' and a type after constant '${name.text}'");
+    let constantType: TypeRef = type(p);
+    p.expect(TT.Assign, "Constants need a value");
+    return endedBySemicolon(p, ConstDecl { line: name.line, name: name.text, type: constantType, value: expression(p) } in default, "constant");
+}
+
+/** NAME : Type [ in lives ]      (in a lambda: NAME [ : Type ]) */
+public function parameter(p: Parser in default, typeRequired: bool): Param {
+    let name: Token = p.expect(TT.Ident, "Expected parameter name");
+    let parameter: Param = Param { line: name.line, name: name.text } in default;
+    if (!typeRequired) {
+        if (p.optional(TT.Colon)) { parameter.type = type(p); }
+        return parameter;
+    }
+    p.expect(TT.Colon, "Expected ':' and a type after parameter '${name.text}'");
+    parameter.type = type(p);
+    if (p.optional(TT.In)) { parameter.lives = lives(p); }
+    return parameter;
+}
+
+/** ( [ parameter ( , parameter )* ] ) */
+public function parameters(p: Parser in default): Param[*] {
+    p.expect(TT.LParen, "Expected '('");
+    let list: Param[*] = [] in default;
+    strictList(p, TT.RParen, () -> { list.push(parameter(p, true)); });
+    p.expect(TT.RParen, "Expected ')' after parameters");
+    return list;
+}
+
+public function functionDeclaration(p: Parser in default, isOverride: bool, withBody: bool): FunctionDecl {
+    p.expect(TT.Function, "Expected 'function'");
+    let name: Token = p.expect(TT.Ident, "Expected function name");
+    let typeName: String = "";
+    if (p.optional(TT.Dot)) {                    // function Type.method(): a static function of Type
+        typeName = name.text;
+        name = p.expect(TT.Ident, "Expected method name after '${typeName}.'");
+    }
+    let parameterList: Param[*] = parameters(p);
+    let declaration: FunctionDecl = FunctionDecl { line: name.line, name: name.text, isOverride, params: parameterList, ret: typeNamed("void", name.line) } in default;
+    if (typeName != "") {
+        declaration.typeName = typeName;
+        declaration.isStatic = true;
+    }
+    if (p.optional(TT.Colon)) { declaration.ret = type(p); }
+    if (p.optional(TT.In)) { declaration.returnLives = lives(p); }
+    if (p.optional(TT.Throws)) { declaration.throwsType = type(p); }
+    if (p.parsingExport && p.optional(TT.Assign)) {     // export function f(...) = c_name { ... }
+        declaration.exportC = p.expect(TT.Ident, "Expected the C name after '=' in export function '${name.text}'").text;
+    }
+    let waitToken: Token = p.current();
+    if (p.atWord("wait_until")) {
+        p.error(waitToken.line, "Write 'wait until' (two words): wait until (condition)");
+    }
+    if (p.optionalWords("wait", "until")) {
+        if (!p.waitUntilAllowed) { p.error(waitToken.line, "'wait until' goes on a method of a synchronized class (whoever calls it waits there until the condition holds)"); }
+        p.expect(TT.LParen, "Expected '(' and a condition after 'wait until'");
+        declaration.waitUntil = expression(p);
+        p.expect(TT.RParen, "Expected ')' after the condition of 'wait until'");
+    }
+    if (withBody && p.at(TT.CCode)) {
+        p.error(p.current().line, "A body of C belongs to a native function: native function ${name.text}(...): T { ... }");
+        p.advance();
+    } else if (withBody) {
+        declaration.body = block(p, "body of '${name.text}'");
+        declaration.hasBody = true;
+        if (declaration.waitUntil != null) { declaration.body = waitFirst(waitToken.line, declaration.waitUntil!, declaration.body); }
+    } else {
+        if (p.at(TT.LBrace)) { p.error(p.current().line, "An interface has signatures: only its static functions have a body (static function ${name.text}(...) { ... })"); }
+        p.expect(TT.Semi, "Expected ';' after the method signature");
+    }
+    return declaration;
+}
+
+/** operator ( + | - | * | / | % | == | < ) parameters : Type block */
+function operatorDeclaration(p: Parser in default): FunctionDecl {
+    let keyword: Token = p.expect(TT.Operator, "Expected 'operator'");
+    let symbol: Token = p.advance();
+    let kind: TT = symbol.kind;
+    if (!(kind == TT.Plus || kind == TT.Minus || kind == TT.Star || kind == TT.Slash || kind == TT.Percent || kind == TT.Eq || kind == TT.Lt)) {
+        p.error(symbol.line, "Operator '${symbol.text}' cannot be overloaded (allowed: + - * / % == <)");
+    }
+    let parameterList: Param[*] = parameters(p);
+    p.expect(TT.Colon, "Operators must declare their return type");
+    let returnType: TypeRef = type(p);
+    return FunctionDecl { line: keyword.line, name: symbol.text, isOperator: true, params: parameterList, ret: returnType, body: block(p, "operator body"), hasBody: true } in default;
+}
+
+/** (after `struct`) NAME { ( field | static ... | function ... | operator ... )* } */
+function structDeclaration(p: Parser in default): StructDecl {
+    let name: Token = p.expect(TT.Ident, "Expected struct name");
+    let declaration: StructDecl = StructDecl { line: name.line, name: name.text } in default;
+    p.expect(TT.LBrace, "Expected '{' to open struct body");
+    while (!p.at(TT.RBrace) && !p.atEnd()) {
+        if (p.at(TT.Let)) {
+            declaration.fields.push(field(p));
+        } else if (p.optional(TT.Static)) {
+            staticFunction(p, declaration.name);
+        } else if (p.at(TT.Function)) {
+            declaration.methods.push(functionDeclaration(p, false, true));
+        } else if (p.at(TT.Operator)) {
+            declaration.methods.push(operatorDeclaration(p));
+        } else if (p.at(TT.Override)) {
+            p.error(p.current().line, "Structs have no inheritance, so 'override' is not allowed");
+        } else {
+            p.error(p.current().line, "Expected 'let', 'function' or 'operator' inside struct (got '${p.current().text}')");
+        }
+    }
+    p.expect(TT.RBrace, "Expected '}' to close struct body");
+    p.optional(TT.Semi);
+    return declaration;
+}
+
+/**
+ * (after `class`) NAME [ extends NAME ] [ implements NAME ( , NAME )* ]
+ *     { ( field | static ... | [override] function ... | native function ... | native let ... | operator ... )* }
+ */
+function classDeclaration(p: Parser in default, isSynchronized: bool): ClassDecl {
+    let name: Token = p.expect(TT.Ident, "Expected class name");
+    let declaration: ClassDecl = ClassDecl { line: name.line, name: name.text, isSynchronized } in default;
+    if (p.optional(TT.Extends)) { declaration.superName = qualifiedName(p, "Expected superclass name"); }
+    if (p.optional(TT.Implements)) {
+        while (true) {
+            declaration.interfaces.push(qualifiedName(p, "Expected interface name"));
+            if (!p.optional(TT.Comma)) { break; }
+        }
+    }
+    p.cOwner = declaration.name;              // its system (implements UnixPlatform...) is known after linking
+    p.expect(TT.LBrace, "Expected '{' to open class body");
+    while (!p.at(TT.RBrace) && !p.atEnd()) {
+        if (p.at(TT.CInclude)) {                  // the headers of its C: only on its system
+            let include: CIncludeDecl = CIncludeDecl { line: p.advance().line, header: p.expect(TT.Str, "Expected the header after 'cinclude': cinclude \"<math.h>\";").text, owner: declaration.name } in default;
+            p.expect(TT.Semi, "Expected ';' after the header of 'cinclude'");
+            p.nativeParts.push(include);
+        } else if (p.at(TT.CCode)) {              // C its methods share: only on its system
+            let code: Token = p.advance();
+            p.nativeParts.push(CCodeDecl { line: code.line, code: code.text, owner: declaration.name } in default);
+        } else if (p.at(TT.Let)) {
+            declaration.fields.push(field(p));
+        } else if (p.optional(TT.Static)) {
+            staticFunction(p, declaration.name);
+        } else if (p.optional(TT.Override)) {
+            if (p.optional(TT.Native)) {
+                p.expect(TT.Function, "Expected 'function' after 'override native'");
+                let m: FunctionDecl = nativeFunction(p, p.previous().line);
+                m.isOverride = true;
+                declaration.methods.push(m);
+            } else if (!p.at(TT.Function)) {
+                p.error(p.current().line, "Expected 'function' after 'override'");
+            } else {
+                declaration.methods.push(method(p, isSynchronized, true));
+            }
+        } else if (p.optional(TT.Native)) {
+            if (p.optional(TT.Let)) {
+                let property: FunctionDecl = nativeProperty(p, p.previous().line);
+                if (!property.hasBody) { p.error(property.line, "A native let of a class needs its value: native let ${property.name}: T = expression;"); }
+                declaration.methods.push(property);
+            } else {
+                p.expect(TT.Function, "Expected 'function' or 'let' after 'native' in class");
+                declaration.methods.push(nativeFunction(p, p.previous().line));
+            }
+        } else if (p.at(TT.Function)) {
+            declaration.methods.push(method(p, isSynchronized, false));
+        } else if (p.at(TT.Operator)) {
+            declaration.methods.push(operatorDeclaration(p));
+        } else {
+            p.error(p.current().line, "Expected 'let', 'function' or 'operator' inside class body (got '${p.current().text}')");
+        }
+    }
+    p.cOwner = "";
+    p.expect(TT.RBrace, "Expected '}' to close class body");
+    p.optional(TT.Semi);
+    return declaration;
+}
+
+/**
+ * native function f(params): T { C } (a method, a static function): the body is C. It becomes a C function the compiler writes (its
+ * parameters with their C types and names), and f calls it. In a class for one system (it implements
+ * UnixPlatform...), f calls it only there (elsewhere it panics; the C of that system reaches no other).
+ */
+public function cBodied(p: Parser in default, declaration: FunctionDecl in default): void {
+    let code: Token = p.advance();
+    let line: int32 = declaration.line;
+    let owner: String = p.cOwner != "" ? "${p.cOwner}_" : "";
+    let cFunction: ExternFunctionDecl = ExternFunctionDecl {
+        line, name: "${owner}c_${declaration.name}", params: declaration.params, ret: declaration.ret,
+        cName: "lm_${owner}${declaration.name}_${line}", cBody: code.text, owner: p.cOwner
+    } in default;
+    p.nativeParts.push(cFunction);
+    let call: Call = Call { line, callee: Ident { line, name: cFunction.name } in default } in default;
+    for (p in declaration.params) { call.args.push(Ident { line, name: p.name } in default); }
+    let run: Stmt = ReturnStmt { line, value: call } in default;
+    if (declaration.ret.kind == TK.Named && declaration.ret.name == "void") { run = ExprStmt { line, expr: call } in default; }
+    declaration.body.push(run);                 // in a class for one system, the analyzer keeps it for that platform only
+    declaration.cBodied = p.cOwner != "";
+    declaration.hasBody = true;
+}
+
+/** A method of a class: in a synchronized class it may say `wait until`. */
+function method(p: Parser in default, ofSynchronizedClass: bool, isOverride: bool): FunctionDecl {
+    p.waitUntilAllowed = ofSynchronizedClass;
+    let method: FunctionDecl = functionDeclaration(p, isOverride, true);
+    p.waitUntilAllowed = false;
+    return method;
+}
+
+/** (after `interface`) NAME [ extends NAME ( , NAME )* ] { ( function NAME parameters [ : Type ] ... ; | static function ... )* } */
+function interfaceDeclaration(p: Parser in default): InterfaceDecl {
+    let name: Token = p.expect(TT.Ident, "Expected interface name");
+    let declaration: InterfaceDecl = InterfaceDecl { line: name.line, name: name.text } in default;
+    if (p.optional(TT.Extends)) {                 // interface LinuxPlatform extends UnixPlatform
+        while (true) {
+            declaration.parents.push(qualifiedName(p, "Expected the name of the interface it extends"));
+            if (!p.optional(TT.Comma)) { break; }
+        }
+    }
+    p.expect(TT.LBrace, "Expected '{' to open interface body");
+    while (!p.at(TT.RBrace) && !p.atEnd()) {
+        if (p.optional(TT.Static)) {              // static function system(): Clock { ... }: gives an implementation
+            staticFunction(p, declaration.name);
+        } else if (p.at(TT.Let)) {
+            p.error(p.current().line, "Interfaces only declare methods; fields belong in classes or structs");
+        } else {
+            declaration.methods.push(functionDeclaration(p, false, false));
+        }
+    }
+    p.expect(TT.RBrace, "Expected '}' to close interface body");
+    p.optional(TT.Semi);
+    return declaration;
+}
+
+/** (after `static`, inside the type `owner`) function ... | native function ... = C ; */
+public function staticFunction(p: Parser in default, owner: String in default): void {
+    let found: FunctionDecl? = null;
+    if (p.optional(TT.Native)) {
+        p.expect(TT.Function, "Expected 'function' after 'static native'");
+        found = nativeFunction(p, p.previous().line);
+        if (!found!.hasBody) { p.error(found!.line, "A static native function needs its C: static native function ${found!.name}(...) = c_function(...);"); }
+    } else if (p.at(TT.Function)) {
+        found = functionDeclaration(p, false, true);
+    } else {
+        p.error(p.current().line, "Expected 'function' after 'static'");
+        return;
+    }
+    let staticFunction: FunctionDecl = found!;
+    if (staticFunction.typeName != "") { p.error(staticFunction.line, "Inside '${owner}' a static function is written without the type: static function ${staticFunction.name}(...)"); }
+    staticFunction.typeName = owner;
+    staticFunction.isStatic = true;
+    p.staticFunctions.push(staticFunction);
+}
+
+/** (after `enum`) NAME { [ variant ( , variant )* [ , ] ] }      variant: NAME [ parameters ] */
+function enumDeclaration(p: Parser in default): EnumDecl {
+    let name: Token = p.expect(TT.Ident, "Expected enum name");
+    let declaration: EnumDecl = EnumDecl { line: name.line, name: name.text } in default;
+    p.expect(TT.LBrace, "Expected '{' to open enum body");
+    looseList(p, TT.RBrace, () -> {
+        let variantName: Token = p.expect(TT.Ident, "Expected variant name");
+        let variant: EnumVariant = EnumVariant { line: variantName.line, name: variantName.text } in default;
+        if (p.at(TT.LParen)) {
+            variant.hasPayload = true;
+            variant.fields = parameters(p);
+        }
+        declaration.variants.push(variant);
+    });
+    p.expect(TT.RBrace, "Expected '}' to close enum body (variants are separated by commas)");
+    p.optional(TT.Semi);
+    return declaration;
+}
+
+/** let NAME : Type [ = expression ] ; */
+public function field(p: Parser in default): FieldDecl {
+    p.expect(TT.Let, "Expected 'let'");
+    let name: Token = p.expect(TT.Ident, "Expected field name");
+    p.expect(TT.Colon, "Expected ':' and a type after field '${name.text}'");
+    let declaration: FieldDecl = FieldDecl { line: name.line, name: name.text, type: type(p) } in default;
+    if (p.optional(TT.Assign)) { declaration.defaultValue = expression(p); }
+    p.expect(TT.Semi, "Expected ';' after field declaration");
+    return declaration;
+}

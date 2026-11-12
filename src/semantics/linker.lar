@@ -18,7 +18,7 @@ import syntax.ast {
     BlockStmt, StringLit, Ident, Member, Index, Call, Unary, Binary, Ternary, IsExpr, Cast, Unwrap, Lambda, ObjectLit,
     ArrayLit, Placed, Pattern, SwitchExpr, PT_NAME, PT_CONSTANT, PT_NULL
 };
-import syntax.parser { parseProgram, parseError };
+import syntax.parser { parseProgram };
 import editor.docstore { document };
 
 public const FILE_LINES: int32 = 1000000;
@@ -151,8 +151,8 @@ function loadLang(): void {
     }
     let m: Module = newModule("", fileNames.length);
     let p: Program = parseProgram(source, m.index * FILE_LINES + 1);
-    if (parseError != "") {
-        errors.push(parseError);
+    if (p.error != "") {
+        errors.push(p.error);
         return;
     }
     let lines: String[*] = source.split("\n") in default;
@@ -266,8 +266,8 @@ public let testsKept: String = "none";
 function parse(m: Module in default, source: String in default): void {
     addWords(source);
     let p: Program = parseProgram(source, m.index * FILE_LINES + 1);
-    if (parseError != "") {
-        errors.push(parseError);
+    if (p.error != "") {
+        errors.push(p.error);
         return;
     }
     if (testsKept != "all" && !(testsKept == "main" && m == root)) {

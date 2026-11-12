@@ -1,0 +1,352 @@
+// codegen.gen.types: the C of the types of a program.
+
+import semantics.types {
+    ArrK, buildingLibrary, ClassInfo, classOf, EnumInfo, enumOf, escapeName, externInfoOf, ExternTypeInfo,
+    FieldInfo, FunctionInfo, functions, globals, isClass, isExternT, isMemParam, isOpt, isResource, LambdaInfo,
+    lambdaList, MethodInfo, NamedK, optIsPointer, optT, StructInfo, structOf, Symbol, syncField, T_ANY, T_STRING,
+    T_VOID, TyK, Type
+};
+import std.text { isDigit, isIdentifierPart };
+import codegen.expressions { classFieldPath, cType, structName, tname, value };
+import codegen.gen { fn, LibraryMember };
+import codegen.gen.classes { dispatchName, functionHeader, params, returnsData };
+import codegen.gen.statements { ret };
+
+/** C functions receive String as a NUL-terminated const char*. */
+public function externPrototype(f: FunctionInfo in default): String {
+    let ps: String[*] = [] in default;
+    for (i, p in f.sig!.params) {
+        if (isMemParam(f.memParams, i)) {
+            ps.push("RtMem*");
+        } else if (p.kind == TyK.Array && p.ak == ArrK.Slice) {
+            ps.push("${cType(p.elem!)}*");             // T[]: the elements and their count
+            ps.push("int32_t");
+        } else {
+            ps.push(f.releases == "String" ? "void*" : externCType(p));     // it releases texts: free(void*), sqlite3_free(void*)
+        }
+    }
+    if (f.varargs) { ps.push("..."); }
+    if (ps.length == 0) { ps.push("void"); }
+    // char*, not const char*: it also matches the standard headers the runtime already includes (getenv, strerror).
+    let ret: String = externCType(f.sig!.elem!);
+    if (f.sig!.elem! == T_STRING) { ret = "char*"; }
+    return "${ret} ${f.cName}(${ps.join(", ")})";
+}
+
+/** The header of the C function of a C body, with its parameters named as in Larimar (a T[] is name and name_length). */
+public function externDefinition(f: FunctionInfo in default): String {
+    let ps: String[*] = [] in default;
+    for (i, p in f.sig!.params) {
+        let name: String = f.ext!.params[i].name;
+        if (isMemParam(f.memParams, i)) {
+            ps.push("RtMem* ${name}");
+        } else if (p.kind == TyK.Array && p.ak == ArrK.Slice) {
+            ps.push("${cType(p.elem!)}* ${name}");
+            ps.push("int32_t ${name}_length");
+        } else {
+            ps.push("${externCType(p)} ${name}");
+        }
+    }
+    if (ps.length == 0) { ps.push("void"); }
+    let ret: String = externCType(f.sig!.elem!);
+    return "${ret} ${f.cName}(${ps.join(", ")})";
+}
+
+/** ccode with lar"name" (the linker gave the linked name): the C name of that function, type or global. */
+public function larInC(code: String): String {
+    let out: StringBuilder = {};
+    let i: int32 = 0;
+    while (i < code.length) {
+        let at: int32? = code.indexOf("lar\"", i);
+        let close: int32? = at != null ? code.indexOf("\"", at! + 4) : null;
+        if (at == null || close == null) {
+            out.add(code.substring(i));
+            break;
+        }
+        out.add(code.substring(i, at!));
+        out.add(cNameOf(code.substring(at! + 4, close!)));
+        i = close! + 1;
+    }
+    return out.toString();
+}
+
+/** The prototypes of the Larimar functions a ccode names (those with C types the runtime already has). */
+public function larPrototypes(code: String, out: StringBuilder): void {
+    let i: int32 = 0;
+    while (i < code.length) {
+        let at: int32? = code.indexOf("lar\"", i);
+        let close: int32? = at != null ? code.indexOf("\"", at! + 4) : null;
+        if (at == null || close == null) { return; }
+        let name: String = code.substring(at! + 4, close!);
+        for (f in functions) {
+            if (f.name == name && !f.isExtern && f.exportName == "" && f.sig != null && plainSig(f.sig!)) { out.add("${functionHeader(f)};\n"); }
+        }
+        i = close! + 1;
+    }
+}
+
+/** Only numbers, bool, String and void: C types the runtime declares before any ccode. */
+function plainSig(sig: Type): bool {
+    let all: Type[*] = [sig.elem!];
+    for (p in sig.params) { all.push(p); }
+    for (t in all) {
+        if (!(t.kind == TyK.Prim && t != T_ANY)) { return false; }
+    }
+    return true;
+}
+
+function cNameOf(name: String): String {
+    for (f in functions) {
+        if (f.name == name) { return f.exportName != "" ? f.exportName : f.cName; }
+    }
+    if (structOf(name) != null || classOf(name) != null || enumOf(name) != null) { return tname(name); }
+    if (externInfoOf(name) != null) { return "Ext_${name}"; }
+    for (g in globals) {
+        if (g.name == name && g.symbol != null) { return g.symbol!.cName; }
+    }
+    return name;
+}
+
+/** A plain C name (a function a prototype can declare), not C text. */
+public function isCName(n: String): bool {
+    if (n.isEmpty() || isDigit(n[0])) { return false; }
+    for (b in n.bytes()) {
+        if (!isIdentifierPart(b)) { return false; }
+    }
+    return true;
+}
+
+public function externCType(t: Type): String {
+    if (t == T_STRING || (isOpt(t) && t.elem! == T_STRING)) { return "const char*"; }
+    if (isResource(t)) { return "Ext_${t.name}"; }                              // the C value itself
+    if (isOpt(t) && isResource(t.elem!)) { return "Ext_${t.elem!.name}"; }
+    return t == T_VOID ? "void" : cType(t);
+}
+
+/** export function: the C function C code calls (C types), which calls the Larimar one. */
+public function exportHeader(f: FunctionInfo, early: bool): String {
+    let ps: String[*] = [] in default;
+    for (i, p in f.sig!.params) { ps.push("${abiType(p, early)} ${exportParam(f, i)}"); }
+    if (ps.length == 0) { ps.push("void"); }
+    let r: Type = f.sig!.elem!;
+    let ret: String = r == T_STRING || r == optT(T_STRING) ? "char*" : abiType(r, early);
+    return "${ret} ${f.exportName}(${ps.join(", ")})";
+}
+
+/** A class of a library, as C sees it: a handle (its object, and the memory a result of C's lives in). */
+public function isHandle(t: Type): bool { return isClass(t) || (isOpt(t) && isClass(t.elem!)); }
+
+/**
+ * The body of an export function: C's values become Larimar's, the Larimar function runs, and its
+ * result goes to C: a text as a copy that C frees (malloc), an object of a library as a new handle.
+ */
+public function exportBody(f: FunctionInfo): String {
+    let xs: String[*] = [];
+    for (i, p in f.sig!.params) { xs.push(fromC(p, exportParam(f, i), f.exportName, f.params[i].name)); }
+    return "${exportHeader(f, false)} {\n${callToC(f.cName, "", xs, f.sig!.elem!)}}\n\n";
+}
+
+/** A value of C as Larimar's: a text, a text or null, the object of a handle. */
+function fromC(t: Type, x: String, fn: String, param: String): String {
+    if (t == T_STRING) { return "rt_str_c(${x})"; }
+    if (t == optT(T_STRING)) {
+        let o: String = cType(t);
+        return "(${x} ? ((${o}){ .has = true, .value = rt_str_c(${x}) }) : ((${o}){ .has = false }))";
+    }
+    if (isHandle(t)) {
+        let c: String = cType(isOpt(t) ? t.elem! : t);
+        return isOpt(t) ? "(${c})rt_handle_object_or_null(${x})" : "(${c})rt_handle_object(${x}, \"${fn}\", \"${param}\")";
+    }
+    return x;
+}
+
+/**
+ * The statements that call `callee` (with `recv` first, when it is a method) and give C its result: a
+ * result with data is made in a memory of the call (a text, copied for C) or of a new handle (an object).
+ */
+function callToC(callee: String, recv: String, xs: String[*], r: Type): String {
+    let sb: StringBuilder = {} in default;
+    if (buildingLibrary) { sb.add("    lm_library_init();\n"); }
+    let before: String = recv != "" ? "${recv}, " : "";
+    let after: String = xs.length > 0 ? ", ${xs.join(", ")}" : "";
+    if (returnsData(r)) {
+        if (isHandle(r)) {                      // a new handle: the result lives in its memory
+            sb.add("    RtHandle* h = rt_handle_new();\n");
+            sb.add("    h->object = ${callee}(${before}&h->mem${after});\n");
+            if (isOpt(r)) { sb.add("    if (!h->object) { rt_handle_release(h); return NULL; }\n"); }
+            sb.add("    return h;\n");
+            return sb.toString();
+        }
+        sb.add("    RtMem mem = rt_mem_growable();\n");
+        sb.add("    ${cType(r)} r = ${callee}(${before}&mem${after});\n");
+        sb.add("    ${r == T_STRING || r == optT(T_STRING) ? "char*" : abiType(r, false)} out = ${toC(r, "r")};\n");
+        sb.add("    rt_mem_free(&mem);\n    return out;\n");
+        return sb.toString();
+    }
+    let all: String = recv != "" ? (xs.length > 0 ? "${recv}, ${xs.join(", ")}" : recv) : xs.join(", ");
+    sb.add(r == T_VOID ? "    ${callee}(${all});\n" : "    return ${callee}(${all});\n");
+    return sb.toString();
+}
+
+/** A Larimar value as C receives it: a text as a copy it frees (NULL for null). */
+function toC(t: Type, x: String): String {
+    if (t == T_STRING) { return "rt_export_text(${x})"; }
+    if (t == optT(T_STRING)) { return "${x}.has ? rt_export_text(${x}.value) : NULL"; }
+    return x;
+}
+
+/** A member of a class, for C: a method through its vtable (a subclass's runs), or a field read. */
+public function memberBody(m: LibraryMember): String {
+    let obj: String = "rt_handle_object(self_h, \"${m.cName}\", \"self\")";
+    if (m.field != null) {
+        let f: FieldInfo = m.field!;
+        let t: Type = f.type;
+        let ret: String = t == T_STRING || t == optT(T_STRING) ? "char*" : abiType(t, false);
+        let read: String = "((${m.cls}*)${obj})->${classFieldPath(m.cls, f)}";
+        return "${ret} ${m.cName}(void* self_h) {\n    ${buildingLibrary ? "lm_library_init();\n    " : ""}return ${toC(t, read)};\n}\n\n";
+    }
+    let mi: MethodInfo = m.method!;
+    let ps: String[*] = ["void* self_h"];
+    let xs: String[*] = [];
+    for (i, t in mi.sig!.params) {
+        ps.push("${abiType(t, false)} a${i}");
+        xs.push(fromC(t, "a${i}", m.cName, mi.decl.params[i].name));
+    }
+    let r: Type = mi.sig!.elem!;
+    let ret: String = r == T_STRING || r == optT(T_STRING) ? "char*" : abiType(r, false);
+    let recv: String = "(${mi.introducer}*)${obj}";
+    return "${ret} ${m.cName}(${ps.join(", ")}) {\n${callToC(dispatchName(mi.introducer, mi), recv, xs, r)}}\n\n";
+}
+
+function exportParam(f: FunctionInfo, i: int32): String { return "${escapeName(f.params[i].name)}_c"; }
+
+/** A type as C code sees it. Early (before the ccode): an opaque extern type is still void*. */
+function abiType(t: Type, early: bool): String {
+    if (early && isExternT(t)) { return "void*"; }
+    if (isHandle(t)) { return "void*"; }                 // a handle of a library (its C type is in the .h)
+    return externCType(t);
+}
+
+/** Its prototype can go before the ccode: numbers, bool, const char* and opaque extern types only. */
+public function earlyExport(f: FunctionInfo): bool {
+    for (p in f.sig!.params) {
+        if (!plainC(p) && p != optT(T_STRING) && !isHandle(p)) { return false; }
+    }
+    let r: Type = f.sig!.elem!;
+    return plainC(r) || r == optT(T_STRING) || isHandle(r);
+}
+
+function plainC(t: Type): bool {
+    if (t.kind == TyK.Prim) { return true; }
+    if (!isExternT(t)) { return false; }
+    let e: ExternTypeInfo? = externInfoOf(t.name);
+    return e != null && e.decl.cType == "" && e.sig == null;
+}
+
+/** A C struct (extern type X = struct { ... }): C defines it, Larimar does not. */
+function cStruct(t: Type): bool {
+    if (t.kind != TyK.Named || t.nk != NamedK.Struct) { return false; }
+    let so: StructInfo? = structOf(t.name);
+    return so != null && so.decl.cName != "";
+}
+
+public function forward(out: StringBuilder, t: Type): void {
+    if (t.kind == TyK.Opt && optIsPointer(t)) { return; }
+    if (t.kind == TyK.Named) {
+        if (t.nk == NamedK.Extern || cStruct(t)) { return; }
+        let name: String = tname(t.name);
+        out.add("typedef struct ${name} ${name};\n");
+        if (t.nk == NamedK.Class) { out.add("typedef struct ${name}_VTable ${name}_VTable;\n"); }
+        if (t.nk == NamedK.Interface) { out.add("typedef struct ${name}_Table ${name}_Table;\n"); }
+        return;
+    }
+    let name: String = structName(t);
+    out.add("typedef struct ${name} ${name};");
+    if (t.kind == TyK.Func) { out.add("  /* ${t.text} */"); }
+    out.add("\n");
+}
+
+public function define(out: StringBuilder, t: Type): void {
+    if (cStruct(t)) { return; }
+    if (t.kind == TyK.Named) {
+        if (t.nk == NamedK.Struct) {
+            let s: StructInfo = structOf(t.name)!;
+            out.add("struct ${tname(s.name)} {\n");
+            for (f in s.fields) { out.add("    ${cType(f.type)} ${escapeName(f.name)};\n"); }
+            if (s.fields.length == 0) { out.add("    char _none;\n"); }
+            out.add("};\n\n");
+        } else if (t.nk == NamedK.Enum) {
+            let e: EnumInfo = enumOf(t.name)!;
+            out.add("enum ${e.name}_Tag { ");            // named, so a debugger shows the variant's name
+            for (i, v in e.variants) {
+                if (i > 0) { out.add(", "); }
+                out.add("${e.name}_${v.name} = ${v.index}");
+            }
+            out.add(" };\n");
+            out.add("struct ${tname(e.name)} {\n    enum ${e.name}_Tag tag;\n    union {");
+            for (v in e.variants) {
+                if (!v.hasPayload || v.fields.length == 0) { continue; }
+                out.add(" struct {");
+                for (f in v.fields) { out.add(" ${cType(f.type)} ${escapeName(f.name)};"); }
+                out.add(" } ${v.name};");
+            }
+            out.add(" char _none; } as;\n};\n\n");
+        } else if (t.nk == NamedK.Class) {
+            let c: ClassInfo = classOf(t.name)!;
+            out.add("struct ${tname(c.name)} {\n");
+            if (c.superName == "") {
+                out.add("    RtObjHead _h;\n");
+            } else {
+                out.add("    ${tname(c.superName)} _super;\n");
+            }
+            if (c.sync && syncField(c) == "_sync") { out.add("    RtSync* _sync;\n"); }     // a child uses its parent's
+            for (f in c.fields) { out.add("    ${cType(f.type)} ${escapeName(f.name)};\n"); }
+            if (c.thread) { out.add("    RtThread _thread;\n"); }
+            if (c.builder) { out.add("    RtSb _sb;\n"); }
+            out.add("};\n\n");
+        } else if (t.nk == NamedK.Interface) {
+            let i: String = tname(t.name);
+            out.add("struct ${i} { void* obj; const ${i}_Table* t; };\n\n");
+        }
+        return;
+    }
+    if (t.kind == TyK.Func) {
+        let id: int32 = t.funcId;
+        let withEnv: LambdaInfo[*] = [] in default;
+        for (l in lambdaList) {
+            if (l.type == t && l.captures.length > 0) { withEnv.push(l); }
+        }
+        for (l in withEnv) {
+            out.add("typedef struct Env_${l.id} {");
+            for (s in l.captures) { out.add(" ${cType(s.type)} ${envField(s)};"); }
+            out.add(" } Env_${l.id};\n");
+        }
+        out.add("struct Closure_${id} {  /* ${t.text} */\n");
+        out.add("    ${cType(t.elem!)} (*fn)(void* env");
+        if (returnsData(t.elem!)) { out.add(", RtMem*"); }
+        for (p in t.params) { out.add(", ${cType(p)}"); }
+        out.add(");\n    union {");
+        for (l in withEnv) { out.add(" Env_${l.id} l_${l.id};"); }
+        out.add(" char _none; } env;\n};\n\n");
+        return;
+    }
+    if (t.kind == TyK.Array) {
+        let name: String = structName(t);
+        let e: String = cType(t.elem!);
+        if (t.ak == ArrK.Fixed) {
+            let n: int64 = t.size;
+            if (n < 1) { n = 1; }
+            out.add("struct ${name} { int32_t length; ${e} items[${n}]; };\n");
+        } else if (t.ak == ArrK.Slice) {
+            out.add("struct ${name} { ${e}* items; int32_t length; };\n");
+        } else {
+            out.add("struct ${name} { ${e}* items; int32_t length; int32_t capacity; RtMem* mem; };\n");
+        }
+        return;
+    }
+    if (t.kind == TyK.Opt && !optIsPointer(t)) {
+        out.add("struct ${structName(t)} { bool has; ${cType(t.elem!)} value; };\n");
+    }
+}
+
+public function envField(s: Symbol): String { return "${s.name}_${s.id}"; }

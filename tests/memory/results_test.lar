@@ -117,6 +117,14 @@ test function returnOneOfArgs(): void {
     ]);
 }
 
+// El resultado de un método apunta a self y no a sus otros argumentos: un mensaje temporal no lo ata.
+test function methodReturnsSelfNotArgs(): void {
+    runs("tests/cases/memory/method_returns_self_not_args.lar", [
+        "no hay 2",
+        "uno,dos,-"
+    ]);
+}
+
 // Una función que devuelve una vista de su parámetro: la vista vive lo que vive el original.
 test function returnViewOfParam(): void {
     runs("tests/cases/memory/return_view_of_param.lar", [

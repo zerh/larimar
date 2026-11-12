@@ -1,0 +1,219 @@
+// codegen.expressions.strings: strings: literals, interpolation and their methods.
+
+import syntax.ast { BoolLit, Expr, IntLit, StringLit };
+import semantics.types {
+    bits, isEnumT, isFloat, isInteger, isSigned, Place, PlaceK, T_ANY, T_BOOL, T_FLOAT32, T_STRING, Type
+};
+import codegen.gen { line, tmp };
+import codegen.expressions { cType, hoist, isPure, paren, placeMem, value };
+import codegen.expressions.calls { args };
+import codegen.expressions.operators { wide };
+
+/** memOverride != "": the text is built in that memory. */
+public function string(s: StringLit in default, memOverride: String): String {
+    if (s.exprs.length == 0) { return stringLiteral(s.texts[0]); }
+    let p: Place? = s.place;
+    let sb: String = tmp("sb");
+    if (memOverride != "") {
+        line("RtSb ${sb} = rt_sb_mem(${memOverride}, ${s.line});");
+    } else if (p != null && p.kind == PlaceK.Stack) {
+        let buf: String = tmp("text");
+        line("char ${buf}[${p.bytes + 1}];");
+        line("RtSb ${sb} = rt_sb_fixed(${buf}, (int32_t)sizeof ${buf});");
+    } else {
+        line("RtSb ${sb} = rt_sb_mem(${placeMem(s)}, ${s.line});");
+    }
+    appendPieces(s, "&${sb}");
+    return "rt_sb_finish(&${sb})";
+}
+
+/**
+ * print/println of a literal, or of a text whose parts are integers, bool, String or enums: straight to
+ * stdout (fputs or printf), with no text built in memory. null when it does not apply.
+ */
+public function printDirect(s: StringLit in default, newline: bool): String? {
+    let texts: String[*] = [];
+    for (i, raw in s.texts) {
+        let t: String = decodeRaw(raw);
+        if (newline && i == s.texts.length - 1) { t = "${t}\n"; }
+        for (b in t) {
+            if (b == 0) { return null; }
+        }
+        texts.push(t);
+    }
+    for (x in s.exprs) {
+        let t: Type = x.ty!;
+        if (!isInteger(t) && t != T_BOOL && t != T_STRING && !isEnumT(t)) { return null; }
+    }
+    if (s.exprs.length == 0) { return texts[0].isEmpty() ? "" : "fputs(${cLiteral(texts[0])}, stdout)"; }
+    // printf's arguments run in any order: everything up to the last call is computed first, in order
+    let lastCall: int32 = -1;
+    for (i, x in s.exprs) {
+        if (!isPure(x)) { lastCall = i; }
+    }
+    let format: StringBuilder = {} in default;
+    let args: String[*] = [] in default;
+    for (i, text in texts) {
+        format.add(text.replace("%", "%%"));
+        if (i == s.exprs.length) { break; }
+        let x: Expr = s.exprs[i];
+        let t: Type = x.ty!;
+        let v: String = value(x);
+        let early: bool = i <= lastCall && !(x is IntLit || x is BoolLit);
+        if (early) { v = hoist(cType(t), v); }
+        if (t == T_STRING) {
+            let sv: String = early ? v : isPure(x) ? paren(v) : hoist("RtString", v);
+            format.add("%.*s");
+            args.push("(int)${sv}.len");
+            args.push("${sv}.ptr");
+        } else if (t == T_BOOL) {
+            format.add("%s");
+            args.push("(${v}) ? \"true\" : \"false\"");
+        } else if (isEnumT(t)) {
+            format.add("%s");
+            args.push("${t.name}__names[(${v}).tag]");
+        } else {
+            let wide: bool = bits(t) == 64;
+            let signed: bool = isSigned(t);
+            format.add(wide ? signed ? "%lld" : "%llu" : signed ? "%d" : "%u");
+            args.push(wide ? signed ? "(long long)(${v})" : "(unsigned long long)(${v})" : signed ? "(int)(${v})" : "(unsigned)(${v})");
+        }
+    }
+    return "printf(${cLiteral(format.toString())}, ${args.join(", ")})";
+}
+
+/** The bytes of a raw literal text (escapes interpreted; an unknown escape keeps its backslash). */
+function decodeRaw(raw: String in default): String {
+    let sb: StringBuilder = {} in default;
+    let i: int32 = 0;
+    while (i < raw.length) {
+        let c: byte = raw[i];
+        if (c == '\\' && i + 1 < raw.length) {
+            let e: byte = raw[i + 1];
+            if (e == 'n') {
+                sb.add("\n");
+            } else if (e == 't') {
+                sb.add("\t");
+            } else if (e == 'r') {
+                sb.add("\r");
+            } else if (e == '0') {
+                sb.add("\0");
+            } else if (e == '\\' || e == '"' || e == '$' || e == '\'') {
+                sb.add(raw.substring(i + 1, i + 2));
+            } else {
+                sb.add(raw.substring(i, i + 2));
+            }
+            i += 2;
+        } else {
+            sb.add(raw.substring(i, i + 1));
+            i += 1;
+        }
+    }
+    return sb.toString();
+}
+
+/** The C literal of some bytes. */
+function cLiteral(text: String): String {
+    let sb: StringBuilder = {} in default;
+    sb.add("\"");
+    for (i, b in text) { cByte(sb, b, text.substring(i, i + 1)); }
+    sb.add("\"");
+    return sb.toString();
+}
+
+/** Writes the parts of an interpolated text into a builder (sbRef: an RtSb*). */
+public function appendPieces(s: StringLit in default, sbRef: String): void {
+    for (i, text in s.texts) {
+        let c: String = cBytes(text);
+        if (cLength > 0) { line("rt_sb_add(${sbRef}, ${c}, ${cLength});"); }
+        if (i >= s.exprs.length) { continue; }
+        let x: Expr = s.exprs[i];
+        let t: Type = x.ty!;
+        let v: String = value(x);
+        if (t == T_STRING) {
+            line("rt_sb_str(${sbRef}, ${v});");
+        } else if (t == T_BOOL) {
+            line("rt_sb_bool(${sbRef}, ${v});");
+        } else if (t == T_FLOAT32) {
+            line("rt_sb_f32(${sbRef}, ${v});");
+        } else if (isFloat(t)) {
+            line("rt_sb_f64(${sbRef}, (double)(${v}));");
+        } else if (isSigned(t)) {
+            line("rt_sb_i64(${sbRef}, (int64_t)(${v}));");
+        } else if (isInteger(t)) {
+            line("rt_sb_u64(${sbRef}, (uint64_t)(${v}));");
+        } else if (isEnumT(t)) {
+            line("rt_sb_cstr(${sbRef}, ${t.name}__names[(${v}).tag]);");
+        } else if (t == T_ANY) {
+            line("rt_sb_any(${sbRef}, ${v});");
+        }
+    }
+}
+
+public function stringLiteral(raw: String): String {
+    let c: String = cBytes(raw);
+    return "rt_str(${c}, ${cLength})";
+}
+
+/** The C literal of a raw Larimar text (escapes interpreted); its length in bytes goes to cLength. */
+let cLength: int32 = 0;
+
+const OCT: String = "01234567";
+
+function cBytes(raw: String): String {
+    let sb: StringBuilder = {} in default;
+    sb.add("\"");
+    let n: int32 = 0;
+    let i: int32 = 0;
+    while (i < raw.length) {
+        let c: byte = raw[i];
+        if (c == '\\' && i + 1 < raw.length) {
+            let e: byte = raw[i + 1];
+            i += 2;
+            if (e == 'n') {
+                cByte(sb, 10, "");
+            } else if (e == 't') {
+                cByte(sb, 9, "");
+            } else if (e == 'r') {
+                cByte(sb, 13, "");
+            } else if (e == '0') {
+                cByte(sb, 0, "");
+            } else if (e == '\\' || e == '"' || e == '$' || e == '\'') {
+                cByte(sb, e, raw.substring(i - 1, i));
+            } else {
+                cByte(sb, 92, "");               // an unknown escape keeps its backslash
+                n += 1;
+                cByte(sb, e, raw.substring(i - 1, i));
+            }
+            n += 1;
+        } else {
+            cByte(sb, c, raw.substring(i, i + 1));
+            n += 1;
+            i += 1;
+        }
+    }
+    sb.add("\"");
+    cLength = n;
+    return sb.toString();
+}
+
+function cByte(sb: StringBuilder, v: byte, text: String): void {
+    if (v == '"') {
+        sb.add("\\\"");
+    } else if (v == '\\') {
+        sb.add("\\\\");
+    } else if (v == '?') {
+        sb.add("\\?");
+    } else if (v == '\n') {
+        sb.add("\\n");
+    } else if (v == '\t') {
+        sb.add("\\t");
+    } else if (v >= ' ' && v < 127) {
+        sb.add(text);
+    } else {
+        let a: int32 = ((v >> 6) & 7) as int32;
+        let b: int32 = ((v >> 3) & 7) as int32;
+        let c: int32 = (v & 7) as int32;
+        sb.add("\\${OCT.substring(a, a + 1)}${OCT.substring(b, b + 1)}${OCT.substring(c, c + 1)}");
+    }
+}

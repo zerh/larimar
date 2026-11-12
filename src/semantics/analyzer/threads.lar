@@ -1,0 +1,213 @@
+// semantics.analyzer.threads: what a thread can share.
+
+import syntax.ast { Call, Expr, Lambda, ObjectLit, Placed };
+import semantics.types {
+    ArrK, classes, ClassInfo, classOf, enumOf, enums, functions, implementor, interfaces, isClass, isError,
+    isMemory, isMemParam, isSubclass, LambdaInfo, MethodInfo, NamedK, Owner, structOf, structs, Symbol, SymK, T_ANY,
+    T_VOID, TyK, Type
+};
+import semantics.expressions.conversions { typeOf };
+import semantics.expressions.literals { refText };
+import semantics.analyzer { declare, error, frames, frameTop, state, ThreadRun, threadRuns };
+
+public function currentOwner(): Owner? {
+    let i: int32 = frameTop - 1;
+    while (i >= 0) {
+        let o: Owner? = frames[i].owner;
+        if (o != null) { return o; }
+        i -= 1;
+    }
+    return null;
+}
+
+public function edge(from: Owner? in default, to: Owner? in default): void {
+    if (from != null && to != null) { from.edges.push(to); }
+}
+
+public function useGlobal(s: Symbol in default, line: int32): void {
+    let o: Owner? = currentOwner();
+    if (o != null) {
+        o.uses.push(s);
+        o.useLines.push(line);
+    }
+}
+
+/** Every method a call can reach: overrides in subclasses, or the implementations of an interface method. */
+public function callTargets(receiver: Type, m: MethodInfo in default): MethodInfo[*] {
+    let out: MethodInfo[*] = [m] in default;
+    if (receiver.nk == NamedK.Struct) { return out; }
+    for (c in classes) {
+        let related: bool = receiver.nk == NamedK.Class ? isSubclass(c.name, receiver.name) : implementor(c.name, receiver.name) != "";
+        if (!related) { continue; }
+        for (cm in c.methods) {
+            if (cm.name == m.name && !cm.isOperator) { out.push(cm); }
+        }
+    }
+    return out;
+}
+
+/** Can a value of this type be used by two threads at once without a lock? */
+public function sendable(t: Type in default): bool {
+    let visiting: Any = {} in default;
+    return sendableIn(t, visiting);
+}
+
+function sendableIn(t: Type in default, visiting: Any): bool {
+    if (isError(t) || t.kind == TyK.Null) { return true; }
+    if (t == T_ANY) { return false; }
+    if (t.kind == TyK.Prim) { return true; }
+    if (t.kind == TyK.Opt) { return sendableIn(t.elem!, visiting); }
+    if (t.kind == TyK.Array) { return t.ak == ArrK.Fixed && sendableIn(t.elem!, visiting); }
+    if (t.kind == TyK.Func) { return t.safe; }
+    if (visiting.contains(t.name)) { return true; }
+    visiting[t.name] = true;
+    if (t.nk == NamedK.Struct) {
+        for (f in structOf(t.name)!.fields) {
+            if (!sendableIn(f.type, visiting)) { return false; }
+        }
+        return true;
+    }
+    if (t.nk == NamedK.Enum) {
+        for (v in enumOf(t.name)!.variants) {
+            for (f in v.fields) {
+                if (!sendableIn(f.type, visiting)) { return false; }
+            }
+        }
+        return true;
+    }
+    if (t.nk == NamedK.Interface) {             // shared like its classes: every one that implements it
+        for (c in classes) {
+            if (!implementsInterface(c, t.name)) { continue; }
+            if (!(c.sync || stateFields(c.name) == "")) { return false; }
+        }
+        return true;
+    }
+    return t.nk == NamedK.Class ? classOf(t.name)!.sync || stateFields(t.name) == "" : false;
+}
+
+/** Class c implements interface i (itself, or a class it extends). */
+function implementsInterface(c: ClassInfo in default, i: String): bool {
+    let at: ClassInfo? = c;
+    while (at != null) {
+        if (at!.interfaces.contains(i)) { return true; }
+        at = at!.superName != "" ? classOf(at!.superName) : null;
+    }
+    return false;
+}
+
+/**
+ * The fields that make objects of class `name` changeable, as text ('a', 'b'), or "" when they have none:
+ * an object with no fields, in its class or in any class that extends it, has no state that two threads
+ * could change, so it is shared like a value (a set of routes, a strategy). A Thread or a StringBuilder
+ * keeps state of its own.
+ */
+public function stateFields(name: String in default): String {
+    for (c in classes) {
+        if (!isSubclass(c.name, name)) { continue; }
+        if (c.thread || c.builder) { return "the state of ${c.thread ? "a Thread" : "a StringBuilder"}"; }
+        if (c.fields.length > 0) {
+            let names: String[*] = [] in default;
+            for (f in c.fields) { names.push("'${f.name}'"); }
+            return c.name == name ? names.join(", ") : "${names.join(", ")} of its subclass '${c.name}'";
+        }
+    }
+    return "";
+}
+
+/** For the message of a value that cannot be shared: what an ordinary object has that could change. */
+function changeable(t: Type in default): String {
+    if (t.kind != TyK.Named || t.nk != NamedK.Class || classOf(t.name)!.sync) { return ", which"; }
+    let fields: String = stateFields(t.name);
+    return fields == "" ? ", which" : ", which has fields (${fields}) that";
+}
+
+public function checkSynchronizedClasses(): void {
+    for (c in classes) {
+        let parent: ClassInfo? = c.superName != "" ? classOf(c.superName) : null;
+        // synchronized from synchronized: every method, the parent's too, takes the same lock
+        if (c.sync && parent != null && !parent.sync) {
+            error(c.line, "Synchronized class '${c.name}' can only extend another synchronized class: the methods of '${parent.name}' use its fields without the lock.");
+        }
+        if (!c.sync && parent != null && (parent.sync || parent.thread)) {
+            error(c.line, parent.thread
+                ? "Class '${c.name}' cannot extend Thread."
+                : "Class '${c.name}' cannot extend synchronized class '${parent.name}': declare it 'synchronized class ${c.name}', so its methods take the same lock.");
+        }
+        if (!c.sync) { continue; }
+        for (m in c.methods) {
+            if (m.sig == null) { continue; }
+            for (i, p in m.sig!.params) {
+                if (!sendable(p) && !isMemParam(m.memParams, i)) {
+                    error(m.decl.line, "Parameter '${m.decl.params[i].name}' of ${c.name}.${m.name} is ${p.text}, which the caller could change while the object uses it. Synchronized methods take values (numbers, bool, String, structs of them) and synchronized objects.");
+                }
+            }
+            let r: Type = m.sig!.elem!;
+            if (r != T_VOID && !sendable(r)) {
+                error(m.decl.line, "${c.name}.${m.name} returns ${r.text}, which would let other threads use the object's data without its lock. Return values (numbers, bool, String, structs of them) or synchronized objects.");
+            }
+        }
+    }
+}
+
+/** A lambda given where a `thread safe` function is expected: checked like the run of a Thread. */
+public function checkThreadSafeLambda(l: LambdaInfo in default, line: int32): void {
+    threadRuns.push(ThreadRun { lambda: l, line, safe: true } in default);
+}
+
+/** Thread { run: ... }: a lambda written here, or a synchronized object. */
+public function checkThreadRun(o: ObjectLit in default): void {
+    for (fi in o.fields) {
+        if (fi.name != "run") { continue; }
+        let v: Expr = fi.value is Placed p ? p.expr : fi.value;
+        if (v is Lambda l && l.lambda != null) {
+            threadRuns.push(ThreadRun { lambda: l.lambda!, line: o.line } in default);
+            return;
+        }
+        let t: Type = typeOf(v);
+        if (isClass(t) && classOf(t.name)!.sync) { return; }
+        if (!isError(t)) {
+            error(fi.line, "A thread runs a lambda written here, run: () -> { ... }, or an object of a synchronized class that implements Runnable; that is how the compiler checks what it shares.");
+        }
+    }
+}
+
+public let markRound: int32 = 0;
+
+public function checkThreads(): void {
+    for (tr in threadRuns) {
+        let ref: Call? = tr.lambda.node.ref;
+        // a reference: '::bump' / 'b::get' is given where a 'thread safe' function is expected, but it ...
+        let given: String = ref != null ? "'${refText(ref!)}' is given where a 'thread safe' function is expected, but it" : "";
+        for (s in tr.lambda.captures) {
+            if (sendable(s.type)) { continue; }
+            let what: String = s.kind == SymK.Self ? "self" : "'${s.name}'";
+            let which: String = changeable(s.type);
+            error(tr.line, ref != null
+                ? "${given} keeps ${what} (${s.type.text})${which} other threads could change at the same time. It can use only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes or of classes without fields, and 'thread safe' functions."
+                : tr.safe
+                ? "This 'thread safe' lambda uses ${what} (${s.type.text})${which} other threads could change at the same time. It can use only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes or of classes without fields, and 'thread safe' functions."
+                : "This thread uses ${what} (${s.type.text})${which} could change while the thread runs. A thread can share only values (numbers, bool, String, and structs, enums and T[N] made of them), objects of synchronized classes or of classes without fields, and 'thread safe' functions.");
+        }
+        markRound += 1;
+        let todo: Owner[*] = [tr.lambda.owner] in default;
+        let reported: Any = {} in default;
+        let k: int32 = 0;
+        while (k < todo.length) {
+            let o: Owner = todo[k];
+            k += 1;
+            if (o.mark == markRound) { continue; }
+            o.mark = markRound;
+            for (i, g in o.uses) {
+                let key: String = "${g.id}";
+                if (reported.contains(key) || !(isMemory(g) || g.mutatedGlobal || !sendable(g.type))) { continue; }
+                reported[key] = true;
+                let line: int32 = o.useLines[i];
+                let who: String = ref != null ? given : tr.safe ? "This 'thread safe' lambda" : "This thread";
+                error(tr.line, isMemory(g)
+                    ? "${who} can reach global memory '${g.name}' (line ${line}). Between threads only the default memory is shared: create things 'in default' or in a memory of the thread."
+                    : "${who} can reach global '${g.name}' (line ${line}), which can change while threads use it. Keep shared state in an object of a synchronized class.");
+            }
+            for (e in o.edges) { todo.push(e); }
+        }
+    }
+}

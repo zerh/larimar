@@ -1,0 +1,152 @@
+// semantics.expressions.constants: the values known when compiling.
+
+import syntax.ast { Binary, BoolLit, Expr, FloatLit, Ident, IntLit, StringLit, Ternary, Unary };
+import semantics.types { ConstK, maxOf, minOf, Symbol, SymK, T_UINT64, Type };
+import semantics.analyzer { error, lookup };
+
+public class ConstVal {
+    let kind: ConstK;
+    let i: int64 = 0;
+    let big: bool = false;
+    let huge: bool = false;
+    let f: float64 = 0.0;
+    let b: bool = false;
+    let s: String = "";
+    let text: String = "";      // integers: as written (for messages)
+}
+
+function cInt(i: int64): ConstVal { return ConstVal { kind: ConstK.Int, i } in default; }
+function cFloat(f: float64): ConstVal { return ConstVal { kind: ConstK.Float, f } in default; }
+function cBool(b: bool): ConstVal { return ConstVal { kind: ConstK.Bool, b } in default; }
+
+function asDouble(v: ConstVal): float64 {
+    if (v.kind == ConstK.Float) { return v.f; }
+    return v.big ? (v.i as uint64) as float64 : v.i as float64;
+}
+
+/** The value of an integer literal, negated or not. */
+public function literalValue(n: IntLit in default, negate: bool): ConstVal {
+    let v: ConstVal = ConstVal { kind: ConstK.Int, i: n.num, big: n.big, huge: n.huge, text: n.text } in default;
+    if (!negate) { return v; }
+    if (v.huge) {
+        v.text = "-${v.text}";
+        return v;
+    }
+    if (v.big) {
+        v.big = false;
+        if ((v.i as uint64) == 9223372036854775808) {
+            v.text = "-9223372036854775808";
+            return v;
+        }
+        v.huge = true;
+        v.text = "-${v.text}";
+        return v;
+    }
+    v.i = 0 - v.i;
+    v.text = "${v.i}";
+    return v;
+}
+
+/** Integer values: does it fit in t? */
+public function intFits(i: int64, big: bool, huge: bool, t: Type): bool {
+    if (huge) { return false; }
+    if (t == T_UINT64) { return big || i >= 0; }
+    return big ? false : i >= minOf(t) && i <= maxOf(t);
+}
+
+/** int64, float64, bool or String (raw text), or null after reporting an error. */
+public function evalConst(e: Expr in default): ConstVal? {
+    switch (e) {
+        case IntLit n -> { return literalValue(n, false); }
+        case FloatLit f -> { return cFloat(f.text.toFloat() ?? 0.0); }
+        case BoolLit b -> { return cBool(b.value); }
+        case StringLit s -> {
+            if (s.exprs.length == 0) { return ConstVal { kind: ConstK.Str, s: s.texts[0] } in default; }
+        }
+        case Ident id -> {
+            let c: Symbol? = lookup(id.name);
+            if (c != null && c.kind == SymK.Const) { return ConstVal { kind: c.ck, i: c.ci, big: c.cbig, f: c.cf, b: c.cb, s: c.cs } in default; }
+            error(e.line, "'${id.name}' is not a constant; only literals and other constants are allowed here.");
+            return null;
+        }
+        case Ternary t -> {
+            let co: ConstVal? = evalConst(t.cond);
+            if (co == null) { return null; }
+            if (co.kind != ConstK.Bool) {
+                error(e.line, "The condition of '?:' must be a bool.");
+                return null;
+            }
+            return co.b ? evalConst(t.then) : evalConst(t.otherwise);
+        }
+        case Unary u -> {
+            if (u.op == "-" && u.operand is IntLit n) { return literalValue(n, true); }
+            let v: ConstVal? = evalConst(u.operand);
+            if (v == null) { return null; }
+            if (u.op == "-" && v.kind == ConstK.Int) { return cInt(0 - v.i); }
+            if (u.op == "-" && v.kind == ConstK.Float) { return cFloat(0.0 - v.f); }
+            if (u.op == "~" && v.kind == ConstK.Int) { return cInt(~v.i); }
+            if (u.op == "!" && v.kind == ConstK.Bool) { return cBool(!v.b); }
+            error(e.line, "Invalid constant expression.");
+            return null;
+        }
+        case Binary b -> { return evalBinary(b); }
+        default -> {}
+    }
+    error(e.line, "This must be a constant: a literal, a constant, or arithmetic on them.");
+    return null;
+}
+
+function evalBinary(e: Binary in default): ConstVal? {
+    let l: ConstVal? = evalConst(e.left);
+    let r: ConstVal? = evalConst(e.right);
+    if (l == null || r == null) { return null; }
+    let op: String = e.op;
+    if (l.kind == ConstK.Int && r.kind == ConstK.Int) {
+        let x: int64 = l.i;
+        let y: int64 = r.i;
+        if ((op == "/" || op == "%") && y == 0) {
+            error(e.line, "Division by zero in a constant.");
+            return null;
+        }
+        switch (op) {
+            case "+" -> { return cInt(x + y); }
+            case "-" -> { return cInt(x - y); }
+            case "*" -> { return cInt(x * y); }
+            case "/" -> { return cInt(x / y); }
+            case "%" -> { return cInt(x % y); }
+            case "<<" -> { return cInt(x << (y as int32)); }
+            case ">>" -> { return cInt(x >> (y as int32)); }
+            case "&" -> { return cInt(x & y); }
+            case "|" -> { return cInt(x | y); }
+            case "^" -> { return cInt(x ^ y); }
+            default -> {}
+        }
+    }
+    if ((l.kind == ConstK.Int || l.kind == ConstK.Float) && (r.kind == ConstK.Int || r.kind == ConstK.Float)) {
+        let x: float64 = asDouble(l);
+        let y: float64 = asDouble(r);
+        switch (op) {
+            case "+" -> { return cFloat(x + y); }
+            case "-" -> { return cFloat(x - y); }
+            case "*" -> { return cFloat(x * y); }
+            case "/" -> { return cFloat(x / y); }
+            default -> {}
+        }
+    }
+    error(e.line, "Invalid constant expression.");
+    return null;
+}
+
+public function evalSize(e: Expr in default): int64 {
+    let v: ConstVal? = evalConst(e);
+    if (v == null) { return -1; }
+    if (v.kind != ConstK.Int) {
+        error(e.line, "An array capacity must be an integer.");
+        return -1;
+    }
+    if (v.huge || v.big || v.i < 0 || v.i > 2147483647) {
+        error(e.line, "An array capacity must be between 0 and 2147483647 (got ${v.text == "" ? "${v.i}" : v.text}).");
+        return -1;
+    }
+    return v.i;
+}

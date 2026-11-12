@@ -1,0 +1,702 @@
+// semantics.analyzer.flow: what a function's result may point to, and whether the function creates it.
+
+import syntax.ast {
+    allExprs, allStmts, AssignStmt, Binary, BoolLit, Call, Cast, Expr, exprAll, FloatLit, ForStmt, Ident, Index,
+    IntLit, IsExpr, Lambda, Member, NullLit, ObjectLit, Param, Placed, ReturnStmt, SelfExpr, Stmt, StringLit,
+    SuperMember, SwitchExpr, Ternary, TK, TypeRef, Unary, Unwrap, VarDecl, YieldStmt
+};
+import semantics.types {
+    classes, ClassInfo, classOf, describe, enumOf, FieldInfo, findField, FunctionInfo, functionOf, functions,
+    interfaces, isOpt, isResource, MethodInfo, named, NamedK, nativeMethods, outlives, P_GLOBAL, P_RESULT, Place,
+    PlaceK, primByName, R_STATIC, Region, resolveRegion, RK, rLocal, Scope, structOf, structs, Symbol, symbolic,
+    SymK, T_ANY, T_STRING, T_VOID, TyK, Type
+};
+import semantics.linker { target };
+import semantics.expressions.conversions { hasRefs, namedHasRefs, regionOf };
+import semantics.analyzer { block, declare, Deferred, deferred, DefK, error, frame, lookup, scope, state };
+import semantics.analyzer.compact { Mixing, mixings };
+import semantics.analyzer.statements { livesHint };
+
+/** Method names whose result may point to the receiver (decided before the receiver is checked). */
+let viewMethods: Any = { substring: 1, trim: 1, trimStart: 1, trimEnd: 1, bytes: 1, split: 1, lines: 1, pop: 1, map: 1, filter: 1 } in default;
+/** Method names known only as methods whose result is new data. */
+let freshMethods: Any = {} in default;
+/** Of the methods of the program that return their data: `name`, and `name.i` when some one may return its argument i. */
+let argFlows: Any = {} in default;
+/** Method names of which some method creates its result (calls to them give the memory of the call). */
+let creatingMethods: Any = {} in default;
+
+public function flowSummaries(): void {
+    for (f in functions) {
+        if (!f.isExtern) {
+            for (_ in f.params) { f.flows.push(false); }
+        }
+    }
+    let changed: bool = true;
+    while (changed) {        // grows until nothing changes (a call can make its caller return its arguments)
+        changed = false;
+        for (f in functions) {
+            if (f.isExtern) { continue; }
+            flowParams = steadyParams(f.decl!.params, f.decl!.body);
+            let flow: Any = flowNames(f.decl!.body, true);
+            flowParams = [] in default;
+            for (i, p in f.params) {
+                if (!f.flows[i] && flow.contains(p.name)) {
+                    f.flows[i] = true;
+                    f.returnsArgs = true;
+                    changed = true;
+                }
+            }
+        }
+    }
+    let names: Any = {};
+    let all: MethodInfo[*] = [] in default;
+    for (st in structs) { for (m in st.methods) { all.push(m); } }
+    for (c in classes) { for (m in c.methods) { all.push(m); } }
+    for (m in nativeMethods) { all.push(m); }
+    let plain: Any = {};                // types whose methods no other class writes again: their flow is exact
+    for (st in structs) { plain[st.name] = 1; }
+    for (c in classes) {
+        if (!c.builder && c.superName == "") { plain[c.name] = 1; }
+    }
+    for (c in classes) {
+        if (c.superName != "") { plain.remove(c.superName); }
+    }
+    for (m in all) {
+        let c: ClassInfo? = classOf(m.owner);
+        flowSelfClass = c != null ? m.owner : "";
+        m.returnsArgs = (m.decl.returnLives != "" && m.decl.returnLives != "default")
+            || (primByName(m.owner) == null && (c != null && c.builder ? m.name == "toString" : returnsArgs(m.decl.params, m.decl.body, true)));
+        if (m.returnsArgs && m.decl.returnLives == "" && plain.contains(m.owner)) {
+            let flow: Any = flowOf(m.decl.params, m.decl.body);
+            for (p in m.decl.params) { m.flows.push(flow.contains(p.name)); }
+        }
+        flowSelfClass = "";
+        if (m.returnsArgs) {
+            argFlows[m.name] = 1;
+            for (i, _ in m.decl.params) {
+                if (m.flows.length == 0 || m.flows[i]) { argFlows["${m.name}.${i}"] = 1; }
+            }
+        }
+        if (m.owner == "String" || m.owner == "Any") { m.creates = hasRefs(m.sig!.elem!) && !m.returnsArgs; }
+        if (primByName(m.owner) != null && m.creates) { creatingMethods[m.name] = 1; }
+        if (m.returnsArgs) { viewMethods[m.name] = 1; } else { names[m.name] = 1; }
+    }
+    for (i in interfaces) {
+        for (m in i.methods) {
+            m.returnsArgs = true;
+            viewMethods[m.name] = 1;
+            argFlows[m.name] = 1;
+            for (k, _ in m.decl.params) { argFlows["${m.name}.${k}"] = 1; }
+        }
+    }
+    for (n, _ in names.fields) {
+        if (!viewMethods.contains(n)) { freshMethods[n] = 1; }
+    }
+    // Which results are new data (created in the memory of the call): grows until nothing changes.
+    for (i in interfaces) {
+        for (m in i.methods) {
+            m.creates = true;
+            creatingMethods[m.name] = 1;
+        }
+    }
+    changed = true;
+    while (changed) {
+        changed = false;
+        for (f in functions) {
+            if (!f.isExtern && !f.creates && createsResult(f.decl!.body, f.sig!.elem!, f.params)) {
+                f.creates = true;
+                changed = true;
+            }
+        }
+        for (m in all) {
+            if (primByName(m.owner) != null) { continue; }
+            if (m.creates) { continue; }
+            let c: ClassInfo? = classOf(m.owner);
+            if (!(c != null && c.builder ? m.name == "toString" : createsResult(m.decl.body, m.sig!.elem!, m.decl.params))) { continue; }
+            m.creates = true;
+            creatingMethods[m.name] = 1;
+            changed = true;
+        }
+    }
+}
+
+/** Built-in methods whose result is new data, or a plain value: their receiver can be a temporary. */
+public function builtinFresh(name: String): bool {
+    return switch (name) {
+        case "toUpperCase", "toLowerCase", "replace", "repeat", "padStart", "padEnd", "codePoints", "join", "clone",
+             "length", "isEmpty", "isBlank", "contains", "containsKey", "startsWith", "endsWith", "equalsIgnoreCase", "count",
+             "compareTo", "codePointCount", "indexOf", "lastIndexOf", "toInt", "toFloat", "toBool", "push", "clear",
+             "remove", "removeAt", "removeIf" -> true;
+        default -> false;
+    };
+}
+
+/** May a method call's result point to its receiver? */
+public function viewMethod(name: String): bool {
+    return viewMethods.contains(name) || !freshMethods.contains(name) && !builtinFresh(name);
+}
+
+/** Some method of that name may create its result. */
+public function creatingMethod(name: String): bool { return creatingMethods.contains(name); }
+
+/** module.name, after linking, is the name itself. */
+function linked(e: Expr): Expr { return e is Member m && m.replaced != null ? m.replaced! : e; }
+
+/** An extern whose first parameter is a memory: it creates in the memory of the call, which is not written. */
+public function callMemory(f: FunctionInfo): bool { return f.isExtern && f.memParams.length > 0 && f.memParams[0]; }
+
+/** A C function that makes a resource (returns X?, X released by f): the resource lives where its result goes. */
+function makesResource(f: FunctionInfo): bool {
+    if (f.isExtern && f.ext != null && f.ext!.releasedBy != "") { return true; }     // a text of C: copied into the call's memory
+    return f.isExtern && f.sig != null && isOpt(f.sig!.elem!) && isResource(f.sig!.elem!.elem!);
+}
+
+/** The names an expression mentions (self as "self"), lambdas included; `viaPlaced`: also inside `... in m`. */
+/** The class whose method's body flowNames reads ("" outside methods): a number read from self points nowhere. */
+let flowSelfClass: String = "";
+
+/** The parameters of the body flowNames reads, with the type written for them (a name declared again is left out). */
+let flowParams: Param[*] = [] in default;
+
+/** The parameters that keep their written type in the whole body: no variable of the body takes their name. */
+function steadyParams(params: Param[*] in default, body: Stmt[*]): Param[*] {
+    let names: Any = {};
+    let stmts: Stmt[*] = [];
+    allStmts(body, stmts);
+    for (s in stmts) {
+        switch (s) {
+            case VarDecl v -> { names[v.name] = 1; }
+            case ForStmt f -> {
+                names[f.varName] = 1;
+                if (f.indexName != "") { names[f.indexName] = 1; }
+            }
+            default -> {}
+        }
+    }
+    let out: Param[*] = [] in default;
+    for (p in params) {
+        if (!names.contains(p.name)) { out.push(p); }
+    }
+    return out;
+}
+
+/** name.length, with name a parameter written as String or a list: a number. */
+function lengthIsNumber(name: String): bool {
+    for (p in flowParams) {
+        if (p.name == name && p.type != null) {
+            let t: TypeRef = p.type!;
+            return (t.kind == TK.Named && t.name == "String") || t.kind == TK.Fixed || t.kind == TK.Growable;
+        }
+    }
+    return false;
+}
+
+function mentioned(e: Expr, out: Any, viaPlaced: bool): void {
+    let xs: Expr[*] = [];
+    exprAll(e, true, xs);
+    let skip: Expr[*] = [];
+    for (x in xs) {
+        if (skip.contains(x)) { continue; }
+        switch (x) {
+            case Placed p -> {
+                if (!viaPlaced) { exprAll(p, true, skip); }
+            }
+            case Index i -> exprAll(i.index, true, skip);          // a position or a key is not pointed to
+            case StringLit t -> {                                   // interpolation copies its parts into new text
+                for (x in t.exprs) { exprAll(x, true, skip); }
+            }
+            case Call c -> {
+                let f: FunctionInfo? = linked(c.callee) is Ident id ? functionOf(id.name) : staticCallee(c);
+                if (f != null && (!f.isExtern || callMemory(f))) {
+                    for (i, a in c.args) {      // arguments the result does not point to
+                        if (f.isExtern || i >= f.flows.length || !f.flows[i]) { exprAll(a, true, skip); }
+                    }
+                }
+            }
+            case Member m -> {               // self.count, self.items.length: a number is copied, not pointed to
+                if (flowSelfClass != "" && m.object is SelfExpr) {
+                    let fi: FieldInfo? = findField(flowSelfClass, m.name);
+                    if (fi != null && !hasRefs(fi.type)) { exprAll(m, true, skip); }
+                } else if (flowSelfClass != "" && m.name == "length" && m.object is Member o && o.object is SelfExpr) {
+                    let fi: FieldInfo? = findField(flowSelfClass, o.name);
+                    if (fi != null && (fi.type == T_STRING || fi.type.kind == TyK.Array)) { exprAll(m, true, skip); }
+                } else if (m.name == "length" && m.object is Ident pid && lengthIsNumber(pid.name)) {
+                    exprAll(m, true, skip);
+                }
+            }
+            case SwitchExpr sw -> {          // of a block arm only what it yields is the value; its other statements are not
+                for (k in sw.cases) {
+                    exprAll(k.guard, true, skip);
+                    if (!k.hasBlock) { continue; }
+                    allExprs(k.block, true, skip);
+                    let stmts: Stmt[*] = [];
+                    allStmts(k.block, stmts);
+                    for (st in stmts) {
+                        if (st is YieldStmt y) { mentioned(y.value, out, viaPlaced); }
+                    }
+                }
+            }
+            case Ident id -> { out[id.name] = 1; }
+            case SelfExpr _ -> { out["self"] = 1; }
+            default -> {}
+        }
+    }
+}
+
+function rootName(start: Expr): String {
+    let e: Expr = start;
+    while (true) {
+        switch (e) {
+            case Ident id -> { return id.name; }
+            case SelfExpr _ -> { return "self"; }
+            case Member m -> { e = m.object; }
+            case Index i -> { e = i.object; }
+            default -> { return ""; }
+        }
+    }
+}
+
+/** The names whose data may be in what the body returns (flowNames), reading its parameters with their written types. */
+function flowOf(params: Param[*] in default, body: Stmt[*]): Any {
+    flowParams = steadyParams(params, body);
+    let flow: Any = flowNames(body, true);
+    flowParams = [] in default;
+    return flow;
+}
+
+/** May the result point to data of a parameter (or of self)? On the safe side: the regions still check every return. */
+public function returnsArgs(params: Param[*] in default, body: Stmt[*], method: bool): bool {
+    let flow: Any = flowOf(params, body);
+    for (p in params) {
+        if (flow.contains(p.name)) { return true; }
+    }
+    return method && flow.contains("self");
+}
+
+/**
+ * The names whose data may flow into what the body returns: used in a return, or in the value of a
+ * variable that is, and what is passed to a method of one of them (it may keep it). `viaPlaced`: also
+ * what is used inside `... in m` (it is pointed to, but not created where the result goes).
+ */
+function flowNames(body: Stmt[*], viaPlaced: bool): Any {
+    let flow: Any = {};
+    let stmts: Stmt[*] = [];
+    allStmts(body, stmts);
+    let exprs: Expr[*] = [];
+    allExprs(body, true, exprs);
+    for (s in stmts) {
+        if (s is ReturnStmt r && r.value != null) { mentioned(r.value!, flow, viaPlaced); }
+    }
+    let before: int32 = -1;
+    while (before != entries(flow)) {
+        before = entries(flow);
+        for (s in stmts) {
+            switch (s) {
+                case VarDecl v -> {
+                    if (v.init != null && flow.contains(v.name)) { mentioned(v.init!, flow, viaPlaced); }
+                }
+                case AssignStmt a -> {
+                    if (flow.contains(rootName(a.target))) { mentioned(a.value, flow, viaPlaced); }
+                }
+                case ForStmt f -> {
+                    if (flow.contains(f.varName) || f.indexName != "" && flow.contains(f.indexName)) { mentioned(f.iterable, flow, viaPlaced); }
+                }
+                default -> {}
+            }
+        }
+        for (e in exprs) {
+            switch (e) {
+                case Call c -> {
+                    if (c.callee is Member m && flow.contains(rootName(m.object)) && (m.name == "push" || !builtinFresh(m.name))) {
+                        for (a in c.args) { mentioned(a, flow, viaPlaced); }   // (contains, indexOf... keep nothing)
+                    }
+                }
+                case IsExpr x -> {
+                    if (x.binding != "" && flow.contains(x.binding)) { mentioned(x.expr, flow, viaPlaced); }
+                }
+                case SwitchExpr sw -> {
+                    if (bindsFlow(sw, flow)) { mentioned(sw.subject, flow, viaPlaced); }
+                }
+                default -> {}
+            }
+        }
+    }
+    return flow;
+}
+
+/** How many named entries a table has. */
+function entries(t: Any): int32 {
+    let n: int32 = 0;
+    for (k, _ in t.fields) { n += 1; }
+    return n;
+}
+
+function bindsFlow(sw: SwitchExpr, flow: Any): bool {
+    for (c in sw.cases) {
+        for (p in c.patterns) {
+            if (p.binding != "" && flow.contains(p.binding)) { return true; }
+            for (b in p.bindings) {
+                if (flow.contains(b)) { return true; }
+            }
+        }
+    }
+    return false;
+}
+
+/** The types written for the parameters and the variables of a body (by name; the last one wins). */
+class Declared {
+    let names: String[*] = [];
+    let types: TypeRef?[*] = [];
+}
+
+function declaredType(d: Declared, name: String): TypeRef? {
+    let i: int32 = d.names.length - 1;
+    while (i >= 0) {
+        if (d.names[i] == name) { return d.types[i]; }
+        i -= 1;
+    }
+    return null;
+}
+
+function isDeclared(d: Declared, name: String): bool { return d.names.contains(name); }
+
+/**
+ * May the body create its result (in the memory the caller gives)? On the safe side: when not, the
+ * result only points to existing data (arguments, self, globals) and the call gives no memory.
+ */
+function createsResult(body: Stmt[*], ret: Type in default, params: Param[*]): bool {
+    if (!hasRefs(ret)) { return false; }
+    let any: bool = ret == T_ANY || isOpt(ret) && ret.elem! == T_ANY;
+    let flow: Any = flowNames(body, false);
+    let declared: Declared = Declared {};
+    for (p in params) {
+        declared.names.push(p.name);
+        declared.types.push(p.type);
+    }
+    let stmts: Stmt[*] = [];
+    allStmts(body, stmts);
+    for (s in stmts) {
+        if (s is VarDecl v) {
+            declared.names.push(v.name);
+            declared.types.push(v.type);
+        }
+    }
+    for (s in stmts) {
+        let e: Expr? = switch (s) {
+            case ReturnStmt r -> r.value;
+            case VarDecl v -> flow.contains(v.name) && refsOf(v.type) ? v.init : null;
+            case AssignStmt a -> a.target is Ident id && flow.contains(id.name) && refsOf(declaredType(declared, id.name)) ? a.value : null;
+            case ForStmt f -> f.rangeEnd == null && flow.contains(f.varName) ? f.iterable : null;
+            default -> null;
+        };
+        if (e != null && creates(e, any, declared)) { return true; }
+    }
+    return false;
+}
+
+/** Has a written type references to memory? (unknown: yes) */
+function refsOf(t: TypeRef?): bool {
+    if (t == null) { return true; }
+    return switch (t.kind) {
+        case Named -> {
+            let p: Type? = primByName(t.name);
+            if (p != null) { yield hasRefs(p); }
+            if (structOf(t.name) != null) { yield namedHasRefs(t.name, NamedK.Struct); }
+            if (enumOf(t.name) != null) { yield namedHasRefs(t.name, NamedK.Enum); }
+            yield true;
+        }
+        case Fixed, Infer, Opt -> refsOf(t.inner);
+        default -> true;
+    };
+}
+
+/** May this expression create data where it is placed? `any`: the result is an Any (a struct put in it is copied). */
+function creates(start: Expr?, any: bool, declared: Declared): bool {
+    if (start == null) { return false; }
+    let e: Expr = linked(start!);
+    return switch (e) {
+        case NullLit _ -> false;
+        case IntLit _ -> false;
+        case FloatLit _ -> false;
+        case BoolLit _ -> false;
+        case IsExpr _ -> false;
+        case Placed _ -> false;                      // it says where it lives
+        case StringLit s -> s.exprs.length > 0;
+        case Ident id -> {
+            let t: TypeRef? = declaredType(declared, id.name);
+            yield any && (t == null || !(t.kind == TK.Named && t.name == "Any"));
+        }
+        case SelfExpr _ -> false;
+        case Member _ -> any;
+        case Index _ -> any;
+        case Unwrap u -> creates(u.expr, any, declared);
+        case Cast c -> creates(c.expr, any, declared);
+        case Ternary t -> creates(t.then, any, declared) || creates(t.otherwise, any, declared);
+        case Unary u -> u.op == "-" && !(u.operand is IntLit || u.operand is FloatLit);
+        case Binary b -> switch (b.op) {
+            case "??" -> creates(b.left, any, declared) || creates(b.right, any, declared);
+            case "&&", "||", "==", "!=", "<", "<=", ">", ">=" -> false;
+            default -> true;                         // an operator method may create its result
+        };
+        case Call c -> callCreates(c, any, declared);
+        case SwitchExpr sw -> switchCreates(sw, any, declared);
+        default -> true;
+    };
+}
+
+function switchCreates(sw: SwitchExpr, any: bool, declared: Declared): bool {
+    for (k in sw.cases) {
+        if (k.expr != null && creates(k.expr, any, declared)) { return true; }
+        if (k.hasBlock && yieldsCreate(k.block, any, declared)) { return true; }
+    }
+    return false;
+}
+
+/** Does a block arm of a switch yield a value it creates? (a local it yields lives in the block: an error, not a result) */
+function yieldsCreate(block: Stmt[*], any: bool, declared: Declared): bool {
+    let stmts: Stmt[*] = [];
+    allStmts(block, stmts);
+    for (s in stmts) {
+        if (s is YieldStmt y && creates(y.value, any, declared)) { return true; }
+    }
+    return false;
+}
+
+/** Type.name(...) when it calls a static function. */
+function staticCallee(c: Call): FunctionInfo? {
+    if (!(linked(c.callee) is Member m) || !(m.object is Ident t)) { return null; }
+    return functionOf("${t.name}.${m.name}");
+}
+
+function callCreates(c: Call, any: bool, declared: Declared): bool {
+    let args: bool = false;
+    for (a in c.args) {
+        if (creates(a, any, declared)) { args = true; }
+    }
+    let callee: Expr = linked(c.callee);
+    let sf: FunctionInfo? = staticCallee(c);
+    if (callee is Ident || sf != null) {
+        let fname: String = callee is Ident cid ? cid.name : "";
+        if (fname == "print" || fname == "println") { return false; }
+        let f: FunctionInfo? = sf;
+        if (f == null && !isDeclared(declared, fname)) { f = functionOf(fname); }
+        if (f == null) { return true; }              // a function value
+        if (f.isExtern) { return callMemory(f) || makesResource(f); }
+        if (f.creates) { return true; }
+        for (i, a in c.args) {                       // (a parameter that says where it lives: there)
+            if (i < f.params.length && f.flows[i] && f.params[i].lives == "" && creates(a, any, declared)) { return true; }
+        }
+        return false;
+    }
+    return switch (callee) {
+        case SuperMember sm -> creatingMethods.contains(sm.name) || viewMethods.contains(sm.name) && args;
+        case Member m -> methodCreates(m, c, args, any, declared);
+        default -> true;
+    };
+}
+
+function methodCreates(m: Member, c: Call, coarse: bool, any: bool, declared: Declared): bool {
+    if (m.object is Ident en && enumOf(en.name) != null && !isDeclared(declared, en.name)) { return coarse; }
+    let n: String = m.name;
+    let args: bool = coarse;
+    if (argFlows.contains(n)) {                 // only the arguments some method of that name may return
+        args = false;
+        for (i, a in c.args) {
+            if (argFlows.contains("${n}.${i}") && creates(a, any, declared)) { args = true; }
+        }
+    }
+    if (creatingMethods.contains(n)) { return true; }
+    let receiver: bool = creates(m.object, false, declared);
+    return switch (n) {
+        case "substring", "trim", "trimStart", "trimEnd", "bytes", "pop" -> receiver;
+        case "length", "isEmpty", "isBlank", "contains", "containsKey", "startsWith", "endsWith", "equalsIgnoreCase", "count",
+             "compareTo", "codePointCount", "indexOf", "lastIndexOf", "toInt", "toFloat", "toBool", "push", "clear",
+             "remove", "removeAt", "removeIf", "sort", "__wait" -> false;
+        case "toUpperCase", "toLowerCase", "replace", "repeat", "padStart", "padEnd", "split", "lines", "codePoints",
+             "join", "clone", "map", "filter" -> true;
+        // a method of the program that does not create: its result may point to the receiver or the arguments
+        default -> !(viewMethods.contains(n) || freshMethods.contains(n)) || viewMethods.contains(n) && (receiver || args);
+    };
+}
+
+/** Where a variable's value is created: the caller's memory if it is returned, else its block's (globals: forever). */
+public function valuePlace(name: String, global: bool): Place {
+    if (global) { return P_GLOBAL; }
+    return state().returned.contains(name) ? P_RESULT : (Place { kind: PlaceK.Block, scope: block() } in default);
+}
+
+/** The memory of a block (created the first time something lives in it). */
+public function blockRegion(b: Scope in default): Region { return rLocal(b, "the memory of this block"); }
+
+/** The locals whose data may end up in the result: they are created where the caller says. */
+public function returnedNames(body: Stmt[*]): Any {
+    return hasRefs(frame().returnType ?? T_VOID) ? flowNames(body, false) : {};
+}
+
+public function requireOutlives(value: Expr in default, storage: Region in default, line: int32, target: String): void {
+    let d: Deferred = Deferred {
+        line, kind: DefK.Outlives, value: regionOf(value), storage,
+        msg: "This value lives in {v}, but ${target} lives longer (in {st}). Use .clone() to copy it there{hint}.",
+        forever: "This value lives in {v}, but ${target} lives for the whole program: create it with 'in default'.",
+        expr: value, target: target.clone() in default
+    } in default;
+    if (symbolic(d.value) || symbolic(storage)) { deferred.push(d); } else { runCheck(d, false); }
+}
+
+/** value must live at least as long as storage; checked now, or at the end if a variable is involved. */
+public function lifetime(value: Region in default, storage: Region in default, line: int32, msg: String in default): void {
+    let d: Deferred = Deferred { line, kind: DefK.Outlives, value, storage, msg } in default;
+    if (symbolic(value) || symbolic(storage)) { deferred.push(d); } else { runCheck(d, false); }
+}
+
+/** The same, knowing the expression and what it is for (a field of a literal, a thrown error), to name the culprit. */
+public function lifetimeOf(value: Expr in default, storage: Region in default, line: int32, msg: String in default, role: String): void {
+    let d: Deferred = Deferred { line, kind: DefK.Outlives, value: regionOf(value), storage, msg, expr: value, role: role.clone() in default } in default;
+    if (symbolic(d.value) || symbolic(storage)) { deferred.push(d); } else { runCheck(d, false); }
+}
+
+public function mustLiveForever(value: Region in default, line: int32, msg: String in default): void {
+    lifetime(value, R_STATIC, line, msg);
+}
+
+function fill(msg: String, v: Region, st: Region): String {
+    let dv: String = describe(v);
+    let ds: String = describe(st);
+    if (v.kind == RK.Local && st.kind == RK.Local && v.scope != st.scope && dv == ds) {
+        // two different blocks would read the same: say which one dies first
+        let c: Scope? = v.scope;
+        let perTurn: bool = false;
+        while (c != null && c != st.scope) {
+            if (c.loop) { perTurn = true; }
+            c = c.parent;
+        }
+        dv = perTurn ? "the memory of this block (freed at its '}', on every turn of the loop)" : "the memory of this block (freed at its '}')";
+        ds = "the memory of an outer block";
+    }
+    return msg.replace("{v}", dv).replace("{st}", ds).replace("{hint}", livesHint(v, st));
+}
+
+public function runCheck(d: Deferred in default, resolve: bool): void {
+    let v: Region = resolve ? resolveRegion(d.value) : d.value;
+    let st: Region = resolve ? resolveRegion(d.storage) : d.storage;
+    if (d.kind == DefK.ReturnLocal) {
+        if (v.kind == RK.Local && v.scope!.frame == d.frame!) {
+            let e: Expr? = d.expr;
+            if (e != null && e! is Ident id) {
+                error(d.line, "'${id.name}' lives in ${describe(v)}, which is freed when the function returns: return ${id.name}.clone(), or create '${id.name}' without 'in'.");
+            } else {
+                error(d.line, "The returned value lives in ${describe(v)}, which is freed when the function returns. Create it in the return statement (it then lives where the caller says), or clone it there.");
+            }
+        }
+        return;
+    }
+    if (!outlives(v, st)) {
+        let named: String = culprit(d, v, st, resolve);
+        error(d.line, named != "" ? named : fill(d.forever != "" && st.kind == RK.Static && v.kind == RK.Local ? d.forever : d.msg, v, st));
+    } else if (st.kind == RK.Local && st.memory != null && v.kind == RK.Local && v.scope! == st.scope! && v.memory != st.memory) {
+        mixings.push(Mixing { memory: st.memory!, line: d.line } in default);      // for Memory.compact
+    }
+}
+
+/** The methods whose result is a view of their object (it shares its bytes). */
+const VIEW_METHODS: String = " trim trimStart trimEnd substring bytes split lines toString ";
+
+/** The `in` that puts a copy where a region lives, when the code can say it: " in default", " in m", or "". */
+function placementFor(r: Region): String {
+    if (r.memory != null) { return " in ${r.memory!.name}"; }      // a memory with a name, global or local
+    return r.kind == RK.Static ? " in default" : "";
+}
+
+/**
+ * A message that names what lives too little, and the code that fixes it, when the value is something
+ * the programmer wrote: a lambda (its capture), a view (its text), a variable. "" when there is none.
+ */
+function culprit(d: Deferred in default, v: Region, st: Region, resolve: bool): String {
+    let given: Expr? = d.expr;
+    if (given == null) { return ""; }
+    let e: Expr = given!;
+    if (e is Placed p) { e = p.expr; }
+    let lives: String = st.kind != RK.Static ? "longer (in {st})" : st.label != "" ? "for the whole program (in ${st.label})" : "for the whole program";
+    // a copy stored in a list, a field or a table goes to their memory on its own; a global variable asks for 'in default'
+    let keep: String = st.kind == RK.Static && d.target.startsWith("'") ? " in default" : "";
+    let keepVariable: String = placementFor(st);
+    if (d.role == "throw") {
+        if (e is ObjectLit o) {
+            for (fi in o.fields) {
+                let r: Region = resolve ? resolveRegion(regionOf(fi.value)) : regionOf(fi.value);
+                if (!outlives(r, R_STATIC) && fi.value is Ident id) {
+                    return "An error can travel up to main, so '${id.name}' must live the whole program: ${fi.name}: ${id.name}.clone() in default";
+                }
+            }
+        }
+        return "";
+    }
+    if (d.role.startsWith("field ")) {
+        let field: String = d.role.substring(6);
+        if (e is Ident id && isFunctionValue(e)) {        // a function has no clone(): it must live there
+            return fill("Field '${field}' gets the function '${id.name}', which lives in {v}, but the object lives ${lives}. A function cannot be copied with clone(): make '${id.name}' live there${parameterHint(id.name, st)}.", v, st);
+        }
+        if (e is Ident id) {
+            return fill("Field '${field}' gets '${id.name}', which lives in {v}, but the object lives ${lives}: ${field}: ${id.name}.clone()${keep}", v, st);
+        }
+        let view: String = viewCulprit(e, v, "the object", lives, keep);
+        return view != "" ? fill("Field '${field}': ${view}", v, st) : "";
+    }
+    if (d.target == "") { return ""; }
+    if (e is Lambda l && l.lambda != null) {
+        for (s in l.lambda!.captures) {
+            if (s.kind == SymK.Self) { continue; }
+            let r: Region = resolve ? resolveRegion(s.region) : s.region;
+            if (outlives(r, st)) { continue; }
+            // the copy goes where the target lives: its memory by name when there is one to write
+            let into: String = keepVariable != "" ? keepVariable : " in <memory>";     // its name, or default
+            let fix: String = "Capture a copy made in the memory where ${d.target} lives: let kept: ${s.type.text} = ${s.name}.clone()${into}; and capture 'kept' instead.";
+            let start: String = l.ref != null && l.ref!.callee is Member rm
+                ? "${s.name}::${rm.name} keeps '${s.name}', which lives in {v}, but ${d.target} lives ${lives}."
+                : "The lambda captures '${s.name}', which lives in {v}, but ${d.target} lives ${lives}.";
+            if (clonesInside(l, s.name)) {
+                return fill("${start} ${s.name}.clone() runs only when the lambda is called, by which time '${s.name}' may no longer exist. ${fix}", r, st);
+            }
+            return fill("${start} ${fix}", r, st);
+        }
+        return "";
+    }
+    let view: String = viewCulprit(e, v, d.target, lives, keep);
+    if (view != "") { return fill(view, v, st); }
+    if (e is Ident id && isFunctionValue(e)) {
+        return fill("The function '${id.name}' lives in {v}, but ${d.target} lives ${lives}. A function cannot be copied with clone(): make '${id.name}' live there${parameterHint(id.name, st)}.", v, st);
+    }
+    if (e is Ident id && v.kind == RK.Local) {
+        return fill("'${id.name}' lives in {v}, but ${d.target} lives ${lives}. Keep a copy there: ${id.name}.clone()${keep}", v, st);
+    }
+    return "";
+}
+
+/** A lambda or a function value (it has no clone()). */
+function isFunctionValue(e: Expr): bool { return e.ty != null && e.ty!.kind == TyK.Func; }
+
+/** For a parameter that must live where it is kept: its declaration with `in`. */
+function parameterHint(name: String, st: Region): String {
+    let s: Symbol? = lookup(name);
+    if (s == null || s.kind != SymK.Param) { return ""; }
+    return st.kind == RK.Static ? " (declare the parameter as '${name}: ${s.type.text} in default')" : "";
+}
+
+/** x.trim(), x.substring(...)...: the result shares the bytes of x. */
+function viewCulprit(e: Expr, v: Region, target: String, lives: String, keep: String): String {
+    if (!(e is Call c) || !(c.callee is Member m) || !VIEW_METHODS.contains(" ${m.name} ")) { return ""; }
+    let source: String = m.object is Ident id ? "'${id.name}'" : "its object";
+    let code: String = m.object is Ident oid ? "${oid.name}.${m.name}(${c.args.length == 0 ? "" : "..."})" : "the value";
+    return "${m.name}() shares the bytes of ${source}, which lives in {v}, but ${target} lives ${lives}: when that memory is freed, those bytes may no longer exist. Keep a copy: ${code}.clone()${keep}";
+}
+
+/** Does the body of the lambda call name.clone()? (It runs when the lambda is called, not when it is made.) */
+function clonesInside(l: Lambda, name: String): bool {
+    let xs: Expr[*] = [];
+    allExprs(l.body, true, xs);
+    for (x in xs) {
+        if (x is Call c && c.callee is Member m && m.name == "clone" && m.object is Ident id && id.name == name) { return true; }
+    }
+    return false;
+}

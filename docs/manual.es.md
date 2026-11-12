@@ -5342,9 +5342,10 @@ repositorio tiene:
 larimar/
   src/                   el compilador (Larimar), una carpeta por etapa:
     main.lar               los comandos (new, build, run, test, check, lsp, dap)
-    syntax/                del texto al árbol: lexer, parser, ast
-    semantics/             entender el programa: módulos (linker), tipos, análisis, expresiones
-    codegen/               del árbol a C: gen, expresiones, prune, mapa de depuración
+    syntax/                del texto al árbol: lexer, parser (parser/: su gramática por tema), ast
+    semantics/             entender el programa: módulos (linker), tipos, analyzer y expressions
+                           (analyzer/, expressions/: sus partes por tema)
+    codegen/               del árbol a C: gen, expressions (gen/, expressions/: sus partes), prune, mapa de depuración
     editor/                larimar check, lsp y dap
     project/               el compilador de C, larimar test (larimar.toml se lee con std.encoding.toml)
   std/                   la biblioteca estándar (std/runtime: el runtime, el C bajo cada programa)

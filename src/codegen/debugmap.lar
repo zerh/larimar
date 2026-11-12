@@ -15,7 +15,8 @@ import semantics.types {
     structOf, classOf, interfaceOf, enumOf, optIsPointer, escapeName, hasCapture
 };
 import semantics.linker { filePaths, FILE_LINES, decode };
-import codegen.gen { methodName, envField };
+import codegen.gen.classes { methodName };
+import codegen.gen.types { envField };
 
 let typesOut: String[*] = [] in default;     // "name": {...} entries of "types"
 let typesSeen: Any = {} in default;

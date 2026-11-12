@@ -1,0 +1,204 @@
+// codegen.expressions.clone: clone: copying a value into another memory.
+
+import syntax.ast { Call };
+import semantics.types {
+    ArrK, CallInfo, classes, EnumInfo, enumOf, escapeName, FieldInfo, isArray, isClass, isEnumT, isInterface, isOpt,
+    isStruct, NamedK, optIsPointer, structOf, Symbol, T_ANY, T_STRING, TyK, Type
+};
+import codegen.gen { line, tmp };
+import codegen.expressions { cType, mangle, memoryRef, placeMem, structName, value };
+import codegen.expressions.calls { receiver };
+
+let cloneTypes: Type[*] = [] in default;
+let cloneSeen: Any = {} in default;
+
+public function cloneTypeList(): Type[*] { return cloneTypes; }
+
+public function needsDeepClone(t: Type): bool {
+    if (t == T_STRING || t == T_ANY) { return true; }
+    if (t.kind == TyK.Prim || t.kind == TyK.Func || isInterface(t) || t.kind == TyK.Null) { return false; }
+    if (t.kind == TyK.Named) {
+        if (t.nk == NamedK.Class) { return true; }
+        if (t.nk == NamedK.Struct) {
+            for (f in structOf(t.name)!.fields) {
+                if (needsDeepClone(f.type)) { return true; }
+            }
+            return false;
+        }
+        if (t.nk == NamedK.Enum) {
+            for (v in enumOf(t.name)!.variants) {
+                for (f in v.fields) {
+                    if (needsDeepClone(f.type)) { return true; }
+                }
+            }
+        }
+        return false;
+    }
+    if (t.kind == TyK.Array) { return t.ak == ArrK.Growable || (t.ak == ArrK.Fixed && needsDeepClone(t.elem!)); }
+    return t.kind == TyK.Opt ? needsDeepClone(t.elem!) : false;
+}
+
+public function requireClone(t: Type in default): void {
+    if (!needsDeepClone(t) || cloneSeen.contains(t.text)) { return; }
+    cloneSeen[t.text] = true;
+    cloneTypes.push(t);
+    if (isStruct(t)) {
+        for (f in structOf(t.name)!.fields) { requireClone(f.type); }
+    }
+    if (isEnumT(t)) {
+        for (v in enumOf(t.name)!.variants) {
+            for (f in v.fields) { requireClone(f.type); }
+        }
+    }
+    if (isClass(t)) {
+        for (c in classes) {
+            if (!c.sync && !c.thread) {
+                for (f in c.fields) { requireClone(f.type); }
+            }
+        }
+    }
+    if (t.kind == TyK.Array || t.kind == TyK.Opt) { requireClone(t.elem!); }
+}
+
+public function cloneHeader(t: Type): String {
+    return "static ${cType(t)} clone_${mangle(t)}(${cType(t)} v, RtMem* mem, RtCloneMap* cm)";
+}
+
+public function cloneOf(t: Type in default, v: String): String {
+    if (!needsDeepClone(t)) { return v; }
+    requireClone(t);
+    return "clone_${mangle(t)}(${v}, mem, cm)";
+}
+
+/** A class object is copied by its own class (a subclass, maybe): every class's fields may need copying. */
+function requireClassClones(): void {
+    for (ci in classes) {
+        if (!ci.sync && !ci.thread) {
+            for (f in ci.fields) { requireClone(f.type); }
+        }
+    }
+}
+
+public function cloneCall(c: Call in default, b: CallInfo in default): String {
+    let t: Type = b.receiverType!;
+    let v: String = value(receiver(c));
+    if (!needsDeepClone(t)) { return v; }
+    requireClone(t);
+    requireClassClones();
+    let mem: String = placeMem(c);
+    let map: String = tmp("clones");
+    let res: String = tmp("copy");
+    line("RtCloneMap ${map} = rt_clone_map();");
+    line("${cType(t)} ${res} = clone_${mangle(t)}(${v}, ${mem}, &${map});");
+    line("rt_clone_done(&${map});");
+    return res;
+}
+
+/**
+ * Memory.compact(m): m starts again with no blocks; what its variables reach in the old blocks is copied
+ * back (each thing once, cycles included), the variables are pointed at the copies, and the old blocks are
+ * freed. What lives in other memories is left where it is.
+ */
+public function compactCall(c: Call in default, b: CallInfo in default): String {
+    let ms: Symbol = b.memory!;
+    requireClassClones();
+    let old: String = tmp("old");
+    let map: String = tmp("moved");
+    line("{");
+    line("    RtMem ${old};");
+    line("    rt_mem_compact_begin(${memoryRef(ms)}, &${old}, \"${ms.name}\", ${c.line});");
+    line("    RtCloneMap ${map} = rt_clone_map();");
+    line("    ${map}.only = ${old}.chunks;");
+    line("    RtMem* mem = ${memoryRef(ms)};");
+    line("    RtCloneMap* cm = &${map};");
+    for (r in b.roots) {
+        if (needsDeepClone(r.type)) { line("    ${r.cName} = ${cloneOf(r.type, r.cName)};"); }
+    }
+    line("    (void)mem;");
+    line("    rt_clone_done(cm);");
+    line("    rt_mem_compact_end(&${old});");
+    line("}");
+    return "((void)0)";
+}
+
+public function cloneFunctions(): String {
+    let out: StringBuilder = {} in default;
+    // Generating a function may require more: go on until there are no new ones.
+    let i: int32 = 0;
+    while (i < cloneTypes.length) {
+        let t: Type = cloneTypes[i];
+        out.add("${cloneHeader(t)} {\n    (void)cm;\n");
+        cloneBody(out, t);
+        out.add("}\n\n");
+        i += 1;
+    }
+    return out.toString();
+}
+
+function cloneBody(out: StringBuilder, t: Type in default): void {
+    if (t == T_STRING) {
+        out.add("    if (rt_clone_keeps(cm, v.ptr)) return v;\n    return rt_str_clone(v, mem, 0);\n");
+        return;
+    }
+    if (t == T_ANY) {
+        out.add("    return rt_any_clone(v, mem, cm);\n");
+        return;
+    }
+    if (isClass(t)) {
+        out.add("    if (rt_clone_keeps(cm, v)) return v;\n");
+        out.add("    return (${cType(t)})rt_obj_vt(v)->clone(v, mem, cm);\n");
+        return;
+    }
+    if (isStruct(t)) {
+        for (f in structOf(t.name)!.fields) {
+            if (needsDeepClone(f.type)) {
+                let n: String = escapeName(f.name);
+                out.add("    v.${n} = ${cloneOf(f.type, "v.${n}")};\n");
+            }
+        }
+        out.add("    return v;\n");
+        return;
+    }
+    if (isEnumT(t)) {
+        let e: EnumInfo = enumOf(t.name)!;
+        for (vr in e.variants) {
+            let deep: FieldInfo[*] = [] in default;
+            for (f in vr.fields) {
+                if (needsDeepClone(f.type)) { deep.push(f); }
+            }
+            if (deep.length == 0) { continue; }
+            out.add("    if (v.tag == ${e.name}_${vr.name}) {\n");
+            for (f in deep) {
+                let path: String = "v.as.${vr.name}.${escapeName(f.name)}";
+                out.add("        ${path} = ${cloneOf(f.type, path)};\n");
+            }
+            out.add("    }\n");
+        }
+        out.add("    return v;\n");
+        return;
+    }
+    if (isArray(t, ArrK.Fixed)) {
+        out.add("    for (int32_t i = 0; i < v.length; i++) v.items[i] = ${cloneOf(t.elem!, "v.items[i]")};\n    return v;\n");
+        return;
+    }
+    if (isArray(t, ArrK.Growable)) {
+        let n: String = structName(t);
+        // Memory.compact copies a list once however many places share it; clone() gives each its own copy
+        out.add("    if (rt_clone_keeps(cm, v)) return v;\n");
+        out.add("    if (cm->only) { void* done = rt_clone_get(cm, v); if (done) return (${n}*)done; }\n");
+        out.add("    ${n}* r = ${n}_new(mem, 0);\n");
+        out.add("    if (cm->only) rt_clone_put(cm, v, r);\n");
+        out.add("    for (int32_t i = 0; i < v->length; i++) ${n}_add(r, ${cloneOf(t.elem!, "v->items[i]")}, 0);\n");
+        out.add("    return r;\n");
+        return;
+    }
+    if (isOpt(t)) {
+        if (optIsPointer(t)) {
+            out.add("    return v ? ${cloneOf(t.elem!, "v")} : v;\n");
+        } else {
+            out.add("    if (v.has) v.value = ${cloneOf(t.elem!, "v.value")};\n    return v;\n");
+        }
+        return;
+    }
+    out.add("    return v;\n");
+}

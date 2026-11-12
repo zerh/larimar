@@ -1,0 +1,796 @@
+// semantics.analyzer.declarations: what a program declares: the system of each class, C declarations, constants and signatures.
+
+import std.text { isAscii };
+import syntax.ast {
+    allExprs, BoolLit, Call, CCodeDecl, CIncludeDecl, ClassDecl, ConstDecl, EnumDecl, Expr, ExprStmt,
+    ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, FunctionDecl, Ident, IfStmt, InterfaceDecl, NativeTypeDecl,
+    Node, Param, PL_MEMORY, Placed, Program, Stmt, StringLit, StructDecl, TK, TypeRef
+};
+import semantics.types {
+    ArrK, cCode, cCodeStd, classes, classIndex, ClassInfo, classOf, ConstK, contextView, enumIndex, EnumInfo,
+    enumOf, enums, escapeName, externInfoOf, externInfos, externTypeIndex, ExternTypeInfo, externTypes, FieldInfo,
+    findMethod, funcT, functionIndex, FunctionInfo, functionOf, functions, includes, includeWhens, interfaceIndex,
+    InterfaceInfo, interfaceMethod, interfaceOf, interfaces, isArray, isClass, isContextT, isCValue, isEnumT,
+    isError, isExternTypeName, isFloat, isInteger, isOpt, isPrimName, isResource, libraryPrefix, libraryRules,
+    maxText, MethodInfo, minOf, named, NamedK, nativeMethods, newOwner, optT, platformCondition, primByName,
+    structIndex, StructInfo, structMethod, structOf, structs, Symbol, SymK, T_ANY, T_BOOL, T_BYTE, T_ERROR,
+    T_STRING, T_VOID, TyK, Type, usesThreads, VariantInfo, variantOf
+};
+import semantics.linker { inTarget, target };
+import semantics.expressions { resolveTop, resolveType, resolveValue, TC_OTHER, TC_PARAM };
+import semantics.expressions.constants { ConstVal, evalConst, intFits };
+import semantics.analyzer { declare, error };
+
+function requireAscii(name: String, line: int32, what: String): void {
+    if (!isAscii(name)) { error(line, "${what} '${name}' must use ASCII letters for now (variables and fields can use any letter)."); }
+}
+
+// ---- the system of a class: implements UnixPlatform, LinuxPlatform, MacOSPlatform or WindowsPlatform ----
+
+/** The interfaces of the program, to follow `extends`. */
+let interfaceDecls: InterfaceDecl[*] = [] in default;
+let classDecls: ClassDecl[*] = [] in default;
+
+function interfaceDecl(name: String): InterfaceDecl? {
+    for (i in interfaceDecls) { if (i.name == name) { return i; } }
+    return null;
+}
+
+function classDecl(name: String): ClassDecl? {
+    for (c in classDecls) { if (c.name == name) { return c; } }
+    return null;
+}
+
+/** The interfaces given, with every one they extend, each once (in the order found). */
+function withAncestors(names: String[] in default, line: int32): String[*] {
+    let all: String[*] = [] in default;
+    let todo: String[*] = [] in default;
+    for (n in names) { todo.push(n); }
+    let next: int32 = 0;
+    while (next < todo.length) {
+        let n: String = todo[next];
+        next += 1;
+        if (all.contains(n)) { continue; }
+        all.push(n);
+        let i: InterfaceDecl? = interfaceDecl(n);
+        if (i != null) {
+            for (p in i!.parents) { todo.push(p); }
+        }
+    }
+    return all;
+}
+
+/** "linux", "macos", "windows", "unix" or "" (every system), from the interfaces of the class and its superclasses. */
+function platformOfClass(name: String, line: int32): String {
+    let found: String = "";
+    let at: ClassDecl? = classDecl(name);
+    let depth: int32 = 0;
+    while (at != null && depth < 64) {
+        for (i in withAncestors(at!.interfaces, line)) {
+            let p: String = switch (i) {
+                case "std__os__LinuxPlatform" -> "linux";
+                case "std__os__MacOSPlatform" -> "macos";
+                case "std__os__WindowsPlatform" -> "windows";
+                case "std__os__UnixPlatform" -> "unix";
+                default -> "";
+            };
+            found = narrower(found, p, name, line);
+        }
+        at = at!.superName != "" ? classDecl(at!.superName) : null;
+        depth += 1;
+    }
+    return found;
+}
+
+/** Of two systems, the narrower one (linux within unix); two that do not overlap are an error. */
+function narrower(a: String, b: String, owner: String, line: int32): String {
+    if (b == "" || a == b) { return a; }
+    if (a == "") { return b; }
+    if (a == "unix" && (b == "linux" || b == "macos")) { return b; }
+    if (b == "unix" && (a == "linux" || a == "macos")) { return a; }
+    error(line, "A class is for one system: '${owner}' is for ${a} and for ${b}.");
+    return a;
+}
+
+/**
+ * The C of a class for one platform goes only there: its cinclude, its ccode and the C functions of its
+ * methods get that platform, and each method with a C body calls its function only there (elsewhere it
+ * panics). With --target nothing is left to the C compiler: the C of the target's classes is plain C,
+ * and that of the others is not generated.
+ */
+function assignPlatforms(program: Program in default): void {
+    for (d in program.decls) {
+        switch (d) {
+            case InterfaceDecl i -> interfaceDecls.push(i);
+            case ClassDecl c -> classDecls.push(c);
+            default -> {}
+        }
+    }
+    let kept: Node[*] = [] in default;
+    for (d in program.decls) {
+        let owner: String = switch (d) {        // the class whose C this is
+            case CIncludeDecl c -> c.owner;
+            case CCodeDecl c -> c.owner;
+            case ExternFunctionDecl f -> f.owner;
+            default -> "";
+        };
+        let system: String = owner != "" ? platformOfClass(owner, d.line) : "";
+        if (target != "" && !inTarget(system)) { continue; }           // another platform's C: not generated
+        let written: String = target != "" ? "" : system;              // the target's C: no #if around it
+        switch (d) {
+            case CIncludeDecl c when owner != "" -> { c.platform = written; }
+            case CCodeDecl c when owner != "" -> { c.platform = written; }
+            case ExternFunctionDecl f when owner != "" -> { f.platform = written; }
+            case ExternFunctionDecl f when target != "" && f.name == "std__os__platformNumber" -> {
+                f.cBody = "return ${platformNumber(target)};" in default;          // what Platform.current() reads
+            }
+            case ClassDecl c -> onlyOn(c, platformOfClass(c.name, c.line));
+            default -> {}
+        }
+        kept.push(d);
+    }
+    program.decls = kept;
+}
+
+/** The number std.os gives each platform (its platformNumber). */
+function platformNumber(platform: String): int32 {
+    return switch (platform) {
+        case "windows" -> 1;
+        case "macos" -> 2;
+        case "linux" -> 3;
+        default -> 0;
+    };
+}
+
+/** The methods with a C body of a class for one platform: they call their C only there; elsewhere they panic. */
+function onlyOn(c: ClassDecl in default, system: String in default): void {
+    if (system == "" || target != "" && inTarget(system)) { return; }
+    for (m in c.methods) {
+        if (!m.cBodied) { continue; }
+        let line: int32 = m.line;
+        let panic: Call = Call { line, callee: Ident { line, name: "panic" } in default } in default;
+        panic.args.push(StringLit { line, texts: ["'${c.name.replace("__", ".")}.${m.name}' is for ${system}, not for this system"] } in default);
+        let stop: Stmt = ExprStmt { line, expr: panic } in default;
+        if (target != "") {
+            m.body = [stop] in default;
+            continue;
+        }
+        let only: IfStmt = IfStmt { line, cond: BoolLit { line, value: true } in default, platform: system, hasElse: true } in default;
+        for (st in m.body) { only.thenBody.push(st); }
+        only.elseBody.push(stop);
+        m.body = [only] in default;
+    }
+}
+
+public function collect(program: Program in default): void {
+    assignPlatforms(program);
+    for (d in program.decls) {
+        switch (d) {
+            case StructDecl s -> {
+                requireAscii(s.name, s.line, "Type name");
+                for (m in s.methods) { requireAscii(m.name, m.line, "Method name"); }
+            }
+            case ClassDecl c -> {
+                requireAscii(c.name, c.line, "Type name");
+                for (m in c.methods) { requireAscii(m.name, m.line, "Method name"); }
+            }
+            case InterfaceDecl i -> {
+                requireAscii(i.name, i.line, "Type name");
+                for (m in i.methods) { requireAscii(m.name, m.line, "Method name"); }
+            }
+            case NativeTypeDecl n -> {
+                requireAscii(n.name, n.line, "Type name");
+                for (m in n.methods) { requireAscii(m.name, m.line, "Method name"); }
+            }
+            case EnumDecl e -> {
+                requireAscii(e.name, e.line, "Type name");
+                for (v in e.variants) { requireAscii(v.name, v.line, "Variant name"); }
+            }
+            case ExternFunctionDecl f -> requireAscii(f.name, f.line, "C function name");
+            default -> {}
+        }
+    }
+    for (d in program.decls) {
+        switch (d) {
+            case CIncludeDecl c -> {
+                includes.push(c.header);
+                includeWhens.push(c.platform);
+            }
+            case CCodeDecl c -> {
+                cCode.push(c.platform == "" ? c.code : "#if ${platformCondition(c.platform)}\n${c.code}\n#endif" in default);
+                cCodeStd.push(c.fromStd);
+            }
+            case ExternTypeDecl t -> {
+                if (!typeNameTaken(t.name, t.line)) {
+                    externTypes.push(t.name);
+                    externInfos.push(ExternTypeInfo { name: t.name, decl: t } in default);
+                    externTypeIndex[t.name] = externTypes.length - 1;
+                }
+            }
+            case NativeTypeDecl n -> {
+                // the methods of a type the compiler knows (std: String, Any), or of a C type (native type X = T { ... })
+                let ofC: ExternTypeInfo? = externInfoOf(n.name);
+                if ((primByName(n.name) == null || n.name == "void") && ofC == null) {
+                    error(n.line, "Native type '${n.name}' must name a built-in value type.");
+                    continue;
+                }
+                for (m in n.methods) {
+                    let mi: MethodInfo = MethodInfo { name: m.name, owner: n.name, decl: m, isOperator: m.isOperator, introducer: n.name, own: newOwner() } in default;
+                    nativeMethods.push(mi);
+                    m.method = mi;
+                }
+            }
+            case StructDecl s -> {
+                if (!typeNameTaken(s.name, s.line)) {
+                    structs.push(StructInfo { name: s.name, line: s.line, decl: s } in default);
+                    structIndex[s.name] = structs.length - 1;
+                }
+            }
+            case ClassDecl c -> {
+                if (!typeNameTaken(c.name, c.line)) {
+                    let ci: ClassInfo = ClassInfo { name: c.name, superName: c.superName, interfaces: withAncestors(c.interfaces, c.line), line: c.line, decl: c } in default;
+                    ci.sync = c.isSynchronized;
+                    ci.thread = c.builtin && c.name == "Thread";
+                    ci.builder = false;
+                    if (ci.sync || ci.thread) { usesThreads = true; }
+                    classes.push(ci);
+                    classIndex[c.name] = classes.length - 1;
+                }
+            }
+            case InterfaceDecl i -> {
+                if (!typeNameTaken(i.name, i.line)) {
+                    interfaces.push(InterfaceInfo { name: i.name, line: i.line } in default);
+                    interfaceIndex[i.name] = interfaces.length - 1;
+                }
+            }
+            case EnumDecl e -> {
+                if (!typeNameTaken(e.name, e.line)) {
+                    enums.push(EnumInfo { name: e.name, line: e.line, errorId: enums.length + 1 } in default);
+                    enumIndex[e.name] = enums.length - 1;
+                }
+            }
+            case FunctionDecl f -> {
+                if (f.typeName == "" && !functionNameTaken(f.name, f.line)) {
+                    let c: String = (f.name == "main" ? "user_main" : escapeName(f.name)) in default;
+                    if (f.exportName != "") { c = "larimar_${c}" in default; }     // the C name is the export's
+                    functions.push(FunctionInfo { name: f.name, params: f.params, isExtern: false, decl: f, line: f.line, cName: c, owner: newOwner(), exportName: exportCName(f) } in default);
+                    functionIndex[f.name] = functions.length - 1;
+                }
+            }
+            case ExternFunctionDecl f -> {
+                if (!functionNameTaken(f.name, f.line)) {
+                    let fi: FunctionInfo = FunctionInfo {
+                        name: f.name, params: f.params, isExtern: true, varargs: f.varargs, ext: f, line: f.line, cName: f.cName, owner: newOwner()
+                    } in default;
+                    fi.prototype = f.prototype;
+                    functions.push(fi);
+                    functionIndex[f.name] = functions.length - 1;
+                }
+            }
+            default -> {}
+        }
+    }
+    for (d in program.decls) {          // static functions, once every type is known
+        if (d is FunctionDecl f && f.typeName != "") { collectStatic(f); }
+    }
+}
+
+function typeNameTaken(name: String, line: int32): bool {
+    if (isPrimName(name)) {
+        error(line, "'${name}' is a built-in type and cannot be redefined.");
+        return true;
+    }
+    if (structOf(name) != null || classOf(name) != null || interfaceOf(name) != null || enumOf(name) != null || isExternTypeName(name)) {
+        error(line, "Type '${name}' is already defined.");
+        return true;
+    }
+    return false;
+}
+
+/** Type.name: a function that belongs to a type, without self. */
+function collectStatic(f: FunctionDecl in default): void {
+    let t: String = f.typeName;
+    let full: String = "${t}.${f.name}" in default;
+    let isType: bool = structOf(t) != null || classOf(t) != null || interfaceOf(t) != null || enumOf(t) != null || primByName(t) != null || isExternTypeName(t);
+    if (!isType) {
+        error(f.line, "'${t}' is not a type, so '${full}' cannot be declared.");
+        return;
+    }
+    if (f.isOverride) { error(f.line, "Static functions cannot override ('${full}')."); }
+    if (functionNameTaken(full, f.line)) { return; }
+    let c: String = "${escapeName(t)}_${escapeName(f.name)}" in default;
+    functions.push(FunctionInfo { name: full, params: f.params, isExtern: false, decl: f, line: f.line, cName: c, owner: newOwner() } in default);
+    functionIndex[full] = functions.length - 1;
+}
+
+/** extern type X = (A, B) -> R: the signature C functions of that type have. */
+function externSignature(e: ExternTypeInfo in default): void {
+    let fr: TypeRef? = e.decl.func;
+    if (fr == null) { return; }
+    let ps: Type[*] = [] in default;
+    for (i, p in fr.params) {
+        let pt: Type = resolveValue(p, "Parameter ${i + 1} of '${e.name}'");
+        if (!isError(pt) && !isCValue(pt)) {
+            error(p.line, "Parameter ${i + 1} of C function type '${e.name}': only numbers, bool, String, native types and C structs can be passed to C.");
+        }
+        ps.push(pt);
+    }
+    let ret: Type = resolveType(fr.inner!);
+    if (!isError(ret) && ret != T_VOID && !isCValue(ret)) {
+        error(fr.line, "C function type '${e.name}' can only return numbers, bool, String, void, native types or C structs.");
+    }
+    e.sig = funcT(ps, ret, false);
+    // (A, Context) -> R: C gives the Context back to the function, so a Larimar function (with what it captures) can go
+    let others: Type[*] = [] in default;
+    for (i, pt in ps) {
+        if (!isContextT(pt)) {
+            others.push(pt);
+            if (isResource(pt) || isOpt(pt) && isResource(pt.elem!)) { e.view = T_ERROR; }
+        } else if (e.ctxIndex >= 0) {
+            error(fr.line, "C function type '${e.name}' has two Contexts: a callback gets back one.");
+        } else {
+            e.ctxIndex = i;
+        }
+    }
+    if (e.ctxIndex < 0) { return; }
+    if (e.view != null) {
+        error(fr.line, "C function type '${e.name}' gets a Context and a resource: give the callback the C value instead (a native type without 'released by').");
+        e.view = null;
+        return;
+    }
+    if (ret == T_STRING || isOpt(ret) && ret.elem! == T_STRING) {
+        error(fr.line, "C function type '${e.name}' gets a Context: the Larimar function it stands for cannot return a String to C (C would not know when to free it).");
+    }
+    e.view = funcT(others, ret, false);
+}
+
+let exportNames: Any = {} in default;
+
+/** The C name of an export function: = c_name, else its name (in a library, <prefix>_<name>). */
+function exportCName(f: FunctionDecl in default): String {
+    if (f.exportName == "") { return ""; }
+    if (f.exportC != "") { return f.exportC; }
+    return libraryRules && libraryPrefix != "" ? "${libraryPrefix}_${f.exportName}" : f.exportName;
+}
+
+/** What an export function can take: what C can pass, a String? (NULL is null), and in a library its classes. */
+function exportable(t: Type): bool {
+    if (t == optT(T_STRING)) { return true; }
+    if (!libraryRules) { return isCValue(t); }
+    // a library describes its functions to C (.h) and to Larimar (.lar) by itself: no types of other headers
+    return t.kind == TyK.Prim && t != T_ANY || isClass(t) || (isOpt(t) && isClass(t.elem!));
+}
+
+/** export function: C calls it by its name, with C types. */
+function checkExport(f: FunctionInfo in default, fd: FunctionDecl in default): void {
+    let n: String = f.exportName;
+    if (fd.name == "main") { error(f.line, "'main' cannot be exported; export another function."); }
+    if (exportNames.contains(n)) { error(f.line, "Another function is already exported as '${n}'."); }
+    exportNames[n] = true;
+    if (libraryRules && (n == "${libraryPrefix}_free" || n == "${libraryPrefix}_interface" || n.endsWith("_release"))) {
+        error(f.line, "'${n}' is a name the library gives C itself (${libraryPrefix}_free, ${libraryPrefix}_interface, <Class>_release): export it with another name (= c_name).");
+    }
+    for (g in functions) {
+        if (g.isExtern && g.cName == n) { error(f.line, "'${n}' is already the name of a native function: C would have two functions with that name."); }
+    }
+    let what: String = libraryRules ? "numbers, bool, String, String? and the library's classes" : "numbers, bool, String, String?, native types and C structs";
+    for (i, p in fd.params) {
+        let pt: Type = f.sig!.params[i];
+        if (p.lives != "") { error(p.line, "'in ${p.lives}' is not allowed on the parameters of an export function: C gives plain values."); }
+        if (!isError(pt) && !exportable(pt)) {
+            error(p.line, isClass(pt) ? "Parameter '${p.name}' of export function '${n}': a class goes to C only from a library ([project] kind = \"library\"), where C keeps it as a handle."
+                                      : "Parameter '${p.name}' of export function '${n}': C can only pass ${what}.");
+        }
+    }
+    let ret: Type = f.sig!.elem!;
+    if (!isError(ret) && ret != T_VOID && !exportable(ret)) {
+        error(f.line, isClass(ret) ? "Export function '${n}' returns a class: only a library ([project] kind = \"library\") gives C its objects, as handles."
+                                   : "Export function '${n}' can only return void or ${what}.");
+    }
+    if (fd.returnLives != "") { error(f.line, "Export function '${n}' cannot say where its result lives: C receives its own copy (a text) or a handle."); }
+    if (f.throwsType != null) { error(f.line, "Export function '${n}' cannot throw: an error cannot cross into C. Catch it inside."); }
+}
+
+/** An instance method `name` of the type `t` (to reject a static function with the same name). */
+function instanceMethodNamed(t: String in default, name: String): bool {
+    let so: StructInfo? = structOf(t);
+    if (so != null) { return structMethod(so, name, false, 0) != null; }
+    if (classOf(t) != null) { return findMethod(t, name, false, 0) != null; }
+    for (m in nativeMethods) {
+        if (m.owner == t && m.name == name && !m.isOperator) { return true; }
+    }
+    return false;
+}
+
+function functionNameTaken(name: String, line: int32): bool {
+    let f: FunctionInfo? = functionOf(name);
+    if (f != null) {
+        error(line, "Function '${name}' is already defined (line ${f.line}).");
+        return true;
+    }
+    if (name == "print" || name == "println") {
+        error(line, "'${name}' is a built-in function.");
+        return true;
+    }
+    return false;
+}
+
+// ---- constants ---------------------------------------------------------------------------
+
+public function constants(program: Program in default): void {
+    for (d in program.decls) {
+        if (!(d is ConstDecl c)) { continue; }
+        let t: Type = resolveType(c.type);
+        let v: ConstVal? = evalConst(c.value) in default;
+        if (v == null || isError(t)) { continue; }
+        let ok: bool = (isInteger(t) && v.kind == ConstK.Int) || (isFloat(t) && (v.kind == ConstK.Float || v.kind == ConstK.Int))
+            || (t == T_BOOL && v.kind == ConstK.Bool) || (t == T_STRING && v.kind == ConstK.Str);
+        if (!ok) {
+            error(c.line, "Constant '${c.name}' of type ${t.text} cannot hold that value; constants are numbers, bool or String literals.");
+            continue;
+        }
+        if (v.kind == ConstK.Int && isInteger(t) && !intFits(v.i, v.big, v.huge, t)) {
+            error(c.line, "Constant '${c.name}' = ${constIntText(v)} does not fit in ${t.text} (${minOf(t)}..${maxText(t)}).");
+            continue;
+        }
+        let s: Symbol = declare(c.name, SymK.Const, t, c.line);
+        if (v.kind == ConstK.Int && isFloat(t)) {
+            s.ck = ConstK.Float;
+            s.cf = v.big ? (v.i as uint64) as float64 : v.i as float64;
+        } else {
+            s.ck = v.kind;
+            s.ci = v.i;
+            s.cbig = v.big;
+            s.cf = v.f;
+            s.cb = v.b;
+            s.cs = v.s;
+        }
+        s.immutable = true;
+    }
+}
+
+public function constIntText(v: ConstVal): String {
+    if (v.text != "") { return v.text; }
+    return v.big ? "${v.i as uint64}" : "${v.i}";
+}
+
+// ---- signatures -------------------------------------------------------------------------
+
+public function signatures(program: Program in default): void {
+    for (e in externInfos) { externSignature(e); }
+    for (d in program.decls) {
+        switch (d) {
+            case StructDecl sd -> {
+                let info: StructInfo? = structOf(sd.name);
+                if (info == null || info.decl != sd) { continue; }
+                let names: Any = {} in default;
+                for (f in sd.fields) {
+                    if (names.contains(f.name)) {
+                        error(f.line, "Field '${f.name}' is declared twice in struct '${sd.name}'.");
+                        continue;
+                    }
+                    names[f.name] = true;
+                    let ft: Type = resolveTop(f.type, TC_OTHER, "Field '${f.name}'");
+                    if (sd.cName != "" && !isError(ft) && !isCValue(ft)) {
+                        error(f.line, "Field '${f.name}' of C struct '${sd.name}': only numbers, bool, String (read only), native types, C pointers and other C structs can be fields.");
+                    }
+                    info.fields.push(FieldInfo { name: f.name, type: ft, defaultValue: f.defaultValue, owner: sd.name, line: f.line, cName: f.cName } in default);
+                }
+                for (m in sd.methods) {
+                    let mi: MethodInfo = MethodInfo { name: m.name, owner: sd.name, decl: m, isOperator: m.isOperator, introducer: sd.name, own: newOwner() } in default;
+                    resolveMethodSig(mi, m);
+                    if (!m.isOperator && names[m.name] != null) { error(m.line, "'${m.name}' in struct '${sd.name}' is both a field and a method."); }
+                    if (!m.isOperator && structMethod(info, m.name, false, 0) != null) {
+                        error(m.line, "Method '${m.name}' is declared twice in struct '${sd.name}'.");
+                        continue;
+                    }
+                    if (m.isOperator && mi.sig != null && structMethod(info, m.name, true, mi.sig!.params.length) != null) {
+                        error(m.line, "Operator '${m.name}' is declared twice in struct '${sd.name}'.");
+                        continue;
+                    }
+                    info.methods.push(mi);
+                    m.method = mi;
+                }
+            }
+            case ClassDecl cd -> {
+                let info: ClassInfo? = classOf(cd.name);
+                if (info == null || info.decl != cd) { continue; }
+                for (f in cd.fields) {
+                    info.fields.push(FieldInfo { name: f.name, type: resolveTop(f.type, TC_OTHER, "Field '${f.name}'"), defaultValue: f.defaultValue, owner: cd.name, line: f.line } in default);
+                }
+                for (m in cd.methods) {
+                    let mi: MethodInfo = MethodInfo { name: m.name, owner: cd.name, decl: m, isOperator: m.isOperator, introducer: cd.name, own: newOwner() } in default;
+                    resolveMethodSig(mi, m);
+                    info.methods.push(mi);
+                    m.method = mi;
+                }
+            }
+            case InterfaceDecl id -> {
+                let info: InterfaceInfo? = interfaceOf(id.name);
+                if (info == null) { continue; }
+                for (m in id.methods) {
+                    if (interfaceMethod(info, m.name) != null) {
+                        error(m.line, "Method '${m.name}' is declared twice in interface '${id.name}'.");
+                        continue;
+                    }
+                    let mi: MethodInfo = MethodInfo { name: m.name, owner: id.name, decl: m, isOperator: false, introducer: id.name, own: newOwner() } in default;
+                    resolveMethodSig(mi, m);
+                    info.methods.push(mi);
+                }
+                if (withAncestors(id.parents, id.line).contains(id.name)) { error(id.line, "Interface '${id.name}' extends itself."); }
+                for (a in withAncestors(id.parents, id.line)) {   // interface A extends B: B's methods too
+                    let parent: InterfaceDecl? = interfaceDecl(a);
+                    if (parent == null) {
+                        error(id.line, "'${a}' is not an interface: interface ${id.name} extends interfaces only.");
+                        continue;
+                    }
+                    for (m in parent!.methods) {
+                        if (interfaceMethod(info, m.name) != null) { continue; }
+                        let mi: MethodInfo = MethodInfo { name: m.name, owner: id.name, decl: m, isOperator: false, introducer: id.name, own: newOwner() } in default;
+                        resolveMethodSig(mi, m);
+                        info.methods.push(mi);
+                    }
+                }
+            }
+            case NativeTypeDecl nd -> {
+                for (i, m in nd.methods) {
+                    let mi: MethodInfo = m.method!;
+                    resolveMethodSig(mi, m);
+                    for (j, previous in nd.methods) {
+                        if (j >= i) { break; }
+                        let old: MethodInfo = previous.method!;
+                        if (old.name == mi.name && old.isOperator == mi.isOperator
+                            && old.sig!.params.length == mi.sig!.params.length) {
+                            error(m.line, "Native method '${m.name}' is declared twice in '${nd.name}'.");
+                        }
+                    }
+                }
+            }
+            case EnumDecl ed -> {
+                let info: EnumInfo? = enumOf(ed.name);
+                if (info == null) { continue; }
+                if (ed.variants.length == 0) { error(ed.line, "Enum '${ed.name}' needs at least one variant."); }
+                for (v in ed.variants) {
+                    if (variantOf(info, v.name) != null) {
+                        error(v.line, "Variant '${v.name}' is declared twice in enum '${ed.name}'.");
+                        continue;
+                    }
+                    let vi: VariantInfo = VariantInfo { name: v.name, index: info.variants.length, line: v.line, hasPayload: v.hasPayload } in default;
+                    if (v.hasPayload) {
+                        let names: Any = {} in default;
+                        for (p in v.fields) {
+                            if (names.contains(p.name)) { error(p.line, "Field '${p.name}' is declared twice in variant '${v.name}'."); }
+                            names[p.name] = true;
+                            vi.fields.push(FieldInfo { name: p.name, type: resolveTop(p.type!, TC_OTHER, "Field '${p.name}'"), owner: ed.name, line: p.line } in default);
+                        }
+                    }
+                    info.variants.push(vi);
+                }
+            }
+            default -> {}
+        }
+    }
+    for (f in functions) {
+        let sd: FunctionDecl? = f.decl;
+        if (sd != null && sd.typeName != "" && instanceMethodNamed(sd.typeName, sd.name)) {
+            error(f.line, "'${sd.typeName}' already has a method '${sd.name}'; a static function needs another name.");
+        }
+    }
+    for (f in functions) {
+        let e: ExternFunctionDecl? = f.ext;
+        if (e != null) {
+            let ps: Type[*] = [] in default;
+            for (i, p in e.params) {
+                let pt: Type = resolveTop(p.type!, TC_PARAM, "Parameter '${p.name}'");
+                if (isContextT(pt)) {
+                    if (f.ctxParam >= 0) { error(p.line, "'${f.name}' takes two Contexts: a C function gives one to its callback."); }
+                    f.ctxParam = i;
+                }
+                if (contextView(pt) != null) {
+                    if (f.ctxCallback >= 0) { error(p.line, "'${f.name}' takes two callbacks with a Context: only one can get it."); }
+                    f.ctxCallback = i;
+                    f.ctxKeep = p.lives == "default";
+                }
+                if (p.lives != "" && !(p.lives == "default" && contextView(pt) != null)) {
+                    error(p.line, p.lives == "default"
+                        ? "'in default' on a parameter of a native function goes on a callback that gets a Context (C keeps it, so what it uses must live as long as the program)."
+                        : "'in ${p.lives}' is not allowed on the parameters of a native function (only 'in default', on a callback that C keeps).");
+                }
+                if (isArray(pt, ArrK.Growable) && pt.elem! == T_BYTE) {
+                    f.memParams.push(true);       // a memory: C receives RtMem* and can create things in it
+                } else if (isArray(pt, ArrK.Slice)) {
+                    f.memParams.push(false);      // T[]: C receives a pointer to the elements and their count
+                    if (!isError(pt.elem!) && !isPlainNumber(pt.elem!)) {
+                        error(p.line, "Parameter '${p.name}' of native function '${f.name}': a T[] passed to C must be of numbers or bool (byte[], int32[], float64[]...).");
+                    }
+                } else {
+                    f.memParams.push(false);
+                    if (!isError(pt) && !isCValue(pt) && pt != optT(T_STRING)) {       // String?: null goes as NULL
+                        error(p.line, "Parameter '${p.name}' of native function '${f.name}': only numbers, bool, String, native types, C structs and memories (byte[*]) can be passed to C.");
+                    }
+                }
+                ps.push(pt);
+            }
+            let ret: Type = resolveType(e.ret);
+            if (!isError(ret) && ret != T_VOID && !isCValue(ret) && ret != optT(T_STRING)) {
+                error(e.line, "Native function '${f.name}' can only return numbers, bool, String, void, native types or C structs.");
+            }
+            if (f.ctxParam >= 0 && f.ctxCallback < 0) {
+                error(e.line, "'${f.name}' takes a Context: it is for a callback, so declare that callback's type with a Context too (native type F = (int32, Context) -> void;).");
+            }
+            f.sig = funcT(ps, ret, false);
+        } else {
+            let fd: FunctionDecl = f.decl!;
+            f.sig = resolveSig(f.params, fd.ret);
+            f.throwsType = resolveThrows(fd.throwsType);
+            f.memParams = memoryParams(f.params, fd.body);
+            if (f.exportName != "") { checkExport(f, fd); }
+        }
+        let s: Symbol = declare(f.name, SymK.Function, f.sig!, f.line);
+        s.func = f;
+        s.cName = f.cName;
+        s.immutable = true;
+    }
+    for (d in program.decls) {
+        if (d is ExternValueDecl v) { externValue(v); }
+    }
+    for (e in externInfos) {
+        externResource(e);
+    }
+    for (f in functions) {
+        if (f.isExtern && f.sig != null) {
+            externResourceRules(f);
+            textReleaser(f);
+        }
+    }
+}
+
+/** extern const NAME: T;  extern let NAME: T;  a name C has (a constant, a macro, a global). */
+public function externValue(v: ExternValueDecl in default): void {
+    let what: String = v.isConst ? "native const" : "native let";
+    let t: Type = resolveValue(v.type, "${what} '${v.name}'");
+    if (!isError(t)) {
+        if (isResource(t)) {
+            error(v.line, "'${v.name}': a resource (${t.text}) is made by a C function, not declared as a ${what}.");
+        } else if (!isCValue(t) || (t == T_STRING && !v.isConst)) {
+            error(v.line, v.isConst ? "'${v.name}': a native const is a number, bool, String, native type, C struct or C pointer."
+                                    : "'${v.name}': a native let is a number, bool, native type, C struct or C pointer (a C string is a native type).");
+        }
+    }
+    let s: Symbol = declare(v.name, SymK.Global, t, v.line);
+    s.cName = v.cExpr != "" ? "(${v.cExpr})" : v.cName;
+    s.immutable = v.isConst;
+    s.externValue = v;
+}
+
+/** released by f: f takes exactly one X and returns nothing useful; only release() calls it. */
+function externResource(e: ExternTypeInfo in default): void {
+    let d: ExternTypeDecl = e.decl;
+    if (d.releasedBy == "") { return; }
+    if (d.func != null) {
+        error(d.line, "A pointer to a C function cannot be a resource.");
+        return;
+    }
+    let fi: FunctionInfo? = functionOf(d.releasedBy);
+    if (fi == null || fi.sig == null) {
+        error(d.line, "'${d.releasedBy}' (that releases '${e.name}') is not a function: declare it, e.g. native function ${d.releasedBy}(x: ${e.name}): void;");
+        return;
+    }
+    let ps: Type[*] = fi.sig!.params;
+    if (ps.length != 1 || ps[0] != named(e.name, NamedK.Extern) || fi.varargs) {
+        error(d.line, "'${d.releasedBy}' releases '${e.name}', so it must take exactly one ${e.name}: ${d.releasedBy}(x: ${e.name}).");
+    }
+    if (fi.throwsType != null) { error(d.line, "'${d.releasedBy}' releases '${e.name}' when a memory is freed: it cannot throw."); }
+    if (fi.releases != "" && fi.releases != e.name) { error(d.line, "'${d.releasedBy}' already releases '${fi.releases}'."); }
+    fi.releases = e.name;       // (a resource of one platform, a DIR* of Unix: the type exists everywhere, its cells only there)
+    e.releaser = fi;
+}
+
+/** ...: String = c_f released by r: r is a native function that takes the text (one String); only the compiler calls it. */
+function textReleaser(f: FunctionInfo in default): void {
+    let e: ExternFunctionDecl? = f.ext;
+    if (e == null || e.releasedBy == "") { return; }
+    let ret: Type = f.sig!.elem!;
+    if (ret != T_STRING && ret != optT(T_STRING)) {
+        error(f.line, "'released by' after a native function goes on a text that C makes ('${f.name}' returns ${ret.text}): for a C value, declare a resource (native type X released by f).");
+        return;
+    }
+    let r: FunctionInfo? = functionOf(e.releasedBy);
+    if (r == null || r.sig == null || !r.isExtern) {
+        error(f.line, "'${e.releasedBy}' (that releases the text of '${f.name}') is not a native function: declare it, e.g. native function ${e.releasedBy}(text: String): void;");
+        return;
+    }
+    if (r.sig!.params.length != 1 || r.sig!.params[0] != T_STRING || r.varargs) {
+        error(f.line, "'${e.releasedBy}' releases the text of '${f.name}', so it must take exactly one String: ${e.releasedBy}(text: String).");
+    }
+    if (r.releases != "" && r.releases != "String") { error(f.line, "'${e.releasedBy}' already releases '${r.releases}'."); }
+    r.releases = "String";
+    f.textReleaser = r;
+}
+
+/** A C function that makes a resource returns X? (C fails: null). A resource goes to C as X, not X?. */
+function externResourceRules(f: FunctionInfo in default): void {
+    let ret: Type = f.sig!.elem!;
+    if (isResource(ret)) {
+        error(f.line, "'${f.name}' makes a ${ret.text}, and C may fail: declare it as returning '${ret.text}?' (null when it fails).");
+    }
+    for (i, p in f.sig!.params) {
+        if (isOpt(p) && isResource(p.elem!)) {
+            error(f.params[i].line, "Parameter '${f.params[i].name}' of '${f.name}': a resource goes to C as ${p.elem!.text}, not ${p.text}.");
+        }
+    }
+}
+
+function resolveMethodSig(mi: MethodInfo in default, m: FunctionDecl in default): void {
+    mi.sig = resolveSig(m.params, m.ret);
+    if (m.forwardsToC) {             // its C function takes a callback with a Context: the method takes the Larimar function
+        let ps: Type[*] = [] in default;
+        for (t in mi.sig!.params) {
+            let view: Type? = contextView(t);
+            ps.push(view != null ? view! : t);
+        }
+        mi.sig = funcT(ps, mi.sig!.elem!, false);
+    }
+    mi.throwsType = resolveThrows(m.throwsType);
+    mi.memParams = memoryParams(m.params, m.body);       // an interface method too: byte[*] is a memory
+    if (m.isOperator) {
+        let n: int32 = m.params.length;
+        let unaryMinus: bool = m.name == "-" && n == 0;
+        if (!unaryMinus && n != 1) { error(m.line, "Operator '${m.name}' takes exactly one parameter (the right side)."); }
+        if ((m.name == "==" || m.name == "<") && mi.sig!.elem! != T_BOOL) { error(m.line, "Operator '${m.name}' must return bool."); }
+        if (m.throwsType != null) { error(m.line, "Operators cannot throw."); }
+    }
+}
+
+function resolveSig(params: Param[*] in default, ret: TypeRef in default): Type {
+    let names: Any = {} in default;
+    let ps: Type[*] = [] in default;
+    for (p in params) {
+        if (names.contains(p.name)) { error(p.line, "Duplicate parameter '${p.name}'."); }
+        names[p.name] = true;
+        ps.push(resolveTop(p.type!, TC_PARAM, "Parameter '${p.name}'"));
+    }
+    let r: Type = resolveType(ret);
+    if (isArray(r, ArrK.Slice)) {
+        error(ret.line, "A function cannot return T[] (a borrowed view); return T[N] or T[*].");
+        r = T_ERROR;
+    }
+    return funcT(ps, r, false);
+}
+
+/** A number or bool: what a T[] given to C may hold (C sees an array of them). */
+function isPlainNumber(t: Type): bool {
+    return t.kind == TyK.Prim && t != T_STRING && t != T_ANY && t != T_VOID;
+}
+
+function resolveThrows(t: TypeRef? in default): Type? {
+    if (t == null) { return null; }
+    let r: Type = resolveType(t);
+    if (isError(r)) { return null; }
+    if (!isEnumT(r)) {
+        error(t.line, "Only enums can be thrown; '${r.text}' is not an enum.");
+        return null;
+    }
+    enumOf(r.name)!.thrown = true;
+    return r;
+}
+
+/** byte[N], byte[], byte[*] as written. */
+public function isByteArrayRef(t: TypeRef): bool {
+    let i: TypeRef? = t.inner;
+    if (i == null || t.kind == TK.Opt || t.kind == TK.Func || t.kind == TK.Named) { return false; }
+    return i.kind == TK.Named && (i.name == "byte" || i.name == "uint8") && (t.kind == TK.Fixed || t.kind == TK.Growable || t.kind == TK.Infer);
+}
+
+/** byte-array parameters used after `in` inside the body are memory parameters. */
+function memoryParams(params: Param[*] in default, body: Stmt[*] in default): bool[*] {
+    let used: Any = {} in default;
+    let es: Expr[*] = [] in default;
+    allExprs(body, true, es);
+    for (e in es) {
+        if (e is Placed p && p.mode == PL_MEMORY && p.memory is Ident m) { used[m.name] = 1; }
+    }
+    let out: bool[*] = [] in default;
+    for (p in params) { out.push(isByteArrayRef(p.type!) && (p.type!.kind == TK.Growable || used[p.name] != null)); }
+    return out;
+}

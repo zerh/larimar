@@ -558,6 +558,8 @@ public class MethodInfo {
     let own: Owner;
     /** It may return data of its arguments or of self. */
     let returnsArgs: bool = false;
+    /** The arguments its result may point to, one per parameter (empty: every one, when returnsArgs). */
+    let flows: bool[*] = [];
     /** Its result may be new data, created in the memory the caller gives. */
     let creates: bool = false;
 }

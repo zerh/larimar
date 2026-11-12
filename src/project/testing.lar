@@ -27,7 +27,7 @@ import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
 import syntax.ast { Program, FunctionDecl, TK };
-import syntax.parser { parseProgram, parseError };
+import syntax.parser { parseProgram };
 import project.cc { windows, quote, commandLine, systemLibraries, selfPath, installHint };
 import std.io.console as Console;
 import std.encoding.json as Json;
@@ -60,7 +60,7 @@ public class TestFunction {
 public function testFunctions(source: String in default): TestFunction[*] {
     let out: TestFunction[*] = [];
     let p: Program = parseProgram(source, 1);
-    if (parseError != "") { return out; }
+    if (p.error != "") { return out; }
     for (d in p.decls) {
         if (d is FunctionDecl f && f.isTest) {
             let setup: String = "";

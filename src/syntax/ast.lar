@@ -73,6 +73,7 @@ public function typeNamed(name: String in default, line: int32): TypeRef { retur
 // ---- declarations ----------------------------------------------------------------------
 
 public class Program extends Node {
+    let error: String = "";             // the first lexical or syntax error ("": none): then the rest is not to be used
     let decls: Node[*] = [];
     let imports: ImportDecl[*] = [];
     let publics: String[*] = [];

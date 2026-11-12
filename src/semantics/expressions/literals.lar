@@ -1,0 +1,331 @@
+// semantics.expressions.literals: lambdas, objects, lists, tables and casts.
+
+import syntax.ast { ArrayLit, Call, Cast, Expr, ExprStmt, Ident, Lambda, Member, ObjectLit, Param };
+import semantics.types {
+    allFields, arrayT, ArrK, ClassInfo, classOf, EnumInfo, enumOf, externInfoOf, externSig, FieldInfo, FrameK,
+    InterfaceInfo, interfaceMethod, interfaceOf, isClass, isEnumT, isError, isExternT, isNumeric, isOpt, isPtr,
+    isResource, isStruct, LambdaInfo, lambdaList, meet, MethodInfo, named, NamedK, newOwner, optT, P_TEMP, Place,
+    PlaceK, R_STATIC, Region, Scope, StructInfo, structOf, Symbol, T_ANY, T_BOOL, T_ERROR, T_STRING, T_VOID, TyK,
+    Type, VariantInfo, variantOf
+};
+import semantics.analyzer { error, popFrame, popScope, pushFrame, pushScope, scope, state, wrong };
+import semantics.analyzer.flow { lifetime, lifetimeOf, returnedNames };
+import semantics.analyzer.narrowing { narrow, reassignedNames };
+import semantics.analyzer.statements { analyzeStmts, checkReturns, declareParam };
+import semantics.analyzer.threads { checkThreadRun, currentOwner, edge };
+import semantics.expressions { check, describeExpr, note, noted, resolveTop, resolveType, TC_PARAM };
+import semantics.expressions.calls { checkAllArgs };
+import semantics.expressions.conversions { coerce, hasRefs, placeRegion, regionOf, setRegion };
+
+public function checkLambda(l: Lambda in default, expected: Type? in default): Type {
+    if (expected == null || expected.kind != TyK.Func) {
+        if (l.ref != null && (expected == null || !isError(expected))) {
+            return wrong(l.line, "${refText(l.ref!)} is a reference to a function: use it where a function type is expected (a parameter, a variable or a field of type (A) -> B).");
+        }
+        if (expected == null) { return wrong(l.line, "Cannot infer the type of this lambda. Give it a function type, e.g. let f: (int32) -> int32 = (x) -> { ... };"); }
+        if (externSig(expected) != null) {
+            error(l.line, "${expected.text} is a pointer to a C function, and a lambda is not one: pass a native function or an 'export function' (or give the type a Context, so a lambda can go).");
+        } else if (!isError(expected)) {
+            error(l.line, "A lambda cannot be used where ${expected.text} is expected.");
+        }
+        return T_ERROR;
+    }
+    let ft: Type = expected;
+    if (l.ref != null && l.params.length == 0 && !referenceTarget(l.ref!)) { return T_ERROR; }
+    if (l.ref != null && l.params.length == 0) {              // Module::function: a lambda with the expected parameters
+        let call: Call = l.ref!;
+        for (i in 0..ft.params.length) {
+            l.params.push(Param { line: l.line, name: "__ref${i}" } in default);
+            call.args.push(Ident { line: l.line, name: "__ref${i}" } in default);
+        }
+        if (ft.elem! == T_VOID) { l.body = [ExprStmt { line: l.line, expr: call } in default] in default; }
+    }
+    if (l.params.length != ft.params.length) { return wrong(l.line, "This lambda has ${l.params.length} parameter(s) but ${ft.text} expects ${ft.params.length}."); }
+    for (i, p in l.params) {
+        if (p.type == null) { continue; }
+        let pt: Type = resolveTop(p.type!, TC_PARAM, "Parameter '${p.name}'");
+        if (!isError(pt) && pt != ft.params[i]) {
+            error(p.line, "Lambda parameter '${p.name}' is declared as ${pt.text} but the function type expects ${ft.params[i].text}.");
+        }
+    }
+    let info: LambdaInfo = LambdaInfo { id: lambdaList.length, type: ft, node: l, owner: newOwner() } in default;
+    lambdaList.push(info);
+    l.lambda = info;
+    let saved: Scope = scope;
+    edge(currentOwner(), info.owner);   // creating a lambda may run it
+    pushFrame(FrameK.Lambda, ft.elem, null, info, null, scope, info.owner);
+    state().reassigned = reassignedNames(l.body);
+    state().returned = returnedNames(l.body);
+    for (i, p in l.params) { info.params.push(declareParam(p, ft.params[i], false)); }
+    analyzeStmts(l.body);
+    checkReturns(l.body, ft.elem!, l.line, "This lambda");
+    popFrame(saved);
+    let r: Region = R_STATIC;
+    for (c in info.captures) { r = meet(r, c.region); }
+    setRegion(l, r);
+    note(ft);
+    return ft;
+}
+
+/** pepito::run(): the parentheses call it; the reference is written without them. */
+public function calledReference(c: Call in default, ref: Call in default): Type {
+    let shown: String = refText(ref);
+    let call: String = shown.replace("::", ".");
+    if (call.startsWith(".")) { call = call.substring(1); }
+    error(c.line, "'${shown}()' calls a reference: for the reference write '${shown}' (without parentheses); to call the function, ${call}(...).");
+    return checkAllArgs(c);
+}
+
+/** How a method reference was written: Pages::show. */
+public function refText(c: Call): String {
+    if (c.callee is Member m) { return "${describeExpr(m.object)}::${m.name}"; }
+    if (c.callee is Ident id) {          // module.name was already renamed to the name itself: std__encoding__hex__encode
+        let shown: String = id.name.replace("__", ".");
+        let i: int32 = shown.lastIndexOf(".") ?? -1;
+        return i > 0 ? "${shown.substring(0, i)}::${shown.substring(i + 1)}" : "::${shown}";
+    }
+    return "this reference";
+}
+
+/** Module::function, variable::method or self::method; not a field (it would be read on every call). */
+function referenceTarget(c: Call in default): bool {
+    if (c.callee is Member m && m.object is Member) {
+        error(c.line, "'::' takes a module, a variable or 'self' before it: keep '${describeExpr(m.object)}' in a variable first.");
+        return false;
+    }
+    return true;
+}
+
+function checkValues(o: ObjectLit in default): Type {
+    for (fi in o.fields) { check(fi.value, null, P_TEMP); }
+    return T_ERROR;
+}
+
+function valuesRegion(o: ObjectLit in default): Region {
+    let r: Region = R_STATIC;
+    for (fi in o.fields) { r = meet(r, regionOf(fi.value)); }
+    return r;
+}
+
+public function checkObjectLit(o: ObjectLit in default, expected: Type? in default, place: Place in default): Type {
+    let exp: Type? = expected;
+    if (exp != null && isOpt(exp)) { exp = exp.elem; }
+    if (o.typeName == "" && exp != null && exp == T_ANY) { return checkAnyLit(o, place); }
+    let positional: bool = false;
+    for (fi in o.fields) {
+        if (fi.name == "") {
+            error(fi.line, "Every entry here needs a name (name: value); entries without a name are only for Any.");
+            positional = true;
+        }
+    }
+    if (positional) { return checkValues(o); }
+    let typeName: String = o.typeName;
+    if (typeName == "" && exp != null && exp.kind == TyK.Named) { typeName = exp.name; }
+    if (typeName == "") {
+        if (expected == null) {
+            error(o.line, "Cannot infer the type of this object literal; write the type before it: Tipo { ... }");
+        } else if (!isError(expected)) {
+            error(o.line, "An object literal cannot be used where ${expected.text} is expected.");
+        }
+        return checkValues(o);
+    }
+    let so: StructInfo? = structOf(typeName);
+    if (so != null) {
+        checkFieldInits(o, so.fields, typeName, place, null);
+        setRegion(o, valuesRegion(o));
+        return named(typeName, NamedK.Struct);
+    }
+    let co: ClassInfo? = classOf(typeName);
+    if (co != null) {
+        if (place.kind == PlaceK.Stack) { error(o.line, "Objects of a class live in a memory; use 'in' with a memory, not a temporary buffer."); }
+        o.place = place;
+        let pr: Region = placeRegion(place);
+        checkFieldInits(o, allFields(typeName), typeName, place, pr);
+        setRegion(o, pr);
+        if (co.thread) { checkThreadRun(o); }
+        return named(typeName, NamedK.Class);
+    }
+    let ii: InterfaceInfo? = interfaceOf(typeName);
+    if (ii != null) {
+        if (place.kind == PlaceK.Stack) { error(o.line, "An interface literal lives in a memory; use 'in' with a memory."); }
+        o.place = place;
+        let pr: Region = placeRegion(place);
+        let seen: Any = {} in default;
+        for (fi in o.fields) {
+            let m: MethodInfo? = interfaceMethod(ii, fi.name);
+            if (seen.contains(fi.name)) { error(fi.line, "Method '${fi.name}' is given twice."); }
+            seen[fi.name] = true;
+            if (m == null) {
+                error(fi.line, "Interface '${typeName}' has no method '${fi.name}'.");
+                check(fi.value, null, P_TEMP);
+                continue;
+            }
+            if (m.throwsType != null) {
+                error(fi.line, "'${typeName}.${m.name}' can throw; implement it with a class, lambdas cannot throw.");
+                continue;
+            }
+            coerce(fi.value, m.sig!, place, "Method '${fi.name}'");
+            lifetime(regionOf(fi.value), pr, fi.line, "Method '${fi.name}' uses data from {v}, but the object lives in {st}, which lives longer.");
+        }
+        let missing: String[*] = [] in default;
+        for (m in ii.methods) {
+            if (seen[m.name] == null) { missing.push(m.name); }
+        }
+        if (missing.length > 0) { error(o.line, "Missing method(s) of '${typeName}': ${missing.join(", ")}."); }
+        setRegion(o, pr);
+        return named(typeName, NamedK.Interface);
+    }
+    let dot: int32? = typeName.indexOf(".");
+    if (dot != null) {                     // Shape.Rect { width: 3.0, height: 4.0 }
+        let en: String = typeName.substring(0, dot);
+        let vn: String = typeName.substring(dot + 1);
+        let eo: EnumInfo? = enumOf(en);
+        let v: VariantInfo? = eo != null ? variantOf(eo, vn) : null;
+        if (v == null) {
+            error(o.line, eo == null ? "'${en}' is not an enum." : "Enum '${en}' has no variant '${vn}'.");
+            return checkValues(o);
+        }
+        checkFieldInits(o, v.fields, typeName, place, null);
+        setRegion(o, valuesRegion(o));
+        o.variant = v;
+        return named(eo!.name, NamedK.Enum);
+    }
+    if (enumOf(typeName) != null) { return wrong(o.line, "Enum values are created with ${typeName}.Variante or ${typeName}.Variante { campo: valor }."); }
+    error(o.line, "Unknown type '${typeName}' in object literal.");
+    return checkValues(o);
+}
+
+/** { 1, "two", name: v, inner: { ... } }: positions and named entries. */
+function checkAnyLit(o: ObjectLit in default, place: Place in default): Type {
+    if (place.kind == PlaceK.Stack) { error(o.line, "An Any table lives in a memory; use 'in' with a memory, not a temporary buffer."); }
+    o.place = place;
+    let pr: Region = placeRegion(place);
+    let seen: Any = {} in default;
+    for (fi in o.fields) {
+        let positional: bool = fi.name == "" || fi.shorthand;
+        if (!positional) {
+            if (seen.contains(fi.name)) { error(fi.line, "Entry '${fi.name}' is given twice."); }
+            seen[fi.name] = true;
+        }
+        let v: Expr = fi.value;
+        coerce(v, T_ANY, place, positional ? "Entry" : "Entry '${fi.name}'");
+        lifetime(regionOf(v), pr, fi.line, "This entry lives in {v}, but the table lives in {st}, which lives longer. Use .clone().");
+    }
+    setRegion(o, pr);
+    return T_ANY;
+}
+
+/** objRegion != null: a class object, whose fields must not reference shorter-lived data. */
+function checkFieldInits(o: ObjectLit in default, fields: FieldInfo[*] in default, typeName: String, place: Place in default, objRegion: Region? in default): void {
+    let seen: Any = {} in default;
+    for (fi in o.fields) {
+        let f: FieldInfo? = null;
+        for (x in fields) {
+            if (x.name == fi.name && f == null) { f = x; }
+        }
+        if (seen.contains(fi.name)) { error(fi.line, "Field '${fi.name}' is set twice."); }
+        seen[fi.name] = true;
+        if (f == null) {
+            error(fi.line, "'${typeName}' has no field '${fi.name}'.");
+            check(fi.value, null, P_TEMP);
+            continue;
+        }
+        if (f.type == T_STRING && structOf(f.owner) != null && structOf(f.owner)!.decl.cName != "") {
+            error(fi.line, "Field '${fi.name}' is a C string: it is read (a view of C's text), not set.");
+        }
+        coerce(fi.value, f.type, place, "Field '${fi.name}'");
+        if (objRegion != null && hasRefs(f.type)) {
+            lifetimeOf(fi.value, objRegion, fi.line, "Field '${fi.name}' gets data from {v}, but the object lives in {st}, which lives longer. Use .clone(){hint}.", "field ${fi.name}");
+        }
+    }
+    let missing: String[*] = [] in default;
+    let so: StructInfo? = structOf(typeName);
+    let cStructLit: bool = so != null && so.decl.cName != "";      // a C struct: what is not given is zero, as in C
+    for (f in fields) {
+        if (f.defaultValue == null && seen[f.name] == null && !cStructLit) { missing.push(f.name); }
+    }
+    if (missing.length > 0) { error(o.line, "Missing required field(s) of '${typeName}': ${missing.join(", ")}."); }
+}
+
+public function checkArrayLit(a: ArrayLit in default, expected: Type? in default, place: Place in default): Type {
+    let exp: Type? = expected;
+    if (exp != null && isOpt(exp)) { exp = exp.elem; }
+    if (exp == null || exp.kind != TyK.Array) {
+        if (expected == null) {
+            error(a.line, "Cannot infer the type of this array; give the variable a type, e.g. let xs: int32[] = [1, 2, 3];");
+        } else if (!isError(expected)) {
+            error(a.line, "An array literal cannot be used where ${expected.text} is expected.");
+        }
+        for (x in a.elems) { check(x, null, P_TEMP); }
+        return T_ERROR;
+    }
+    let at: Type = exp;
+    if (at.ak == ArrK.Growable) {
+        a.place = place;
+        let pr: Region = placeRegion(place);
+        for (x in a.elems) {
+            coerce(x, at.elem!, place, "Element");
+            if (hasRefs(at.elem!)) {
+                lifetime(regionOf(x), pr, x.line, "This element lives in {v}, but the list lives in {st}, which lives longer. Use .clone(){hint}.");
+            }
+        }
+        setRegion(a, pr);
+        return at;
+    }
+    // FIXED (or a slice parameter: a fixed temporary converted to a slice)
+    let r: Region = R_STATIC;
+    for (x in a.elems) {
+        coerce(x, at.elem!, place, "Element");
+        r = meet(r, regionOf(x));
+    }
+    let count: int64 = a.elems.length as int64;
+    let n: int64 = at.ak == ArrK.Fixed && at.size >= 0 ? at.size : count;
+    if (count > n) { return wrong(a.line, "${a.elems.length} elements do not fit in ${at.text}."); }
+    if (at.ak == ArrK.Fixed && at.size < 0 && count == 0) {
+        return wrong(a.line, "The capacity of an empty array cannot be inferred; write it, e.g. int32[16].");
+    }
+    setRegion(a, r);
+    return arrayT(at.elem!, ArrK.Fixed, n);
+}
+
+public function checkCast(c: Cast in default): Type {
+    let target: Type = resolveType(c.type);
+    let t: Type = check(c.expr, isNumeric(target) ? target : null, P_TEMP);
+    if (isError(t) || isError(target)) { return T_ERROR; }
+    if (t == T_ANY) {     // the value, if the Any holds one of that kind (numbers convert when they fit)
+        if (!(isNumeric(target) || target == T_BOOL || target == T_STRING || isClass(target) || isStruct(target) || isEnumT(target))) { return wrong(c.line, "An Any can be read as a number, bool, String, class, struct or enum (got ${target.text}); use a switch for tables."); }
+        if (hasRefs(target)) { setRegion(c, regionOf(c.expr)); }
+        return noted(optT(target));
+    }
+    if (t == target || (isNumeric(t) && isNumeric(target))) { return target; }
+    // C pointers: one pointer as another (a sockaddr_in* as a sockaddr*), or an opaque extern type as a pointer
+    let opaque: bool = (isExternT(t) && !isResource(t) && externSig(t) == null) || (isExternT(target) && !isResource(target) && externSig(target) == null);
+    if ((isPtr(t) && isPtr(target)) || (isPtr(t) && opaque) || (isPtr(target) && opaque)) { return target; }
+    // what dlsym gives (an opaque pointer) as a pointer to a C function, and back
+    let opaqueT: bool = isExternT(t) && !isResource(t) && externSig(t) == null && externInfoOf(t.name)!.decl.cType == "";
+    let opaqueTarget: bool = isExternT(target) && !isResource(target) && externSig(target) == null && externInfoOf(target.name)!.decl.cType == "";
+    if ((opaqueT && externSig(target) != null) || (opaqueTarget && externSig(t) != null)) { return target; }
+    if (isClass(t) && isClass(target)) {
+        return wrong(c.line, "Use a switch with a type pattern to convert ${t.text} to ${target.text}: switch (x) { case ${target.text} y -> ... }");
+    }
+    return wrong(c.line, "Cannot convert ${t.text} to ${target.text} with 'as' (only between number types, and between C pointers).");
+}
+
+/** Checks e where the facts hold (the right side of && and ||, a side of ?:). */
+public function checkWith(facts: Symbol[*] in default, e: Expr in default, expected: Type? in default, place: Place in default): Type {
+    if (facts.length == 0) { return check(e, expected, place); }
+    pushScope();
+    narrow(facts);
+    let t: Type = check(e, expected, place);
+    popScope();
+    return t;
+}
+
+public function coerceWith(facts: Symbol[*] in default, e: Expr in default, target: Type in default, place: Place in default, ctx: String in default): Type {
+    if (facts.length == 0) { return coerce(e, target, place, ctx); }
+    pushScope();
+    narrow(facts);
+    let t: Type = coerce(e, target, place, ctx);
+    popScope();
+    return t;
+}

@@ -1,0 +1,72 @@
+// syntax.parser.types: types as they are written (int32, String?, T[*], (A) -> R thread safe).
+// Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
+
+import syntax.ast { TK, typeNamed, TypeRef };
+import syntax.lexer { Token, TT };
+import syntax.parser { Parser, qualifiedName, strictList };
+import syntax.parser.expressions { coalesce, optionalFollows };
+
+/**
+ * ( qualified NAME | ( Type ) | ( [ Type ( , Type )* ] ) -> Type ) suffix*
+ *     suffix: [ ] | [ * ] | [ expression ] | ? | *          and after a function type: [ thread safe ]
+ */
+public function type(p: Parser in default): TypeRef {
+    let start: Token = p.current();
+    let base: TypeRef = TypeRef { line: start.line, kind: TK.Named } in default;
+    if (p.optional(TT.LParen)) {
+        let parameterTypes: TypeRef[*] = [] in default;
+        strictList(p, TT.RParen, () -> { parameterTypes.push(type(p)); });
+        p.expect(TT.RParen, "Expected ')' in type");
+        if (p.optional(TT.Arrow)) {              // suffixes after a function type belong to its return type
+            return threadSafe(p, TypeRef { line: start.line, kind: TK.Func, params: parameterTypes, inner: type(p) } in default);
+        }
+        if (parameterTypes.length != 1) {
+            p.error(start.line, "Expected '->' after the parameters of a function type");
+            return base;
+        }
+        base = parameterTypes[0];
+    } else {
+        let line: int32 = p.current().line;
+        base = typeNamed(qualifiedName(p, "Expected a type"), line);
+    }
+    while (!p.hasFailed()) {
+        if (p.optional(TT.LBracket)) {
+            let line: int32 = p.previous().line;
+            if (p.optional(TT.RBracket)) {
+                base = TypeRef { line, kind: TK.Infer, inner: base } in default;
+            } else if (p.at(TT.Star) && p.next().kind == TT.RBracket) {
+                p.advance();
+                p.advance();
+                base = TypeRef { line, kind: TK.Growable, inner: base } in default;
+            } else {
+                base = TypeRef { line, kind: TK.Fixed, inner: base, size: coalesce(p) } in default;
+                p.expect(TT.RBracket, "Expected ']' after array capacity");
+            }
+        } else if (p.at(TT.Question) && (!p.readingCastType || optionalFollows(p.next().kind))) {
+            p.advance();
+            base = TypeRef { line: p.previous().line, kind: TK.Opt, inner: base } in default;
+        } else if (p.at(TT.Star) && (!p.readingCastType || optionalFollows(p.next().kind) || p.next().kind == TT.Star)) {
+            p.advance();                     // T*: a C pointer (after `as`, only where a type can end: x as T* ; not x as T * 2)
+            base = TypeRef { line: p.previous().line, kind: TK.Ptr, inner: base } in default;
+        } else {
+            return base.kind == TK.Func ? threadSafe(p, base) : base;      // ((A) -> B) thread safe
+        }
+    }
+    return base;
+}
+
+/**
+ * [ thread safe ] after a function type: other threads may call it at the same time. Two words, like
+ * `wait until`; neither is reserved. With function types inside function types it goes to the nearest
+ * one on its left; parentheses choose another: ((A) -> (B) -> C) thread safe.
+ */
+function threadSafe(p: Parser in default, functionType: TypeRef in default): TypeRef {
+    if (p.optionalWords("thread", "safe")) {
+        if (functionType.threadSafe) {
+            p.error(p.previous().line, "'thread safe' is written once.");
+        } else {
+            functionType.threadSafe = true;
+        }
+    }
+    return functionType;
+}

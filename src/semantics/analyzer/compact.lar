@@ -1,0 +1,351 @@
+// semantics.analyzer.compact: Memory.compact: where a memory may be compacted.
+
+import syntax.ast { Call, Expr, Ident, IfStmt, Index, Member, Param, ReturnStmt, SelfExpr, Stmt };
+import semantics.types {
+    ArrK, classes, describe, enumOf, FieldInfo, Frame, isAncestorOrSelf, isArray, isClass, isError, isInterface,
+    isMemory, isSubclass, meet, named, NamedK, P_RESULT, P_TEMP, Place, PlaceK, R_STATIC, Region, resolveRegion, RK,
+    sameRegion, Scope, structOf, structs, Symbol, symbolic, SymK, T_ANY, T_VOID, TyK, Type
+};
+import semantics.linker { target };
+import semantics.expressions { check };
+import semantics.expressions.conversions { coerce, hasRefs, regionOf, typeOf };
+import semantics.analyzer {
+    allSymbols, block, declare, Deferred, deferred, DefK, error, frame, popScope, pushScope, scope, state, varSyms
+};
+import semantics.analyzer.flow { runCheck };
+import semantics.analyzer.narrowing { narrow, nonNull };
+import semantics.analyzer.statements { analyzeStmts, requireBool };
+
+/** A call to Memory.compact(m): its memory, and the variables that could be seen where it is. */
+public class CompactCall {
+    let call: Call;
+    let memory: Symbol;
+    let visible: Symbol[*] = [];
+}
+
+public let compactCalls: CompactCall[*] = [] in default;
+
+/** Where data of another memory of the same block was stored in a memory with a name. */
+public class Mixing {
+    let memory: Symbol;
+    let line: int32;
+}
+
+public let mixings: Mixing[*] = [] in default;
+
+/** Memory.compact(m) here: m must belong to this function, and the call cannot be inside a for over data. */
+public function noteCompact(c: Call in default, m: Symbol in default): void {
+    if (m.kind == SymK.Global) {
+        error(c.line, "Memory.compact() works on memories declared in a function: declare '${m.name}' in main or in the function that runs the work (let ${m.name}: byte[*] = [] in heap;).");
+        return;
+    }
+    let cc: CompactCall = CompactCall { call: c, memory: m } in default;
+    let sc: Scope? = scope;
+    while (sc != null) {
+        if (sc.iterating) {
+            error(c.line, "Memory.compact() cannot run inside a 'for' over a list, a table or a text: the loop keeps pointing to what it goes over. Compact before or after the loop.");
+            return;
+        }
+        for (k, v in sc.names.fields) { cc.visible.push(allSymbols[v as int32 ?? 0]); }
+        if (sc == m.scope) { break; }
+        sc = sc.parent;
+    }
+    compactCalls.push(cc);
+}
+
+/**
+ * Once every variable's memory is known: the variables of the compacted memory move with it; any other
+ * variable of its block (or of a block inside it) that may point into it would be left pointing to freed
+ * memory, so it is an error. So is data of another memory of the block stored in it.
+ */
+function checkCompacts(): void {
+    for (cc in compactCalls) {
+        let m: Symbol = cc.memory;
+        let mr: Region = m.memRegion!;
+        let line: int32 = cc.call.line;
+        let ok: bool = true;
+        for (x in mixings) {
+            if (x.memory == m) {
+                error(line, "Memory.compact(${m.name}): line ${x.line} keeps data of another memory of this block in '${m.name}', and compact() moves only what lives in '${m.name}'. Create that data in it (... in ${m.name}).");
+                ok = false;
+                break;
+            }
+        }
+        let roots: Symbol[*] = [] in default;
+        for (v in cc.visible) {
+            if (v == m || isMemory(v) || !(v.kind == SymK.Local || v.kind == SymK.Param) || !hasRefs(v.type)) { continue; }
+            let r: Region = resolveRegion(v.region);
+            if (r.memory == m) {
+                let why: String = notMovable(v.type, {} in default);
+                if (why != "") {
+                    error(line, "Memory.compact(${m.name}) cannot move '${v.name}': it holds ${why}, which compact() cannot move.");
+                    ok = false;
+                } else if (v.immutable) {
+                    error(line, "Memory.compact(${m.name}) cannot move '${v.name}': it cannot be given a new value.");
+                    ok = false;
+                } else {
+                    roots.push(v);
+                }
+            } else if (r.kind == RK.Local && isAncestorOrSelf(mr.scope!, r.scope!)) {
+                error(line, "Memory.compact(${m.name}): '${v.name}' lives in ${describe(r)} and may point into '${m.name}', so compact() would leave it pointing to freed memory. Create it in '${m.name}' (... in ${m.name}), or declare it after the compact() call.");
+                ok = false;
+            }
+        }
+        if (ok) {
+            for (rt in roots) { cc.call.call!.roots.push(rt); }
+        }
+    }
+}
+
+/** What a value of this type may hold that compact() cannot move ("" when nothing): "a lambda", "a thread"... */
+function notMovable(t: Type in default, seen: Any in default): String {
+    if (seen.contains(t.text)) { return ""; }
+    seen[t.text] = true;
+    let parts: FieldInfo[*] = [] in default;            // what to look inside
+    if (t == T_ANY) {                                   // a table can hold any class, struct or enum of the program
+        for (c in classes) {
+            let why: String = notMovable(named(c.name, NamedK.Class), seen);
+            if (why != "") { return "${why} (an Any can hold a ${c.name})"; }
+        }
+        for (st in structs) {
+            let why: String = notMovable(named(st.name, NamedK.Struct), seen);
+            if (why != "") { return "${why} (an Any can hold a ${st.name})"; }
+        }
+        return "";
+    }
+    switch (t.kind) {
+        case Func -> { return "a lambda"; }
+        case Opt, Array -> { return notMovable(t.elem!, seen); }
+        case Named -> {
+            if (t.nk == NamedK.Interface) { return "an interface value"; }
+            if (t.nk == NamedK.Struct) { for (f in structOf(t.name)!.fields) { parts.push(f); } }
+            if (t.nk == NamedK.Enum) {
+                for (vr in enumOf(t.name)!.variants) { for (f in vr.fields) { parts.push(f); } }
+            }
+            if (t.nk == NamedK.Class) {                 // its fields, its parents' and those of the classes that extend it
+                for (c in classes) {
+                    if (c.name == t.name || isSubclass(t.name, c.name) || isSubclass(c.name, t.name)) {
+                        if (c.sync) { return "a synchronized object (${c.name})"; }
+                        if (c.thread) { return "a thread (${c.name})"; }
+                        for (f in c.fields) { parts.push(f); }
+                    }
+                }
+            }
+        }
+        default -> { return ""; }
+    }
+    for (f in parts) {
+        let why: String = notMovable(f.type, seen);
+        if (why != "") { return "${why} (field '${f.name}' of ${f.owner})"; }
+    }
+    return "";
+}
+
+public function resolveRegions(): void {
+    for (s in varSyms) { s.resolved = R_STATIC; }
+    let changed: bool = true;
+    let guard: int32 = 0;
+    while (changed && guard < 100) {
+        changed = false;
+        for (s in varSyms) {
+            let old: Region = s.resolved!;
+            let next: Region = meet(old, resolveRegion(s.varRegion ?? R_STATIC));
+            if (!sameRegion(old, next) || old.memory != next.memory) {      // which memory of a block, too
+                s.resolved = next;
+                changed = true;
+            }
+        }
+        guard += 1;
+    }
+    for (d in deferred) { runCheck(d, true); }
+    checkCompacts();
+}
+
+/** The object of a field or element access: a.b and a[i] give a. */
+public function objectOf(e: Expr): Expr? {
+    if (e is Member m) { return m.object; }
+    if (e is Index x) { return x.object; }
+    return null;
+}
+
+/** Is the target reached through a class object or list (shared, not a captured copy)? */
+public function throughReference(target: Expr): bool {
+    let obj: Expr? = objectOf(target);
+    while (obj != null) {
+        if (isReference(typeOf(obj))) { return true; }
+        obj = objectOf(obj);
+    }
+    return false;
+}
+
+public function isReference(t: Type): bool {
+    return isClass(t) || isInterface(t) || t == T_ANY || (t.kind == TyK.Array && t.ak != ArrK.Fixed);
+}
+
+/** Where the fields or elements of `obj` are stored. */
+public function storageRegion(obj: Expr in default): Region {
+    if (isReference(typeOf(obj))) { return regionOf(obj); }
+    if (obj is Ident || obj is SelfExpr) {
+        let s: Symbol? = obj.symbol;
+        if (s == null) { return R_STATIC; }
+        return s.kind == SymK.Global ? R_STATIC : s.region;
+    }
+    let o: Expr? = objectOf(obj);
+    return o != null ? storageRegion(o) : regionOf(obj);
+}
+
+/** The memory new data should go to when stored inside `obj`. */
+public function placeFor(obj: Expr in default): Place {
+    let t: Type = typeOf(obj);
+    if (isClass(t)) { return Place { kind: PlaceK.OfObject, expr: obj } in default; }
+    if (isArray(t, ArrK.Growable)) { return Place { kind: PlaceK.OfList, expr: obj } in default; }
+    let o: Expr? = objectOf(obj);
+    return o != null ? placeFor(o) : P_TEMP;
+}
+
+public function rootSymbol(e: Expr in default): Symbol? {
+    let n: Expr? = e;
+    while (n != null) {
+        if (n is Ident || n is SelfExpr) { return n.symbol; }
+        n = objectOf(n);
+    }
+    return null;
+}
+
+public function isLValue(e: Expr): bool {
+    if (e is Ident) { return e.symbol != null && e.symbol!.kind != SymK.Function && e.symbol!.kind != SymK.Const; }
+    if (e is SelfExpr) { return true; }
+    let o: Expr? = objectOf(e);
+    return o != null && (isLValue(o) || isReference(typeOf(o)));
+}
+
+public function analyzeReturn(r: ReturnStmt in default): void {
+    let f: Frame = frame();
+    if (state().exprSwitchDepth > 0) {
+        error(r.line, "'return' is not allowed inside a switch expression; use 'yield' to give the case its value.");
+    }
+    let rt: Type = f.returnType ?? T_VOID;
+    let value: Expr? = r.value;
+    if (value == null) {
+        if (rt != T_VOID && !isError(rt)) { error(r.line, "Missing return value: expected ${rt.text}."); }
+        return;
+    }
+    if (rt == T_VOID) {
+        error(r.line, "This function returns void and cannot return a value.");
+        check(value, null, P_TEMP);
+        return;
+    }
+    coerce(value, rt, hasRefs(rt) ? P_RESULT : P_TEMP, "Return value");
+    let reg: Region = regionOf(value);
+    if (hasRefs(rt)) {
+        let d: Deferred = Deferred { line: r.line, kind: DefK.ReturnLocal, value: reg, storage: R_STATIC, msg: "", frame: f, expr: value, role: "return" } in default;
+        if (symbolic(reg)) { deferred.push(d); } else { runCheck(d, false); }
+    }
+}
+
+/** The platform the code being analyzed runs on: inside what is for windows, "windows" ("" any). */
+public let platformCtx: String = "";
+
+/**
+ * An if for platforms (IfStmt.platform): a ... b ... else. Every branch is checked, each for its platform, in the block
+ * around (there is no block of its own). A name every branch declares, with the same type, stays for
+ * the code after it (one C name for all of them); what only some declare belongs to its branch.
+ */
+function analyzeWhen(i: IfStmt in default): void {
+    let outer: String = platformCtx;
+    let stmtScope: Scope = scope;
+    let blk: Scope = block();
+    scope = blk;
+    let syms: int32[*] = [] in default;              // what the branches declare (indexes in allSymbols)
+    let branchOf: int32[*] = [] in default;          // and which branch
+    let seen: String[*] = [] in default;
+    let covered: bool = false;
+    let cur: IfStmt = i;
+    while (true) {
+        whenBranch(cur.thenBody, cur.platform, seen.length, syms, branchOf, blk);
+        seen.push(cur.platform);
+        if (!cur.hasElse) { break; }
+        if (cur.elseBody.length == 1 && cur.elseBody[0] is IfStmt n && n.chained) {
+            cur = n;
+            continue;
+        }
+        covered = true;                      // the others: after windows, unix; and the reverse
+        let rest: String = seen.length == 1 && seen[0] == "windows" ? "unix" : seen.length == 1 && seen[0] == "unix" ? "windows" : outer;
+        whenBranch(cur.elseBody, rest, seen.length, syms, branchOf, blk);
+        seen.push("");
+        break;
+    }
+    if (!covered) {
+        let win: bool = false;
+        let unix: bool = false;
+        let mac: bool = false;
+        let linux: bool = false;
+        for (p in seen) {
+            if (p == "windows") { win = true; }
+            if (p == "unix") { unix = true; }
+            if (p == "macos") { mac = true; }
+            if (p == "linux") { linux = true; }
+        }
+        covered = win && (unix || (mac && linux));
+    }
+    // Without every platform covered, nothing a branch declares can stay: some platform would lack it.
+    if (covered) {
+        for (x, k in syms) {
+            if (branchOf[x] != 0) { continue; }
+            let f: Symbol = allSymbols[k];
+            let same: int32[*] = [] in default;
+            for (y, j in syms) {
+                if (branchOf[y] != 0 && allSymbols[j].name == f.name && allSymbols[j].type.text == f.type.text) { same.push(j); }
+            }
+            if (same.length != seen.length - 1) { continue; }
+            for (j in same) {
+                allSymbols[j].cName = f.cName;        // one name in C, whichever branch the C compiler keeps
+                allSymbols[j].used = true;
+            }
+            blk.names[f.name] = k;
+        }
+    }
+    platformCtx = outer;
+    scope = stmtScope;
+}
+
+/** One branch of an if for platforms, checked for `platform`; what it declares is hidden until every branch is seen. */
+function whenBranch(body: Stmt[*] in default, platform: String in default, branch: int32, syms: int32[*] in default, branchOf: int32[*] in default, blk: Scope in default): void {
+    platformCtx = platform;
+    let start: int32 = allSymbols.length;
+    let narrowed: int32 = blk.narrowSyms.length;
+    analyzeStmts(body);
+    while (blk.narrowSyms.length > narrowed) {   // what a branch learns about null holds only in it
+        blk.narrowSyms.pop();
+        blk.narrowTypes.pop();
+    }
+    for (k in start..allSymbols.length) {
+        let s: Symbol = allSymbols[k];
+        if (s.scope != blk || (blk.names[s.name] as int32 ?? -1) != k) { continue; }
+        syms.push(k);
+        branchOf.push(branch);
+        blk.names[s.name] = -1;                     // the next branch may declare it again
+        // unique in C (the block may declare the name again after it); once: a nested one already did
+        if (!s.cName.contains("__w")) { s.cName = "${s.cName}__w${s.id}" in default; }
+    }
+}
+
+public function analyzeIf(i: IfStmt in default): void {
+    if (i.platform != "") {
+        analyzeWhen(i);
+        return;
+    }
+    requireBool(i.cond, "if");
+    let yes: Symbol[*] = nonNull(i.cond, true);
+    let no: Symbol[*] = nonNull(i.cond, false);
+    pushScope();
+    narrow(yes);
+    analyzeStmts(i.thenBody);
+    popScope();
+    if (i.hasElse) {
+        pushScope();
+        narrow(no);
+        analyzeStmts(i.elseBody);
+        popScope();
+    }
+}

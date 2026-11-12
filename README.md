@@ -156,14 +156,19 @@ checks all of it.
 |------|---------|
 | main.lar | CLI, project management |
 | syntax/lexer.lar | Tokenization |
-| syntax/parser.lar | Syntax parsing, AST construction (its grammar above each function) |
+| syntax/parser.lar | The class Parser (tokens, where it reads) and `parseProgram` |
+| syntax/parser/ | The grammar, above each function: declarations, natives, types, statements, expressions |
 | syntax/ast.lar | AST node definitions |
 | semantics/linker.lar | Modules and imports |
 | semantics/types.lar | Type system, symbol tables |
-| semantics/analyzer.lar | Semantic analysis, type checking, lifetime analysis |
-| semantics/expressions.lar | Expression type checking, method resolution |
-| codegen/gen.lar | C code generation for statements |
-| codegen/expressions.lar | C code generation for expressions |
+| semantics/analyzer.lar | Semantic analysis: its state, its entry, scopes and symbols |
+| semantics/analyzer/ | declarations, classes, statements, flow (what a result points to), compact, narrowing, threads, order |
+| semantics/expressions.lar | Expression type checking: types as written, names, members, indexes |
+| semantics/expressions/ | constants, conversions, literals, operators, calls, switches |
+| codegen/gen.lar | C code generation: the context of a function, the assembly of the output |
+| codegen/gen/ | types, classes, statements, library (the .h and .lar of a library) |
+| codegen/expressions.lar | C code generation for expressions: names, C types, values |
+| codegen/expressions/ | strings, operators, calls, clone, lambdas, patterns |
 | codegen/prune.lar | Only the C the program reaches: of what it generates, and of the runtime (std/runtime) |
 | codegen/debugmap.lar | Debug map: C names and types of every variable, for the debugger |
 | editor/session.lar | One analysis without C; larimar check |

@@ -1,0 +1,65 @@
+// codegen.expressions.patterns: the patterns of a switch.
+
+import semantics.types {
+    escapeName, isClass, isInterface, isOpt, optIsPointer, PatK, PatternInfo, Symbol, T_ANY, T_STRING, TyK, Type
+};
+import codegen.gen { line };
+import codegen.expressions { anyKind, anyPayload, boxType, cType, value };
+
+// Joined only with || (several patterns in one case), so a comparison needs no parentheses of its own
+// (clang warns about if ((a == b))).
+public function patternTest(pi: PatternInfo in default, st: Type, inner: Type, subj: String, val: String): String {
+    let opt: bool = isOpt(st);
+    let has: String = "";
+    if (opt) { has = optIsPointer(st) ? "(${subj} != NULL)" : "${subj}.has"; }
+    if (st == T_ANY) {
+        if (pi.kind == PatK.Default) { return "1"; }
+        if (pi.kind == PatK.Null) { return "${subj}.kind == RT_ANY_NULL"; }
+        let at: Type = pi.anyType!;
+        if (isClass(at)) { return "rt_any_is_obj(${subj}, &rtclass_${at.name})"; }
+        return at.kind == TyK.Named ? "rt_any_is_val(${subj}, &${boxType(at)})" : "${subj}.kind == ${anyKind(at)}";
+    }
+    let test: String = "1";
+    if (pi.kind == PatK.AnyType) {
+        test = "0";
+    } else if (pi.kind == PatK.Null) {
+        test = optIsPointer(st) ? "${subj} == NULL" : "!${subj}.has";
+    } else if (pi.kind == PatK.Variant) {
+        test = "${val}.tag == ${inner.name}_${pi.variant!.name}";
+    } else if (pi.kind == PatK.Constant) {
+        let c: String = value(pi.constant!);
+        test = inner == T_STRING ? "rt_str_eq(${val}, ${c})" : "${val} == ${c}";
+    } else if (pi.kind == PatK.Class) {
+        if (isInterface(inner)) {
+            test = "(${val}.t->cls != NULL && rt_is_a(rt_obj_class(${val}.obj), &rtclass_${pi.cls!.name}))";
+        } else {
+            test = "rt_is_a(rt_obj_class(${val}), &rtclass_${pi.cls!.name})";
+        }
+    }
+    return opt && pi.kind != PatK.Default && pi.kind != PatK.Null ? "(${has} && ${test})" : test;
+}
+
+public function bindPattern(pi: PatternInfo, inner: Type, subj: String, val: String): void {
+    let w: Symbol? = pi.whole;
+    if (w != null) {
+        line("${cType(w.type)} ${w.cName} = ${val};");
+        if (!w.used) { line("(void)${w.cName};"); }
+    }
+    if (pi.kind == PatK.Variant) {
+        for (i, bo in pi.bindings) {
+            if (bo == null) { continue; }
+            let b: Symbol = bo;
+            line("${cType(b.type)} ${b.cName} = ${val}.as.${pi.variant!.name}.${escapeName(pi.variant!.fields[i].name)};");
+            if (!b.used) { line("(void)${b.cName};"); }
+        }
+    } else if (pi.kind == PatK.AnyType && pi.bindings.length > 0) {
+        let b: Symbol = pi.bindings[0]!;
+        line("${cType(b.type)} ${b.cName} = ${anyPayload(pi.anyType!, val)};");
+        if (!b.used) { line("(void)${b.cName};"); }
+    } else if (pi.kind == PatK.Class && pi.bindings.length > 0) {
+        let b: Symbol = pi.bindings[0]!;
+        let obj: String = isInterface(inner) ? "${val}.obj" : val;
+        line("${pi.cls!.name}* ${b.cName} = (${pi.cls!.name}*)${obj};");
+        if (!b.used) { line("(void)${b.cName};"); }
+    }
+}

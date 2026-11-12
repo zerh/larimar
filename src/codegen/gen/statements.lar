@@ -1,0 +1,649 @@
+// codegen.gen.statements: bodies and statements, switch included.
+
+import syntax.ast {
+    allExprs, allStmts, AssignStmt, Binary, BlockStmt, BreakStmt, Call, ContinueStmt, Expr, ExprStmt, ForStmt,
+    IfStmt, Index, IsExpr, Member, ReturnStmt, Stmt, SwitchExpr, SwitchStmt, ThrowStmt, TryStmt, VarDecl, WhileStmt,
+    YieldStmt
+};
+import semantics.types {
+    ArrK, CatchInfo, EnumInfo, enumOf, ForInfo, isOpt, isStruct, LambdaInfo, MbK, MemberInfo, optIsPointer,
+    PatternInfo, platformCondition, SwitchInfo, Symbol, T_ANY, T_STRING, T_VOID, TyK, Type
+};
+import codegen.expressions {
+    addrOf, cType, discard, expr, forget, hoist, inOrder, isPure, lazy, lazyPre, lvalue, strip, tname, value, zero
+};
+import codegen.expressions.patterns { bindPattern, patternTest };
+import codegen.expressions.strings { stringLiteral };
+import codegen.gen {
+    ArmCtx, Block, debugLines, Fn, fn, hasErrors, indent4, line, lineMark, loopBlock, newFn, popBlock, pushBlock,
+    rootBlock, Temp, tmp, topBlock, TryCtx
+};
+import codegen.gen.classes { returnsData };
+
+function usesErrors(body: Stmt[*] in default): bool {
+    if (!hasErrors) { return false; }
+    let ss: Stmt[*] = [] in default;
+    allStmts(body, ss);
+    for (s in ss) {
+        if (s is ThrowStmt || s is TryStmt) { return true; }
+    }
+    let es: Expr[*] = [] in default;
+    allExprs(body, false, es);
+    for (e in es) {
+        if (e is Call && e.throwing) { return true; }
+        if (e is SwitchExpr sw) {
+            for (c in sw.cases) {
+                if (c.throwStmt != null) { return true; }
+            }
+        }
+    }
+    return false;
+}
+
+/** lock != "": a method of a synchronized class, locked for its whole run (unlocked on every exit). */
+public function body(stmts: Stmt[*] in default, ret: Type in default, throwsOut: bool, lambda: LambdaInfo? in default,
+                     ps: Symbol[*], lock: String, declLine: int32): String {
+    let saved: Fn = fn;
+    fn = newFn();
+    fn.ret = ret;
+    fn.throwsOut = throwsOut;
+    fn.lambda = lambda;
+    let root: Block = Block {} in default;
+    pushBlock(root);
+    if (debugLines) {                               // the start of the function is its declaration's line
+        let mark: String = lineMark(declLine);
+        if (mark != "") { line(mark); }
+    }
+    if (lock != "") {
+        line("rt_sync_lock(${lock});");
+        root.cleanups.push("rt_sync_unlock(${lock});");
+    }
+    for (p in ps) {
+        if (!p.used) { line("(void)${p.cName};"); }
+    }
+    let all: Expr[*] = [] in default;           // the names bound by `is` live for the whole function
+    allExprs(stmts, false, all);
+    for (e in all) {
+        let b: Symbol? = e is IsExpr ? e.symbol : null;
+        if (b != null) {
+            line("${cType(b.type)} ${b.cName} = NULL;");
+            if (!b.used) { line("(void)${b.cName};"); }
+        }
+    }
+    if (usesErrors(stmts)) {
+        line("RtError err;");
+        line("err.kind = 0;");
+    } else if (throwsOut) {
+        line("(void)err_out;");
+    }
+    openMemory(stmts);
+    for (s in stmts) { stmt(s); }
+    if (!endsWithJump(stmts)) {
+        emitCleanups(root);
+        // The language proved every path returns (loops forever, try/catch, switch);
+        // C cannot see it, so close the function explicitly.
+        if (ret != T_VOID) { line("return ${zero(ret)};"); }
+    }
+    let out: String = fn.out.toString();
+    if (returnsData(ret) && !fn.destUsed) { out = "    (void)rt_dest;\n${out}" in default; }
+    fn = saved;
+    return out;
+}
+
+public function endsWithJump(stmts: Stmt[*]): bool {
+    if (stmts.length == 0) { return false; }
+    let last: Stmt = stmts[stmts.length - 1];
+    return last is ReturnStmt || last is ThrowStmt;
+}
+
+function emitCleanups(b: Block): void {
+    let i: int32 = b.cleanups.length - 1;
+    while (i >= 0) {
+        line(b.cleanups[i]);
+        i -= 1;
+    }
+}
+
+public function block(stmts: Stmt[*] in default): void {
+    let b: Block = Block {} in default;
+    pushBlock(b);
+    openMemory(stmts);
+    for (s in stmts) { stmt(s); }
+    popBlock();
+    if (!endsWithJump(stmts)) { emitCleanups(b); }
+}
+
+/** A block between braces, one level in. */
+function bracedBlock(stmts: Stmt[*] in default): void {
+    fn.indent += 1;
+    block(stmts);
+    fn.indent -= 1;
+}
+
+/** Emits the cleanups of every block from the innermost up to `stop` (inclusive). */
+public function cleanupsUntil(stop: Block): void {
+    let i: int32 = fn.blocks.length - 1;
+    while (i >= 0) {
+        let b: Block = fn.blocks[i];
+        emitCleanups(b);
+        if (b == stop) { return; }
+        i -= 1;
+    }
+}
+
+function anyCleanups(stop: Block): bool {
+    let i: int32 = fn.blocks.length - 1;
+    while (i >= 0) {
+        let b: Block = fn.blocks[i];
+        if (b.cleanups.length > 0) { return true; }
+        if (b == stop) { return false; }
+        i -= 1;
+    }
+    return false;
+}
+
+/** A statement; what it creates without a place lives in its temporary memory, freed when it ends. */
+public function stmt(s: Stmt in default): void {
+    if (debugLines) {
+        let mark: String = lineMark(s.line);
+        if (mark != "") { line(mark); }
+    }
+    let saved: Temp? = fn.temp;
+    let t: Temp = Temp { owner: topBlock() } in default;
+    fn.temp = t;
+    let outer: StringBuilder = fn.out;
+    fn.out = {} in default;                  // the statement, to put its memory before it if it used one
+    stmtInner(s);
+    let text: String = fn.out.toString();
+    fn.out = outer;
+    fn.temp = saved;
+    if (t.name == "") {
+        fn.out.add(text);
+        return;
+    }
+    line("RtMem ${t.name} = rt_mem_growable();");
+    fn.out.add(text);
+    let free: String = "rt_mem_free(&${t.name});";
+    let kept: String[*] = [] in default;
+    let removed: bool = false;
+    for (c in t.owner.cleanups) {
+        if (!removed && c == free) { removed = true; } else { kept.push(c); }
+    }
+    t.owner.cleanups = kept;
+    let one: Stmt[*] = [s];
+    if (!endsWithJump(one)) { line(free); }
+}
+
+/** A block whose variables hold data gets its memory, freed when the block ends. */
+public function openMemory(stmts: Stmt[*] in default): void {
+    if (stmts.length == 0 || stmts[0].blockMemory == "") { return; }
+    let m: String = stmts[0].blockMemory;
+    line("RtMem ${m} = rt_mem_growable();");
+    topBlock().cleanups.push("rt_mem_free(&${m});");
+}
+
+/** The current statement's temporary memory (declared before it the first time it is used). */
+public function tempMem(): String {
+    let t: Temp? = fn.temp;
+    if (t == null) { return "&rt_default_mem"; }      // outside statements: initializing globals
+    if (t.name == "") {
+        t.name = tmp("tmp");
+        t.owner.cleanups.push("rt_mem_free(&${t.name});");   // also on return, break or an error
+    }
+    return "&${t.name}";
+}
+
+function stmtInner(s: Stmt in default): void {
+    switch (s) {
+        case VarDecl v -> varDecl(v);
+        case AssignStmt a -> assign(a);
+        case BlockStmt b -> {
+            line("{");
+            bracedBlock(b.body);
+            line("}");
+        }
+        case ReturnStmt r -> ret(r);
+        case ExprStmt e -> discard(expr(e.expr));
+        case IfStmt i -> ifStmt(i);
+        case WhileStmt w -> whileStmt(w);
+        case ForStmt f -> forStmt(f);
+        case BreakStmt, ContinueStmt -> {
+            if (loopBlock != null) { cleanupsUntil(loopBlock!); }
+            line(s is BreakStmt ? "break;" : "continue;");
+        }
+        case ThrowStmt t -> throwStmt(t);
+        case YieldStmt y -> {
+            let arm: ArmCtx = fn.arms[fn.arms.length - 1];
+            line("${arm.result} = ${value(y.value)};");
+            cleanupsUntil(arm.block);
+            line("goto ${arm.endLabel};");
+            arm.used = true;
+        }
+        case TryStmt t -> tryStmt(t);
+        case SwitchStmt sw -> switchCode(sw.switchExpr, false);
+        default -> {}
+    }
+}
+
+function assign(s: AssignStmt in default): void {
+    let target: Expr = s.target;
+    let parts: Expr[*] = [] in default;
+    placeParts(target, parts);
+    let held: Expr[*] = [] in default;
+    if (s.value is Binary b && b.left == target) {      // a[i()] += v reads and writes the same place: i() runs once
+        for (p in parts) {
+            if (!isPure(p)) {
+                p.computed = hoist(cType(p.ty!), expr(p));
+                held.push(p);
+            }
+        }
+    } else {                                            // the place, then the value (left to right)
+        parts.push(s.value);
+        held = inOrder(parts) in default;
+    }
+    assignTo(s, target);
+    forget(held);
+}
+
+/**
+ * The parts of a place that are computed, in order: the object and the index of a[i], the object of a.f.
+ * An object that is a value (a struct, a T[N]) is not copied: its own place is looked into.
+ */
+function placeParts(target: Expr in default, parts: Expr[*] in default): void {
+    switch (target) {
+        case Index x -> {
+            placeObject(x.object, parts);
+            parts.push(x.index);
+        }
+        case Member m -> { placeObject(m.object, parts); }
+        default -> { }
+    }
+}
+
+function placeObject(o: Expr in default, parts: Expr[*] in default): void {
+    let t: Type? = o.ty;
+    if (t != null && (isStruct(t) || t.kind == TyK.Array && t.ak == ArrK.Fixed)) {
+        placeParts(o, parts);
+    } else {
+        parts.push(o);
+    }
+}
+
+function assignTo(s: AssignStmt in default, target: Expr in default): void {
+    let mi: MemberInfo? = target.member;
+    if (target is Member m && mi != null && mi.kind == MbK.AnyKey) {
+        let obj: String = hoist("RtAny", expr(m.object));
+        line("rt_any_set(${obj}, ${stringLiteral(mi.key)}, ${value(s.value)}, ${s.line});");
+        return;
+    }
+    if (target is Index x && x.object.ty == T_ANY) {
+        let obj: String = hoist("RtAny", expr(x.object));
+        let key: String = expr(x.index);
+        let v: String = value(s.value);
+        if (x.index.ty == T_STRING) {
+            line("rt_any_set(${obj}, ${key}, ${v}, ${s.line});");
+        } else {
+            line("rt_any_set_at(${obj}, (int64_t)(${key}), ${v}, ${s.line});");
+        }
+        return;
+    }
+    let t: String = lvalue(target);
+    line("${t} = ${value(s.value)};");
+}
+
+function varDecl(v: VarDecl in default): void {
+    let s: Symbol = v.symbol!;
+    switch (s.memKind) {
+        case HeapGrowable -> {
+            line("RtMem ${s.cName} = rt_mem_growable();");
+            topBlock().cleanups.push("rt_mem_free(&${s.cName});");
+        }
+        case HeapFixed -> {
+            let size: String = expr(v.type.size!);
+            line("RtMem ${s.cName} = rt_mem_heap((int64_t)(${size}), ${v.line});");
+            topBlock().cleanups.push("rt_mem_free(&${s.cName});");
+        }
+        case FixedLocal -> {
+            line("uint8_t ${s.cName}__buf[${s.type.size < 1 ? 1 : s.type.size}];");
+            line("RtMem ${s.cName} = rt_mem_fixed(${s.cName}__buf, sizeof ${s.cName}__buf);");
+            topBlock().cleanups.push("rt_mem_finalize(&${s.cName});");   // a File, a socket, a thread living here
+        }
+        default -> {
+            let init: String = value(v.init!);
+            line("${cType(s.type)} ${s.cName} = ${init};");
+            if (!s.used) { line("(void)${s.cName};"); }
+        }
+    }
+}
+
+public function ret(r: ReturnStmt in default): void {
+    let a: Expr? = r.value;
+    if (a == null) {
+        cleanupsUntil(rootBlock());
+        line("return;");
+        return;
+    }
+    let v: String = value(a);
+    if (anyCleanups(rootBlock())) {
+        let t: String = tmp("ret");
+        line("${cType(fn.ret)} ${t} = ${v};");
+        cleanupsUntil(rootBlock());
+        line("return ${t};");
+    } else {
+        line("return ${v};");
+    }
+}
+
+function ifStmt(i: IfStmt in default): void {
+    if (i.platform != "") {
+        whenStmt(i);
+        return;
+    }
+    let c: String = expr(i.cond);
+    line("if (${strip(c)}) {");
+    bracedBlock(i.thenBody);
+    if (i.hasElse) {
+        line("} else {");
+        bracedBlock(i.elseBody);
+    }
+    line("}");
+}
+
+/**
+ * An if for platforms (IfStmt.platform): C's #if / #elif / #else / #endif, with no braces,
+ * so what a branch declares stays for the code after it. Every branch is written (the C compiler keeps
+ * one); what a branch leaves to free at the end of the block is freed only where that branch is kept.
+ */
+function whenStmt(i: IfStmt in default): void {
+    let above: String[*] = [] in default;            // the conditions of the branches above
+    let cur: IfStmt = i;
+    while (true) {
+        let c: String = platformCondition(cur.platform);
+        line("${above.length == 0 ? "#if" : "#elif"} ${c}");
+        whenBranch(cur.thenBody, keptWhen(c, above));
+        above.push(c);
+        if (!cur.hasElse) { break; }
+        if (cur.elseBody.length == 1 && cur.elseBody[0] is IfStmt n && n.chained) {
+            cur = n;
+            continue;
+        }
+        line("#else");
+        whenBranch(cur.elseBody, keptWhen("1", above));
+        break;
+    }
+    line("#endif");
+}
+
+/** When the C compiler keeps a branch: its condition, and none of the ones above. */
+function keptWhen(c: String, above: String[*]): String {
+    if (above.length == 0) { return c; }
+    return "(${c}) && !(${above.join(" || ")})";
+}
+
+function whenBranch(stmts: Stmt[*] in default, kept: String): void {
+    let top: Block = topBlock();
+    let before: int32 = top.cleanups.length;
+    for (s in stmts) { stmt(s); }
+    for (k in before..top.cleanups.length) {
+        top.cleanups[k] = "#if ${kept}\n${top.cleanups[k]}\n#endif" in default;
+    }
+}
+
+/** Opens the block of a loop body. */
+function loopBlockOpen(): Block {
+    let b: Block = Block {} in default;
+    pushBlock(b);
+    loopBlock = b;
+    return b;
+}
+
+function loopBody(body: Stmt[*] in default, b: Block in default): void {
+    openMemory(body);
+    for (s in body) { stmt(s); }
+    popBlock();
+    if (!endsWithJump(body)) { emitCleanups(b); }
+}
+
+function whileStmt(w: WhileStmt in default): void {
+    let saved: Block? = loopBlock;
+    let cond: String = lazy(w.cond);
+    let pre: String = lazyPre;
+    line(pre.isEmpty() ? "while (${strip(cond)}) {" : "while (1) {");
+    fn.indent += 1;
+    let b: Block = loopBlockOpen();
+    if (!pre.isEmpty()) {
+        fn.out.add(indent4(pre));      // pre-lines were generated one level out
+        line("if (!(${strip(cond)})) break;");
+    }
+    loopBody(w.body, b);
+    fn.indent -= 1;
+    line("}");
+    loopBlock = saved;
+}
+
+/** `int32_t i = idx;` for the index variable of a for, if it has one. */
+function indexVar(ix: Symbol? in default, value: String): void {
+    if (ix == null) { return; }
+    line("${ix.type == T_STRING ? "RtString" : "int32_t"} ${ix.cName} = ${value};");
+    if (!ix.used) { line("(void)${ix.cName};"); }
+}
+
+function forStmt(f: ForStmt in default): void {
+    let info: ForInfo = f.forInfo!;
+    let saved: Block? = loopBlock;
+    line("{");
+    fn.indent += 1;
+    let outer: Block = Block {} in default;
+    pushBlock(outer);
+    let v: Symbol = info.value!;
+    if (info.range) {
+        let ct: String = cType(info.elemType!);
+        let start: String = tmp("from");
+        let end: String = tmp("to");
+        line("${ct} ${start} = ${expr(f.iterable)};");
+        line("${ct} ${end} = ${expr(f.rangeEnd!)};");
+        line("for (${ct} ${v.cName} = ${start}; ${v.cName} < ${end}; ${v.cName}++) {");
+        if (!v.used) { line("    (void)${v.cName};"); }
+    } else if (info.any != 0) {
+        let named: bool = info.any == 2;
+        let src: Expr = named && f.iterable is Member m ? m.object : f.iterable;
+        let tb: String = tmp("table");
+        let n: String = tmp("n");
+        let idx: String = tmp("i");
+        let count: String = named ? "count" : "length";
+        line("RtAny ${tb}_v = ${expr(src)};");
+        line("RtTable* ${tb} = ${tb}_v.kind == RT_ANY_TABLE ? ${tb}_v.as.t : NULL;");
+        line("int32_t ${n} = ${tb} ? ${tb}->${count} : 0;");
+        line("for (int32_t ${idx} = 0; ${idx} < ${n}; ${idx}++) {");
+        fn.indent += 1;
+        line("if (${tb}->${count} != ${n}) rt_panic(\"an Any table cannot gain or lose entries while it is being iterated\", ${f.line});");
+        indexVar(info.index, named ? "${tb}->keys[${idx}]" : idx);
+        line("RtAny ${v.cName} = ${tb}->${named ? "values" : "items"}[${idx}];");
+        if (!v.used) { line("(void)${v.cName};"); }
+        fn.indent -= 1;
+    } else if (f.iterable.ty != null && f.iterable.ty! == T_STRING) {
+        let text: String = tmp("text");
+        let idx: String = tmp("i");
+        line("RtString ${text} = ${expr(f.iterable)};");
+        line("for (int32_t ${idx} = 0; ${idx} < ${text}.len; ${idx}++) {");
+        fn.indent += 1;
+        indexVar(info.index, idx);
+        line("uint8_t ${v.cName} = (uint8_t)${text}.ptr[${idx}];");
+        if (!v.used) { line("(void)${v.cName};"); }
+        fn.indent -= 1;
+    } else {
+        let at: Type = f.iterable.ty!;
+        let idx: String = tmp("i");
+        let p: String = tmp(switch (at.ak) {
+            case Fixed -> "arr";
+            case Slice -> "view";
+            default -> "list";
+        });
+        if (at.ak == ArrK.Fixed) {
+            line("${cType(at)}* ${p} = ${addrOf(f.iterable)};");
+        } else {
+            line("${cType(at)} ${p} = ${expr(f.iterable)};");
+        }
+        let arrow: String = at.ak == ArrK.Slice ? "." : "->";
+        line("for (int32_t ${idx} = 0; ${idx} < ${p}${arrow}length; ${idx}++) {");
+        fn.indent += 1;
+        let ix: Symbol? = info.index;
+        if (ix != null) { line("int32_t ${ix.cName} = ${idx};"); }
+        line("${cType(info.elemType!)} ${v.cName} = ${p}${arrow}items[${idx}];");
+        if (ix != null && !ix.used) { line("(void)${ix.cName};"); }
+        if (!v.used) { line("(void)${v.cName};"); }
+        fn.indent -= 1;
+    }
+    fn.indent += 1;
+    let b: Block = loopBlockOpen();
+    loopBody(f.body, b);
+    fn.indent -= 1;
+    line("}");
+    popBlock();
+    fn.indent -= 1;
+    line("}");
+    loopBlock = saved;
+}
+
+public function throwStmt(t: ThrowStmt in default): void {
+    let e: Type = t.value.ty!;
+    let v: String = value(t.value);
+    line("err.kind = ${enumOf(e.name)!.errorId};");
+    line("err.as.e_${e.name} = ${v};");
+    propagate();
+}
+
+/** Sends the current error to the innermost try, or to the caller. */
+public function propagate(): void {
+    if (fn.tries.length > 0) {
+        let t: TryCtx = fn.tries[fn.tries.length - 1];
+        cleanupsUntil(t.block);
+        line("goto ${t.catchLabel};");
+        return;
+    }
+    cleanupsUntil(rootBlock());
+    if (fn.throwsOut) {
+        line("*err_out = err;");
+        line(fn.ret == T_VOID ? "return;" : "return ${zero(fn.ret)};");
+    } else {
+        line("rt_panic(\"uncaught error\", 0);");
+    }
+}
+
+function tryStmt(t: TryStmt in default): void {
+    let catchL: String = tmp("try_catch") in default;      // (kept in fn.tries while its body is generated)
+    let endL: String = tmp("try_end");
+    line("{");
+    fn.indent += 1;
+    let b: Block = Block {} in default;
+    pushBlock(b);
+    fn.tries.push(TryCtx { catchLabel: catchL, block: b } in default);
+    openMemory(t.body);
+    for (s in t.body) { stmt(s); }
+    fn.tries.pop();
+    popBlock();
+    if (!endsWithJump(t.body)) { emitCleanups(b); }
+    fn.indent -= 1;
+    line("}");
+    line("goto ${endL};");
+    line("${catchL}:");
+    for (i, c in t.catches) {
+        let ci: CatchInfo = c.catchInfo!;
+        let e: EnumInfo = ci.error!;
+        line("${i == 0 ? "" : "} else "}if (err.kind == ${e.errorId}) {");
+        fn.indent += 1;
+        line("${tname(e.name)} ${ci.variable!.cName} = err.as.e_${e.name};");
+        line("(void)${ci.variable!.cName};");
+        line("err.kind = 0;");
+        block(c.body);
+        fn.indent -= 1;
+    }
+    line("} else {");
+    fn.indent += 1;
+    propagate();
+    fn.indent -= 1;
+    line("}");
+    line("${endL}: ;");
+}
+
+// =====================================================================================
+// Switch
+// =====================================================================================
+
+public function switchCode(sw: SwitchExpr in default, isExpr: bool): String {
+    let si: SwitchInfo = sw.sw!;
+    let st: Type = si.subjectType;
+    let subj: String = tmp("subject");
+    line("${cType(st)} ${subj} = ${expr(sw.subject)};");
+    let res: String = "";
+    if (isExpr) {
+        res = tmp("value") in default;     // (kept in fn.arms while the arms are generated)
+        line("${cType(si.resultType!)} ${res};");
+        line("memset(&${res}, 0, sizeof ${res});");
+    }
+    let end: String = tmp("switch_end") in default;
+    let jumped: bool = false;              // some goto to end was written
+    let inner: Type = isOpt(st) ? st.elem! : st;
+    let innerVal: String = isOpt(st) && !optIsPointer(st) ? "${subj}.value" : subj;
+    for (c in sw.cases) {
+        let pis: PatternInfo[*] = c.patternInfos;
+        let tests: String[*] = [];
+        for (pi in pis) { tests.push(patternTest(pi, st, inner, subj, innerVal)); }
+        line("{");
+        fn.indent += 1;
+        line("if (${tests.join(" || ")}) {");
+        fn.indent += 1;
+        if (pis.length == 1) { bindPattern(pis[0], inner, subj, innerVal); }
+        let guard: Expr? = c.guard;
+        if (guard != null) {
+            let g: String = expr(guard);
+            line("if (${strip(g)}) {");
+            fn.indent += 1;
+        }
+        let ae: Expr? = c.expr;
+        if (c.throwStmt != null) {
+            throwStmt(c.throwStmt!);
+        } else if (ae != null) {
+            if (isExpr) {
+                let v: String = value(ae);
+                line("${res} = ${v};");
+            } else {
+                discard(expr(ae));
+            }
+            line("goto ${end};");
+            jumped = true;
+        } else {
+            line("{");
+            fn.indent += 1;
+            let b: Block = Block {} in default;
+            pushBlock(b);
+            if (isExpr) { fn.arms.push(ArmCtx { endLabel: end, result: res, block: b } in default); }
+            openMemory(c.block);
+            for (s in c.block) { stmt(s); }
+            if (isExpr) {
+                if (fn.arms[fn.arms.length - 1].used) { jumped = true; }
+                fn.arms.pop();
+            }
+            popBlock();
+            let jumps: bool = endsWithJump(c.block) || (isExpr && c.block.length > 0 && c.block[c.block.length - 1] is YieldStmt);
+            if (!jumps) { emitCleanups(b); }
+            fn.indent -= 1;
+            line("}");
+            if (!isExpr) {
+                line("goto ${end};");
+                jumped = true;
+            }
+        }
+        if (guard != null) {
+            fn.indent -= 1;
+            line("}");
+        }
+        fn.indent -= 1;
+        line("}");
+        fn.indent -= 1;
+        line("}");
+    }
+    if (isExpr) { line("rt_panic(\"no case of the switch matched\", ${sw.line});"); }
+    if (jumped) { line("${end}: ;"); }
+    return res;
+}
