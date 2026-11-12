@@ -1,0 +1,23 @@
+// A file of a copy of the standard library (the one of a repository, open in an editor) is checked
+// against that copy, not against the installed one: its parts import the file being read.
+import std.os;
+import std.os { Platform, OS };
+import std.test { check, skip };
+import std.io.path as Paths;
+import tests.support.compiler { checked };
+
+test function aFileOfACopyOfStd(): void {
+    if (Platform.current() == OS.Windows) {
+        skip("copies the folder with cp");
+        return;
+    }
+    let copy: String = Paths.absolute("build/test/cases/${os.processId()}-copy");
+    let std: String = Paths.join(os.env("LARIMAR_HOME") ?? ".", "std");
+    check(os.run("mkdir -p '${copy}' && cp -R '${std}' '${copy}/'") == 0, "the copy of std");
+    let files: String[] = ["crypto.lar", "time.lar", "net.lar", "os/process.lar", "crypto/posix.lar"];
+    for (file in files) {
+        let errors: String = checked("${copy}/std/${file}");
+        check(errors == "", "std/${file} of a copy: ${errors}");
+    }
+    os.run("rm -rf '${copy}'");
+}

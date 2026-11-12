@@ -86,7 +86,7 @@ public class ImportDecl extends Node {
     let hasNames: bool = false;
 }
 
-/** platform: "" (every one), "windows", "macos", "linux" or "unix": written inside `#when windows ... #end`. */
+/** platform: "" (every one), "windows", "macos", "linux" or "unix": that of the class it is in (the analyzer sets it). */
 public class CIncludeDecl extends Node {
     let header: String;
     let platform: String = "";
@@ -98,7 +98,7 @@ public class CCodeDecl extends Node {
     let owner: String = "";             // the class it is in ("" at the top level)
     let fromStd: bool = false;          // the standard library's: only what is used reaches the C
 }
-/** native type X;  = T*;  = "C TYPE";  = (A, B) -> R  (a C function pointer);  ... released by f;  (inside #when for one platform) */
+/** native type X;  = T*;  = c"C TYPE";  = (A, B) -> R  (a C function pointer);  ... released by f; */
 public class ExternTypeDecl extends Node {
     let name: String;
     let cType: String = "";             // the C type ("" is void*)
@@ -254,9 +254,9 @@ public class ReturnStmt extends Stmt { let value: Expr? = null; }
 public class ExprStmt extends Stmt { let expr: Expr; }
 
 /**
- * platform != "": `#when windows ... #when macos ... #else ... #end`, chosen when the C is compiled
- * (#if), not when it runs. No block: what a branch declares stays for the code after #end. Each
- * further `#when` is an IfStmt in elseBody with `chained`; `#else` is the last elseBody.
+ * platform != "": chosen when the C is compiled (#if ... #else ... #endif), not when it runs. It is how
+ * a native method of a class for one platform calls its C only there (the analyzer writes it; no
+ * syntax gives it). A further platform is an IfStmt in elseBody with `chained`.
  */
 public class IfStmt extends Stmt {
     let cond: Expr;

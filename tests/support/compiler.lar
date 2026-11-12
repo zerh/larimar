@@ -251,3 +251,14 @@ function windows(): bool { return Platform.name() == "windows"; }
 function identifierPart(c: byte): bool {
     return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
 }
+
+/** The errors larimar check gives for a file ("" when there are none). */
+public function checked(file: String): String {
+    let log: String = place("check.txt");
+    let code: int32 = os.run("${quote(compiler())} check ${quote(file)} > ${quote(log)} 2>&1");
+    try {
+        return code == 0 ? "" : Files.readString(log).clone();
+    } catch (IoError e) {
+        return "larimar check gave no output";
+    }
+}

@@ -194,13 +194,6 @@ function program(startLine: int32): Program {
     return program;
 }
 
-/** `when` after a declaration was an old way: what is for one system goes in a class for its platform. */
-function noWhenSuffix(): void {
-    if (at(TT.When)) {
-        error(current().line, "For one system, put it in a class for its platform (class X implements UnixPlatform { ... })");
-    }
-}
-
 // =========================================================================================
 // Declarations
 // =========================================================================================
@@ -236,7 +229,6 @@ function topLevelDeclaration(): Node {
     if (optional(TT.CCode)) { return CCodeDecl { line: start.line, code: previous().text } in default; }
     if (optional(TT.CInclude)) {
         let include: CIncludeDecl = CIncludeDecl { line: start.line, header: expect(TT.Str, "Expected the header after 'cinclude': cinclude \"<math.h>\";").text } in default;
-        noWhenSuffix();
         return endedBySemicolon(include, "'cinclude'");
     }
     if (atWord("test") && next().kind == TT.Function) {
@@ -378,7 +370,6 @@ function nativeFunctionOfC(): ExternFunctionDecl {
         if (by.text != "by") { error(by.line, "Expected 'by' after 'released': released by free"); }
         declaration.releasedBy = expect(TT.Ident, "Expected the function that releases the result of '${name.text}' after 'released by'").text;
     }
-    noWhenSuffix();
     if (at(TT.CCode)) {                         // native function f(...): T { C }: the compiler writes it
         if (target != "") { error(name.line, "A native function names its C function (= c_name;) or has a body of C, not both"); }
         declaration.cBody = advance().text;
@@ -405,7 +396,6 @@ function nativeValue(): Node {
             declaration.cName = expect(TT.Ident, "Expected the C name, or c\"C text\", after '='").text;
         }
     }
-    noWhenSuffix();
     return endedBySemicolon(declaration, what);
 }
 
@@ -473,7 +463,6 @@ function nativeCType(name: Token in default): Node {
     } else if (atWord("released_by")) {
         error(current().line, "Write 'released by' (two words): released by close");
     }
-    noWhenSuffix();
     if (at(TT.LBrace)) {
         nativeMembers(declaration);
         optional(TT.Semi);
@@ -807,7 +796,7 @@ function cBodied(declaration: FunctionDecl in default): void {
     for (p in declaration.params) { call.args.push(Ident { line, name: p.name } in default); }
     let run: Stmt = ReturnStmt { line, value: call } in default;
     if (declaration.ret.kind == TK.Named && declaration.ret.name == "void") { run = ExprStmt { line, expr: call } in default; }
-    declaration.body.push(run);                 // in a class for one system, the analyzer puts it in its #when
+    declaration.body.push(run);                 // in a class for one system, the analyzer keeps it for that platform only
     declaration.cBodied = cOwner != "";
     declaration.hasBody = true;
 }

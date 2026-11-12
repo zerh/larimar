@@ -28,8 +28,7 @@ import semantics.types {
     optT, buildingLibrary, libraryPrefix
 };
 import std.text { isIdentifierPart, isDigit };
-import codegen.runtimeselect { selectRuntime };
-import codegen.prune { prune, braceDelta };
+import codegen.prune { prune, selectRuntime, braceDelta };
 import semantics.linker { filePaths, fileSources, FILE_LINES };
 import semantics.expressions { hasRefs };
 import codegen.expressions {
@@ -368,10 +367,7 @@ public function generate(): String {
     let anyResource: bool = false;
     for (e in externInfos) {
         if (e.sig != null) { continue; }
-        for (d in declsOf(e)) {
-            let td: String = "typedef ${d.cType != "" ? d.cType : "void*"} Ext_${e.name};";
-            part.add(d.platform == "" ? "${td}\n" : "#if ${platformCondition(d.platform)}\n${td}\n#endif\n");
-        }
+        part.add("typedef ${e.decl.cType != "" ? e.decl.cType : "void*"} Ext_${e.name};\n");
         if (e.decl.releasedBy != "") {
             if (!anyResource) {
                 part.add("typedef struct RtRes { int state; void (*release)(struct RtRes*); } RtRes;   /* 1 live, 2 releasing, 0 released */\n");
@@ -593,19 +589,42 @@ function internal(): String { return buildingLibrary ? "static " : ""; }
 function exportHelpers(out: StringBuilder): void {
     section(out, "Export helpers");
     if (buildingLibrary) { out.add("static void lm_library_init(void);\n"); }
-    out.add("typedef struct RtHandle { void* object; RtMem mem; } RtHandle;\n\n");
-    out.add("static RtHandle* rt_handle_new(void) {\n    RtHandle* h = (RtHandle*)calloc(1, sizeof(RtHandle));\n");
-    out.add("    if (!h) rt_panic(\"out of memory\", 0);\n    h->mem = rt_mem_growable();\n    return h;\n}\n\n");
-    out.add("static void rt_handle_release(void* p) {\n    RtHandle* h = (RtHandle*)p;\n    if (!h) return;\n");
-    out.add("    rt_mem_free(&h->mem);\n    free(h);\n}\n\n");
-    out.add("static void* rt_handle_object(void* p, const char* fn, const char* param) {\n");
-    out.add("    if (!p) {\n        char msg[256];\n");
-    out.add("        snprintf(msg, sizeof msg, \"%s: '%s' is NULL\", fn, param);\n        rt_panic(msg, 0);\n    }\n");
-    out.add("    return ((RtHandle*)p)->object;\n}\n\n");
-    out.add("static void* rt_handle_object_or_null(void* p) { return p ? ((RtHandle*)p)->object : NULL; }\n\n");
-    out.add("static char* rt_export_text(RtString s) {\n    char* out = (char*)malloc((size_t)s.len + 1);\n");
-    out.add("    if (!out) rt_panic(\"out of memory\", 0);\n    if (s.len > 0) memcpy(out, s.ptr, (size_t)s.len);\n");
-    out.add("    out[s.len] = 0;\n    return out;\n}\n");
+    out.add("""
+        typedef struct RtHandle { void* object; RtMem mem; } RtHandle;
+
+        static RtHandle* rt_handle_new(void) {
+            RtHandle* h = (RtHandle*)calloc(1, sizeof(RtHandle));
+            if (!h) rt_panic("out of memory", 0);
+            h->mem = rt_mem_growable();
+            return h;
+        }
+
+        static void rt_handle_release(void* p) {
+            RtHandle* h = (RtHandle*)p;
+            if (!h) return;
+            rt_mem_free(&h->mem);
+            free(h);
+        }
+
+        static void* rt_handle_object(void* p, const char* fn, const char* param) {
+            if (!p) {
+                char msg[256];
+                snprintf(msg, sizeof msg, "%s: '%s' is NULL", fn, param);
+                rt_panic(msg, 0);
+            }
+            return ((RtHandle*)p)->object;
+        }
+
+        static void* rt_handle_object_or_null(void* p) { return p ? ((RtHandle*)p)->object : NULL; }
+
+        static char* rt_export_text(RtString s) {
+            char* out = (char*)malloc((size_t)s.len + 1);
+            if (!out) rt_panic("out of memory", 0);
+            if (s.len > 0) memcpy(out, s.ptr, (size_t)s.len);
+            out[s.len] = 0;
+            return out;
+        }
+        """);
 }
 
 /**
@@ -739,48 +758,49 @@ function methodsOf(cls: String in default): MethodInfo[*] {
     return out;
 }
 
-/** An extern type's declaration, as a list (the code below was written for one per platform). */
-function declsOf(e: ExternTypeInfo in default): ExternTypeDecl[*] {
-    return [e.decl] in default;
-}
-
 /**
  * Resources (extern type X released by f): a value lives in a cell of the memory it was made in, with its
  * state; the memory releases it when it is freed, unless release(x) already did.
  */
 function resources(out: StringBuilder): void {
     section(out, "Resources");
-    out.add("static void rt_res_final(void* p) {\n    RtRes* r = (RtRes*)p;\n");
-    out.add("    if (r->state == 1) { r->state = 2; r->release(r); r->state = 0; }\n}\n");
-    out.add("static inline void rt_res_release(void* p) { if (p) rt_res_final(p); }\n");
+    out.add("""
+        static void rt_res_final(void* p) {
+            RtRes* r = (RtRes*)p;
+            if (r->state == 1) { r->state = 2; r->release(r); r->state = 0; }
+        }
+        static inline void rt_res_release(void* p) { if (p) rt_res_final(p); }
+        """);
     for (e in externInfos) {
         if (e.decl.releasedBy == "" || e.sig != null) { continue; }
         let n: String = e.name;
-        let only: String = "";                      // a resource of one platform: its releaser's
-        for (k, d in declsOf(e)) {
-            let f: FunctionInfo? = k < e.releasers.length ? e.releasers[k] : null;
-            if (f == null) { continue; }
-            let pw: String = d.platform;
-            if (pw == "" && f.isExtern && f.ext!.platform != "") {
-                pw = f.ext!.platform;
-                only = pw;
-            }
-            if (pw != "") { out.add("#if ${platformCondition(pw)}\n"); }
-            let call: String = f.isExtern ? "${f.cName}(((Res_${n}*)r)->value)" : "${f.cName}((Res_${n}*)r)";
-            out.add("static void ${n}__release(RtRes* r) { ${call}; }\n");
-            let pointer: bool = d.cType == "" || d.cType.trim().endsWith("*") || d.cType.trim() == "HANDLE";
-            let valid: String = pointer ? "v != NULL && (intptr_t)v != -1" : "(intmax_t)(v) >= 0";   // -1: INVALID_HANDLE_VALUE, MAP_FAILED
-            out.add("static Res_${n}* ${n}__new(RtMem* m, Ext_${n} v, int line) {\n");
-            out.add("    if (!(${valid})) return NULL;          /* C failed: no resource */\n");
-            out.add("    Res_${n}* c = (Res_${n}*)rt_mem_alloc(m, sizeof(Res_${n}), line);\n");
-            out.add("    c->h.state = 1;\n    c->h.release = ${n}__release;\n    c->value = v;\n");
-            out.add("    rt_mem_on_free(m, rt_res_final, c, line);\n    return c;\n}\n");
-            if (pw != "") { out.add("#endif\n"); }
-        }
+        let f: FunctionInfo? = e.releaser;
+        if (f == null) { continue; }
+        let only: String = f.isExtern ? f.ext!.platform : "";      // a resource of one platform: its releaser's
+        let cType: String = e.decl.cType.trim();
+        let valid: String = cType == "" || cType.endsWith("*") || cType == "HANDLE"
+            ? "v != NULL && (intptr_t)v != -1"                      // -1: INVALID_HANDLE_VALUE, MAP_FAILED
+            : "(intmax_t)(v) >= 0";
         if (only != "") { out.add("#if ${platformCondition(only)}\n"); }
-        out.add("static inline Ext_${n} ${n}__get(Res_${n}* c, int line) {\n");
-        out.add("    if (!c || c->h.state == 0) rt_panic(\"a released ${shortName(n)} was used\", line);\n");
-        out.add("    return c->value;\n}\n");
+        out.add("""
+            static void ${n}__release(RtRes* r) { ${f.isExtern ? "${f.cName}(((Res_${n}*)r)->value)" : "${f.cName}((Res_${n}*)r)"}; }
+            static Res_${n}* ${n}__new(RtMem* m, Ext_${n} v, int line) {
+                if (!(${valid})) return NULL;          /* C failed: no resource */
+                Res_${n}* c = (Res_${n}*)rt_mem_alloc(m, sizeof(Res_${n}), line);
+                c->h.state = 1;
+                c->h.release = ${n}__release;
+                c->value = v;
+                rt_mem_on_free(m, rt_res_final, c, line);
+                return c;
+            }
+            """);
+        if (only != "") { out.add("#endif\n#if ${platformCondition(only)}\n"); }
+        out.add("""
+            static inline Ext_${n} ${n}__get(Res_${n}* c, int line) {
+                if (!c || c->h.state == 0) rt_panic("a released ${shortName(n)} was used", line);
+                return c->value;
+            }
+            """);
         if (only != "") { out.add("#endif\n"); }
     }
 }
@@ -1410,15 +1430,22 @@ function collectionHelpers(out: StringBuilder, t: Type): void {
     if (isArray(t, ArrK.Growable)) {
         let n: String = structName(t);
         let e: String = cType(t.elem!);
-        out.add("static inline ${n}* ${n}_new(RtMem* mem, int line) { ${n}* l = (${n}*)rt_mem_alloc(mem, sizeof(${n}), line); l->mem = mem; return l; }\n");
-        out.add("static inline bool ${n}_push(${n}* l, ${e} v) {\n");
-        out.add("    if (l->length == l->capacity) {\n");
-        out.add("        int32_t nc = l->capacity ? (l->capacity < 0x3fffffff ? l->capacity * 2 : 0x7fffffff) : 8;\n");
-        out.add("        if (nc == l->capacity) return false;\n");
-        out.add("        ${e}* ni = (${e}*)rt_mem_try_realloc(l->mem, l->items, sizeof(${e}) * (size_t)l->capacity, sizeof(${e}) * (size_t)nc);\n");
-        out.add("        if (!ni) return false;\n        l->items = ni;\n        l->capacity = nc;\n    }\n");
-        out.add("    l->items[l->length++] = v;\n    return true;\n}\n");
-        out.add("static inline void ${n}_add(${n}* l, ${e} v, int line) { if (!${n}_push(l, v)) rt_panic(\"memory is full\", line); }\n");
+        out.add("""
+            static inline ${n}* ${n}_new(RtMem* mem, int line) { ${n}* l = (${n}*)rt_mem_alloc(mem, sizeof(${n}), line); l->mem = mem; return l; }
+            static inline bool ${n}_push(${n}* l, ${e} v) {
+                if (l->length == l->capacity) {
+                    int32_t nc = l->capacity ? (l->capacity < 0x3fffffff ? l->capacity * 2 : 0x7fffffff) : 8;
+                    if (nc == l->capacity) return false;
+                    ${e}* ni = (${e}*)rt_mem_try_realloc(l->mem, l->items, sizeof(${e}) * (size_t)l->capacity, sizeof(${e}) * (size_t)nc);
+                    if (!ni) return false;
+                    l->items = ni;
+                    l->capacity = nc;
+                }
+                l->items[l->length++] = v;
+                return true;
+            }
+            static inline void ${n}_add(${n}* l, ${e} v, int line) { if (!${n}_push(l, v)) rt_panic("memory is full", line); }
+            """);
     } else if (isArray(t, ArrK.Fixed)) {
         let n: String = structName(t);
         let e: String = cType(t.elem!);
@@ -1828,7 +1855,7 @@ function ifStmt(i: IfStmt in default): void {
 }
 
 /**
- * #when windows ... #when macos ... #else ... #end: C's #if / #elif / #else / #endif, with no braces,
+ * An if for platforms (IfStmt.platform): C's #if / #elif / #else / #endif, with no braces,
  * so what a branch declares stays for the code after it. Every branch is written (the C compiler keeps
  * one); what a branch leaves to free at the end of the block is freed only where that branch is kept.
  */

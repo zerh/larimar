@@ -73,12 +73,28 @@ public let fileNames: String[*] = [] in default;
 public let filePaths: String[*] = [] in default;
 public let fileSources: String[*] = [] in default;
 
+/**
+ * The standard library a file belongs to, when it is one of its files (std/crypto.lar open in the
+ * editor, of a copy that is not the installed one): its modules are then the ones of that copy, so
+ * that `import std.crypto` in its parts is the file being read, not another.
+ */
+function ownStd(mainPath: String in default): String? {
+    let dir: String = Paths.parent(Paths.normalize(Paths.absolute(mainPath)));
+    while (dir != "") {
+        if (Paths.fileName(dir) == "std" && readSource(Paths.join(dir, "lang.lar")) != null) { return dir.clone() in default; }
+        let up: String = Paths.parent(dir);
+        if (up == dir) { break; }
+        dir = up;
+    }
+    return null;
+}
+
 /** Links the program whose main file is `mainFile` (shown as `mainShown`). Errors go to linkErrors. */
 public let linkErrors: String[*] = [] in default;
 
 public function link(mainShown: String in default, mainSource: String in default, sourceDir: String in default, std: String in default, mainPath: String in default): Program {
     rootDir = sourceDir;
-    stdDir = std;
+    stdDir = ownStd(mainPath) ?? std;
     fileNames.push(mainShown);
     filePaths.push(mainPath);
     fileSources.push(mainSource);

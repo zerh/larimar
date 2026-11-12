@@ -538,7 +538,7 @@ public class ExternTypeInfo {
     let name: String;
     let decl: ExternTypeDecl;
     let sig: Type? = null;
-    let releasers: FunctionInfo?[*] = [];    // its releaser, when released
+    let releaser: FunctionInfo? = null;      // released by f: f
     /** A pointer to a C function that gets a Context: the Larimar function it stands for (without the Context). */
     let view: Type? = null;
     let ctxIndex: int32 = -1;

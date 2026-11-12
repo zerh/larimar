@@ -1,23 +1,33 @@
-// codegen.prune: only the generated C the program reaches. The same idea as rtselect, applied to the program:
-// the C is cut into declarations (a function, a type, a helper, a prototype, a global), and a
-// declaration is kept when it defines a name that a kept declaration uses. The roots are main, the
-// export functions, and what the program wrote in C itself (cinclude, ccode), which stays whole.
-// The ccode of the standard library ("ccode (std)") is cut like the rest: only what is used stays.
-// So unused functions and methods of std, the types only their signatures mention, the helpers of
-// those types, and the runtime only they needed, all leave the C.
+// codegen.prune: only the C the program reaches, of what it generates and of the runtime.
+//
+// The C is cut into pieces: the generated program into declarations (a function, a type, a helper, a
+// prototype, a global), the runtime into paragraphs (blank lines outside braces and #if blocks; each
+// #include is one). A piece is kept when it defines a name that a kept piece uses. For the program, the
+// roots are main, the export functions, and what the program wrote in C itself (cinclude, ccode), which
+// stays whole; the ccode of the standard library ("ccode (std)") is cut like the rest. For the runtime,
+// the roots are the names the pruned program uses; #ifdef RT_THREADS and #ifdef RT_FILES are decided here.
+//
+// The runtime itself is C, in the ccode of std/runtime/*.lar (read in the order of runtimeFiles): editing
+// it does not change the compiler, nor the bootstrap.
 
-import codegen.runtimeselect { tokens, isName };
+import std.text { isIdentifierPart, isDigit };
+import std.io.path as Paths;
+import std.io.files as Files;
+import std.io { IoError };
+import semantics.linker { stdDir };
 
-/** A declaration of the generated C, or a section heading. */
+/** A piece of C: a declaration of the program, a paragraph of the runtime, or a heading over them. */
 class Piece {
     let text: String;
-    let section: int32;                 // the heading it is under (-1: before any)
     let heading: bool = false;
-    let root: bool = false;
+    let root: bool = false;             // kept whatever uses it (what the program wrote in C)
+    let include: bool = false;          // an #include of the runtime
     let blankAfter: bool = false;
     let defines: String[*] = [];
     let uses: String[*] = [];
 }
+
+// ---- the program ----------------------------------------------------------------------------------
 
 /** Sections written by the program itself: they stay whole, and what they use is kept. */
 function rootSection(title: String): bool {
@@ -29,83 +39,33 @@ public function prune(program: String, roots: String[*]): String {
     let pieces: Piece[*] = [];
     let cur: String[*] = [];
     let depth: int32 = 0;
-    let section: int32 = -1;
     let title: String = "";
-    let lines: String[*] = program.split("\n");
-    for (ln in lines) {
+    inComment = false;
+    for (ln in program.split("\n")) {
         let t: String = ln.trim();
         if (depth == 0 && t.startsWith("/* ---- ") && t.endsWith("*/")) {
-            flush(pieces, cur, section, rootSection(title));
-            cur.clear();
-            title = sectionTitle(t);
-            pieces.push(newPiece(ln, pieces.length, true));
-            section = pieces.length - 1;
+            flush(pieces, cur, rootSection(title));
+            title = t.substring(8, t.indexOf(" -", 8) ?? t.length);          // after "/* ---- "
+            pieces.push(Piece { text: ln.clone(), heading: true });
             continue;
         }
         if (depth == 0 && t.isEmpty()) {
-            if (cur.length > 0) {
-                flush(pieces, cur, section, rootSection(title));
-                cur.clear();
-            }
+            flush(pieces, cur, rootSection(title));
             if (pieces.length > 0) { pieces[pieces.length - 1].blankAfter = true; }
             continue;
         }
         cur.push(ln);
         if (rootSection(title)) { continue; }               // whole, up to the next heading
         depth += braceDelta(ln);
-        if (depth == 0 && (t.endsWith(";") || t.endsWith("}") || t.startsWith("#"))) {
-            flush(pieces, cur, section, t.startsWith("#"));
-            cur.clear();
-        }
+        if (depth == 0 && (t.endsWith(";") || t.endsWith("}") || t.startsWith("#"))) { flush(pieces, cur, t.startsWith("#")); }
     }
-    flush(pieces, cur, section, rootSection(title));
+    flush(pieces, cur, rootSection(title));
 
-    // name -> the pieces that define it
-    let byName: Any = {};
-    let defs: int32[*] = [];
-    let next: int32[*] = [];
-    let heads: int32[*] = [];
-    for (i, p in pieces) {
-        for (d in p.defines) {
-            let slot: int32 = (byName[d] as int32 ?? -1);
-            if (slot < 0) {
-                slot = heads.length;
-                heads.push(-1);
-                byName[d] = slot;
-            }
-            defs.push(i);
-            next.push(heads[slot]);
-            heads[slot] = defs.length - 1;
-        }
-    }
-    let keep: bool[*] = [];
-    for (p in pieces) { keep.push(false); }
-    let work: int32[*] = [];
-    for (i, p in pieces) {
-        if (p.root) {
-            keep[i] = true;
-            work.push(i);
-        }
-    }
-    for (r in roots) { mark(r, byName, heads, defs, next, keep, work); }
-    let w: int32 = 0;
-    while (w < work.length) {
-        for (u in pieces[work[w]].uses) { mark(u, byName, heads, defs, next, keep, work); }
-        w += 1;
-    }
-
+    let keep: bool[*] = reach(pieces, roots);
     let out: StringBuilder = {};
     for (i, p in pieces) {
-        let emit: bool = keep[i];
-        if (p.heading) {                                     // a heading goes with what is kept under it
-            let j: int32 = i + 1;
-            while (j < pieces.length && !pieces[j].heading) {
-                if (keep[j]) { emit = true; }
-                j += 1;
-            }
-            if (emit) { out.add("\n"); }
-        }
-        if (!emit) { continue; }
+        if (!kept(pieces, keep, i)) { continue; }
+        if (p.heading) { out.add("\n"); }
         out.add(p.text);
         out.add("\n");
         if (p.blankAfter && !p.heading) { out.add("\n"); }
@@ -113,58 +73,238 @@ public function prune(program: String, roots: String[*]): String {
     return out.toString();
 }
 
-function sectionTitle(t: String): String {
-    let s: String = t.substring(8);                          // after "/* ---- "
-    let end: int32 = s.indexOf(" -") ?? s.length;
-    return s.substring(0, end);
-}
-
-function flush(pieces: Piece[*], lines: String[*], section: int32, root: bool): void {
+/** The lines gathered so far become a piece. */
+function flush(pieces: Piece[*], lines: String[*], root: bool): void {
     if (lines.length == 0) { return; }
-    pieces.push(newPiece(lines.join("\n"), section, false));
-    let p: Piece = pieces[pieces.length - 1];
-    p.root = root;
-    describe(p);
+    pieces.push(Piece { text: lines.join("\n").clone(), root });
+    describe(pieces[pieces.length - 1]);
+    lines.clear();
 }
 
-/** A piece, created where the caller puts it. */
-function newPiece(text: String, section: int32, heading: bool): Piece {
-    return Piece { text: text.clone(), section, heading };
+// ---- the runtime ----------------------------------------------------------------------------------
+
+/** The runtime's files, in std/runtime, in the order their C is written. */
+let runtimeFiles: String[*] = ["base", "threads", "panic", "memory", "thread", "string", "string_methods", "integer", "class", "any"];
+
+/** The C of a runtime file: between "ccode {" and the last "}" (each file is that one ccode). */
+function runtimeC(file: String): String {
+    let marker: int32 = file.indexOf("ccode {") ?? -1;
+    let close: int32 = file.lastIndexOf("}") ?? -1;
+    return marker >= 0 && close > marker + 7 ? file.substring(marker + 7, close) : "";
 }
 
-function mark(name: String, byName: Any, heads: int32[*], defs: int32[*], next: int32[*], keep: bool[*], work: int32[*]): void {
-    let slot: int32 = (byName[name] as int32 ?? -1);
-    if (slot < 0) { return; }
-    let e: int32 = heads[slot];
-    while (e >= 0) {
-        let i: int32 = defs[e];
-        if (!keep[i]) {
-            keep[i] = true;
-            work.push(i);
+/** The runtime's C, read once from std/runtime (an #error line for C if a file is missing). */
+let runtimeRead: String? = null;
+function runtimeSource(): String {
+    if (runtimeRead != null) { return runtimeRead!; }
+    let text: String = "";
+    for (name in runtimeFiles) {
+        let path: String = Paths.join(Paths.join(stdDir, "runtime"), "${name}.lar");
+        try {
+            text = "${text}${runtimeC(Files.readString(path))}";
+        } catch (IoError e) {
+            text = "${text}#error \"Larimar's runtime was not found: ${path} (set LARIMAR_HOME to the folder that has std/)\"\n";
         }
-        e = next[e];
     }
+    runtimeRead = text.clone() in default;
+    return text;
 }
 
-/** The braces a line opens minus those it closes (strings and comments left out). */
-public function braceDelta(ln: String): int32 {
-    let d: int32 = 0;
-    for (t in tokens(ln)) {
-        if (t == "{") { d += 1; } else if (t == "}") { d -= 1; }
-    }
-    return d;
+/** What each standard header gives (enough for the runtime and for the generated code). */
+const HEADER_NAMES: String = "stdint.h stdbool.h stddef.h stdio.h stdlib.h string.h";
+const HEADER_STDINT: String = "int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t intptr_t uintptr_t INT8_MIN INT8_MAX INT16_MIN INT16_MAX INT32_MIN INT32_MAX INT64_MIN INT64_MAX UINT8_MAX UINT16_MAX UINT32_MAX UINT64_MAX SIZE_MAX";
+const HEADER_STDBOOL: String = "bool true false";
+const HEADER_STDDEF: String = "size_t NULL ptrdiff_t offsetof";
+const HEADER_STDIO: String = "FILE stdout stderr stdin printf fprintf snprintf sprintf fputs fputc puts putchar fwrite fread fflush fopen fclose fgets getchar EOF";
+const HEADER_STDLIB: String = "malloc calloc realloc free exit abort strtod strtol strtoll strtoul strtoull getenv system atoi";
+const HEADER_STRING: String = "memcpy memmove memset memcmp memchr strlen strcmp strncmp strchr strrchr strstr strpbrk strcpy strncpy strcat";
+
+function headerNames(i: int32): String {
+    return switch (i) {
+        case 0 -> HEADER_STDINT;
+        case 1 -> HEADER_STDBOOL;
+        case 2 -> HEADER_STDDEF;
+        case 3 -> HEADER_STDIO;
+        case 4 -> HEADER_STDLIB;
+        default -> HEADER_STRING;
+    };
 }
 
-/** What a declaration defines (at its top level) and every name it uses. */
+/**
+ * The runtime the program needs, in the runtime's order. allHeaders: the program has its own C
+ * (ccode, native), which may count on the standard headers.
+ */
+public function selectRuntime(program: String, threads: bool, files: bool, allHeaders: bool): String {
+    let pieces: Piece[*] = [];
+    let cur: String[*] = [];
+    let braces: int32 = 0;
+    let pp: int32 = 0;
+    inComment = false;
+    for (ln in resolve(runtimeSource(), threads, files)) {     // paragraphs; each #include is one
+        let t: String = ln.trim();
+        if (braces == 0 && pp == 0 && (t.isEmpty() || t.startsWith("#include"))) {
+            paragraph(pieces, cur);
+            if (!t.isEmpty()) { pieces.push(includePiece(ln)); }
+            continue;
+        }
+        cur.push(ln);
+        if (t.startsWith("#if")) { pp += 1; } else if (t.startsWith("#endif")) { pp -= 1; }
+        braces += braceDelta(ln);
+    }
+    paragraph(pieces, cur);
+
+    let wanted: String[*] = names(program);
+    if (allHeaders) {
+        for (i in 0..6) { wanted.push(headerNames(i).split(" ")[0].clone()); }
+    }
+    let keep: bool[*] = reach(pieces, wanted);
+    let out: StringBuilder = {};
+    let lastInclude: bool = false;
+    for (i, p in pieces) {
+        if (!kept(pieces, keep, i)) { continue; }
+        if (out.length > 0 && !(lastInclude && p.include)) { out.add("\n"); }
+        out.add(p.text);
+        out.add("\n");
+        lastInclude = p.include;
+    }
+    return out.toString();
+}
+
+/** The lines gathered so far become a paragraph: a heading when it is only a comment. */
+function paragraph(pieces: Piece[*], lines: String[*]): void {
+    if (lines.length == 0) { return; }
+    pieces.push(Piece { text: lines.join("\n").clone() });
+    let p: Piece = pieces[pieces.length - 1];
+    describe(p);
+    p.heading = p.defines.length == 0 && p.uses.length == 0;
+    lines.clear();
+}
+
+/** #include <stdio.h>: it defines what that header gives. */
+function includePiece(line: String): Piece {
+    let p: Piece = Piece { text: line.clone(), include: true };
+    let t: String = line.trim();
+    let header: String = t.substring((t.indexOf("<") ?? 0) + 1, t.indexOf(">") ?? t.length);
+    for (i, name in HEADER_NAMES.split(" ")) {
+        if (name != header) { continue; }
+        for (d in headerNames(i).split(" ")) { p.defines.push(d.clone()); }
+    }
+    return p;
+}
+
+/** Keeps the lines that apply: #ifdef RT_THREADS / RT_FILES (and their #else) are decided; other #if stay. */
+function resolve(text: String, threads: bool, files: bool): String[*] {
+    let out: String[*] = [];
+    // the open #if blocks: known (decided here), cond, and whether the lines around were kept
+    let known: bool[*] = [];
+    let cond: bool[*] = [];
+    let parent: bool[*] = [];
+    let top: int32 = 0;
+    let active: bool = true;
+    for (ln in text.split("\n")) {
+        let t: String = ln.trim();
+        if (t.startsWith("#ifdef ") || t.startsWith("#ifndef ") || t.startsWith("#if ")) {
+            let macro: String = "";
+            if (!t.startsWith("#if ")) { macro = t.substring((t.indexOf(" ") ?? 0) + 1).trim(); }
+            let k: bool = macro == "RT_THREADS" || macro == "RT_FILES";
+            let defined: bool = macro == "RT_THREADS" ? threads : files;
+            let c: bool = t.startsWith("#ifdef ") == defined;
+            if (top < known.length) {
+                known[top] = k;
+                cond[top] = c;
+                parent[top] = active;
+            } else {
+                known.push(k);
+                cond.push(c);
+                parent.push(active);
+            }
+            top += 1;
+            if (!k && active) { out.push(ln); }
+            active = active && (!k || c);
+            continue;
+        }
+        if ((t.startsWith("#else") || t.startsWith("#elif") || t.startsWith("#endif")) && top > 0) {
+            let f: int32 = top - 1;
+            if (t.startsWith("#endif")) {
+                top -= 1;
+                active = parent[f];
+                if (!known[f] && active) { out.push(ln); }
+                continue;
+            }
+            if (known[f]) {
+                cond[f] = !cond[f];
+                active = parent[f] && cond[f];
+            } else if (parent[f]) {
+                out.push(ln);
+            }
+            continue;
+        }
+        if (active) { out.push(ln); }
+    }
+    return out;
+}
+
+// ---- what is reached ------------------------------------------------------------------------------
+
+/** For each piece, whether it is kept: a root, or one that defines a name wanted or used by a kept one. */
+function reach(pieces: Piece[*], wanted: String[*]): bool[*] {
+    let slots: Any = {};                // name -> the pieces that define it, a chain through next
+    let heads: int32[*] = [];
+    let definer: int32[*] = [];
+    let next: int32[*] = [];
+    let keep: bool[*] = [];
+    let queue: String[*] = [];          // the names to follow (the order does not change the result)
+    for (w in wanted) { queue.push(w); }
+    for (i, p in pieces) {
+        keep.push(p.root);
+        if (p.root) {
+            for (u in p.uses) { queue.push(u); }
+        }
+        for (d in p.defines) {
+            let slot: int32 = (slots[d] as int32 ?? -1);
+            if (slot < 0) {
+                slot = heads.length;
+                heads.push(-1);
+                slots[d] = slot;
+            }
+            definer.push(i);
+            next.push(heads[slot]);
+            heads[slot] = definer.length - 1;
+        }
+    }
+    let q: int32 = 0;
+    while (q < queue.length) {
+        let slot: int32 = (slots[queue[q]] as int32 ?? -1);
+        q += 1;
+        let e: int32 = slot < 0 ? -1 : heads[slot];
+        while (e >= 0) {
+            let i: int32 = definer[e];
+            if (!keep[i]) {
+                keep[i] = true;
+                for (u in pieces[i].uses) { queue.push(u); }
+            }
+            e = next[e];
+        }
+    }
+    return keep;
+}
+
+/** A piece that is kept; a heading goes with what is kept under it. */
+function kept(pieces: Piece[*], keep: bool[*], i: int32): bool {
+    if (keep[i] || !pieces[i].heading) { return keep[i]; }
+    let j: int32 = i + 1;
+    while (j < pieces.length && !pieces[j].heading) {
+        if (keep[j]) { return true; }
+        j += 1;
+    }
+    return false;
+}
+
+/** What a piece defines (at its top level) and every name it uses. */
 function describe(p: Piece): void {
     let toks: String[*] = tokens(p.text);
-    let seen: Any = {};
-    for (t in toks) {
-        if (isName(t) && !seen.contains(t)) {
-            seen[t] = true;
-            p.uses.push(t.clone());
-        }
-    }
+    for (n in unique(toks)) { p.uses.push(n.clone()); }
+    let defined: Any = {};
     let braces: int32 = 0;
     let parens: int32 = 0;
     let i: int32 = 0;
@@ -172,66 +312,151 @@ function describe(p: Piece): void {
         let t: String = toks[i];
         let prev: String = i > 0 ? toks[i - 1] : "";
         let after: String = i + 1 < toks.length ? toks[i + 1] : "";
-        if (t == "{") {
-            braces += 1;
-        } else if (t == "}") {
-            braces -= 1;
-        } else if (t == "(") {
-            parens += 1;
-        } else if (t == ")") {
-            parens -= 1;
+        switch (t) {
+            case "{" -> { braces += 1; }
+            case "}" -> { braces -= 1; }
+            case "(" -> { parens += 1; }
+            case ")" -> { parens -= 1; }
+            default -> {}
         }
-        if (braces != 0 || parens != 0 || !isName(t)) {
-            i += 1;
-            continue;
-        }
-        if (t == "typedef") {                                // typedef struct A ... B;  typedef X B;
-            if (after == "struct" && i + 2 < toks.length) { define(p, toks[i + 2]); }
-            let d: int32 = 0;
-            let j: int32 = i + 1;
-            while (j < toks.length) {
-                let x: String = toks[j];
-                if (x == "{") {
-                    d += 1;
-                } else if (x == "}") {
-                    d -= 1;
-                } else if (x == ";" && d == 0) {
-                    break;
-                }
-                j += 1;
-            }
-            if (j < toks.length && isName(toks[j - 1])) { define(p, toks[j - 1]); }
-            let k: int32 = i + 1;                            // typedef R (*Name)(...);
-            while (k + 3 < j) {
+        i += 1;
+        if (braces != 0 || parens != 0 || !isName(t)) { continue; }
+        let found: String = "";
+        if (prev == "#" && t == "define" && isName(after)) {
+            found = after;
+        } else if (t == "typedef") {                         // typedef struct A ... B;  typedef X B;  typedef R (*B)(...);
+            if (after == "struct" && i + 1 < toks.length) { define(p, defined, toks[i + 1]); }
+            let end: int32 = statementEnd(toks, i);
+            if (end < toks.length && isName(toks[end - 1])) { define(p, defined, toks[end - 1]); }
+            let k: int32 = i;
+            while (k + 3 < end && toks[k] != "{") {          // (a field of a struct is not a name of the piece)
                 if (toks[k] == "(" && toks[k + 1] == "*" && isName(toks[k + 2]) && toks[k + 3] == ")") {
-                    define(p, toks[k + 2]);
+                    define(p, defined, toks[k + 2]);
                     break;
                 }
                 k += 1;
             }
-            i = j;
-        } else if (t == "struct" && isName(after) && i + 2 < toks.length && toks[i + 2] == "{") {
-            define(p, after);
-        } else if (t == "enum" && (after == "{" || isName(after) && i + 2 < toks.length && toks[i + 2] == "{")) {
-            // enum { A = 0, B = 1 };  enum Shape_Tag { Shape_Circle = 0, ... };
-            let j: int32 = after == "{" ? i + 2 : i + 3;
-            if (after != "{") { define(p, after); }
+            i = end + 1;
+        } else if (t == "struct" && isName(after) && i + 1 < toks.length && toks[i + 1] == "{") {
+            found = after;
+        } else if (t == "enum" && (after == "{" || isName(after) && i + 1 < toks.length && toks[i + 1] == "{")) {
+            if (after != "{") { define(p, defined, after); }       // enum { A = 0, B };  enum Tag { A, B };
+            let j: int32 = after == "{" ? i + 1 : i + 2;
             while (j < toks.length && toks[j] != "}") {
-                let x: String = toks[j];
-                let y: String = j + 1 < toks.length ? toks[j + 1] : "";
-                if (isName(x) && (y == "," || y == "}" || y == "=")) { define(p, x); }
+                let then: String = j + 1 < toks.length ? toks[j + 1] : "";
+                if (isName(toks[j]) && (then == "," || then == "}" || then == "=")) { define(p, defined, toks[j]); }
                 j += 1;
             }
-        } else if ((after == "(" || after == "=" || after == "[" || after == ";") && (isName(prev) || prev == "*") && prev != "return") {
-            define(p, t);
+        } else if ((after == "(" || after == "=" || after == "[" || after == ";") && (isName(prev) || prev == "*") && prev != "return" && prev != "define") {
+            found = t;                                       // a function, a variable, a prototype
         }
-        i += 1;
+        if (found != "") { define(p, defined, found); }
     }
 }
 
-function define(p: Piece, name: String): void {
-    for (d in p.defines) {
-        if (d == name) { return; }
+/** Where the statement that starts at `from` ends: its `;` outside braces (toks.length if none). */
+function statementEnd(toks: String[*], from: int32): int32 {
+    let depth: int32 = 0;
+    let j: int32 = from;
+    while (j < toks.length) {
+        if (toks[j] == "{") { depth += 1; } else if (toks[j] == "}") { depth -= 1; } else if (toks[j] == ";" && depth == 0) { break; }
+        j += 1;
     }
+    return j;
+}
+
+function define(p: Piece, defined: Any, name: String): void {
+    if (defined.contains(name)) { return; }
+    defined[name] = true;
     p.defines.push(name.clone());
+}
+
+/** The names of some tokens, each once. */
+function unique(toks: String[*]): String[*] {
+    let seen: Any = {};
+    let out: String[*] = [];
+    for (t in toks) {
+        if (!isName(t) || seen.contains(t)) { continue; }
+        seen[t] = true;
+        out.push(t);
+    }
+    return out;
+}
+
+/** The names a C text mentions, each once (comments, strings and character literals left out). */
+function names(c: String): String[*] { return unique(tokens(c)); }
+
+// ---- reading C ------------------------------------------------------------------------------------
+
+/** Inside a block comment that started on an earlier line. */
+let inComment: bool = false;
+
+/** The braces a line opens minus those it closes (strings and comments left out). */
+public function braceDelta(ln: String): int32 {
+    let d: int32 = 0;
+    let i: int32 = 0;
+    while (i < ln.length) {
+        let c: byte = ln[i];
+        if (inComment) {
+            if (c == '*' && i + 1 < ln.length && ln[i + 1] == '/') {
+                inComment = false;
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+        if (c == '/' && i + 1 < ln.length && ln[i + 1] == '*') {
+            inComment = true;
+            i += 2;
+            continue;
+        }
+        if (c == '/' && i + 1 < ln.length && ln[i + 1] == '/') { break; }
+        if (c == '"' || c == '\'') {
+            i += 1;
+            while (i < ln.length && ln[i] != c) {
+                if (ln[i] == '\\') { i += 1; }
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+        if (c == '{') { d += 1; } else if (c == '}') { d -= 1; }
+        i += 1;
+    }
+    return d;
+}
+
+public function isName(t: String): bool { return !t.isEmpty() && letter(t[0]); }
+
+function letter(c: byte): bool { return isIdentifierPart(c) && !isDigit(c); }
+
+/** C tokens: names, numbers and single punctuation characters; comments, strings and characters are skipped. */
+public function tokens(c: String): String[*] {
+    let out: String[*] = [];
+    let i: int32 = 0;
+    let n: int32 = c.length;
+    while (i < n) {
+        let ch: byte = c[i];
+        if (ch == '/' && i + 1 < n && c[i + 1] == '*') {
+            let end: int32 = c.indexOf("*/", i + 2) ?? -1;
+            i = end < 0 ? n : end + 2;
+        } else if (ch == '/' && i + 1 < n && c[i + 1] == '/') {
+            while (i < n && c[i] != '\n') { i += 1; }
+        } else if (ch == '"' || ch == '\'') {
+            i += 1;
+            while (i < n && c[i] != ch) {
+                if (c[i] == '\\') { i += 1; }
+                i += 1;
+            }
+            i += 1;
+        } else if (isIdentifierPart(ch)) {
+            let start: int32 = i;
+            while (i < n && isIdentifierPart(c[i])) { i += 1; }
+            out.push(c.substring(start, i));
+        } else {
+            if (ch > ' ') { out.push(c.substring(i, i + 1)); }
+            i += 1;
+        }
+    }
+    return out;
 }

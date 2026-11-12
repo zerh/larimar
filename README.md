@@ -87,7 +87,7 @@ larimar/
 │   ├── main.lar         the commands
 │   ├── syntax/          lexer, parser, ast
 │   ├── semantics/       linker (modules), types, analyzer, expressions
-│   ├── codegen/         gen, expressions, runtimeselect, prune, debugmap
+│   ├── codegen/         gen, expressions, prune, debugmap
 │   ├── editor/          session (larimar check), lsp, ide, docstore, dap
 │   └── project/         cc (the C compiler), testing (larimar test), libraries
 ├── std/                 the standard library (io, os, net, thread, encoding, text, time...); std/runtime: the runtime
@@ -164,8 +164,7 @@ checks all of it.
 | semantics/expressions.lar | Expression type checking, method resolution |
 | codegen/gen.lar | C code generation for statements |
 | codegen/expressions.lar | C code generation for expressions |
-| codegen/runtimeselect.lar | Runtime selection: only the pieces of the runtime (std/runtime) the program uses |
-| codegen/prune.lar | Keeps only the generated C the program reaches |
+| codegen/prune.lar | Only the C the program reaches: of what it generates, and of the runtime (std/runtime) |
 | codegen/debugmap.lar | Debug map: C names and types of every variable, for the debugger |
 | editor/session.lar | One analysis without C; larimar check |
 | editor/lsp.lar | Language server: JSON-RPC, documents, forked analyses |

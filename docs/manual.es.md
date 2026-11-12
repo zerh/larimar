@@ -5344,7 +5344,7 @@ larimar/
     main.lar               los comandos (new, build, run, test, check, lsp, dap)
     syntax/                del texto al árbol: lexer, parser, ast
     semantics/             entender el programa: módulos (linker), tipos, análisis, expresiones
-    codegen/               del árbol a C: gen, expresiones, runtimeselect, prune, mapa de depuración
+    codegen/               del árbol a C: gen, expresiones, prune, mapa de depuración
     editor/                larimar check, lsp y dap
     project/               el compilador de C, larimar test (larimar.toml se lee con std.encoding.toml)
   std/                   la biblioteca estándar (std/runtime: el runtime, el C bajo cada programa)
@@ -5387,7 +5387,7 @@ estándar en `$LARIMAR_HOME/std`, y el runtime en `$LARIMAR_HOME/std/runtime`.
 
 **El runtime es C, no Larimar.** Las memorias, los textos, `Any`, las clases y los hilos son el suelo
 sobre el que se apoya el C generado, así que están escritos en C: el `ccode` de `std/runtime/*.lar` (un archivo por
-parte, en el orden en que los lista `codegen/runtimeselect.lar`). El compilador los lee al generar un
+parte, en el orden en que los lista `codegen/prune.lar`). El compilador los lee al generar un
 programa y se queda solo con los párrafos que usa. Cambiar el runtime no cambia el compilador: no hace
 falta regenerar `bootstrap/larimarc.c`, solo volver a pasar las pruebas.
 

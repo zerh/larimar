@@ -29,6 +29,12 @@ part of it, in the folder of its name.
 - `std.math`: C's math by its names (`sqrt`, `pow`, `floor`, `sin`...), `PI`, `E`, `min`, `max`, and
   `Random`, a fast sequence that repeats with its seed.
 - `larimar`: its commands are a `switch`, and its help a text block.
+- The compiler: `codegen/runtimeselect.lar` and `codegen/prune.lar` are one module (one way to cut C into
+  pieces and to follow what is reached, for the program and for the runtime); the generated C is the same.
+  A resource type has one releaser; fixed C is written as text blocks; what `#when` left behind is gone.
+- A file of a copy of the standard library (a repository's `std/crypto.lar`, open in an editor whose
+  installed Larimar is another) is checked against that copy: it showed *Switch value: expected
+  RandomSource but got std.crypto.posix.UrandomSource*.
 - The manuals and the specification are in `docs/`, next to the page that shows them (`manual.html`
   reads the ones published with it). The manual explains `native struct` and `native type`, and where
   `c"..."` is needed; the page no longer speaks of `#when`.

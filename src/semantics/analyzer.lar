@@ -862,35 +862,25 @@ function externValue(v: ExternValueDecl in default): void {
 
 /** released by f: f takes exactly one X and returns nothing useful; only release() calls it. */
 function externResource(e: ExternTypeInfo in default): void {
-    if (e.decl.releasedBy == "") { return; }
-    let all: ExternTypeDecl[*] = [e.decl];
-    let self_: Type = named(e.name, NamedK.Extern);
-    for (d in all) {
-        if (d.func != null) {
-            error(d.line, "A pointer to a C function cannot be a resource.");
-            e.releasers.push(null);
-            continue;
-        }
-        let fi: FunctionInfo? = functionOf(d.releasedBy);
-        if (fi == null || fi.sig == null) {
-            error(d.line, "'${d.releasedBy}' (that releases '${e.name}') is not a function: declare it, e.g. native function ${d.releasedBy}(x: ${e.name}): void;");
-            e.releasers.push(null);
-            continue;
-        }
-        let ps: Type[*] = fi.sig!.params;
-        if (ps.length != 1 || ps[0] != self_ || fi.varargs) {
-            error(d.line, "'${d.releasedBy}' releases '${e.name}', so it must take exactly one ${e.name}: ${d.releasedBy}(x: ${e.name}).");
-        }
-        if (fi.throwsType != null) { error(d.line, "'${d.releasedBy}' releases '${e.name}' when a memory is freed: it cannot throw."); }
-        let fe: ExternFunctionDecl? = fi.ext;
-        if (fe != null && fe.platform != "" && d.platform != "" && !platformWithin(d.platform, fe.platform)) {
-            error(d.line, "'${d.releasedBy}' exists only on ${fe.platform}, but '${e.name}' is declared for ${d.platform}.");
-        }
-        // a resource of one platform only (a DIR* of Unix): the type exists everywhere, its cells only there
-        if (fi.releases != "" && fi.releases != e.name) { error(d.line, "'${d.releasedBy}' already releases '${fi.releases}'."); }
-        fi.releases = e.name;
-        e.releasers.push(fi);
+    let d: ExternTypeDecl = e.decl;
+    if (d.releasedBy == "") { return; }
+    if (d.func != null) {
+        error(d.line, "A pointer to a C function cannot be a resource.");
+        return;
     }
+    let fi: FunctionInfo? = functionOf(d.releasedBy);
+    if (fi == null || fi.sig == null) {
+        error(d.line, "'${d.releasedBy}' (that releases '${e.name}') is not a function: declare it, e.g. native function ${d.releasedBy}(x: ${e.name}): void;");
+        return;
+    }
+    let ps: Type[*] = fi.sig!.params;
+    if (ps.length != 1 || ps[0] != named(e.name, NamedK.Extern) || fi.varargs) {
+        error(d.line, "'${d.releasedBy}' releases '${e.name}', so it must take exactly one ${e.name}: ${d.releasedBy}(x: ${e.name}).");
+    }
+    if (fi.throwsType != null) { error(d.line, "'${d.releasedBy}' releases '${e.name}' when a memory is freed: it cannot throw."); }
+    if (fi.releases != "" && fi.releases != e.name) { error(d.line, "'${d.releasedBy}' already releases '${fi.releases}'."); }
+    fi.releases = e.name;       // (a resource of one platform, a DIR* of Unix: the type exists everywhere, its cells only there)
+    e.releaser = fi;
 }
 
 /** ...: String = c_f released by r: r is a native function that takes the text (one String); only the compiler calls it. */
@@ -2661,13 +2651,13 @@ function analyzeReturn(r: ReturnStmt in default): void {
     }
 }
 
-/** The platform the code being analyzed runs on: inside `#when windows`, "windows" ("" any). */
+/** The platform the code being analyzed runs on: inside what is for windows, "windows" ("" any). */
 public let platformCtx: String = "";
 
 /**
- * #when a ... #when b ... #else ... #end. Every branch is checked, each for its platform, in the block
+ * An if for platforms (IfStmt.platform): a ... b ... else. Every branch is checked, each for its platform, in the block
  * around (there is no block of its own). A name every branch declares, with the same type, stays for
- * the code after #end (one C name for all of them); what only some declare belongs to its branch.
+ * the code after it (one C name for all of them); what only some declare belongs to its branch.
  */
 function analyzeWhen(i: IfStmt in default): void {
     let outer: String = platformCtx;
@@ -2687,7 +2677,7 @@ function analyzeWhen(i: IfStmt in default): void {
             cur = n;
             continue;
         }
-        covered = true;                      // the others: after `#when windows`, unix; and the reverse
+        covered = true;                      // the others: after windows, unix; and the reverse
         let rest: String = seen.length == 1 && seen[0] == "windows" ? "unix" : seen.length == 1 && seen[0] == "unix" ? "windows" : outer;
         whenBranch(cur.elseBody, rest, seen.length, syms, branchOf, blk);
         seen.push("");
@@ -2727,7 +2717,7 @@ function analyzeWhen(i: IfStmt in default): void {
     scope = stmtScope;
 }
 
-/** One branch of #when, checked for `platform`; what it declares is hidden until every branch is seen. */
+/** One branch of an if for platforms, checked for `platform`; what it declares is hidden until every branch is seen. */
 function whenBranch(body: Stmt[*] in default, platform: String in default, branch: int32, syms: int32[*] in default, branchOf: int32[*] in default, blk: Scope in default): void {
     platformCtx = platform;
     let start: int32 = allSymbols.length;
@@ -2743,7 +2733,7 @@ function whenBranch(body: Stmt[*] in default, platform: String in default, branc
         syms.push(k);
         branchOf.push(branch);
         blk.names[s.name] = -1;                     // the next branch may declare it again
-        // unique in C (the block may declare the name again after #end); once: a nested #when already did
+        // unique in C (the block may declare the name again after it); once: a nested one already did
         if (!s.cName.contains("__w")) { s.cName = "${s.cName}__w${s.id}" in default; }
     }
 }
