@@ -4421,7 +4421,7 @@ main = "src/main.lar"        # por defecto; su carpeta es la raíz de los módul
 output = "dist/melody"       # por defecto build/<name> (build/<name>.exe en Windows; una biblioteca: la carpeta build/<name>)
 
 [library]                    # solo con kind = "library"
-type = "static"              # por defecto; o "dynamic"
+type = "package"             # por defecto; o "static", "dynamic"
 prefix = "mel"               # con qué empiezan sus nombres de C: mel_play (por defecto, el nombre)
 
 [c]
@@ -4438,22 +4438,19 @@ dynamic_library_paths = ["libs"]     # dónde están (-L), y dónde las busca el
 Las rutas son relativas a la carpeta del proyecto. Una clave o sección desconocida es un error, para
 que una errata no pase desapercibida.
 
-**Dependencias.** `[dependencies]` nombra las bibliotecas que usa el proyecto y sus versiones:
+**Paquetes.** `[packages]` nombra las bibliotecas escritas en Larimar que usa el proyecto, cada una con
+la carpeta que la tiene:
 
 ```toml
-[dependencies]
-sql = "github.com/zerh/sql@v1.2.0"
+[packages]
+textkit = "libs/textkit.lpk"
 ```
 
-Cada una va en `deps/<nombre>/` (el compilador no las descarga: se copian o se clonan ahí).
-El compilador solo lee los nombres, y hace tres cosas con ellos:
-
-- **Un import busca también en las dependencias**: cuando `import sql.core;` no está en `src/`, se busca en
-  `deps/*/src/` (`deps/sql/src/sql/core.lar`). Un módulo que está en dos dependencias es un error que nombra las dos.
-- **El C de cada dependencia se suma al del proyecto**: las `static_libraries`, `dynamic_libraries`, sus
-  rutas, `include_paths` y `sources` de `deps/<nombre>/larimar.toml` (su `[c]` y las secciones de su plataforma), con sus rutas
-  relativas a la carpeta de la dependencia.
-- **Una dependencia que no está en `deps/` es un error**: `'sql' is in [dependencies] but not in deps/: put it in deps/sql`.
+Un paquete es lo que `larimar build` hace de una biblioteca ([capítulo 27](#27-bibliotecas-escritas-en-larimar)):
+su C, el C que trae, y el `.lar` que lee `import textkit`, en un archivo (`textkit.lpk`) o como la carpeta
+con lo mismo (`textkit = "libs/textkit"`). El compilador no lo descarga: el archivo se copia ahí, y se
+desempaqueta en `build/packages/` al construir o comprobar el proyecto. Un archivo que no es un paquete, o
+una carpeta sin su `textkit.interface`, es un error que lo dice.
 
 **Por plataforma.** `[c.linux]`, `[c.macos]`, `[c.windows]` y `[c.unix]` (Linux y macOS) llevan las mismas
 claves que `[c]` y solo cuentan en esa plataforma: sus listas se suman a las de `[c]`, y un `compiler` ahí
@@ -4501,7 +4498,7 @@ está. Hay cinco formas de traer una biblioteca, según cómo venga:
 | **Biblioteca estática** (`.a`) | `static_libraries = ["sqlite3"]` y `static_library_paths = ["vendor/lib"]` | queda dentro del ejecutable, aunque haya una dinámica al lado |
 | **Biblioteca dinámica propia** (`.so`, `.dylib`, `.dll`) | `dynamic_libraries = ["tone"]` y `dynamic_library_paths = ["vendor/lib"]` | el ejecutable la carga al arrancar, desde esa carpeta |
 | **Biblioteca del sistema** (`m`, `pthread`, `user32`, una instalada con el gestor de paquetes) | `dynamic_libraries = ["m"]` y, si hace falta, `include_paths` | el ejecutable la carga del sistema |
-| **Biblioteca escrita en Larimar** (con su `.interface`) | una de las dos de arriba, con su carpeta | ver [Bibliotecas escritas en Larimar](#27-bibliotecas-escritas-en-larimar) |
+| **Biblioteca escrita en Larimar** (un paquete) | `[packages]`: `textkit = "libs/textkit"` | ver [Bibliotecas escritas en Larimar](#27-bibliotecas-escritas-en-larimar) |
 
 Un ejemplo con cuatro a la vez:
 
@@ -4894,9 +4891,10 @@ sin saber de Larimar, y que un programa de Larimar importa como un módulo. Quie
 reglas de memoria de Larimar; quien la usa recibe una biblioteca de C normal.
 
 Un proyecto con `kind = "library"` se construye como **biblioteca**: un programa de C la usa como
-cualquier biblioteca de C, y un programa de Larimar la importa como un módulo. Por defecto es
-**estática** (va dentro del ejecutable que la usa); `type = "dynamic"` en `[library]`, o
-`larimar build --dynamic`, la hace dinámica (`--static` hace lo contrario).
+cualquier biblioteca de C, y un programa de Larimar la importa como un módulo. Por defecto se construye
+como **paquete**: una carpeta con la biblioteca traducida a C, que el programa que la usa compila con el
+suyo, en cualquier plataforma. `larimar build --static` o `--dynamic` (o `type` en `[library]`) la compilan
+aquí, en un archivo de biblioteca para un programa de C.
 
 ```toml
 [project]
@@ -4906,7 +4904,7 @@ kind = "library"             # "program" (por defecto) o "library"
 main = "src/textkit.lar"
 
 [library]
-type = "static"              # "static" (por defecto) o "dynamic"
+type = "package"             # "package" (por defecto), "static" o "dynamic"
 prefix = "tk"                # sus nombres de C empiezan con él: tk_wordCount (por defecto, el nombre)
 ```
 
@@ -4959,14 +4957,21 @@ public class Counter {
 public export function newCounter(): Counter { return Counter {}; }
 ```
 
-`larimar build` deja cuatro archivos en `build/textkit/`, que van juntos:
+`larimar build` deja el paquete en `build/textkit/`, una carpeta cuyos archivos van juntos:
 
 | Archivo | Para | Qué tiene |
 |---|---|---|
-| `libtextkit.a` | los dos | la biblioteca (dinámica: `libtextkit.so`, `libtextkit.dylib` o `textkit.dll`) |
+| `textkit.c` | los dos | la biblioteca, en C (con `--static`: `libtextkit.a`; con `--dynamic`: `libtextkit.so`, `libtextkit.dylib` o `textkit.dll`) |
+| `c/` | los dos | el C que trae la biblioteca: los `sources` e `include_paths` de su `[c]`, los de todas las plataformas |
 | `textkit.h` | C | los prototipos, con sus comentarios de documentación, y cómo liberar lo que dan |
 | `textkit.lar` | Larimar | las mismas funciones como declaraciones `native` |
-| `textkit.interface` | el compilador | su nombre, versión, tipo, lo que necesita enlazado y el **hash de la interfaz** |
+| `textkit.interface` | el compilador | su nombre, versión, tipo, el C que trae, lo que necesita enlazado y el **hash de la interfaz** |
+
+La misma carpeta sirve en Linux, macOS y Windows: su C es el que compila en todos los sistemas, y se
+compila donde se usa. `larimar build` lo compila una vez de todos modos, para encontrar sus errores ya.
+
+Junto a la carpeta deja **`build/textkit.lpk`**: los mismos archivos en uno, para publicar y para copiar.
+Es un zip sin comprimir, así que lo abre cualquier herramienta de zip.
 
 ### Usarla desde C
 
@@ -5037,22 +5042,23 @@ int main(void) {
 ```
 
 ```sh
+larimar build --static                   # build/textkit/libtextkit.a
 cc -std=c99 -Ibuild/textkit main.c build/textkit/libtextkit.a -lm
 ./a.out                                  # Larimar 3 3 three
 ```
 
 Lo que una biblioteca estática necesita enlazado además está en `links` de su `.interface` (`-lm`,
-`-pthread` si usa hilos, las de TLS...).
+`-pthread` si usa hilos, las de TLS...). Un programa de C también puede compilar el paquete mismo:
+`textkit.c` y los fuentes que nombra su `.interface`.
 
 ### Usarla desde Larimar
 
-Los cuatro archivos se copian a una carpeta del programa (o se dejan donde están), y la
-biblioteca se nombra en `[c]` como cualquier otra:
+El `.lpk` se copia a la carpeta del programa y se nombra en `[packages]` (también se puede nombrar la
+carpeta, para usar una biblioteca mientras se escribe):
 
 ```toml
-[c]
-static_libraries = ["textkit"]
-static_library_paths = ["libs/textkit"]
+[packages]
+textkit = "libs/textkit.lpk"
 ```
 
 ```ts
@@ -5070,9 +5076,9 @@ function main(): int32 {
 
 Salida: `Larimar 3 three`
 
-Como `textkit.interface` está en esa carpeta, el compilador sabe que es una biblioteca escrita en
-Larimar: `import textkit` encuentra ahí `textkit.lar` (también `larimar check` y el editor), se incluye su
-`.h` y se enlaza lo que necesita. El `.lar` que lee son declaraciones `native` normales:
+`import textkit` encuentra ahí `textkit.lar` (también `larimar check` y el editor), se incluye su `.h`, y
+`larimar build` compila su C con el del programa y enlaza lo que necesita. Una carpeta construida con
+`--static` o `--dynamic` se nombra igual: su `.interface` dice qué es. El `.lar` que lee son declaraciones `native` normales:
 
 ```ts
 cinclude "textkit.h";
@@ -5117,12 +5123,11 @@ El `.interface` tiene ocho dígitos hexadecimales, el comienzo del SHA-256 del
 coinciden, y se detiene con lo que está mal:
 
 - un `.lar` editado a mano: `textkit.lar does not match the library (its hash is ..., textkit.interface says ...)`;
-- una biblioteca de otro build junto a un `.lar` viejo: `libtextkit.a is from another build than textkit.lar and textkit.interface`;
-- una biblioteca estática en `dynamic_libraries` (o al revés): `textkit is a static library (...): put it in static_libraries`.
+- una biblioteca de otro build junto a un `.lar` viejo: `textkit.c is from another build than textkit.lar and textkit.interface`.
 
 Así un programa nunca llama a una biblioteca con declaraciones que no son las suyas. El hash cubre todo
-el `.lar`: las funciones, sus tipos y su documentación, la versión y el tipo. Una versión nueva son cuatro
-archivos nuevos que van juntos. Un programa de C puede comprobar lo mismo al arrancar:
+el `.lar`: las funciones, sus tipos y su documentación, la versión y el tipo. Una versión nueva es una
+carpeta nueva. Un programa de C puede comprobar lo mismo al arrancar:
 `strcmp(tk_interface(), TEXTKIT_INTERFACE) == 0`.
 
 ### Las export functions y las clases de una biblioteca
@@ -5133,9 +5138,18 @@ Qué va a C, y cómo:
   uno propio (`export function answer(): int32 = tk_the_answer { ... }`), y `prefix = ""` deja los
   nombres como están. La biblioteca misma da `<prefijo>_free`, `<prefijo>_<Clase>_release` y
   `<prefijo>_interface`: una export function no puede tomar esos nombres (ni un método llamarse `release`).
-- **Sus tipos**: números, `bool`, `String` y `String?` (`const char*`; `NULL` es `null`), y las **clases**
-  de la biblioteca y sus opcionales. Los tipos native y los structs de C no van: son de cabeceras de C que
-  el programa también necesitaría.
+- **Sus tipos**: números, `bool`, `String` y `String?` (`const char*`; `NULL` es `null`), las **clases**
+  de la biblioteca y sus opcionales, y los **callbacks** (abajo). Los demás tipos native y los structs de C
+  no van: son de cabeceras de C que el programa también necesitaría.
+- **Un callback** es una función del programa que la biblioteca llama. La biblioteca declara su tipo con un
+  `Context` (`native type Visit = (int32, String, Context) -> int32;`, de números, `bool` y `String`) y lo
+  recibe con su `Context`: `export function each(n: int32, visit: Visit, data: Context): int32`. Dentro se
+  llama como una función (`visit(i, "item", data)`). Un programa de Larimar le da cualquier función de esa
+  forma sin el `Context`, también una lambda con lo que captura
+  (`evkit.each(4, (n: int32, label: String) -> { ... })`); un programa de C le da una función y un `void*`.
+  Una biblioteca que **guarda** la función para llamarla después lo dice con `in default` en los dos
+  parámetros (`visit: Visit in default, data: Context in default`): lo que usa la función del programa
+  tiene entonces que vivir tanto como el programa, y el compilador lo comprueba.
 - **Un texto que devuelve** es una copia (`char*`) para quien llama: C la libera con `<prefijo>_free`.
 - **Un objeto que devuelve** es un **handle**: C lo guarda (`tk_Counter*`), lo pasa a sus métodos y a
   otras export functions, y lo devuelve con `<prefijo>_<Clase>_release`. El handle tiene su propia memoria: lo que el
@@ -5171,11 +5185,14 @@ aplican a su código las reglas de una biblioteca.
 
 ### Aclaraciones
 
-- **Por qué estática por defecto.** El ejecutable que la usa es un solo archivo, y no depende de que
-  donde se ejecute esté instalado un `.so` del build correcto. Una dinámica la comparten varios programas
-  y se puede reemplazar sin construirlos de nuevo.
-- **Dónde se busca una dinámica.** Como cualquier biblioteca dinámica: en Linux y macOS, en las
-  `dynamic_library_paths` del programa (rpath; en macOS la biblioteca es `@rpath/libtextkit.dylib`); en
+- **Por qué un paquete por defecto.** Una carpeta sirve en todas las plataformas, sin compilar nada para
+  cada una, y el ejecutable que la usa es un solo archivo. Una estática o una dinámica es para una
+  plataforma; una dinámica la comparten varios programas y se puede reemplazar sin construirlos de nuevo.
+- **Lo que un paquete necesita del sistema.** Una biblioteca del sistema que usa su C (`dynamic_libraries`
+  de su `[c]`, también por plataforma) está en `links` de su `.interface`, y el programa la enlaza: tiene
+  que estar instalada donde se construye el programa y donde se ejecuta.
+- **Dónde se busca una dinámica.** Como cualquier biblioteca dinámica: en Linux y macOS, en su carpeta, la
+  que nombra `[packages]` (rpath; en macOS la biblioteca es `@rpath/libtextkit.dylib`); en
   Windows, junto al `.exe` o en el `PATH` (el enlazador usa `libtextkit.dll.a`, que se hace con ella).
 - **Lo que necesita una estática.** Las bibliotecas que necesita su C, y las que ella misma enlaza, están
   en `links`: un programa de Larimar las agrega solo; uno de C las agrega a su comando. Las bibliotecas
@@ -5187,9 +5204,17 @@ aplican a su código las reglas de una biblioteca.
   en un hilo a la vez, salvo que sea una `synchronized class`.
 - **El hash no es una firma.** Descubre errores (archivos de builds distintos), no a alguien que cambia
   una biblioteca a propósito.
-- **Los cuatro archivos se generan**: no se editan, no se guardan en el repositorio de la biblioteca
+- **El paquete se genera**: sus archivos no se editan, no se guardan en el repositorio de la biblioteca
   (están en `build/`) y se publican juntos.
-- **Todavía no**: las listas, los callbacks y los errores (`throws`) no cruzan una biblioteca; van como
+- **Un paquete que usa otro.** Un paquete no lleva los paquetes que usa su biblioteca: su `.interface`
+  los nombra, y el programa también los nombra en su `[packages]` (`package 'webkit' uses the package
+  'jsonkit': name it in [packages] too`).
+- **C ya compilado.** Un `lib<nombre>.a` de las `static_libraries` de la biblioteca que está en sus
+  `static_library_paths` va en el paquete y se enlaza en el programa. Es para una plataforma: en
+  `[c.linux]`, `[c.macos]` o `[c.windows]` cada sistema recibe el suyo; en `[c]`, el paquete sirve solo
+  para la plataforma para la que se compiló ese archivo.
+- **Todavía no**: las listas y los errores (`throws`) no cruzan una biblioteca, un callback no devuelve un
+  `String` ni recibe un objeto de la biblioteca; van como
   textos, handles y números (un código de error), o se quedan dentro. Un programa no crea objetos de la
   biblioteca con `Counter {}`, ni extiende sus clases: los hacen sus funciones y métodos.
 
@@ -5641,7 +5666,8 @@ native type Op = (int32, int32) -> int32;             // un puntero a función d
 export function restar(a: int32, b: int32): int32 { return a - b; }   // C puede llamarla
 export function nombre(id: int32): String = lm_nombre { return "n${id}"; }  // su nombre en C; C libera el texto
 
-// larimar.toml de una biblioteca: build/<name>/ con lib<name>.a, <name>.h, <name>.lar, <name>.interface
-// [project] kind = "library"      [library] type = "static" (o "dynamic"), prefix = "tk"
+// larimar.toml de una biblioteca: build/<name>/, un paquete: <name>.c, <name>.h, <name>.lar, <name>.interface
+// [project] kind = "library"      [library] type = "package" (o "static", "dynamic"), prefix = "tk"
+// quien la usa: [packages] textkit = "libs/textkit"
 // [c] static_libraries / static_library_paths, dynamic_libraries / dynamic_library_paths
 ```

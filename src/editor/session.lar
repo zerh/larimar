@@ -45,8 +45,8 @@ public function analyzeFile(main: String, shownFrom: String): bool {
 }
 
 /**
- * The folders of the Larimar libraries the project of a file links (static_ and dynamic_libraries of its
- * larimar.toml, with their .interface): `import textkit` finds textkit.lar there. larimar build checks them.
+ * The folders of the libraries the project of a file uses ([packages] of its larimar.toml): `import textkit`
+ * finds textkit.lar there. larimar build checks them.
  */
 function findLibraryRoots(main: String): void {
     libraryRoots.clear();

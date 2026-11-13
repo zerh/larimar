@@ -35,6 +35,14 @@ part of it, in the folder of its name.
 - A file of a copy of the standard library (a repository's `std/crypto.lar`, open in an editor whose
   installed Larimar is another) is checked against that copy: it showed *Switch value: expected
   RandomSource but got std.crypto.posix.UrandomSource*.
+- A library takes **callbacks**: an export function may take a C function type with a `Context` (of
+  numbers, `bool` and `String`) and its `Context`. A Larimar program gives it a lambda, with what it
+  captures; a C program, a function and a `void*`. `in default` on those parameters says the library keeps
+  the function, and then the compiler checks that what the program's function uses lives as long as the
+  program.
+- **Fixed**: a method that a subclass overrides now has what the override returns. A call through the
+  base class could keep, for the whole program, a text that the override returned from an argument that
+  lived only in a block (a use after free). Found by review, with its test.
 - The parser is a class, `Parser` (the tokens and where it reads), with no state outside it: two can read
   at once (the one of a `${...}` inside the one of its file). Its grammar is in `syntax/parser/`:
   `declarations`, `natives`, `types`, `statements`, `expressions`.
@@ -46,8 +54,20 @@ part of it, in the folder of its name.
 - The result of a method of a struct, or of a class without subclasses or superclass, is read as that of
   a function: it points only to the arguments its body can return. `p.expect(kind, "... ${name} ...")`
   gives a token that lives where `p` lives, whatever the message.
-- The documentation no longer names a dependency manager that does not exist yet: a dependency missing
-  from `deps/` says *put it in deps/<name>*, and the plugin example is a generic `mytool`.
+- A library written in Larimar is built into a **package**: `build/<name>/` with the library in C
+  (`<name>.c`), the C it brings (`c/`: the `sources` and `include_paths` of its `[c]`, of every platform),
+  its `.h`, its `.lar` and its `.interface`. A program names the folder in **`[packages]`**
+  (`textkit = "libs/textkit"`) and the package is compiled with it: one folder for every platform, nothing
+  compiled per system. `--static` and `--dynamic` (or `[library] type`) still compile the library, for C;
+  such a folder is named in `[packages]` too.
+- `larimar build` also writes the package in one file, **`build/<name>.lpk`**: a zip without compression,
+  which a program names in `[packages]` (`textkit = "libs/textkit.lpk"`) and gets unpacked in
+  `build/packages/`. A package brings the C libraries already compiled that its library names
+  (`lib<name>.a` in its `static_library_paths`, per platform in `[c.linux]`...), and its `.interface` says
+  which packages the library uses: the program names those too, or the error names the one that is missing.
+- `[packages]` is the one way to use a library written in Larimar. `[dependencies]` with `deps/` (Larimar
+  code used as source) is gone, and a library is no longer found among `static_libraries` by its
+  `.interface`. The plugin example in the manuals is a generic `mytool`.
 - The manuals and the specification are in `docs/`, next to the page that shows them (`manual.html`
   reads the ones published with it). The manual explains `native struct` and `native type`, and where
   `c"..."` is needed; the page no longer speaks of `#when`.

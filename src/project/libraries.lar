@@ -1,14 +1,20 @@
 // project.libraries: the libraries written in Larimar, as larimar build makes them and as the programs
-// that use them find them. A library is a folder of four files of the same build:
+// that use them find them. A library is a folder, a package, that larimar build fills:
 //
-//   libtextkit.a            the library (dynamic: libtextkit.so, libtextkit.dylib, textkit.dll)
-//   textkit.h               for C: its export functions, its handles, how to free what they give
-//   textkit.lar             for Larimar: the same functions as native declarations (import textkit)
-//   textkit.interface       its name, version, kind, the libraries it needs, and the interface hash
+//   textkit.interface       its name, version, type, the interface hash, and what goes with it
+//   textkit.lar             for Larimar: its export functions as native declarations (import textkit)
+//   textkit.h               for C: the same functions, its handles, how to free what they give
+//   textkit.c               the library, translated to C: it is compiled with the program that uses it
+//   c/...                   the C the library brings (the sources and include_paths of its [c])
+//
+// That is type "package", the default: the same folder serves every platform. With --static or --dynamic the
+// library is compiled here instead (libtextkit.a; libtextkit.so, libtextkit.dylib, textkit.dll), for a C program.
+// A program names the folder in [packages] of its larimar.toml, whatever its type, or the package's .lpk:
+// the same folder in one file (project.lpk).
 //
 // The interface hash is the first 8 hex digits of the SHA-256 of the .lar, and the library has it inside
-// ("larimar-interface:<hash>"). A program that links the library builds only when the three agree: a .lar
-// edited by hand, or copied from another build, is found out before the C compiler runs.
+// ("larimar-interface:<hash>"). A program builds only when the three agree: a .lar edited by hand, or
+// copied from another build, is found out before the C compiler runs.
 
 import std.os { Platform };
 import std.io.path as Paths;
@@ -19,13 +25,18 @@ import std.crypto { sha256 };
 import std.encoding.hex as Hex;
 import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
+import project.lpk { unpack };
 
 /** A library written in Larimar that a project links. */
 public class LarimarLibrary {
     let name: String;
     let dir: String;
-    let kind: String;               // "static" or "dynamic"
-    let links: String[*] = [];      // what a static one needs linked too (-l...)
+    let kind: String;               // "package", "static" or "dynamic"
+    let links: String[*] = [];      // what the program links too (-l...), unless the library is dynamic
+    let sources: String[*] = [];    // a package: its C files, compiled with the program (the library's first)
+    let includePaths: String[*] = [];
+    let objects: String[*] = [];    // a package: the compiled C libraries it brings for this platform (lib<name>.a)
+    let needs: String[*] = [];      // a package: the packages its library uses, which the program names too
 }
 
 /** The interface hash of a library: the first 8 hex digits of the SHA-256 of its .lar. */
@@ -34,8 +45,9 @@ public function interfaceHash(module: String): String {
     return Hex.encode(digest).substring(0, 8).clone();
 }
 
-/** The file of a library: lib<name>.a, or the dynamic one of this platform. */
+/** The file of a library: <name>.c in a package, lib<name>.a, or the dynamic one of this platform. */
 public function libraryFile(name: String, kind: String): String {
+    if (kind == "package") { return "${name}.c"; }
     if (kind == "static") { return "lib${name}.a"; }
     if (Platform.name() == "windows") { return "${name}.dll"; }
     return Platform.name() == "macos" ? "lib${name}.dylib" : "lib${name}.so";
@@ -45,30 +57,44 @@ public function libraryFile(name: String, kind: String): String {
 public function interfaceMarker(hash: String): String { return "larimar-interface:${hash}"; }
 
 /**
- * The libraries written in Larimar among static_libraries and dynamic_libraries of [c] (and of [c.unix],
- * [c.<platform>]): those with a <name>.interface in one of their library paths. With `verify`, the
- * interface is checked against the .lar and the library (larimar build); without it, only found (the editor).
+ * The libraries of [packages] (name = "folder"): each folder has the <name>.interface that larimar build
+ * wrote. With `verify`, the interface is checked against the .lar and the library (larimar build); without
+ * it, only found (the editor).
  */
 public function larimarLibraries(dir: String, config: Any, verify: bool, problems: String[*]): LarimarLibrary[*] {
     let out: LarimarLibrary[*] = [];
-    let c: Any = config.c;
-    let sections: Any[] = [c, Platform.name() == "windows" ? null : c.unix, c[Platform.name()]];
-    let kinds: String[] = ["static", "dynamic"];
-    for (kind in kinds) {
-        let names: String[*] = [];
-        let paths: String[*] = [];
-        for (s in sections) {
-            strings(s, "${kind}_libraries", names);
-            strings(s, "${kind}_library_paths", paths);
+    for (name, where in config.packages.fields) {
+        let path: String? = where as String;
+        if (path == null) {
+            problems.push("${name} in [packages] is the folder of the package: ${name} = \"libs/${name}\"".clone());
+            continue;
         }
-        for (name in names) {
-            for (p in paths) {
-                let folder: String = Paths.normalize(Paths.join(dir, p));
-                let itf: String = Paths.join(folder, "${name}.interface");
-                if (!Files.isFile(itf)) { continue; }
-                let found: LarimarLibrary? = read(name, folder, kind, verify, problems);
-                if (found != null) { out.push(found!); }
-                break;
+        let folder: String = Paths.normalize(Paths.join(dir, path!));
+        if (path!.endsWith(".lpk")) {                 // a package in one file: unpacked in the build folder, once
+            if (!Files.isFile(folder)) {
+                problems.push("package '${name}': ${path!} does not exist".clone());
+                continue;
+            }
+            let buildDir: String = config.project.build_dir as String ?? "build";
+            let unpacked: String = Paths.normalize(Paths.join(Paths.join(Paths.join(dir, buildDir), "packages"), name));
+            let wrong: String = unpack(folder, unpacked);
+            if (wrong != "") {
+                problems.push("package '${name}': ${wrong}".clone());
+                continue;
+            }
+            folder = unpacked;
+        }
+        if (!Files.isFile(Paths.join(folder, "${name}.interface"))) {
+            problems.push("package '${name}': ${path!} has no ${name}.interface (a package is the folder that larimar build makes of a library, or its .lpk)".clone());
+            continue;
+        }
+        let found: LarimarLibrary? = read(name, folder, verify, problems);
+        if (found != null) { out.push(found!); }
+    }
+    for (l in out) {
+        for (n in l.needs) {
+            if (config.packages[n] == null) {
+                problems.push("package '${l.name}' uses the package '${n}': name it in [packages] too (${n} = \"...\")".clone());
             }
         }
     }
@@ -86,7 +112,7 @@ function strings(section: Any, key: String, into: String[*]): void {
 }
 
 /** A library's folder, read through its .interface (and checked, with `verify`). */
-function read(name: String, folder: String, kind: String, verify: bool, problems: String[*]): LarimarLibrary? {
+function read(name: String, folder: String, verify: bool, problems: String[*]): LarimarLibrary? {
     let itf: String = Paths.join(folder, "${name}.interface");
     let config: Any = null;
     try {
@@ -100,36 +126,53 @@ function read(name: String, folder: String, kind: String, verify: bool, problems
     }
     let lib: Any = config.library;
     let hash: String = lib["interface"] as String ?? "";
-    let built: String = lib.type as String ?? "";
+    let kind: String = lib.type as String ?? "";
     let found: LarimarLibrary = { name: name.clone(), dir: folder.clone(), kind: kind.clone() };
-    strings(lib, "links", found.links);
+    if (kind == "package") { found.sources.push(Paths.join(folder, libraryFile(name, kind)).clone()); }
+    // [library], and of a package [library.unix] and [library.<platform>]: what the library brings for each
+    let sections: Any[] = [lib, Platform.name() == "windows" ? null : lib.unix, lib[Platform.name()]];
+    for (section in sections) {
+        strings(section, "links", found.links);
+        let relative: String[*] = [];
+        strings(section, "sources", relative);
+        for (x in relative) { found.sources.push(Paths.join(folder, x).clone()); }
+        relative.clear();
+        strings(section, "include_paths", relative);
+        for (x in relative) { found.includePaths.push(Paths.join(folder, x).clone()); }
+        relative.clear();
+        strings(section, "objects", relative);
+        for (x in relative) { found.objects.push(Paths.join(folder, x).clone()); }
+    }
+    strings(lib, "packages", found.needs);
     if (!verify) { return found; }
     if ((lib.name as String ?? "") != name || hash.length != 8) {
         problems.push("${itf} is not the interface of a library called '${name}' (name and interface in [library])".clone());
         return null;
     }
-    if (built != kind) {
-        problems.push("${name} is a ${built} library (${itf}): put it in ${built}_libraries, or build it as ${kind} (larimar build --${kind})".clone());
+    if (kind != "package" && kind != "static" && kind != "dynamic") {
+        problems.push("${itf}: type = \"${kind}\" is not a kind of library (package, static, dynamic)".clone());
         return null;
     }
     let binary: String = Paths.join(folder, libraryFile(name, kind));
     let module: String = Paths.join(folder, "${name}.lar");
     let header: String = Paths.join(folder, "${name}.h");
-    let missing: String[] = [binary, module, header];
-    for (m in missing) {
+    let needed: String[*] = [binary, module, header];
+    for (x in found.sources) { needed.push(x); }
+    for (x in found.objects) { needed.push(x); }
+    for (m in needed) {
         if (!Files.isFile(m)) {
-            problems.push("${m} is missing: a library is its four files of the same build (${libraryFile(name, kind)}, ${name}.h, ${name}.lar, ${name}.interface)".clone());
+            problems.push("${m} is missing: a package is the whole folder of one build (${libraryFile(name, kind)}, ${name}.h, ${name}.lar, ${name}.interface, and its c/)".clone());
             return null;
         }
     }
     try {
         let own: String = interfaceHash(Files.readString(module));
         if (own != hash) {
-            problems.push("${module} does not match the library (its hash is ${own}, ${name}.interface says ${hash}): it was edited, or comes from another build. Copy the four files of one build.".clone());
+            problems.push("${module} does not match the library (its hash is ${own}, ${name}.interface says ${hash}): it was edited, or comes from another build. Copy the whole folder of one build.".clone());
             return null;
         }
         if (!fileHas(binary, interfaceMarker(hash))) {
-            problems.push("${binary} is from another build than ${name}.lar and ${name}.interface (interface ${hash}): copy the four files of one build.".clone());
+            problems.push("${binary} is from another build than ${name}.lar and ${name}.interface (interface ${hash}): copy the whole folder of one build.".clone());
             return null;
         }
     } catch (IoError e) {
@@ -169,9 +212,18 @@ function fileHas(path: String, marker: String): bool throws IoError {
 }
 
 /** The .interface of a library that larimar build writes. */
-public function interfaceText(name: String, version: String, kind: String, prefix: String, hash: String, made: String, links: String[*]): String {
+public function interfaceText(name: String, version: String, kind: String, prefix: String, hash: String, made: String, links: String[*],
+        sources: String[*], includePaths: String[*], objects: String[*], packages: String[*]): String {
     let quoted: String[*] = [];
     for (l in links) { quoted.push("\"${l}\""); }
+    let files: String[*] = [];
+    for (x in sources) { files.push("\"${x}\""); }
+    let includes: String[*] = [];
+    for (x in includePaths) { includes.push("\"${x}\""); }
+    let compiled: String[*] = [];
+    for (x in objects) { compiled.push("\"${x}\""); }
+    let needs: String[*] = [];
+    for (x in packages) { needs.push("\"${x}\""); }
     return """
         # ${name}: a library written in Larimar. Written by larimar build; read by larimar build of the
         # programs that link it. The interface hash is that of ${name}.lar, and ${libraryFile(name, kind)} has it inside:
@@ -186,5 +238,9 @@ public function interfaceText(name: String, version: String, kind: String, prefi
         larimar = "${made}"
         files = ["${libraryFile(name, kind)}", "${name}.h", "${name}.lar"]
         links = [${quoted.join(", ")}]
+        sources = [${files.join(", ")}]
+        include_paths = [${includes.join(", ")}]
+        objects = [${compiled.join(", ")}]
+        packages = [${needs.join(", ")}]
         """;
 }

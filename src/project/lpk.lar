@@ -1,0 +1,196 @@
+// project.lpk: a package in one file. <name>.lpk is the folder of a package (project.libraries) as a zip
+// without compression: any zip tool opens it, and reading it needs no decompressor. larimar build of a
+// library writes it next to the folder; a program that names it in [packages] gets it unpacked in its
+// build folder, once for each .lpk (its size and time are kept in a file next to what was unpacked).
+
+import std.io.path as Paths;
+import std.io.files as Files;
+import std.io.files { File };
+import std.io { IoError };
+
+const LOCAL: uint32 = 0x04034b50;         // the header before each file
+const CENTRAL: uint32 = 0x02014b50;       // the entry of each file in the directory, at the end
+const END: uint32 = 0x06054b50;           // the end of the directory: how many entries, and where it starts
+
+/** Bytes, written and read as zip does: numbers with their lowest byte first. */
+class Bytes {
+    let items: byte[*] = [];
+
+    function length(): int32 { return self.items.length; }
+
+    /** A number in `width` bytes. */
+    function number(value: uint32, width: int32): void {
+        let v: uint32 = value;
+        for (i in 0..width) {
+            self.items.push((v & 0xFF) as byte);
+            v = v >> 8;
+        }
+    }
+
+    function text(s: String): void {
+        for (b in s.bytes()) { self.items.push(b); }
+    }
+
+    function add(other: Bytes): void {
+        for (b in other.items) { self.items.push(b); }
+    }
+
+    /** The number in `width` bytes at `at`. */
+    function read(at: int32, width: int32): int32 {
+        let v: uint32 = 0;
+        for (i in 0..width) { v = v | ((self.items[at + i] as uint32) << ((8 * i) as uint32)); }
+        return v as int32;
+    }
+
+    /** `count` bytes from `at`. */
+    function part(at: int32, count: int32): Bytes {
+        let out: Bytes = {};
+        for (i in 0..count) { out.items.push(self.items[at + i]); }
+        return out;
+    }
+
+    /** The CRC-32 of zip. */
+    function crc(): uint32 {
+        let crc: uint32 = 0xFFFFFFFF;
+        for (b in self.items) {
+            crc = crc ^ (b as uint32);
+            for (k in 0..8) { crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320 : crc >> 1; }
+        }
+        return crc ^ 0xFFFFFFFF;
+    }
+
+    /** The header of a file: the one before its bytes (LOCAL), or the start of its entry in the directory (CENTRAL). */
+    function header(signature: uint32, name: String, crc: uint32, size: int32): void {
+        self.number(signature, 4);
+        if (signature == CENTRAL) { self.number(20, 2); }       // made by: zip 2.0
+        self.number(20, 2);                                     // needs: zip 2.0
+        self.number(0, 2);                                      // flags
+        self.number(0, 2);                                      // method: stored, as it is
+        self.number(0, 2);                                      // time: none, so the same package is the same file
+        self.number(33, 2);                                     // date: 1980-01-01
+        self.number(crc, 4);
+        self.number(size as uint32, 4);
+        self.number(size as uint32, 4);
+        self.number(name.length as uint32, 2);
+        self.number(0, 2);                                      // no extra field
+        if (signature == LOCAL) { self.text(name); }
+    }
+}
+
+/** Writes the files of a folder (all of them, with those of its folders) into a .lpk. */
+public function pack(folder: String, lpk: String): void throws IoError {
+    let names: String[*] = [];
+    filesOf(folder, "", names);
+    names.sort();
+    let out: Bytes = {};
+    let directory: Bytes = {};
+    for (name in names) {
+        let data: Bytes = contents(Paths.join(folder, name));
+        let crc: uint32 = data.crc();
+        let offset: int32 = out.length();
+        out.header(LOCAL, name, crc, data.length());
+        out.add(data);
+        directory.header(CENTRAL, name, crc, data.length());
+        directory.number(0, 2);                     // no comment
+        directory.number(0, 2);                     // disk
+        directory.number(0, 2);                     // internal attributes
+        directory.number(0, 4);                     // external attributes
+        directory.number(offset as uint32, 4);
+        directory.text(name);
+    }
+    let start: int32 = out.length();
+    out.add(directory);
+    out.number(END, 4);
+    out.number(0, 2);
+    out.number(0, 2);
+    out.number(names.length as uint32, 2);
+    out.number(names.length as uint32, 2);
+    out.number(directory.length() as uint32, 4);
+    out.number(start as uint32, 4);
+    out.number(0, 2);
+    let f: File = Files.create(lpk);
+    f.write(out.items);
+    f.close();
+}
+
+/**
+ * Unpacks a .lpk into a folder, unless that was already done for this very file: "" when it is there, or
+ * what is wrong with the file.
+ */
+public function unpack(lpk: String, folder: String): String {
+    let stamp: String = "${Files.size(lpk)} ${Files.modifiedTime(lpk)}";
+    let stampFile: String = Paths.join(folder, ".lpk");
+    try {
+        if (Files.isFile(stampFile) && Files.readString(stampFile) == stamp) { return ""; }
+        if (Files.isDirectory(folder)) { clear(folder); }           // nothing of another .lpk stays
+        let all: Bytes = contents(lpk);
+        let end: int32 = all.length() - 22;
+        while (end >= 0 && all.read(end, 4) != END as int32) { end -= 1; }
+        if (end < 0) { return "${lpk} is not a package (a .lpk is a zip)"; }
+        let count: int32 = all.read(end + 10, 2);
+        let at: int32 = all.read(end + 16, 4);
+        for (i in 0..count) {
+            if (at + 46 > all.length() || all.read(at, 4) != CENTRAL as int32) { return "${lpk} is damaged (its directory)"; }
+            let method: int32 = all.read(at + 10, 2);
+            let size: int32 = all.read(at + 24, 4);
+            let nameLength: int32 = all.read(at + 28, 2);
+            let skip: int32 = all.read(at + 30, 2) + all.read(at + 32, 2);
+            let local: int32 = all.read(at + 42, 4);
+            let name: String = stringOf(all.part(at + 46, nameLength).items);
+            at += 46 + nameLength + skip;
+            if (name.endsWith("/")) { continue; }                     // a folder: made with its files
+            if (method != 0) { return "${lpk}: '${name}' is compressed, and a .lpk is a zip without compression (larimar build makes it)"; }
+            if (name.startsWith("/") || name.contains("..") || name.contains("\\") || name.contains(":")) {
+                return "${lpk}: '${name}' would be written outside the package";
+            }
+            if (local < 0 || local + 30 > all.length()) { return "${lpk} is damaged ('${name}')"; }
+            let data: int32 = local + 30 + all.read(local + 26, 2) + all.read(local + 28, 2);
+            if (size < 0 || data + size > all.length()) { return "${lpk} is damaged ('${name}')"; }
+            let to: String = Paths.join(folder, name);
+            Files.createDirectories(Paths.parent(to));
+            let f: File = Files.create(to);
+            f.write(all.part(data, size).items);
+            f.close();
+        }
+        Files.writeString(stampFile, stamp);
+    } catch (IoError e) {
+        return "cannot unpack ${lpk}: ${Files.message(e)}";
+    }
+    return "";
+}
+
+/** Deletes what a folder has. */
+function clear(folder: String): void throws IoError {
+    for (name in Files.list(folder)) {
+        let path: String = Paths.join(folder, name);
+        if (Files.isDirectory(path)) { clear(path); }
+        Files.delete(path);
+    }
+}
+
+/** The files under a folder, as paths from it with '/'. */
+function filesOf(folder: String, prefix: String, into: String[*]): void throws IoError {
+    for (name in Files.list(folder)) {
+        let path: String = Paths.join(folder, name);
+        if (Files.isDirectory(path)) {
+            filesOf(path, "${prefix}${name}/", into);
+        } else if (name != ".lpk") {
+            into.push("${prefix}${name}");
+        }
+    }
+}
+
+/** The bytes of a file. */
+function contents(path: String): Bytes throws IoError {
+    let out: Bytes = {};
+    let chunk: byte[*] = [];
+    for (i in 0..65536) { chunk.push(0); }
+    let f: File = Files.open(path);
+    while (true) {
+        let n: int32 = f.read(chunk);
+        if (n == 0) { break; }
+        for (i in 0..n) { out.items.push(chunk[i]); }
+    }
+    f.close();
+    return out;
+}

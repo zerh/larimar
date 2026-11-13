@@ -82,6 +82,20 @@ public function flowSummaries(): void {
         if (primByName(m.owner) != null && m.creates) { creatingMethods[m.name] = 1; }
         if (m.returnsArgs) { viewMethods[m.name] = 1; } else { names[m.name] = 1; }
     }
+    // a call through a class may run the method of a subclass: what that one returns, this one may too
+    let grew: bool = true;
+    while (grew) {
+        grew = false;
+        for (m in all) {
+            if (!m.returnsArgs) { continue; }
+            for (o in overridden(m)) {
+                if (!o.returnsArgs) {
+                    o.returnsArgs = true;
+                    grew = true;
+                }
+            }
+        }
+    }
     for (i in interfaces) {
         for (m in i.methods) {
             m.returnsArgs = true;
@@ -118,7 +132,30 @@ public function flowSummaries(): void {
             creatingMethods[m.name] = 1;
             changed = true;
         }
+        for (m in all) {                        // and what the method of a subclass creates, this one may too
+            if (!m.creates) { continue; }
+            for (o in overridden(m)) {
+                if (!o.creates) {
+                    o.creates = true;
+                    changed = true;
+                }
+            }
+        }
     }
+}
+
+/** The methods that `m` writes again: those of its name in the classes above its own. */
+function overridden(m: MethodInfo): MethodInfo[*] {
+    let out: MethodInfo[*] = [];
+    let c: ClassInfo? = classOf(m.owner);
+    while (c != null && c!.superName != "") {
+        c = classOf(c!.superName);
+        if (c == null) { break; }
+        for (o in c!.methods) {
+            if (o.name == m.name && o.decl.params.length == m.decl.params.length) { out.push(o); }
+        }
+    }
+    return out;
 }
 
 /** Built-in methods whose result is new data, or a plain value: their receiver can be a temporary. */

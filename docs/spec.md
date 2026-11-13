@@ -1163,7 +1163,8 @@ Fixed answers:
 - a method of an interface: flows from every argument and from `self`, and creates (any class may
   implement it);
 - a method of a class that extends another, or that another extends: when its result flows from one
-  argument or from `self`, it flows from every one (a subclass may write it again);
+  argument or from `self`, it flows from every one; and it flows, and creates, when a method that
+  overrides it in a subclass does (a call through the class may run that one);
 - a native function: when its first parameter is a memory ([§19.3](#193-native-functions)), it
   creates and its result flows from nothing; otherwise it does not create, and its result may flow from
   every argument (C may return a pointer into one of them);
@@ -1566,7 +1567,10 @@ given by the project (by default, its name; it may be empty). In a library:
 - An export function is called `<prefix>_NAME` in C, unless it says `= NAME`; the names above are not
   available to it.
 - Its parameters and results may be only numbers, `bool`, `String`, `String?` and the library's classes and
-  their optionals.
+  their optionals. A parameter may also be a `Context`, or a C function type
+  ([§19.8](#198-c-function-pointers-and-callbacks)) of numbers, `bool` and `String` that has a `Context`;
+  both may say `in default` (the library keeps the function), the only place `in` is allowed on a parameter
+  of an export function.
 - A class is a **handle** in C (`<prefix>_<Class>*`). An object returned to C lives, with everything it
   creates afterwards, in a memory of its own, freed by `<prefix>_<Class>_release`. A `NULL` handle passed
   where a class is expected is a panic; where an optional is expected, it is `null`.
@@ -1908,7 +1912,7 @@ These belong to the tools and the library, which have their own versions and doc
 - the modules of the standard library other than `std.lang` (`std.io`, `std.io.files`, `std.os`,
   `std.os.process`, `std.time`, `std.crypto`, `std.encoding.json`, `std.net`, `std.test`, ...);
 - the commands `larimar build`, `run`, `check`, `test`, `lsp`, `dap`, the plugins, and the file
-  `larimar.toml` (with `[dependencies]` and `deps/`);
+  `larimar.toml` (with `[packages]`);
 - the names and the shape of the generated C, other than what [§19](#19-c-interoperability) defines
   (`RtMem*`, `rt_mem_alloc`, `lar"..."`, the names of native and export functions);
 - the text of compile errors.

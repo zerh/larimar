@@ -94,36 +94,27 @@ END
     ;;
 esac
 
-# plugins ($LARIMAR_HOME/plugins/*.toml) and dependencies (deps/<name>/src, [c] of each, a missing one)
-case "plugins-deps" in *"$FILTER"*)
+# plugins ($LARIMAR_HOME/plugins/*.toml)
+case "plugins" in *"$FILTER"*)
     T="$(mktemp -d)"
-    mkdir -p "$T/home/bin" "$T/home/plugins" "$T/app/src" "$T/app/deps/sql/src/sql"
+    mkdir -p "$T/home/bin" "$T/home/plugins"
     ln -s "$ROOT/std" "$T/home/std"
     printf '#!/bin/sh\necho "mytool: $*"\nexit 7\n' > "$T/home/bin/mytool"
     chmod +x "$T/home/bin/mytool"
     printf '[plugin]\nname = "mytool"\nprogram = "mytool"\n\n[commands]\nadd = ["add"]\nbuild = ["x"]\n' > "$T/home/plugins/mytool.toml"
-    printf '[project]\nname = "app"\n\n[dependencies]\nsql = "github.com/zerh/sql@v1.0.0"\n' > "$T/app/larimar.toml"
-    printf 'import sql.core;\nfunction main(): int32 { println(core.hello()); return 0; }\n' > "$T/app/src/main.lar"
-    printf 'public function hello(): String { return "from deps"; }\n' > "$T/app/deps/sql/src/sql/core.lar"
-    printf '[project]\nname = "sql"\n\n[c]\ndynamic_libraries = ["m"]\n' > "$T/app/deps/sql/larimar.toml"
     missing=""
     out="$(LARIMAR_HOME="$T/home" "$LARIMARC" add x@1 2>&1)"; code=$?
     printf "%s\n" "$out" | grep -qF "mytool: add x@1" || missing="$missing\n  the plugin did not get its arguments: $out"
     printf "%s\n" "$out" | grep -qF "cannot take 'larimar build'" || missing="$missing\n  a plugin took a command of larimar"
     [ $code -eq 7 ] || missing="$missing\n  exit $code (the plugin's is 7)"
-    out="$(cd "$T/app" && LARIMAR_HOME="$T/home" CC="$CC" "$LARIMARC" run 2>&1)"
-    printf "%s\n" "$out" | grep -qF "from deps" || missing="$missing\n  a module of deps/ was not found: $out"
-    mv "$T/app/deps/sql" "$T/app/deps/other"
-    out="$(cd "$T/app" && LARIMAR_HOME="$T/home" "$LARIMARC" build 2>&1)"
-    printf "%s\n" "$out" | grep -qF "'sql' is in [dependencies] but not in deps/" || missing="$missing\n  no error for a missing dependency: $out"
     rm -rf "$T"
     if [ -z "$missing" ]; then
         pass=$((pass + 1))
-        echo "  ok    plugins-deps (plugins answer commands; modules and C of deps/)"
+        echo "  ok    plugins (plugins answer commands)"
     else
         fail=$((fail + 1))
-        failed="$failed plugins-deps"
-        echo "  FAIL  plugins-deps"
+        failed="$failed plugins"
+        echo "  FAIL  plugins"
         printf "%b\n" "$missing" | sed "s/^/        /"
     fi
     ;;

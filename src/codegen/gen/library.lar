@@ -1,7 +1,8 @@
 // codegen.gen.library: a library's interface: its .h (C) and its .lar (Larimar), from its export functions.
 
 import semantics.types {
-    classOf, escapeName, FieldInfo, FunctionInfo, functions, isOpt, libraryPrefix, MethodInfo, optT, T_STRING,
+    classOf, escapeName, externInfoOf, FieldInfo, FunctionInfo, functions, isContextT, isExternT, isOpt, libraryPrefix,
+    MethodInfo, optT, T_STRING,
     T_VOID, Type
 };
 import semantics.linker { FILE_LINES, fileSources };
@@ -51,6 +52,17 @@ public function libraryProblems(): String[*] {
     return out;
 }
 
+/** The callback types the export functions take, each once, in the order they appear. */
+function callbacks(): Type[*] {
+    let out: Type[*] = [] in default;
+    for (f in exports()) {
+        for (t in f.sig!.params) {
+            if (isExternT(t) && !isContextT(t) && !out.contains(t)) { out.push(t); }
+        }
+    }
+    return out;
+}
+
 /** The doc comment (a doc block or // lines) right above a declaration, one line each. */
 function docAbove(encoded: int32): String[*] {
     let out: String[*] = [];
@@ -95,6 +107,8 @@ function docBlock(lines: String[*], indent: String): String {
 /** A type of an export function in the library's .h. */
 function headerType(t: Type, result: bool): String {
     if (t == T_STRING || t == optT(T_STRING)) { return result ? "char*" : "const char*"; }
+    if (isContextT(t)) { return "void*"; }
+    if (isExternT(t)) { return "${libraryPrefix != "" ? "${libraryPrefix}_" : ""}${plainName(t.name)}"; }
     if (isHandle(t)) { return "${libraryPrefix != "" ? "${libraryPrefix}_" : ""}${plainName((isOpt(t) ? t.elem! : t).name)}*"; }
     return t == T_VOID ? "void" : cType(t);
 }
@@ -139,6 +153,13 @@ public function libraryHeader(name: String, version: String, kind: String, hash:
     sb.add("#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
     for (c in hs) { sb.add("typedef struct ${p}${c} ${p}${c};\n"); }
     if (hs.length > 0) { sb.add("\n"); }
+    for (t in callbacks()) {                         // the functions the library calls back: yours, with your void*
+        let sig: Type = externInfoOf(t.name)!.sig!;
+        let ps: String[*] = [];
+        for (pt in sig.params) { ps.push(headerType(pt, false)); }
+        sb.add("/** A function of yours that the library calls; the void* is the one you give with it. */\n");
+        sb.add("typedef ${headerType(sig.elem!, false)} (*${headerType(t, false)})(${ps.join(", ")});\n\n");
+    }
     for (cls in handleClassNames()) {                // the members of each class: its fields (read) and methods
         let c: String = plainName(cls);
         sb.add("/* ${c}: its fields (to read) and its methods; self is the handle. */\n\n");
@@ -224,6 +245,7 @@ function bindingClass(cls: String in default, p: String): String {
 /** A type of an export function in the library's .lar. */
 function bindingType(t: Type): String {
     if (isHandle(t)) { return isOpt(t) ? "${plainName(t.elem!.name)}?" : plainName(t.name); }
+    if (isExternT(t)) { return plainName(t.name); }
     return t.text;
 }
 
@@ -239,11 +261,19 @@ public function libraryModule(name: String, version: String, kind: String, made:
     sb.add("// of this file, and so does the library inside: a program builds only when they agree.\n\n");
     sb.add("cinclude \"${name}.h\";\n\n");
     for (cls in handleClassNames()) { sb.add(bindingClass(cls, p)); }
+    for (t in callbacks()) {
+        let sig: Type = externInfoOf(t.name)!.sig!;
+        let ps: String[*] = [];
+        for (pt in sig.params) { ps.push(bindingType(pt)); }
+        sb.add("/** A function the library calls: give it any function of yours of this shape, without the Context. */\n");
+        sb.add("public native type ${plainName(t.name)} = (${ps.join(", ")}) -> ${sig.elem! == T_VOID ? "void" : bindingType(sig.elem!)};\n\n");
+    }
     for (f in exports()) {
         let ps: String[*] = [] in default;
         let names: String[*] = [] in default;
         for (i, t in f.sig!.params) {
-            ps.push("${f.params[i].name}: ${bindingType(t)}");
+            // a function the library keeps ('in default' in the library): what it captures lives as long as the program
+            ps.push("${f.params[i].name}: ${bindingType(t)}${isExternT(t) && !isContextT(t) && f.params[i].lives == "default" ? " in default" : ""}");
             names.push(f.params[i].name);
         }
         let n: String = plainName(f.name);

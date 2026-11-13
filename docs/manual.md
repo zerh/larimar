@@ -4427,7 +4427,7 @@ main = "src/main.lar"        # the default; its folder is the root of the module
 output = "dist/melody"       # by default build/<name> (build/<name>.exe on Windows; a library: the folder build/<name>)
 
 [library]                    # only with kind = "library"
-type = "static"              # the default; or "dynamic"
+type = "package"             # the default; or "static", "dynamic"
 prefix = "mel"               # what its C names start with: mel_play (by default, the name)
 
 [c]
@@ -4444,22 +4444,19 @@ dynamic_library_paths = ["libs"]     # where they are (-L), and where the execut
 Paths are relative to the project folder. An unknown key or section is an error, so that a typo does
 not go unnoticed.
 
-**Dependencies.** `[dependencies]` names the libraries the project uses and their versions:
+**Packages.** `[packages]` names the libraries written in Larimar that the project uses, each with the
+folder that has it:
 
 ```toml
-[dependencies]
-sql = "github.com/zerh/sql@v1.2.0"
+[packages]
+textkit = "libs/textkit.lpk"
 ```
 
-Each one goes in `deps/<name>/` (the compiler does not download them: they are copied or cloned
-there). The compiler reads only the names, and does three things with them:
-
-- **An import looks in the dependencies too**: when `import sql.core;` is not in `src/`, it is looked for
-  in `deps/*/src/` (`deps/sql/src/sql/core.lar`). A module that is in two dependencies is an error that names both.
-- **The C of each dependency is added to the project's**: the `static_libraries`, `dynamic_libraries`,
-  their paths, `include_paths` and `sources` of `deps/<name>/larimar.toml` (its `[c]` and its platform's sections), with their paths
-  relative to the dependency's folder.
-- **A dependency that is not in `deps/` is an error**: `'sql' is in [dependencies] but not in deps/: put it in deps/sql`.
+A package is what `larimar build` makes of a library ([chapter 27](#27-libraries-written-in-larimar)): its
+C, the C it brings, and the `.lar` that `import textkit` reads, in one file (`textkit.lpk`) or as the folder
+with the same things (`textkit = "libs/textkit"`). The compiler does not download it: the file is copied
+there, and unpacked in `build/packages/` when the project is built or checked. A file that is not a
+package, or a folder without its `textkit.interface`, is an error that says so.
 
 **Per platform.** `[c.linux]`, `[c.macos]`, `[c.windows]` and `[c.unix]` (Linux and macOS) take the same
 keys as `[c]` and count only on that platform: their lists are added to `[c]`'s, and a `compiler` there
@@ -4507,7 +4504,7 @@ to bring in a library, depending on how it comes:
 | **Static library** (`.a`) | `static_libraries = ["sqlite3"]` and `static_library_paths = ["vendor/lib"]` | it ends up inside the executable, even if a dynamic one is next to it |
 | **Dynamic library of your own** (`.so`, `.dylib`, `.dll`) | `dynamic_libraries = ["tone"]` and `dynamic_library_paths = ["vendor/lib"]` | the executable loads it when it starts, from that folder |
 | **System library** (`m`, `pthread`, `user32`, one installed with the package manager) | `dynamic_libraries = ["m"]` and, if needed, `include_paths` | the executable loads it from the system |
-| **Library written in Larimar** (with its `.interface`) | one of the two above, with its folder | see [Libraries written in Larimar](#27-libraries-written-in-larimar) |
+| **Library written in Larimar** (a package) | `[packages]`: `textkit = "libs/textkit"` | see [Libraries written in Larimar](#27-libraries-written-in-larimar) |
 
 An example with four at once:
 
@@ -4897,9 +4894,10 @@ without knowing Larimar, and which a Larimar program imports like a module. Whoe
 memory rules of Larimar; whoever uses it gets a plain C library.
 
 A project with `kind = "library"` is built into a **library**: a C program uses it like any C library,
-and a Larimar program imports it like a module. It is **static** by default (it goes inside the
-executable that uses it); `type = "dynamic"` in `[library]`, or `larimar build --dynamic`, makes it a
-dynamic one (`--static` goes the other way).
+and a Larimar program imports it like a module. By default it is built into a **package**: a folder with
+the library translated to C, which the program that uses it compiles with its own, on any platform.
+`larimar build --static` or `--dynamic` (or `type` in `[library]`) compile it here instead, into a library
+file for a C program.
 
 ```toml
 [project]
@@ -4909,7 +4907,7 @@ kind = "library"             # "program" (the default) or "library"
 main = "src/textkit.lar"
 
 [library]
-type = "static"              # "static" (the default) or "dynamic"
+type = "package"             # "package" (the default), "static" or "dynamic"
 prefix = "tk"                # its C names start with it: tk_wordCount (by default, the name)
 ```
 
@@ -4962,14 +4960,21 @@ public class Counter {
 public export function newCounter(): Counter { return Counter {}; }
 ```
 
-`larimar build` leaves four files in `build/textkit/`, which go together:
+`larimar build` leaves the package in `build/textkit/`, a folder whose files go together:
 
 | File | For | What it has |
 |---|---|---|
-| `libtextkit.a` | both | the library (dynamic: `libtextkit.so`, `libtextkit.dylib` or `textkit.dll`) |
+| `textkit.c` | both | the library, in C (with `--static`: `libtextkit.a`; with `--dynamic`: `libtextkit.so`, `libtextkit.dylib` or `textkit.dll`) |
+| `c/` | both | the C the library brings: the `sources` and `include_paths` of its `[c]`, those of every platform |
 | `textkit.h` | C | the prototypes, with their doc comments, and how to free what they give |
 | `textkit.lar` | Larimar | the same functions as `native` declarations |
-| `textkit.interface` | the compiler | its name, version, kind, what it needs linked and the **interface hash** |
+| `textkit.interface` | the compiler | its name, version, type, the C it brings, what it needs linked and the **interface hash** |
+
+The same folder serves Linux, macOS and Windows: its C is the one that builds on every system, and it is
+compiled where it is used. `larimar build` compiles it once all the same, to find its errors now.
+
+Next to the folder it leaves **`build/textkit.lpk`**: the same files in one, to publish and to copy. It is a
+zip without compression, so any zip tool opens it.
 
 ### Using it from C
 
@@ -5039,22 +5044,23 @@ int main(void) {
 ```
 
 ```sh
+larimar build --static                   # build/textkit/libtextkit.a
 cc -std=c99 -Ibuild/textkit main.c build/textkit/libtextkit.a -lm
 ./a.out                                  # Larimar 3 3 three
 ```
 
 What a static library needs linked besides is in `links` of its `.interface` (`-lm`, `-pthread` if it
-uses threads, the TLS ones...).
+uses threads, the TLS ones...). A C program can also compile the package itself: `textkit.c` and the
+sources its `.interface` names.
 
 ### Using it from Larimar
 
-The four files are copied into a folder of the program (or left where they are), and
-the library is named in `[c]` like any other:
+The `.lpk` is copied into the program's folder and named in `[packages]` (the folder can be named
+instead, to use a library as it is being written):
 
 ```toml
-[c]
-static_libraries = ["textkit"]
-static_library_paths = ["libs/textkit"]
+[packages]
+textkit = "libs/textkit.lpk"
 ```
 
 ```ts
@@ -5072,9 +5078,9 @@ function main(): int32 {
 
 Output: `Larimar 3 three`
 
-Since `textkit.interface` is in that folder, the compiler knows it is a library written in Larimar:
-`import textkit` finds `textkit.lar` there (`larimar check` and the editor too), its `.h` is included and
-what it needs is linked. The `.lar` it reads is plain `native` declarations:
+`import textkit` finds `textkit.lar` there (`larimar check` and the editor too), its `.h` is included, and
+`larimar build` compiles its C with the program's and links what it needs. A folder built with `--static`
+or `--dynamic` is named the same way: its `.interface` says what it is. The `.lar` it reads is plain `native` declarations:
 
 ```ts
 cinclude "textkit.h";
@@ -5119,11 +5125,10 @@ The `.interface` has eight hexadecimal digits, the start of the SHA-256 of the
 agree, and stops with what is wrong:
 
 - a `.lar` edited by hand: `textkit.lar does not match the library (its hash is ..., textkit.interface says ...)`;
-- a library of another build next to an old `.lar`: `libtextkit.a is from another build than textkit.lar and textkit.interface`;
-- a static library in `dynamic_libraries` (or the opposite): `textkit is a static library (...): put it in static_libraries`.
+- a library of another build next to an old `.lar`: `textkit.c is from another build than textkit.lar and textkit.interface`.
 
 So a program never calls a library with declarations that are not its own. The hash covers the whole
-`.lar`: the functions, their types and docs, the version and the kind. A new version is four new files
+`.lar`: the functions, their types and docs, the version and the kind. A new version is a new folder
 that go together. A C program can check the same when it starts:
 `strcmp(tk_interface(), TEXTKIT_INTERFACE) == 0`.
 
@@ -5135,9 +5140,18 @@ What goes to C, and how:
   its own (`export function answer(): int32 = tk_the_answer { ... }`), and `prefix = ""` leaves the names
   as they are. The library itself gives `<prefix>_free`, `<prefix>_<Class>_release` and
   `<prefix>_interface`: an export function cannot take those names (nor a method called `release`).
-- **Their types**: numbers, `bool`, `String` and `String?` (`const char*`; `NULL` is `null`), and the
-  **classes** of the library and their optionals. Native types and C structs do not go: they belong to C
-  headers that the program would need too.
+- **Their types**: numbers, `bool`, `String` and `String?` (`const char*`; `NULL` is `null`), the
+  **classes** of the library and their optionals, and **callbacks** (below). Other native types and C
+  structs do not go: they belong to C headers that the program would need too.
+- **A callback** is a function of the program that the library calls. The library declares its type with a
+  `Context` (`native type Visit = (int32, String, Context) -> int32;`, of numbers, `bool` and `String`) and
+  takes it with its `Context`: `export function each(n: int32, visit: Visit, data: Context): int32`. Inside,
+  it is called like a function (`visit(i, "item", data)`). A Larimar program gives it any function of that
+  shape without the `Context`, a lambda with what it captures included
+  (`evkit.each(4, (n: int32, label: String) -> { ... })`); a C program gives a function and a `void*`. A
+  library that **keeps** the function to call it later says so with `in default` on both parameters
+  (`visit: Visit in default, data: Context in default`): what the program's function uses must then live
+  as long as the program, and the compiler checks it.
 - **A text it returns** is a copy (`char*`) for the caller: C frees it with `<prefix>_free`.
 - **An object it returns** is a **handle**: C keeps it (`tk_Counter*`), passes it to its methods and
   to other export functions, and gives it back with `<prefix>_<Class>_release`. The handle has its own memory: what the
@@ -5173,11 +5187,14 @@ library to its code too.
 
 ### Clarifications
 
-- **Why static by default.** The executable that uses it is a single file, and it does not depend on a
-  `.so` of the right build being installed where it runs. A dynamic library is shared by several
-  programs and can be replaced without building them again.
-- **Where a dynamic one is looked for.** Like any dynamic library: on Linux and macOS, in the
-  `dynamic_library_paths` of the program (rpath; on macOS the library is `@rpath/libtextkit.dylib`); on
+- **Why a package by default.** One folder serves every platform, with nothing to compile for each, and
+  the executable that uses it is a single file. A static or a dynamic library is for one platform; a
+  dynamic one is shared by several programs and can be replaced without building them again.
+- **What a package needs of the system.** A library of the system that its C uses (`dynamic_libraries` of
+  its `[c]`, per platform too) is in `links` of its `.interface`, and the program links it: it must be
+  installed where the program is built and where it runs.
+- **Where a dynamic one is looked for.** Like any dynamic library: on Linux and macOS, in its folder, the
+  one `[packages]` names (rpath; on macOS the library is `@rpath/libtextkit.dylib`); on
   Windows, next to the `.exe` or in the `PATH` (the linker uses `libtextkit.dll.a`, which is made with it).
 - **What a static one needs.** The libraries its C needs, and those it links itself, are in `links`:
   a Larimar program adds them on its own; a C program adds them to its command. The static libraries
@@ -5189,9 +5206,17 @@ library to its code too.
   one thread at a time, unless it is a `synchronized class`.
 - **The hash is not a signature.** It finds out mistakes (files of different builds), not someone who
   changes a library on purpose.
-- **The four files are generated**: they are not edited, they are not kept in the library's repository
+- **The package is generated**: its files are not edited, they are not kept in the library's repository
   (they are in `build/`), and they are published together.
-- **Not yet**: lists, callbacks and errors (`throws`) do not cross a library; they go as texts, handles
+- **A package that uses another.** A package does not carry the packages its library uses: its
+  `.interface` names them, and the program names them too in its `[packages]` (`package 'webkit' uses the
+  package 'jsonkit': name it in [packages] too`).
+- **C that is already compiled.** A `lib<name>.a` of the library's `static_libraries` that is in its
+  `static_library_paths` goes in the package and is linked into the program. It is for one platform: in
+  `[c.linux]`, `[c.macos]` or `[c.windows]` each system gets its own; in `[c]`, the package serves only the
+  platform that file was compiled for.
+- **Not yet**: lists and errors (`throws`) do not cross a library, a callback does not return a `String`
+  nor take an object of the library; they go as texts, handles
   and numbers (an error code), or stay inside. A program does not create objects of the library with
   `Counter {}`, nor extend its classes: they are made by its functions and methods.
 
@@ -5645,7 +5670,8 @@ native type Op = (int32, int32) -> int32;             // a pointer to a C functi
 export function subtract(a: int32, b: int32): int32 { return a - b; }   // C can call it
 export function name(id: int32): String = lm_name { return "n${id}"; }  // C's name; C frees the text
 
-// larimar.toml of a library: build/<name>/ with lib<name>.a, <name>.h, <name>.lar, <name>.interface
-// [project] kind = "library"      [library] type = "static" (or "dynamic"), prefix = "tk"
+// larimar.toml of a library: build/<name>/, a package: <name>.c, <name>.h, <name>.lar, <name>.interface
+// [project] kind = "library"      [library] type = "package" (or "static", "dynamic"), prefix = "tk"
+// whoever uses it: [packages] textkit = "libs/textkit"
 // [c] static_libraries / static_library_paths, dynamic_libraries / dynamic_library_paths
 ```

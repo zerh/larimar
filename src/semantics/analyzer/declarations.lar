@@ -11,7 +11,7 @@ import semantics.types {
     enumOf, enums, escapeName, externInfoOf, externInfos, externTypeIndex, ExternTypeInfo, externTypes, FieldInfo,
     findMethod, funcT, functionIndex, FunctionInfo, functionOf, functions, includes, includeWhens, interfaceIndex,
     InterfaceInfo, interfaceMethod, interfaceOf, interfaces, isArray, isClass, isContextT, isCValue, isEnumT,
-    isError, isExternTypeName, isFloat, isInteger, isOpt, isPrimName, isResource, libraryPrefix, libraryRules,
+    isError, isExternT, isExternTypeName, isFloat, isInteger, isOpt, isPrimName, isResource, libraryPrefix, libraryRules,
     maxText, MethodInfo, minOf, named, NamedK, nativeMethods, newOwner, optT, platformCondition, primByName,
     structIndex, StructInfo, structMethod, structOf, structs, Symbol, SymK, T_ANY, T_BOOL, T_BYTE, T_ERROR,
     T_STRING, T_VOID, TyK, Type, usesThreads, VariantInfo, variantOf
@@ -358,7 +358,20 @@ function exportable(t: Type): bool {
     if (t == optT(T_STRING)) { return true; }
     if (!libraryRules) { return isCValue(t); }
     // a library describes its functions to C (.h) and to Larimar (.lar) by itself: no types of other headers
-    return t.kind == TyK.Prim && t != T_ANY || isClass(t) || (isOpt(t) && isClass(t.elem!));
+    return t.kind == TyK.Prim && t != T_ANY || isClass(t) || (isOpt(t) && isClass(t.elem!)) || isContextT(t) || libraryCallback(t);
+}
+
+/**
+ * A callback a library takes: a pointer to a C function (native type F = (A, Context) -> R) of numbers, bool
+ * and String, that gets a Context back, so the program gives it any function of its own, with what it captures.
+ */
+function libraryCallback(t: Type): bool {
+    let e: ExternTypeInfo? = isExternT(t) ? externInfoOf(t.name) : null;
+    if (e == null || e!.sig == null || e!.ctxIndex < 0) { return false; }
+    for (p in e!.sig!.params) {
+        if (!(p.kind == TyK.Prim && p != T_ANY) && !isContextT(p)) { return false; }
+    }
+    return e!.sig!.elem!.kind == TyK.Prim && e!.sig!.elem! != T_ANY;
 }
 
 /** export function: C calls it by its name, with C types. */
@@ -373,10 +386,12 @@ function checkExport(f: FunctionInfo in default, fd: FunctionDecl in default): v
     for (g in functions) {
         if (g.isExtern && g.cName == n) { error(f.line, "'${n}' is already the name of a native function: C would have two functions with that name."); }
     }
-    let what: String = libraryRules ? "numbers, bool, String, String? and the library's classes" : "numbers, bool, String, String?, native types and C structs";
+    let what: String = libraryRules ? "numbers, bool, String, String?, the library's classes, and a callback with its Context" : "numbers, bool, String, String?, native types and C structs";
     for (i, p in fd.params) {
         let pt: Type = f.sig!.params[i];
-        if (p.lives != "") { error(p.line, "'in ${p.lives}' is not allowed on the parameters of an export function: C gives plain values."); }
+        // a callback the library keeps (and its Context): 'in default' says so, and the program's function then lives as long as the program
+        let kept: bool = p.lives == "default" && libraryRules && (isContextT(pt) || libraryCallback(pt));
+        if (p.lives != "" && !kept) { error(p.line, "'in ${p.lives}' is not allowed on the parameters of an export function: C gives plain values."); }
         if (!isError(pt) && !exportable(pt)) {
             error(p.line, isClass(pt) ? "Parameter '${p.name}' of export function '${n}': a class goes to C only from a library ([project] kind = \"library\"), where C keeps it as a handle."
                                       : "Parameter '${p.name}' of export function '${n}': C can only pass ${what}.");

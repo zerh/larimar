@@ -47,12 +47,14 @@ is copied and freed (`native function strdup(s: String): String released by free
 
 ## Libraries for C and for Larimar
 
-A project with `kind = "library"` builds a library instead of an executable, static by default
-(`[library] type = "dynamic"` or `larimar build --dynamic` for a `.so`/`.dylib`/`.dll`). `build/<name>/`
-gets four files: `lib<name>.a`, `<name>.h` for C, `<name>.lar` for Larimar (its `export function`s as
-`native` declarations) and `<name>.interface` with an 8-digit hash of the `.lar` that the library also has
-inside, so a program that links it (`static_libraries` or `dynamic_libraries` in `[c]`, then
-`import <name>`) builds only with files of one build. The library's classes go to C as handles, with
+A project with `kind = "library"` builds a library instead of an executable: `build/<name>/`, a
+**package** with the library in C (`<name>.c`, and the C it brings in `c/`), `<name>.h` for C, `<name>.lar`
+for Larimar (its `export function`s as `native` declarations) and `<name>.interface` with an 8-digit hash
+of the `.lar` that the library also has inside, and `build/<name>.lpk`, the same in one file (a zip without
+compression). A program names the `.lpk` (or the folder) in `[packages]` and writes
+`import <name>`: the package is compiled with it, on any platform, and only with files of one build.
+`larimar build --static` or `--dynamic` compile the library instead (`lib<name>.a`, `.so`/`.dylib`/`.dll`),
+for a C program. The library's classes go to C as handles, with
 their fields and methods (`tk_Counter_add(c, "x")` in C, `c.add("x")` in Larimar), its texts as copies to
 free; everything else of its C is static, so libraries and programs do not clash. See
 [chapter 27 of the manual](docs/manual.md#27-libraries-written-in-larimar).
@@ -125,12 +127,11 @@ the debuggers and a client as other programs (`std.os.process`) and talk to them
 `larimar check --json` and `larimar lsp`, `larimar --debug` with lldb, gdb and `larimar dap`, and
 `https://` against a local HTTPS server (the certificate in `tests/tls`). No Python is needed.
 
-## Plugins and dependencies
+## Plugins and packages
 
 Other programs of `$LARIMAR_HOME/bin` answer commands of `larimar`, declared in `$LARIMAR_HOME/plugins/<name>.toml`
-(a tool can add `larimar hello` that way). A project's `[dependencies]` live in
-`deps/<name>/`: their modules are imported from `deps/<name>/src` and their `[c]` is added to the
-project's. ([manual, chapter 26](docs/manual.md#26-projects-larimartoml-and-larimar-build).)
+(a tool can add `larimar hello` that way). The libraries written in Larimar that a project uses are named
+in `[packages]`, each with its folder. ([manual, chapter 26](docs/manual.md#26-projects-larimartoml-and-larimar-build).)
 
 ## Editor support
 

@@ -125,6 +125,30 @@ test function methodReturnsSelfNotArgs(): void {
     ]);
 }
 
+// Una llamada a través de la clase base puede ejecutar el método de una subclase: lo que ese devuelve,
+// el de la base también puede devolverlo.
+test function anOverrideMayReturnItsArgument(): void {
+    failsWith(raw"""
+        class Base {
+            function pick(a: String): String { return "base"; }
+        }
+        class Sub extends Base {
+            override function pick(a: String): String { return a; }
+        }
+        let kept: String[*] = [] in default;
+        function main(): int32 {
+            let b: Base = Sub { } in default;
+            for (i in 0..3) {
+                let t: String = "temp ${i}";
+                let s: String = b.pick(t);
+                kept.push(s);
+            }
+            println(kept.join(","));
+            return 0;
+        }
+        """, "'s' lives in the memory of this block, but the array lives for the whole program");
+}
+
 // Una función que devuelve una vista de su parámetro: la vista vive lo que vive el original.
 test function returnViewOfParam(): void {
     runs("tests/cases/memory/return_view_of_param.lar", [
