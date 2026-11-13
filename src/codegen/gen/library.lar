@@ -6,7 +6,8 @@ import semantics.types {
 };
 import semantics.linker { FILE_LINES, fileSources };
 import codegen.expressions { cType };
-import codegen.gen { handleClasses, handleClassNames, LibraryMember, libraryMembers, line, memberSkips, takesTextFunctions };
+import codegen.gen { handleClasses, handleClassNames, LibraryMember, libraryMembers, line, memberSkips };
+import codegen.gen.callbacks { takesTextFunctions };
 import codegen.gen.classes { params };
 import codegen.gen.statements { ret };
 import codegen.gen.types { define, isHandle };

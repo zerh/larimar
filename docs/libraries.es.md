@@ -5,10 +5,11 @@ y **todos los intentos de usarla mal** que se probaron. Cada apartado trae el c�
 real que dio al ejecutarlo.
 
 Versión descrita: Larimar 1.7.0. La referencia breve está en el
-[manual, capítulo 27](manual.es.md#27-bibliotecas-escritas-en-larimar).
+[manual, capítulo 27](manual.es.md#27-bibliotecas-escritas-en-larimar). Cómo está hecho esto dentro del
+compilador, para quien vaya a tocarlo, está aparte: [compiler-libraries.es.md](compiler-libraries.es.md).
 
 **Cómo se hizo.** Un banco de pruebas escribió cada proyecto de este manual en disco, lo construyó, lo
-ejecutó y guardó lo que imprimió: 129 ejecuciones. Los bloques de salida son esa salida, sin retocar. Los
+ejecutó y guardó lo que imprimió: 129 ejecuciones, con la versión final del compilador. Los bloques de salida son esa salida, sin retocar. Los
 programas en Larimar y en C se compilaron con el detector de errores de memoria (AddressSanitizer, que
 incluye la detección de fugas); los de hilos, además con el detector de carreras (ThreadSanitizer).
 Todo se ejecutó en **Linux**. En Windows y macOS no se ha ejecutado nada de este manual.
@@ -70,6 +71,27 @@ Todo se ejecutó en **Linux**. En Windows y macOS no se ha ejecutado nada de est
 
 Una biblioteca hecha en Larimar es, hacia fuera, **una biblioteca de C con un archivo de bindings**.
 
+```mermaid
+flowchart LR
+    src["src/textkit.lar<br/>la biblioteca,<br/>en Larimar"]
+    subgraph lpk["build/textkit.lpk: el paquete"]
+        direction TB
+        c["textkit.c: la biblioteca traducida a C"]
+        h["textkit.h: para C"]
+        lar["textkit.lar: el binding, generado"]
+        itf["textkit.interface: el manifiesto"]
+        third["c/: el C de terceros que trae"]
+        c ~~~ h ~~~ lar ~~~ itf ~~~ third
+    end
+    plar["Un programa en Larimar<br/>[packages] e import textkit"]
+    pc["Un programa en C<br/>#include textkit.h"]
+    src -- "larimar build" --> lpk
+    lpk -- "el paquete entero" --> plar
+    lpk -- "textkit.h y textkit.c" --> pc
+```
+
+Los mismos archivos, como quedan en disco:
+
 ```
   src/textkit.lar  ──larimar build──►  build/textkit.lpk          el paquete, en un archivo
                                         build/textkit/             lo mismo, como carpeta:
@@ -95,6 +117,24 @@ sirve para Linux, macOS y Windows.
 Cada biblioteca lleva dentro su propia copia del runtime de Larimar (memorias, textos, hilos), y todo lo
 suyo es privado. El programa y cada biblioteca son mundos separados que solo se tocan por las funciones
 exportadas.
+
+```mermaid
+flowchart LR
+    subgraph prog["El programa"]
+        pcode["su código"]
+        prt["su runtime<br/>memorias, textos, hilos"]
+    end
+    subgraph bank["La biblioteca bank"]
+        bcode["su código"]
+        brt["su runtime, privado"]
+    end
+    subgraph textkit["La biblioteca textkit"]
+        tcode["su código"]
+        trt["su runtime, privado"]
+    end
+    pcode -- "bank_open, bank_Account_deposit…<br/>solo las funciones exportadas" --> bcode
+    pcode -- "tk_title, tk_count…" --> tcode
+```
 
 Se comprobó listando los nombres que el C de una biblioteca deja visibles. Esto es todo lo que se ve de
 `bank` (sección 7):
@@ -143,7 +183,19 @@ En la frontera valen las dos reglas que Larimar aplica a cualquier función:
    con `in`.
 2. **Un resultado vive donde dice quien llama.**
 
-De ellas sale todo lo demás.
+De ellas sale todo lo demás. Un texto que va y otro que vuelve:
+
+```mermaid
+sequenceDiagram
+    participant P as El programa
+    participant B as La biblioteca
+
+    P->>B: title("larimar")
+    Note over B: usa el texto durante la llamada.<br/>Si quiere guardarlo, guarda una copia
+    B-->>P: "Larimar"
+    Note over P: el resultado es del programa:<br/>vive en la memoria donde lo recibe
+    Note over B: no se queda con nada
+```
 
 ### 2.1 Textos
 
@@ -755,6 +807,34 @@ no hay cuenta
 
 Un objeto de la biblioteca vive en la memoria donde el programa lo crea.
 
+```mermaid
+flowchart TB
+    q{"¿Dónde lo crea el programa?"}
+    q -- "en un bloque" --> b["Se libera al salir del bloque"]
+    q -- "in default" --> d["Vive todo el programa"]
+    q -- "en un campo de otro objeto" --> o["Vive lo que viva ese objeto"]
+    q -- "es el resultado de una función" --> r["Se crea donde diga quien llama"]
+    b --> rel["La biblioteca libera el objeto<br/>y toda su memoria, una vez"]
+    d --> rel
+    o --> rel
+    r --> rel
+```
+
+La vida de un objeto, vista desde el programa:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Vivo: la biblioteca lo devuelve
+    Vivo --> Vivo: se leen sus campos, se llaman sus métodos
+    Vivo --> Liberado: se cierra su memoria
+    Liberado --> [*]
+    note right of Liberado
+        Usarlo después no compila.
+        Si se fuerza desde C, es un pánico
+        que nombra la función.
+    end note
+```
+
 **En un bloque:** se libera al salir del bloque. Es el caso del ejemplo anterior.
 
 **En todo el programa:** `in default`.
@@ -947,6 +1027,32 @@ panic: bank_Account_deposit: 'self' is NULL
 Una biblioteca recibe una función del programa como **un parámetro de tipo función**, igual que en
 cualquier código Larimar, y la llama como cualquier función. No hay tipos de C ni `Context` en el código
 de la biblioteca.
+
+```mermaid
+sequenceDiagram
+    participant P as El programa
+    participant F as Su función (una lambda)
+    participant B as La biblioteca
+
+    P->>B: serve("/hi", "ana", (req) -> { … })
+    B->>F: handler(req)
+    Note over F: req es de la biblioteca:<br/>se usa durante la llamada, no se guarda
+    F-->>B: "hola ana"
+    Note over B: ese texto vive en el bloque<br/>de la biblioteca que llamó
+    B-->>P: el resultado de serve
+    Note over P,B: la biblioteca no conservó la función
+```
+
+Qué puede usar la función del programa depende de lo que la biblioteca haga con ella:
+
+```mermaid
+flowchart TB
+    q{"¿Qué dice el parámetro<br/>en la biblioteca?"}
+    q -- "nada" --> a["La llama y no la guarda.<br/>La función puede usar datos locales"]
+    q -- "in self" --> b["La guarda en el objeto.<br/>Lo que usa vive al menos lo que el objeto"]
+    q -- "in default" --> c["La guarda en una variable de módulo.<br/>Lo que usa vive todo el programa"]
+    q -- "thread safe" --> d["La llama desde otro hilo.<br/>Se comprueba como el run de un hilo"]
+```
 
 ### 8.1 Llamada durante la función
 
@@ -1600,6 +1706,26 @@ acumulando.
 **Pruebas de la suite:** `aLibraryCallsBackFromAnotherThread`, `aFunctionOfASynchronizedObjectIsThreadSafe`,
 `aSynchronizedObjectIsNotCreatedAroundSharedData`, `aLibraryAndItsProgramShareNoNames`.
 
+El caso de esta sección: la biblioteca llama a una función del programa desde un hilo suyo.
+
+```mermaid
+sequenceDiagram
+    participant P as El programa
+    participant B as La biblioteca<br/>inBackground
+    participant H as Un hilo de la biblioteca
+
+    P->>B: inBackground((n) -> { seen.add() … })
+    Note over P,B: el tipo dice thread safe: la lambda se comprueba<br/>como el run de un hilo
+    B->>H: t.start()
+    loop cuatro veces
+        H->>P: tick(i)
+        Note over P: solo toca datos synchronized,<br/>atómicos o inmutables
+        P-->>H: n * 2
+    end
+    B->>H: t.join()
+    B-->>P: la suma
+```
+
 ### 9.1 Una biblioteca puede usar hilos por dentro
 
 Sin ninguna condición: sus hilos son suyos y el programa no se entera. La sección 14 tiene un programa y
@@ -2068,6 +2194,20 @@ textkit = "libs/textkit.lpk"
 Al construir o comprobar el proyecto se desempaqueta en `build/packages/textkit/`. Solo se vuelve a
 desempaquetar cuando el archivo cambia, y entonces la carpeta se vacía antes.
 
+```mermaid
+flowchart TB
+    a["larimar build del programa"] --> b{"¿[packages] nombra<br/>un .lpk o una carpeta?"}
+    b -- "una carpeta" --> f["Se usa tal cual"]
+    b -- "un .lpk" --> c{"¿Cambió desde la<br/>última vez?"}
+    c -- "no" --> f2["Se usa build/packages/textkit/"]
+    c -- "sí" --> d["Se vacía la carpeta<br/>y se desempaqueta"]
+    d --> f2
+    f --> g["Se comprueba: manifiesto, hash de la interfaz,<br/>archivos, paquetes que necesita"]
+    f2 --> g
+    g -- "bien" --> h["import textkit lo encuentra.<br/>Su C se compila con el programa"]
+    g -- "mal" --> e["Error de biblioteca<br/>(sección 18)"]
+```
+
 ### 13.3 Mientras se escribe la biblioteca
 
 Es más cómodo nombrar la **carpeta**, sin copiar nada:
@@ -2168,6 +2308,16 @@ en un hilo
 
 ### 14.3 Qué demuestra ese programa
 
+```mermaid
+flowchart TB
+    app["El programa<br/>[packages]: fourkit y tinykit"]
+    four["fourkit<br/>needs: tinykit"]
+    tiny["tinykit<br/>una sola copia en el ejecutable"]
+    app -- "import fourkit" --> four
+    app -- "import tinykit" --> tiny
+    four -- "import tinykit" --> tiny
+```
+
 - **`tinykit` es una sola en el ejecutable.** `uses()` da `3`: dos llamadas desde `fourkit` y una desde
   el programa, contadas en el mismo sitio.
 - **Tres mundos sin choques.** El programa, `fourkit` y `tinykit` crean cosas `in default`; el programa
@@ -2192,6 +2342,18 @@ fourkit_fourTimes fourkit_free fourkit_interface fourkit_larimar_interface
 | El código C | `larimar build` | `build/textkit/textkit.c` y `textkit.h` | cualquier sistema |
 | Biblioteca estática | `larimar build --static` | `build/textkit/libtextkit.a` | el sistema donde se compiló |
 | Biblioteca dinámica | `larimar build --dynamic` | `libtextkit.so`, `.dylib` o `.dll` | el sistema donde se compiló |
+
+```mermaid
+flowchart LR
+    src["src/textkit.lar"]
+    src -- "larimar build" --> c["textkit.c y textkit.h<br/>se compilan con el programa"]
+    src -- "larimar build --static" --> a["libtextkit.a y textkit.h"]
+    src -- "larimar build --dynamic" --> so["libtextkit.so, .dylib o .dll<br/>y textkit.h"]
+    c --> any["Cualquier sistema"]
+    a --> one["El sistema donde se compiló"]
+    so --> one
+    c --> lar["También para un programa Larimar,<br/>como paquete"]
+```
 
 Las tres dieron la misma salida con el `main.c` de la sección 4.6: `3 Larimar hola nada`.
 

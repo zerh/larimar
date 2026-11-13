@@ -22,11 +22,10 @@
 // on Windows or with --no-sanitize.
 
 import std.os;
-import std.text { isIdentifierPart };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
-import syntax.ast { Program, FunctionDecl, TK };
+import syntax.ast { FunctionDecl, Program };
 import syntax.parser { parseProgram };
 import project.cc { windows, quote, commandLine, systemLibraries, selfPath, installHint };
 import std.io.console as Console;

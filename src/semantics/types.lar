@@ -144,8 +144,6 @@ public function ptrT(inner: Type in default): Type {
 
 public function isPtr(t: Type): bool { return t.kind == TyK.Ptr; }
 
-public function elemOf(t: Type): Type { return t.elem!; }
-
 public function bits(t: Type): int32 {
     if (t.kind != TyK.Prim) { return 0; }
     return switch (t.name) {

@@ -27,16 +27,15 @@ import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 import project.lpk { unpack };
 
-/** A library written in Larimar that a project links. */
+/** A package the project names in [packages]: what it adds to the program's build. */
 public class LarimarLibrary {
     let name: String;
-    let dir: String;
-    let kind: String;               // "package", "static" or "dynamic"
-    let links: String[*] = [];      // what the program links too (-l...), unless the library is dynamic
-    let sources: String[*] = [];    // a package: its C files, compiled with the program (the library's first)
+    let dir: String;                // its folder: its .lar (import <name>) and its .h
+    let links: String[*] = [];      // what the program links too (-l...)
+    let sources: String[*] = [];    // its C files, compiled with the program (the library's own first)
     let includePaths: String[*] = [];
-    let objects: String[*] = [];    // a package: the compiled C libraries it brings for this platform (lib<name>.a)
-    let needs: String[*] = [];      // a package: the packages its library uses, which the program names too
+    let objects: String[*] = [];    // the compiled C libraries it brings for this platform (lib<name>.a)
+    let needs: String[*] = [];      // the packages its library uses, which the program names too
 }
 
 /** The interface hash of a library: the first 8 hex digits of the SHA-256 of its .lar. */
@@ -127,8 +126,8 @@ function read(name: String, folder: String, verify: bool, problems: String[*]): 
     let lib: Any = config.library;
     let hash: String = lib["interface"] as String ?? "";
     let kind: String = lib.type as String ?? "";
-    let found: LarimarLibrary = { name: name.clone(), dir: folder.clone(), kind: kind.clone() };
-    if (kind == "package") { found.sources.push(Paths.join(folder, libraryFile(name, kind)).clone()); }
+    let found: LarimarLibrary = { name: name.clone(), dir: folder.clone() };
+    found.sources.push(Paths.join(folder, libraryFile(name, "package")).clone());       // the library's own C goes first
     // [library], and of a package [library.unix] and [library.<platform>]: what the library brings for each
     let sections: Any[] = [lib, Platform.name() == "windows" ? null : lib.unix, lib[Platform.name()]];
     for (section in sections) {

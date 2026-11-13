@@ -12,6 +12,7 @@
 //  - errors     -> a function that throws takes RtError* err_out; every call checks it.
 //  - memories   -> RtMem; heap memories are freed on every exit of their block.
 
+import codegen.gen.callbacks { callbackThunks, takesTextFunctions };
 import semantics.analyzer.declarations { libraryCallback };
 import semantics.types {
     allFields, buildingLibrary, cCode, cCodeStd, chain, classDepth, classes, ClassInfo, enums, externInfos,
@@ -31,7 +32,7 @@ import codegen.gen.classes {
 import codegen.gen.library { exports, plainName };
 import codegen.gen.statements { block, body, ret };
 import codegen.gen.types {
-    callbackThunk, define, earlyExport, exportBody, exportHeader, externCType, externDefinition, externPrototype, forward, isCName,
+    define, earlyExport, exportBody, exportHeader, externCType, externDefinition, externPrototype, forward, isCName,
     isHandle, larInC, larPrototypes, memberBody
 };
 
@@ -251,30 +252,14 @@ public function generate(): String {
         functionsOut.add(body(f.decl!.body, f.sig!.elem!, f.throwsType != null, null, f.paramSymbols, "", f.line));
         functionsOut.add("}\n\n");
     }
-    let callbacks: Type[*] = [];                // export: the C function C code calls
-    for (f in functions) {
+    if (buildingLibrary) { functionsOut.add(callbackThunks()); }     // what makes a function C gives a function of Larimar's
+    for (f in functions) {                      // export: the C function C code calls
         if (f.isExtern || f.exportName == "") { continue; }
-        for (p in f.sig!.params) {              // and what makes a function C gives a function of Larimar's
-            if (p.kind == TyK.Func && !callbacks.contains(p)) {
-                callbacks.push(p);
-                functionsOut.add(callbackThunk(p));
-            }
-        }
         functionsOut.add(exportBody(f));
     }
     if (buildingLibrary) {                      // the members of its classes: tk_Counter_add(handle, ...)
         for (c in handleClassNames()) {
-            for (m in libraryMembers(c)) {
-                if (m.method != null) {
-                    for (p in m.method!.sig!.params) {
-                        if (p.kind == TyK.Func && !callbacks.contains(p)) {
-                            callbacks.push(p);
-                            functionsOut.add(callbackThunk(p));
-                        }
-                    }
-                }
-                functionsOut.add(memberBody(m));
-            }
+            for (m in libraryMembers(c)) { functionsOut.add(memberBody(m)); }
         }
     }
     let methods: StringBuilder = {} in default;
@@ -673,25 +658,6 @@ function libraryGlue(out: StringBuilder): void {
 
 /** Where the interface hash goes in a library's C: larimar build writes it once the .lar is written. */
 public const INTERFACE_MARK: String = "@INTERFACE@";
-
-/** Does an export function take a function that gives a text? */
-public function takesTextFunctions(): bool {
-    for (f in functions) {
-        if (f.isExtern || f.exportName == "") { continue; }
-        for (t in f.sig!.params) {
-            if (t.kind == TyK.Func && t.elem! == T_STRING) { return true; }
-        }
-    }
-    for (c in handleClassNames()) {
-        for (m in libraryMembers(c)) {
-            if (m.method == null) { continue; }
-            for (t in m.method!.sig!.params) {
-                if (t.kind == TyK.Func && t.elem! == T_STRING) { return true; }
-            }
-        }
-    }
-    return false;
-}
 
 /**
  * The classes C knows as handles, in order (their names in the C of the library): those that the export

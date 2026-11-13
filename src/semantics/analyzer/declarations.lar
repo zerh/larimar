@@ -11,7 +11,7 @@ import semantics.types {
     enumOf, enums, escapeName, externInfoOf, externInfos, externTypeIndex, ExternTypeInfo, externTypes, FieldInfo,
     findMethod, funcT, functionIndex, FunctionInfo, functionOf, functions, includes, includeWhens, interfaceIndex,
     InterfaceInfo, interfaceMethod, interfaceOf, interfaces, isArray, isClass, isContextT, isCValue, isEnumT,
-    isError, isExternT, isExternTypeName, isFloat, isInteger, isOpt, isPrimName, isResource, libraryPrefix, libraryRules,
+    isError, isExternTypeName, isFloat, isInteger, isOpt, isPrimName, isResource, libraryPrefix, libraryRules,
     maxText, MethodInfo, minOf, named, NamedK, nativeMethods, newOwner, optT, platformCondition, primByName,
     structIndex, StructInfo, structMethod, structOf, structs, Symbol, SymK, T_ANY, T_BOOL, T_BYTE, T_ERROR,
     T_STRING, T_VOID, TyK, Type, usesThreads, VariantInfo, variantOf

@@ -29,7 +29,11 @@ their own C compiler (tcc), so `larimar hello.lar` runs a file at once.
 - [Manual](docs/manual.md) ([en español](docs/manual.es.md)): the language with examples, projects,
   C, libraries, the editor and the tests.
 - [Specification](docs/spec.md) (language 1.0): when it and the manual disagree, it wins.
-- [Changelog](CHANGELOG.md) and [how to contribute](CONTRIBUTING.md).
+- [Bibliotecas en Larimar](docs/libraries.es.md) (in Spanish): every scenario of writing, publishing and
+  using a library, each with its code and the output it gave.
+- [Changelog](CHANGELOG.md) and [how to contribute](CONTRIBUTING.md): how the compiler is organized, with
+  [every function of it](docs/compiler-reference.md) and
+  [how libraries are made inside](docs/compiler-libraries.es.md) (in Spanish).
 
 ## Calling C
 

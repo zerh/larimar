@@ -86,6 +86,13 @@ part of it, in the folder of its name.
 - `docs/libraries.es.md`: the manual of libraries. Every scenario of writing, publishing and using one, and
   every attempt to misuse one that was tried, each with its code and the output it gave when it was run. `docs/compiler-reference.md`: every function of the compiler, with
   its signature and its comment, generated from the source.
+- The compiler: what a library does with a function of the program is one module, `codegen/gen/callbacks.lar`,
+  whose header tells the whole path and where each piece is; unused imports and an unused function are
+  gone. The generated C is the same.
+- `docs/compiler-libraries.es.md`: how libraries are made inside the compiler, for who changes it (the
+  files, the path of a call, of an object and of a function of the program, and what to touch to change
+  each thing). `CONTRIBUTING.md` shows the compiler from a file to a program, the folders, and the
+  bootstrap. These two and the manual of libraries have diagrams (Mermaid, which GitHub draws).
 - The manuals and the specification are in `docs/`, next to the page that shows them (`manual.html`
   reads the ones published with it). The manual explains `native struct` and `native type`, and where
   `c"..."` is needed; the page no longer speaks of `#when`.

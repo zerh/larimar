@@ -1,0 +1,122 @@
+// codegen.gen.callbacks: a function of the program that a library takes, on the library's side.
+//
+// The library writes a parameter of a function type (handler: (Request) -> String) and calls it like any
+// function. C gives two things for it: a function and a void*, its own data, that the function gets back on
+// each call. This module turns those two into a function of Larimar's:
+//
+//   callbackC       the C type of the function C gives:   R (*name)(A..., void* data)
+//                   a text is not returned: it is left in one more argument, where the library says
+//                   ->  void (*name)(A..., void* data, void* out)
+//   callbackValue   the closure made of the two: its env holds them (RtCCallback), and its function is
+//   callbackThunk   lm_callback_<id>: the arguments as C takes them, C's function called, its result back
+//                   - a text goes as a char* ended by zero, for the time of the call
+//                   - an object of the library goes as a handle on the stack: C uses it, and cannot keep it
+//                   - a text C gives is made, by <prefix>_give, in the memory the library's caller chose
+//
+// The other pieces:
+//   semantics/analyzer/declarations.lar   libraryCallback: which function types cross; 'in' on that parameter
+//   codegen/gen/types.lar                 exportBody, memberBody: the C function, with the two parameters
+//   codegen/gen/library.lar               the .h (its typedef) and the .lar (a native type with a Context)
+//   std/runtime/memory.lar, string.lar    RtCCallback; RtTextOut, where a text is left
+// and on the side of the program that uses the library (any native function that takes a callback):
+//   codegen/expressions/calls.lar         trampoline: the C function that calls the program's lambda
+//   semantics/expressions/calls.lar       what the lambda uses lives as long as who keeps it
+
+import semantics.types { functions, T_STRING, T_VOID, TyK, Type };
+import codegen.expressions { cType };
+import codegen.gen { handleClassNames, libraryMembers };
+import codegen.gen.types { externCType, isHandle };
+
+/** A function of C's as a parameter: R (*name)(A..., void*), the void* being the one given with it. */
+public function callbackC(t: Type, name: String): String {
+    let ps: String[*] = [];
+    for (p in t.params) { ps.push(isHandle(p) ? "void*" : externCType(p)); }
+    ps.push("void*");
+    if (t.elem! == T_STRING) {                  // a text is left where C is told, the last argument
+        ps.push("void*");
+        return "void (*${name})(${ps.join(", ")})";
+    }
+    return "${externCType(t.elem!)} (*${name})(${ps.join(", ")})";
+}
+
+/**
+ * What makes a function of C's a function of Larimar's: the function a closure of that type runs, which
+ * calls C's with the arguments as C takes them (a text, ended by a zero, for the time of the call) and
+ * with its void*.
+ */
+function callbackThunk(t: Type): String {
+    let sb: StringBuilder = {};
+    let ps: StringBuilder = {};
+    let args: String[*] = [];
+    let texts: bool = false;
+    let handles: StringBuilder = {};
+    for (i, p in t.params) {
+        ps.add(", ${cType(p)} a${i}");
+        if (p == T_STRING) {
+            texts = true;
+            args.push("rt_str_cz(a${i}, &mem, 0)");
+        } else if (isHandle(p)) {               // an object of the library, as a handle for the time of the call
+            handles.add("    RtHandle h${i} = { .object = a${i} };\n");
+            args.push("&h${i}");
+        } else {
+            args.push("a${i}");
+        }
+    }
+    args.push("c->data");
+    let r: Type = t.elem!;
+    sb.add("static ${cType(r)} lm_callback_${t.funcId}(void* env${r == T_STRING ? ", RtMem* rt_dest" : ""}${ps.toString()}) {\n");
+    sb.add("    RtCCallback* c = (RtCCallback*)env;\n");
+    sb.add(handles.toString());
+    if (texts) { sb.add("    RtMem mem = rt_mem_growable();\n"); }
+    if (r == T_STRING) {                        // the text is made where the caller of this function said
+        sb.add("    RtTextOut out = { rt_text_out_set, rt_dest, rt_str_c(\"\") };\n");
+        args.push("&out");
+    }
+    let call: String = "((${callbackC(t, "")})c->fn)(${args.join(", ")})";
+    sb.add(r == T_VOID || r == T_STRING ? "    ${call};\n" : "    ${cType(r)} r = ${call};\n");
+    if (texts) { sb.add("    rt_mem_free(&mem);\n"); }
+    if (r == T_STRING) { sb.add("    return out.text;\n"); }
+    else if (r != T_VOID) { sb.add("    return r;\n"); }
+    sb.add("}\n\n");
+    return sb.toString();
+}
+
+/** The closure a function of C's and its void* make: `x` is the function, `x_data` the void*. */
+public function callbackValue(t: Type, x: String): String {
+    return "((Closure_${t.funcId}){ .fn = lm_callback_${t.funcId}, .env = { .c = { (void (*)(void))${x}, ${x}_data } } })";
+}
+
+/** The function types that the export functions and the methods of the library's classes take, each once. */
+function callbackTypes(): Type[*] {
+    let out: Type[*] = [] in default;
+    for (f in functions) {
+        if (f.isExtern || f.exportName == "") { continue; }
+        for (t in f.sig!.params) {
+            if (t.kind == TyK.Func && !out.contains(t)) { out.push(t); }
+        }
+    }
+    for (c in handleClassNames()) {
+        for (m in libraryMembers(c)) {
+            if (m.method == null) { continue; }
+            for (t in m.method!.sig!.params) {
+                if (t.kind == TyK.Func && !out.contains(t)) { out.push(t); }
+            }
+        }
+    }
+    return out;
+}
+
+/** The thunks of all of them. */
+public function callbackThunks(): String {
+    let sb: StringBuilder = {};
+    for (t in callbackTypes()) { sb.add(callbackThunk(t)); }
+    return sb.toString();
+}
+
+/** Does a function or a method of the library take a function that gives a text? (<prefix>_give is for those.) */
+public function takesTextFunctions(): bool {
+    for (t in callbackTypes()) {
+        if (t.elem! == T_STRING) { return true; }
+    }
+    return false;
+}

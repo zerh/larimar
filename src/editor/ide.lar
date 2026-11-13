@@ -11,15 +11,15 @@ import std.io.path as Paths;
 import std.text { isIdentifierPart, isDigit };
 import std.encoding.json as Json;
 import syntax.ast {
-    Node, Expr, Stmt, Program, FunctionDecl, StructDecl, ClassDecl, InterfaceDecl, NativeTypeDecl, EnumDecl,
-    EnumVariant, VarDecl, ConstDecl, FieldDecl, Param, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ForStmt, TryStmt, declName,
-    Ident, Member, Call, Lambda, ObjectLit, IsExpr, allStmts, allExprs, exprAll
+    allExprs, allStmts, Call, ClassDecl, ConstDecl, declName, EnumDecl, Expr, exprAll, ExternFunctionDecl,
+    ExternTypeDecl, ExternValueDecl, ForStmt, FunctionDecl, Ident, InterfaceDecl, Lambda, Member, NativeTypeDecl,
+    Node, Stmt, StructDecl, TryStmt, VarDecl
 };
 import semantics.types {
-    Symbol, SymK, Type, TyK, NamedK, ArrK, FunctionInfo, MethodInfo, FieldInfo, StructInfo, ClassInfo, InterfaceInfo,
-    EnumInfo, VariantInfo, MemberInfo, MbK, CallInfo, CallK, LambdaInfo, functions, structs, classes, interfaces,
-    enums, nativeMethods, externInfos, ExternTypeInfo, structOf, classOf, interfaceOf, enumOf, functionOf,
-    externInfoOf, allFields, findMethod, chain, T_STRING, T_ANY
+    allFields, ArrK, CallInfo, CallK, chain, classes, ClassInfo, classOf, EnumInfo, enumOf, enums, externInfoOf,
+    externInfos, ExternTypeInfo, FieldInfo, findMethod, FunctionInfo, functionOf, functions, InterfaceInfo,
+    interfaceOf, interfaces, LambdaInfo, MbK, MemberInfo, MethodInfo, nativeMethods, StructInfo, structOf, structs,
+    Symbol, SymK, T_ANY, T_STRING, TyK, Type, VariantInfo
 };
 import semantics.linker { isLangHelper, filePaths, fileSources, FILE_LINES, decode, namesOfFile, aliasesOfFile, publicsOfModule, fileOfModule };
 import editor.session { program, stdDir, diagnostics, Diagnostic };

@@ -10,9 +10,9 @@
 import std.encoding.json as Json;
 import syntax.ast { Stmt, Expr, VarDecl, ForStmt, TryStmt, SwitchStmt, IsExpr, SwitchExpr, allStmts, allExprs };
 import semantics.types {
-    Type, TyK, NamedK, ArrK, T_STRING, T_ANY, Symbol, FunctionInfo, MethodInfo, LambdaInfo, ClassInfo, StructInfo, EnumInfo,
-    InterfaceInfo, FieldInfo, functions, structs, classes, interfaces, enums, nativeMethods, globals, lambdaList,
-    structOf, classOf, interfaceOf, enumOf, optIsPointer, escapeName, hasCapture
+    ArrK, classes, ClassInfo, classOf, EnumInfo, enumOf, enums, escapeName, FieldInfo, functions, globals,
+    LambdaInfo, lambdaList, MethodInfo, NamedK, nativeMethods, optIsPointer, StructInfo, structOf, structs, Symbol,
+    T_ANY, T_STRING, Type
 };
 import semantics.linker { filePaths, FILE_LINES, decode };
 import codegen.gen.classes { methodName };
