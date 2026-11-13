@@ -1190,7 +1190,7 @@ What they decide:
 
 `in q` follows `q`'s own `in`: in `a: T in b, b: T in default`, `a` is static. Parameters that live in each
 other in a circle are an error. `in` applies only to parameters whose type needs memory; it is not allowed
-on a memory parameter, on native functions (except `in default` on a callback, [§19.8](#198-c-function-pointers-and-callbacks)) or on export functions. A method that overrides another, or
+on a memory parameter, on native functions (except on a callback, [§19.8](#198-c-function-pointers-and-callbacks)) or on export functions (except on a function of the program, [§19.10](#1910-libraries)). A method that overrides another, or
 implements an interface, repeats the same `in`.
 
 ### 15.8 `clone()`
@@ -1537,7 +1537,12 @@ capture:
 - an `export function` or a `native function` of type `F` goes as it is, with `NULL` as the Context;
 - without `in`, C may call it only during the call; with **`in default`** on the parameter, C may keep it,
   and what it captures must live as long as the whole program;
-- the Larimar function cannot return `String`, and `F` cannot carry resources.
+- in a method of a native type (`native type X = T* { native function m(f: F in self, data: Context) }`),
+  **`in self`** on the parameter says the object keeps it: what the function uses must live at least as
+  long as the object, and its copy is made in the memory where the object is;
+- the Larimar function cannot return `String`, and `F` cannot carry resources. In the `.lar` that
+  `larimar build` writes for a package it can do both: a library takes the text where it says, and the
+  objects it gives the function stay its own (the function uses them, and cannot keep them).
 
 A member of a native type that calls a C function taking such a callback takes the Larimar function.
 

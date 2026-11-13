@@ -41,6 +41,9 @@ part of it, in the folder of its name.
   (it uses them, and cannot keep them) and gives a number, a `bool`, nothing or a text, which lives in the
   block of the library that called it (C gives it with `<prefix>_give`). `in default` on the parameter
   says the library keeps the function: what it uses then lives as long as the program.
+- A **method** of a class of a library takes functions too, and may keep one in its object with **`in self`**
+  (`function get(path: String, handler: (Request) -> String in self): void`): what the program's function
+  uses then lives at least as long as the object, and dies with it.
 - A Larimar program uses the package of a library; a library compiled with `--static` or `--dynamic` is
   for C programs, and is no longer named in `[packages]`.
 - **Fixed**: an object of a synchronized class could be created around a list that its creator kept using,

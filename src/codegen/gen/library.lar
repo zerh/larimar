@@ -6,7 +6,7 @@ import semantics.types {
 };
 import semantics.linker { FILE_LINES, fileSources };
 import codegen.expressions { cType };
-import codegen.gen { handleClasses, handleClassNames, LibraryMember, libraryMembers, line, memberSkips };
+import codegen.gen { handleClasses, handleClassNames, LibraryMember, libraryMembers, line, memberSkips, takesTextFunctions };
 import codegen.gen.classes { params };
 import codegen.gen.statements { ret };
 import codegen.gen.types { define, isHandle };
@@ -49,6 +49,37 @@ public function libraryProblems(): String[*] {
         }
     }
     return out;
+}
+
+/** In the .h: the type of a function of yours that `owner` (a function or a method of the library) takes. */
+function callbackTypedef(owner: String, param: String, t: Type, lives: String, p: String): String {
+    let sb: StringBuilder = {};
+    let ps: String[*] = [];
+    for (pt in t.params) { ps.push(headerType(pt, false)); }
+    ps.push("void* data");
+    let text: bool = t.elem! == T_STRING;
+    if (text) { ps.push("void* out"); }
+    sb.add("/**\n * A function of yours that ${owner} calls${t.safe ? ", maybe from another thread and several at once" : ""}: `data` is the void* you give with it");
+    sb.add(switch (lives) {
+        case "default" -> ", and both are kept:\n * they must stay valid for as long as the program runs.\n";
+        case "self" -> ", and both are kept in\n * the object: they must stay valid for as long as it is not released.\n";
+        default -> ".\n";
+    });
+    for (pt in t.params) {
+        if (isHandle(pt)) { sb.add(" * A ${headerType(pt, false)} it gets is the library's: use it during the call, do not release it nor keep it.\n"); }
+    }
+    if (text) { sb.add(" * It gives its text with ${p}give(out, text): the library copies it at once.\n"); }
+    sb.add(" */\n");
+    sb.add("typedef ${text ? "void" : headerType(t.elem!, false)} (*${owner}_${escapeName(param)})(${ps.join(", ")});\n\n");
+    return sb.toString();
+}
+
+/** In the .lar: the same type, which only the compiler names. A thread safe one is checked for other threads. */
+function bindingCallbackType(name: String, t: Type): String {
+    let ps: String[*] = [];
+    for (pt in t.params) { ps.push(bindingType(pt)); }
+    ps.push("Context");
+    return "native type ${name} = (${ps.join(", ")}) -> ${t.elem! == T_VOID ? "void" : bindingType(t.elem!)}${t.safe ? " thread safe" : ""};\n\n";
 }
 
 /** The C type of a function a library takes, in its .h: <export name>_<parameter>. */
@@ -155,20 +186,15 @@ public function libraryHeader(name: String, version: String, kind: String, hash:
     if (hs.length > 0) { sb.add("\n"); }
     for (f in exports()) {                           // the functions of yours that the library calls
         for (i, t in f.sig!.params) {
-            if (t.kind != TyK.Func) { continue; }
-            let ps: String[*] = [];
-            for (pt in t.params) { ps.push(headerType(pt, false)); }
-            ps.push("void* data");
-            let text: bool = t.elem! == T_STRING;
-            if (text) { ps.push("void* out"); }
-            sb.add("/**\n * A function of yours that ${f.exportName} calls${t.safe ? ", maybe from another thread and several at once" : ""}: `data` is the void* you give with it");
-            sb.add(f.params[i].lives == "default" ? ", and both are kept:\n * they must stay valid for as long as the program runs.\n" : ".\n");
-            for (pt in t.params) {
-                if (isHandle(pt)) { sb.add(" * A ${headerType(pt, false)} it gets is the library's: use it during the call, do not release it nor keep it.\n"); }
+            if (t.kind == TyK.Func) { sb.add(callbackTypedef(f.exportName, f.params[i].name, t, f.params[i].lives, p)); }
+        }
+    }
+    for (cls in handleClassNames()) {
+        for (m in libraryMembers(cls)) {
+            if (m.method == null) { continue; }
+            for (i, t in m.method!.sig!.params) {
+                if (t.kind == TyK.Func) { sb.add(callbackTypedef(m.cName, m.method!.decl.params[i].name, t, m.method!.decl.params[i].lives, p)); }
             }
-            if (text) { sb.add(" * It gives its text with ${p}give(out, text): the library copies it at once.\n"); }
-            sb.add(" */\n");
-            sb.add("typedef ${text ? "void" : headerType(t.elem!, false)} (*${callbackName(f, i)})(${ps.join(", ")});\n\n");
         }
     }
     for (cls in handleClassNames()) {                // the members of each class: its fields (read) and methods
@@ -185,7 +211,15 @@ public function libraryHeader(name: String, version: String, kind: String, hash:
             sb.add(docBlock(doc, ""));
             let ps: String[*] = ["${p}${c}* self"];
             if (m.method != null) {
-                for (i, t in m.method!.sig!.params) { ps.push("${headerType(t, false)} ${escapeName(m.method!.decl.params[i].name)}"); }
+                for (i, t in m.method!.sig!.params) {
+                    let name: String = escapeName(m.method!.decl.params[i].name);
+                    if (t.kind == TyK.Func) {
+                        ps.push("${m.cName}_${name} ${name}");
+                        ps.push("void* ${name}_data");
+                    } else {
+                        ps.push("${headerType(t, false)} ${name}");
+                    }
+                }
             }
             sb.add("${headerType(r, true)} ${m.cName}(${ps.join(", ")});\n\n");
         }
@@ -202,12 +236,8 @@ public function libraryHeader(name: String, version: String, kind: String, hash:
     }
     for (c in hs) { sb.add("/** Gives back a ${c} (NULL does nothing). */\nvoid ${p}${c}_release(${p}${c}* handle);\n\n"); }
     sb.add("/** Frees a text the library returned (NULL does nothing). */\nvoid ${p}free(void* text);\n\n");
-    for (f in exports()) {
-        for (t in f.sig!.params) {
-            if (t.kind == TyK.Func && t.elem! == T_STRING && !sb.toString().contains("void ${p}give(")) {
-                sb.add("/** Inside a function of yours that gives a text: leaves `text` in `out`, the last argument it got. */\nvoid ${p}give(void* out, const char* text);\n\n");
-            }
-        }
+    if (takesTextFunctions()) {
+        sb.add("/** Inside a function of yours that gives a text: leaves `text` in `out`, the last argument it got. */\nvoid ${p}give(void* out, const char* text);\n\n");
     }
     sb.add("/** The interface hash of the library (as in ${name}.interface): compare it with ${name.toUpperCase()}_INTERFACE. */\n");
     sb.add("const char* ${p}interface(void);\n\n");
@@ -222,8 +252,14 @@ public function libraryHeader(name: String, version: String, kind: String, hash:
 function bindingClass(cls: String in default, p: String): String {
     let c: String = plainName(cls);
     let sb: StringBuilder = {} in default;
-    sb.add(docBlock(docAbove(classOf(cls)!.line), ""));
     let members: LibraryMember[*] = libraryMembers(cls);
+    for (m in members) {                             // the functions of the program that its methods take
+        if (m.method == null) { continue; }
+        for (i, t in m.method!.sig!.params) {
+            if (t.kind == TyK.Func) { sb.add(bindingCallbackType("${c}_${m.name}_${m.method!.decl.params[i].name}", t)); }
+        }
+    }
+    sb.add(docBlock(docAbove(classOf(cls)!.line), ""));
     let skips: String[*] = memberSkips(cls);
     if (members.length == 0 && skips.length == 0) {
         sb.add("public native type ${c} = ${p}${c}* released by ${p}${c}_release;\n\n");
@@ -243,8 +279,16 @@ function bindingClass(cls: String in default, p: String): String {
         let ps: String[*] = [];
         let names: String[*] = [];
         for (i, t in mi.sig!.params) {
-            ps.push("${mi.decl.params[i].name}: ${bindingType(t)}");
-            names.push(mi.decl.params[i].name);
+            let name: String = mi.decl.params[i].name;
+            if (t.kind == TyK.Func) {
+                // kept by the library: in default, or in the object (in self): what the program's function uses
+                // then lives as long as the program, or as the object
+                ps.push("${name}: ${c}_${m.name}_${name}${mi.decl.params[i].lives != "" ? " in ${mi.decl.params[i].lives}" : ""}");
+                ps.push("${name}_data: Context");
+                continue;
+            }
+            ps.push("${name}: ${bindingType(t)}");
+            names.push(name);
         }
         let r: Type = mi.sig!.elem!;
         sb.add(docBlock(docAbove(mi.decl.line), "    "));
@@ -280,12 +324,7 @@ public function libraryModule(name: String, version: String, kind: String, made:
     for (cls in handleClassNames()) { sb.add(bindingClass(cls, p)); }
     for (f in exports()) {                           // the functions of the program that the library calls
         for (i, t in f.sig!.params) {
-            if (t.kind != TyK.Func) { continue; }
-            let ps: String[*] = [];
-            for (pt in t.params) { ps.push(bindingType(pt)); }
-            ps.push("Context");
-            // thread safe: the library calls it from another thread, so the program's function is checked for that
-            sb.add("native type ${bindingCallback(f, i)} = (${ps.join(", ")}) -> ${t.elem! == T_VOID ? "void" : bindingType(t.elem!)}${t.safe ? " thread safe" : ""};\n\n");
+            if (t.kind == TyK.Func) { sb.add(bindingCallbackType(bindingCallback(f, i), t)); }
         }
     }
     for (f in exports()) {

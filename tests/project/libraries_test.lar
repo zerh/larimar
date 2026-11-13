@@ -421,6 +421,109 @@ test function aCallbackGetsAnObjectAndGivesAText(): void throws IoError {
     check(output.join("") == "hola ana (8 bytes)\n", "from C: ${output.join("")}");
 }
 
+// A method of a class of the library takes a function, and keeps it in its object (in self): what the
+// function uses lives at least as long as the object, and dies with it.
+test function aMethodKeepsAFunctionInItsObject(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let dir: String = Paths.absolute("build/test/lib-app");
+    Files.createDirectories(Paths.join(dir, "src"));
+    Files.writeString(Paths.join(dir, "larimar.toml"), "[project]\nname = \"webkit\"\nkind = \"library\"\nmain = \"src/webkit.lar\"\n\n[library]\nprefix = \"wk\"\n");
+    Files.writeString(Paths.join(dir, "src/webkit.lar"), raw"""
+        public class Request {
+            let path: String;
+            let name: String = "";
+            function param(key: String): String { return key == "name" ? self.name.clone() : ""; }
+        }
+        public class App {
+            let paths: String[*] = [];
+            let handlers: ((Request) -> String)[*] = [];
+            function get(path: String, handler: (Request) -> String in self): void {
+                self.paths.push(path.clone());
+                self.handlers.push(handler);
+            }
+            function handle(path: String, name: String): String {
+                for (i, p in self.paths) {
+                    if (p == path) {
+                        let req: Request = { path: path.clone(), name: name.clone() };
+                        return self.handlers[i](req);
+                    }
+                }
+                return "404";
+            }
+        }
+        public export function newApp(): App { return App { }; }
+        """);
+    let output: String[*] = [];
+    checkInt(0, larimarc(["build", dir], output));
+    let lib: String = Paths.join(dir, "build/webkit");
+    check(Files.readString(Paths.join(lib, "webkit.h")).contains("void wk_App_get(wk_App* self, const char* path, wk_App_get_handler handler, void* handler_data);"), "the method in the .h: ${output.join("")}");
+    check(Files.readString(Paths.join(lib, "webkit.lar")).contains("native function get(path: String, handler: App_get_handler in self, handler_data: Context): void = wk_App_get;"), "and in the .lar, kept in the object");
+    let app: String = Paths.absolute("build/test/lib-app-app");
+    Files.createDirectories(Paths.join(app, "src"));
+    Files.writeString(Paths.join(app, "larimar.toml"), "[project]\nname = \"app\"\n\n[packages]\nwebkit = \"${lib}\"\n");
+    Files.writeString(Paths.join(app, "src/main.lar"), raw"""
+        import webkit;
+        import webkit { App, Request };
+        function serveOnce(greeting: String): void {
+            let app: App = webkit.newApp();
+            let prefix: String = "${greeting}, ";
+            app.get("/hi", (req: Request) -> { return "${prefix}${req.param("name")}"; });
+            app.get("/bye", (req: Request) -> { return "adios ${req.param("name")}"; });
+            println("${app.handle("/hi", "ana")} | ${app.handle("/bye", "luis")} | ${app.handle("/none", "x")}");
+        }
+        function main(): int32 {
+            for (i in 0..2) { serveOnce("hola ${i}"); }
+            return 0;
+        }
+        """);
+    output.clear();
+    checkInt(0, larimarc(["run", app], output));
+    check(output.join("").endsWith("hola 0, ana | adios luis | 404\nhola 1, ana | adios luis | 404\n"), "an object with its functions: ${output.join("")}");
+    // the object lives longer than what the function uses
+    Files.writeString(Paths.join(app, "src/main.lar"), raw"""
+        import webkit;
+        import webkit { App, Request };
+        function main(): int32 {
+            let app: App = webkit.newApp() in default;
+            for (i in 0..2) {
+                let prefix: String = "hola ${i}, ";
+                app.get("/hi", (req: Request) -> { return "${prefix}${req.param("name")}"; });
+            }
+            return 0;
+        }
+        """);
+    output.clear();
+    checkInt(1, larimarc(["build", app], output));
+    check(output.join("").contains("must live as long as the object (the whole program), but it lives in the memory of this block"), "a function that dies before its object: ${output.join("")}");
+    // from C
+    let cc: String = (os.env("CC") ?? "").trim() != "" ? (os.env("CC") ?? "").trim() : "cc";
+    Files.writeString(Paths.join(dir, "main.c"), """
+        #include <stdio.h>
+        #include "webkit.h"
+        static void hello(wk_Request* req, void* data, void* out) {
+            char text[64];
+            char* name = wk_Request_param(req, "name");
+            snprintf(text, sizeof text, "%s %s", (const char*)data, name);
+            wk_free(name);
+            wk_give(out, text);
+        }
+        int main(void) {
+            wk_App* app = wk_newApp();
+            wk_App_get(app, "/hi", hello, "hola");
+            char* answer = wk_App_handle(app, "/hi", "ana");
+            printf("%s\\n", answer);
+            wk_free(answer);
+            wk_App_release(app);
+            return 0;
+        }
+        """);
+    output.clear();
+    checkInt(0, execute(cc, ["-std=c99", "-I${lib}", Paths.join(dir, "main.c"), Paths.join(lib, "webkit.c"), "-lm", "-o", Paths.join(dir, "demo")], output));
+    output.clear();
+    checkInt(0, execute(Paths.join(dir, "demo"), [], output));
+    check(output.join("") == "hola ana\n", "from C: ${output.join("")}");
+}
+
 // A library that calls the program's function from another thread says so in its type (thread safe): the
 // .lar has it, and the program's function is checked like the run of a thread.
 test function aLibraryCallsBackFromAnotherThread(): void throws IoError {

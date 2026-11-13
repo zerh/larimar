@@ -5153,8 +5153,12 @@ What goes to C, and how:
   - A text the function gives lives in the block of the library that called it. A C function gives it with
     `<prefix>_give(out, text)`.
   - A function that can fail handles it inside (`try`/`catch`): a lambda cannot throw.
-  - A library that **keeps** the function to call it later says so with `in default` on the parameter:
-    what the program's function uses must then live as long as the program, and the compiler checks it.
+  - A library that **keeps** the function to call it later says so on the parameter, as any Larimar code
+    does: `in default` (kept for the whole program) or, in a method of one of its classes, `in self` (kept
+    in the object). What the program's function uses must then live as long as the program, or at least
+    as long as the object, and the compiler checks it.
+  - A **method** of a class of the library takes functions the same way
+    (`function get(path: String, handler: (Request) -> String in self): void`).
 
 - **A text it returns** is a copy (`char*`) for the caller: C frees it with `<prefix>_free`.
 - **An object it returns** is a **handle**: C keeps it (`tk_Counter*`), passes it to its methods and
@@ -5219,8 +5223,7 @@ library to its code too.
   `static_library_paths` goes in the package and is linked into the program. It is for one platform: in
   `[c.linux]`, `[c.macos]` or `[c.windows]` each system gets its own; in `[c]`, the package serves only the
   platform that file was compiled for.
-- **Not yet**: lists and errors (`throws`) do not cross a library, and a method of a class does not take
-  a function (an export function does); they go as texts, handles
+- **Not yet**: lists and errors (`throws`) do not cross a library; they go as texts, handles
   and numbers (an error code), or stay inside. A program does not create objects of the library with
   `Counter {}`, nor extend its classes: they are made by its functions and methods.
 

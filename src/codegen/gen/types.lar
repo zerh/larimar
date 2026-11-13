@@ -277,6 +277,12 @@ public function memberBody(m: LibraryMember): String {
     let ps: String[*] = ["void* self_h"];
     let xs: String[*] = [];
     for (i, t in mi.sig!.params) {
+        if (t.kind == TyK.Func) {               // a function of C's, and the void* it gets back
+            ps.push(callbackC(t, "a${i}"));
+            ps.push("void* a${i}_data");
+            xs.push("((Closure_${t.funcId}){ .fn = lm_callback_${t.funcId}, .env = { .c = { (void (*)(void))a${i}, a${i}_data } } })");
+            continue;
+        }
         ps.push("${abiType(t, false)} a${i}");
         xs.push(fromC(t, "a${i}", m.cName, mi.decl.params[i].name));
     }

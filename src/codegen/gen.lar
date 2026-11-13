@@ -12,6 +12,7 @@
 //  - errors     -> a function that throws takes RtError* err_out; every call checks it.
 //  - memories   -> RtMem; heap memories are freed on every exit of their block.
 
+import semantics.analyzer.declarations { libraryCallback };
 import semantics.types {
     allFields, buildingLibrary, cCode, cCodeStd, chain, classDepth, classes, ClassInfo, enums, externInfos,
     FieldInfo, files, findMethod, FunctionInfo, functions, funcTypes, globals, includes, includeWhens, interfaceOf,
@@ -263,7 +264,17 @@ public function generate(): String {
     }
     if (buildingLibrary) {                      // the members of its classes: tk_Counter_add(handle, ...)
         for (c in handleClassNames()) {
-            for (m in libraryMembers(c)) { functionsOut.add(memberBody(m)); }
+            for (m in libraryMembers(c)) {
+                if (m.method != null) {
+                    for (p in m.method!.sig!.params) {
+                        if (p.kind == TyK.Func && !callbacks.contains(p)) {
+                            callbacks.push(p);
+                            functionsOut.add(callbackThunk(p));
+                        }
+                    }
+                }
+                functionsOut.add(memberBody(m));
+            }
         }
     }
     let methods: StringBuilder = {} in default;
@@ -374,7 +385,7 @@ public function generate(): String {
         part.add("typedef ${e.decl.cType != "" ? e.decl.cType : "void*"} Ext_${e.name};\n");
         if (e.decl.releasedBy != "") {
             if (!anyResource) {
-                part.add("typedef struct RtRes { int state; void (*release)(struct RtRes*); } RtRes;   /* 1 live, 2 releasing, 0 released */\n");
+                part.add("typedef struct RtRes { int state; void (*release)(struct RtRes*); RtMem* mem; } RtRes;   /* 1 live, 2 releasing, 0 released; the memory it is in */\n");
                 anyResource = true;
             }
             part.add("typedef struct { RtRes h; Ext_${e.name} value; } Res_${e.name};\n");
@@ -664,11 +675,19 @@ function libraryGlue(out: StringBuilder): void {
 public const INTERFACE_MARK: String = "@INTERFACE@";
 
 /** Does an export function take a function that gives a text? */
-function takesTextFunctions(): bool {
+public function takesTextFunctions(): bool {
     for (f in functions) {
         if (f.isExtern || f.exportName == "") { continue; }
         for (t in f.sig!.params) {
             if (t.kind == TyK.Func && t.elem! == T_STRING) { return true; }
+        }
+    }
+    for (c in handleClassNames()) {
+        for (m in libraryMembers(c)) {
+            if (m.method == null) { continue; }
+            for (t in m.method!.sig!.params) {
+                if (t.kind == TyK.Func && t.elem! == T_STRING) { return true; }
+            }
         }
     }
     return false;
@@ -695,7 +714,12 @@ public function handleClassNames(): String[*] {
         for (m in libraryMembers(out[i])) {
             if (m.method == null) { continue; }
             addHandles(m.method!.sig!.elem!, out);
-            for (t in m.method!.sig!.params) { addHandles(t, out); }
+            for (t in m.method!.sig!.params) {
+                addHandles(t, out);
+                if (t.kind == TyK.Func) {
+                    for (pt in t.params) { addHandles(pt, out); }
+                }
+            }
         }
         i += 1;
     }
@@ -738,6 +762,11 @@ function memberProblem(m: MethodInfo): String {
     if (!crosses(m.sig!.elem!, false) && m.sig!.elem! != T_VOID) { return "it returns ${m.sig!.elem!.text}"; }
     for (i, t in m.sig!.params) {
         if (isMemParam(m.memParams, i)) { return "it takes a memory"; }
+        if (t.kind == TyK.Func && libraryCallback(t)) {     // a function of the program: kept in default or in the object
+            let lives: String = m.decl.params[i].lives;
+            if (lives != "" && lives != "default" && lives != "self") { return "a function it takes lives in ${lives}"; }
+            continue;
+        }
         if (!crosses(t, false)) { return "it takes ${t.text}"; }
         if (m.decl.params[i].lives != "") { return "a parameter says where it lives"; }
     }
@@ -819,6 +848,7 @@ function resources(out: StringBuilder): void {
                 Res_${n}* c = (Res_${n}*)rt_mem_alloc(m, sizeof(Res_${n}), line);
                 c->h.state = 1;
                 c->h.release = ${n}__release;
+                c->h.mem = m;
                 c->value = v;
                 rt_mem_on_free(m, rt_res_final, c, line);
                 return c;

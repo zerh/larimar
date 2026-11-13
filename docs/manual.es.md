@@ -5151,9 +5151,12 @@ Qué va a C, y cómo:
   - Un texto que la función da vive en el bloque de la biblioteca que la llamó. Una función de C lo da con
     `<prefijo>_give(out, text)`.
   - Una función que puede fallar lo maneja dentro (`try`/`catch`): una lambda no puede lanzar.
-  - Una biblioteca que **guarda** la función para llamarla después lo dice con `in default` en el
-    parámetro: lo que usa la función del programa tiene entonces que vivir tanto como el programa, y el
-    compilador lo comprueba.
+  - Una biblioteca que **guarda** la función para llamarla después lo dice en el parámetro, como
+    cualquier código de Larimar: `in default` (guardada todo el programa) o, en un método de una de sus
+    clases, `in self` (guardada en el objeto). Lo que usa la función del programa tiene entonces que vivir
+    tanto como el programa, o al menos tanto como el objeto, y el compilador lo comprueba.
+  - Un **método** de una clase de la biblioteca recibe funciones igual
+    (`function get(path: String, handler: (Request) -> String in self): void`).
 
 - **Un texto que devuelve** es una copia (`char*`) para quien llama: C la libera con `<prefijo>_free`.
 - **Un objeto que devuelve** es un **handle**: C lo guarda (`tk_Counter*`), lo pasa a sus métodos y a
@@ -5218,8 +5221,7 @@ aplican a su código las reglas de una biblioteca.
   `static_library_paths` va en el paquete y se enlaza en el programa. Es para una plataforma: en
   `[c.linux]`, `[c.macos]` o `[c.windows]` cada sistema recibe el suyo; en `[c]`, el paquete sirve solo
   para la plataforma para la que se compiló ese archivo.
-- **Todavía no**: las listas y los errores (`throws`) no cruzan una biblioteca, y un método de una clase
-  no recibe una función (una función exportada sí); van como
+- **Todavía no**: las listas y los errores (`throws`) no cruzan una biblioteca; van como
   textos, handles y números (un código de error), o se quedan dentro. Un programa no crea objetos de la
   biblioteca con `Counter {}`, ni extiende sus clases: los hacen sus funciones y métodos.
 

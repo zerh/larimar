@@ -607,8 +607,10 @@ public function signatures(program: Program in default): void {
                     if (f.ctxCallback >= 0) { error(p.line, "'${f.name}' takes two callbacks with a Context: only one can get it."); }
                     f.ctxCallback = i;
                     f.ctxKeep = p.lives == "default";
+                    // of a method (native type X { native function m(f: F in self, ...) }): the object keeps it
+                    f.ctxSelf = p.lives == "self" && e.params.length > 0 && e.params[0].name == "receiver";
                 }
-                if (p.lives != "" && !(p.lives == "default" && contextView(pt) != null)) {
+                if (p.lives != "" && !(p.lives == "default" && contextView(pt) != null) && !f.ctxSelf) {
                     error(p.line, p.lives == "default"
                         ? "'in default' on a parameter of a native function goes on a callback that gets a Context (C keeps it, so what it uses must live as long as the program)."
                         : "'in ${p.lives}' is not allowed on the parameters of a native function (only 'in default', on a callback that C keeps).");

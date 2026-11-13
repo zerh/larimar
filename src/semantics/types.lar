@@ -528,6 +528,7 @@ public class FunctionInfo {
     let ctxParam: int32 = -1;
     let ctxCallback: int32 = -1;
     let ctxKeep: bool = false;
+    let ctxSelf: bool = false;          // a method of a native type keeps the callback in its object ('in self')
 }
 
 /**

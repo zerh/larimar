@@ -212,7 +212,12 @@ function contextArgs(c: Call in default, f: FunctionInfo, ci: CallInfo): String[
         let a: Expr = c.args[ci.ctxArg];
         let closure: String = cType(ci.ctxView!);
         let held: String = hoist(closure, value(a));
-        context = f.ctxKeep ? "rt_mem_copy(&rt_default_mem, &${held}, sizeof(${closure}), ${c.line})" : "(void*)&${held}";
+        context = "(void*)&${held}";
+        if (f.ctxKeep) { context = "rt_mem_copy(&rt_default_mem, &${held}, sizeof(${closure}), ${c.line})"; }
+        if (f.ctxSelf) {                       // kept with the object: in the memory where the object lives
+            let object: String = hoist(cType(f.sig!.params[0]), value(c.args[0]));
+            context = "rt_mem_copy(${object}->h.mem ? ${object}->h.mem : &rt_default_mem, &${held}, sizeof(${closure}), ${c.line})";
+        }
     }
     let k: int32 = 0;
     let start: int32 = f.memParams.length > 0 && f.memParams[0] ? 1 : 0;      // the memory of the call goes first, apart

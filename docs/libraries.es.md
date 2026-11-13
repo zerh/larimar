@@ -8,7 +8,7 @@ Versión descrita: Larimar 1.7.0. La referencia breve está en el
 [manual, capítulo 27](manual.es.md#27-bibliotecas-escritas-en-larimar).
 
 **Cómo se hizo.** Un banco de pruebas escribió cada proyecto de este manual en disco, lo construyó, lo
-ejecutó y guardó lo que imprimió: 118 ejecuciones. Los bloques de salida son esa salida, sin retocar. Los
+ejecutó y guardó lo que imprimió: 129 ejecuciones. Los bloques de salida son esa salida, sin retocar. Los
 programas en Larimar y en C se compilaron con el detector de errores de memoria (AddressSanitizer, que
 incluye la detección de fugas); los de hilos, además con el detector de carreras (ThreadSanitizer).
 Todo se ejecutó en **Linux**. En Windows y macOS no se ha ejecutado nada de este manual.
@@ -167,7 +167,8 @@ De ellas sale todo lo demás.
 | Situación | Qué pasa |
 |---|---|
 | La biblioteca llama a tu función y no la conserva | Tu función puede usar datos locales. |
-| La biblioteca la guarda (`in default`) | Lo que tu función usa tiene que vivir todo el programa. |
+| La biblioteca la guarda en un objeto (`in self`) | Lo que tu función usa vive al menos lo que viva el objeto. |
+| La biblioteca la guarda en una variable de módulo (`in default`) | Lo que tu función usa tiene que vivir todo el programa. |
 | La biblioteca la llama desde otro hilo (`thread safe`) | Tu función se comprueba como el `run` de un hilo. |
 | Tu función puede fallar | Lo maneja dentro, con `try`/`catch`. |
 
@@ -1195,8 +1196,7 @@ no se pudo (10 bytes)
 | Parámetros | números, `bool`, `String`, clases de la biblioteca |
 | Resultado | un número, `bool`, `String`, o nada |
 
-Todavía no: listas, que la función devuelva un objeto, y funciones en **métodos** de una clase
-(sección 22).
+Todavía no: listas, y que la función devuelva un objeto (sección 22).
 
 ### 8.8 Lo que se genera
 
@@ -1349,6 +1349,249 @@ int main(void) {
 ```
 [ (0 bytes)]
 ```
+
+### 8.10 Funciones en los métodos de una clase
+
+**Prueba de la suite:** `aMethodKeepsAFunctionInItsObject`.
+
+Un método de una clase de la biblioteca recibe una función igual que una función exportada. Es la forma
+natural de una aplicación con rutas:
+
+```ts
+/** Una petición: su ruta y sus parámetros. */
+public class Request {
+    let path: String;
+    let name: String = "";
+
+    /** El valor de un parámetro ("" si no está). */
+    function param(key: String): String { return key == "name" ? self.name.clone() : ""; }
+}
+
+/** Una aplicación: sus rutas, y quién las atiende. */
+public class App {
+    let paths: String[*] = [];
+    let handlers: ((Request) -> String)[*] = [];
+
+    /** Atiende `path` con `handler`. */
+    function get(path: String, handler: (Request) -> String in self): void {
+        self.paths.push(path.clone());
+        self.handlers.push(handler);
+    }
+
+    /** La respuesta a una petición ("404" si nadie atiende esa ruta). */
+    function handle(path: String, name: String): String {
+        for (i, p in self.paths) {
+            if (p == path) {
+                let req: Request = { path: path.clone(), name: name.clone() };
+                return self.handlers[i](req);
+            }
+        }
+        return "404";
+    }
+}
+
+/** Una aplicación nueva. */
+public export function newApp(): App { return App { }; }
+```
+
+```ts
+import webkit;
+import webkit { App, Request };
+
+function serveOnce(greeting: String): void {
+    let app: App = webkit.newApp();                 // vive en este bloque
+    let prefix: String = "${greeting}, ";           // y esto también
+    app.get("/hi", (req: Request) -> { return "${prefix}${req.param("name")}"; });
+    app.get("/bye", (req: Request) -> { return "adiós ${req.param("name")}"; });
+    println("${app.handle("/hi", "ana")} | ${app.handle("/bye", "luis")} | ${app.handle("/nada", "x")}");
+}                                                   // aquí mueren app, sus funciones y prefix
+
+function main(): int32 {
+    for (i in 0..3) { serveOnce("hola ${i}"); }
+    return 0;
+}
+```
+
+```
+hola 0, ana | adiós luis | 404
+hola 1, ana | adiós luis | 404
+hola 2, ana | adiós luis | 404
+```
+
+### 8.11 Una función guardada en el objeto: `in self`
+
+En `get`, el parámetro dice `in self`: la función se queda **en el objeto**. Es la anotación normal de
+Larimar para un método que guarda lo que recibe, y su consecuencia es la de siempre: lo que la función
+usa tiene que vivir al menos tanto como el objeto. Ni más.
+
+En el ejemplo anterior, `app` vive en el bloque de `serveOnce`, y la lambda usa `prefix`, que vive en el
+mismo bloque. Al salir, mueren los tres juntos. Con `in default` eso no compilaría, porque `prefix`
+tendría que vivir todo el programa.
+
+**El objeto vive más que lo que usa la función: rechazado.**
+
+```ts
+function main(): int32 {
+    let app: App = webkit.newApp() in default;
+    for (i in 0..2) {
+        let prefix: String = "hola ${i}, ";
+        app.get("/hi", (req: Request) -> { return "${prefix}${req.param("name")}"; });
+    }
+    return 0;
+}
+```
+
+```
+Semantic Error [src/main.lar:8]: Argument 2 of 'get()' ('handler: (webkit.Request) -> String in self') must live as long as the object (the whole program), but it lives in the memory of this block. A function cannot be copied with clone(): create what it captures there.
+```
+
+**Lo que usa la función está en un bloque interior: rechazado.**
+
+```ts
+function main(): int32 {
+    let app: App = webkit.newApp();
+    if (true) {
+        let prefix: String = "hola ${1}, ";
+        app.get("/hi", (req: Request) -> { return "${prefix}${req.param("name")}"; });
+    }
+    println(app.handle("/hi", "ana"));
+    return 0;
+}
+```
+
+```
+Semantic Error [src/main.lar:8]: Argument 2 of 'get()' ('handler: (webkit.Request) -> String in self') must live as long as the object (the memory of an outer block), but it lives in the memory of this block (freed at its '}'). A function cannot be copied with clone(): create what it captures there.
+```
+
+**El objeto llega como parámetro y la función usa un dato local: rechazado.**
+
+```ts
+function register(app: App): void {
+    let prefix: String = "hola ${1}, ";
+    app.get("/hi", (req: Request) -> { return "${prefix}${req.param("name")}"; });
+}
+function main(): int32 {
+    let app: App = webkit.newApp();
+    register(app);
+    return 0;
+}
+```
+
+```
+Semantic Error [src/main.lar:6]: Argument 2 of 'get()' ('handler: (webkit.Request) -> String in self') must live as long as the object ('app' (owned by the caller)), but it lives in the memory of this block. A function cannot be copied with clone(): create what it captures there.
+```
+
+**El objeto llega como parámetro y la función no usa nada de fuera: correcto.**
+
+```ts
+function register(app: App): void {
+    app.get("/hi", (req: Request) -> { return "hola ${req.param("name")}"; });
+}
+function main(): int32 {
+    let app: App = webkit.newApp();
+    register(app);
+    println(app.handle("/hi", "ana"));
+    return 0;
+}
+```
+
+```
+hola ana
+```
+
+**El objeto y lo que usa la función viven todo el programa: correcto.**
+
+```ts
+let prefix: String = "hola, ";
+function main(): int32 {
+    let app: App = webkit.newApp() in default;
+    app.get("/hi", (req: Request) -> { return "${prefix}${req.param("name")}"; });
+    println(app.handle("/hi", "ana"));
+    return 0;
+}
+```
+
+```
+hola, ana
+```
+
+**Sin fugas.** 500 aplicaciones, cada una con cuatro funciones que usan un dato de su bloque, bajo el
+detector de fugas:
+
+```ts
+function main(): int32 {
+    let total: int32 = 0;
+    for (i in 0..500) {
+        let app: App = webkit.newApp();
+        let tag: String = "r${i}";
+        for (k in 0..4) { app.get("/p${k}", (req: Request) -> { return "${tag}:${req.path}"; }); }
+        total += app.handle("/p3", "x").length;
+    }
+    println("${total}");
+    return 0;
+}
+```
+
+```
+3890
+```
+
+Lo que se genera. En el `.lar`:
+
+```
+native type App_get_handler = (Request, Context) -> String;
+    native function get(path: String, handler: App_get_handler in self, handler_data: Context): void = wk_App_get;
+```
+
+En el `.h`:
+
+```
+ * A function of yours that wk_App_get calls: `data` is the void* you give with it, and both are kept in
+ * the object: they must stay valid for as long as it is not released.
+typedef void (*wk_App_get_handler)(wk_Request*, void* data, void* out);
+void wk_App_get(wk_App* self, const char* path, wk_App_get_handler handler, void* handler_data);
+```
+
+Desde C, la función y su `void*` tienen que valer mientras el objeto no se libere:
+
+```c
+#include <stdio.h>
+#include "webkit.h"
+
+static void hello(wk_Request* req, void* data, void* out) {
+    char text[64];
+    char* name = wk_Request_param(req, "name");
+    snprintf(text, sizeof text, "%s %s", (const char*)data, name);
+    wk_free(name);
+    wk_give(out, text);
+}
+
+int main(void) {
+    wk_App* app = wk_newApp();
+    wk_App_get(app, "/hi", hello, "hola");      /* la función y "hola" valen mientras viva app */
+    char* answer = wk_App_handle(app, "/hi", "ana");
+    printf("%s\n", answer);
+    wk_free(answer);
+    wk_App_release(app);
+    return 0;
+}
+```
+
+```
+hola ana
+```
+
+**Cuándo usar cada una:**
+
+| La biblioteca guarda la función en… | Anotación | Lo que usa la función vive… |
+|---|---|---|
+| ningún sitio: la llama y termina | ninguna | lo que dure la llamada |
+| un objeto suyo | `in self` | al menos lo que viva el objeto |
+| una variable de módulo | `in default` | todo el programa |
+
+Una limitación: cada función guardada ocupa sitio en la memoria del objeto hasta que el objeto muere.
+Registrar rutas al arrancar no importa; volver a registrar sin parar sobre un objeto que no muere iría
+acumulando.
 
 ---
 
@@ -2449,6 +2692,8 @@ Semantic Error [src/main.lar:7]: Argument 1 of 'h' ('req: webkit.Request in defa
 |---|---|---|
 | La biblioteca guarda una función sin decirlo | rechazado al construir la biblioteca | 8.4 |
 | Una función guardada usa un dato local | rechazado | 8.4 |
+| Una función guardada en un objeto usa algo que vive menos que el objeto | rechazado | 8.11 |
+| 500 objetos con cuatro funciones guardadas cada uno, bajo el detector de fugas | sin fugas | 8.11 |
 | Una función deja escapar un error | rechazado | 8.6 |
 
 ### 19.5 Con hilos
@@ -2478,8 +2723,8 @@ Desde C nada de esto se comprueba. Son errores del programa en C, no de la bibli
 **Garantiza**, para un programa Larimar que usa una biblioteca Larimar:
 
 - El binding lo escribe el compilador a partir del código de la biblioteca; nadie lo escribe a mano.
-- Lleva la propiedad de cada cosa: `released by` en textos y clases, `in default` en funciones
-  guardadas, `thread safe` en las que se llaman desde otro hilo.
+- Lleva la propiedad de cada cosa: `released by` en textos y clases, `in default` o `in self` en
+  funciones guardadas, `thread safe` en las que se llaman desde otro hilo.
 - No se puede usar con una biblioteca que no es la suya: el hash de la interfaz lo impide.
 - Con eso, las reglas normales de memoria y de hilos del programa cubren la frontera. Todos los intentos
   de la sección 19 acabaron rechazados o detenidos con un mensaje claro.
@@ -2535,20 +2780,16 @@ detectó al escribir la sección 17.
 
 ## 22. Límites conocidos
 
-1. **Funciones en métodos de una clase.** `app.get("/x", handler)` como método todavía no cruza; como
-   función sí: `webkit.get(app, "/x", handler)`.
-2. **`in self`.** Una función guardada vive hoy todo el programa (`in default`). Atarla a la vida del
-   objeto que la guarda está pendiente.
-3. **Listas.** No cruzan, ni como parámetro ni como resultado.
-4. **Una función del programa no devuelve un objeto.**
-5. **Errores.** No cruzan en ninguna dirección: se capturan dentro.
-6. **El mensaje al guardar un objeto de más** sugiere `clone()`; debería sugerir `in default`.
-7. **Una biblioteca del sistema que falta** da el error del enlazador de C (sección 11.3).
-8. **Un puntero a función de C ajeno que devuelve `String`**: el compilador trata ese texto como si
+1. **Listas.** No cruzan, ni como parámetro ni como resultado.
+2. **Una función del programa no devuelve un objeto.**
+3. **Errores.** No cruzan en ninguna dirección: se capturan dentro.
+4. **El mensaje al guardar un objeto de más** sugiere `clone()`; debería sugerir `in default`.
+5. **Una biblioteca del sistema que falta** da el error del enlazador de C (sección 11.3).
+6. **Un puntero a función de C ajeno que devuelve `String`**: el compilador trata ese texto como si
    viviera todo el programa. Es una suposición sobre el C ajeno que no se comprueba.
-9. **Sin separación por procesador** para el C ya compilado.
-10. **El C del paquete se recompila** en cada `larimar build` del programa.
-11. **Sin gestor de paquetes.** Se copian a mano.
+7. **Sin separación por procesador** para el C ya compilado.
+8. **El C del paquete se recompila** en cada `larimar build` del programa.
+9. **Sin gestor de paquetes.** Se copian a mano.
 
 ---
 
@@ -2565,6 +2806,7 @@ Están en `tests/project/libraries_test.lar`, salvo las indicadas. Corren con
 | `aPackageBringsItsC` | C de terceros en fuente; dos paquetes en un programa | 10, 14 |
 | `aLibraryCallsTheProgramBack` | Funciones del programa: llamada, guardada, desde C, rechazos | 8.1 a 8.4, 8.9 |
 | `aCallbackGetsAnObjectAndGivesAText` | La función recibe un objeto y da un texto; rechazos; desde C | 8.5, 19.3 |
+| `aMethodKeepsAFunctionInItsObject` | Funciones en métodos; `in self`; rechazo; desde C | 8.10, 8.11 |
 | `aLibraryCallsBackFromAnotherThread` | `thread safe` en la biblioteca, en el binding y en el programa | 9 |
 | `aLibraryAndItsProgramShareNoNames` | Cada uno con su runtime | 1.2, 14 |
 | `aPackageInOneFile` | El `.lpk`; un archivo que no es un zip | 13, 18.3 |
@@ -2615,6 +2857,7 @@ public export function f(n: int32, text: String): String { ... }          // nú
 public export function open(name: String): Account { ... }                // un objeto: un handle
 public export function each(n: int32, visit: (int32) -> int32): int32     // una función del programa
 public export function keep(visit: (int32) -> int32 in default): void     // que la biblioteca guarda
+function get(path: String, handler: (Request) -> String in self): void    // en un método: guardada en el objeto
 public export function bg(tick: (int32) -> int32 thread safe in default)  // y llama desde otro hilo
 ```
 
