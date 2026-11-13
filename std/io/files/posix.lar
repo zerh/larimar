@@ -7,25 +7,25 @@ public class PosixFolders implements FolderSystem, UnixPlatform {
     cinclude "<unistd.h>";
     cinclude "<dirent.h>";
 
-    native function makeDirectory(path: String): int32 { return mkdir(path, 0777); }   /* less what the umask takes away */
+    override native function makeDirectory(path: String): int32 { return mkdir(path, 0777); }   /* less what the umask takes away */
 
-    native function removeDirectory(path: String): int32 { return rmdir(path); }
+    override native function removeDirectory(path: String): int32 { return rmdir(path); }
 
-    native function makeWritable(path: String): void { (void)path; }
+    override native function makeWritable(path: String): void { (void)path; }
 
-    native function copyPermissions(from: String, to: String): void {
+    override native function copyPermissions(from: String, to: String): void {
         struct stat st;
         if (stat(from, &st) == 0) chmod(to, st.st_mode & 07777);
     }
 
-    native function listOpen(path: String): int64 { return (int64_t)(intptr_t)opendir(path); }
+    override native function listOpen(path: String): int64 { return (int64_t)(intptr_t)opendir(path); }
 
-    native function listNext(list: int64, into: byte[]): bool {
+    override native function listNext(list: int64, into: byte[]): bool {
         struct dirent* e = readdir((DIR*)(intptr_t)list);
         if (e == NULL) return false;
         snprintf((char*)into, (size_t)into_length, "%s", e->d_name);
         return true;
     }
 
-    native function listClose(list: int64): void { closedir((DIR*)(intptr_t)list); }
+    override native function listClose(list: int64): void { closedir((DIR*)(intptr_t)list); }
 }

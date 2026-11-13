@@ -6,7 +6,7 @@ Cada módulo de `src/`, con su descripción y **todas** sus funciones, clases y 
 
 Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver la guía de mantenimiento. Aquí está el detalle.
 
-**51 módulos, 1127 funciones y métodos** (578 con comentario, 549 sin él).
+**51 módulos, 1128 funciones y métodos** (579 con comentario, 549 sin él).
 
 ## Módulos
 
@@ -20,7 +20,7 @@ Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver
 - [`src/syntax/parser/statements.lar`](#syntax-parser-statements) — 8 funciones
 - [`src/syntax/parser/types.lar`](#syntax-parser-types) — 2 funciones
 - [`src/semantics/analyzer.lar`](#semantics-analyzer) — 17 funciones
-- [`src/semantics/analyzer/classes.lar`](#semantics-analyzer-classes) — 10 funciones
+- [`src/semantics/analyzer/classes.lar`](#semantics-analyzer-classes) — 11 funciones
 - [`src/semantics/analyzer/compact.lar`](#semantics-analyzer-compact) — 15 funciones
 - [`src/semantics/analyzer/declarations.lar`](#semantics-analyzer-declarations) — 32 funciones
 - [`src/semantics/analyzer/flow.lar`](#semantics-analyzer-flow) — 42 funciones
@@ -1008,7 +1008,7 @@ Records that the current lambda (and every lambda in between) captures `s`.
 
 ## semantics.analyzer.classes
 
-`src/semantics/analyzer/classes.lar` · 241 líneas · 10 funciones
+`src/semantics/analyzer/classes.lar` · 252 líneas · 11 funciones
 semantics.analyzer.classes: classes and interfaces: fields, methods, what a class inherits and what it implements.
 
 `public function validateClasses(): void`
@@ -1017,29 +1017,33 @@ semantics.analyzer.classes: classes and interfaces: fields, methods, what a clas
 `function processClass(c: ClassInfo in default, done: Any): void`
 <sub>línea 65</sub>
 
+`function implementedOf(c: ClassInfo, name: String): String`  
+The interface, of those a class implements, that has a method of this name ("" when none does).  
+<sub>línea 132</sub>
+
 `function sameLives(a: Param[*], b: Param[*]): bool`
-<sub>línea 129</sub>
+<sub>línea 140</sub>
 
 `function sameThrows(a: Type?, b: Type?): bool`
-<sub>línea 137</sub>
+<sub>línea 148</sub>
 
 `function throwsText(t: Type?): String`
-<sub>línea 139</sub>
+<sub>línea 150</sub>
 
 `function checkSameSig(c: ClassInfo, m: MethodInfo, pm: MethodInfo, line: int32): void`
-<sub>línea 141</sub>
+<sub>línea 152</sub>
 
 `public function validateInterfaces(): void`
-<sub>línea 153</sub>
+<sub>línea 164</sub>
 
 `public function checkFieldDefaults(): void`
-<sub>línea 181</sub>
+<sub>línea 192</sub>
 
 `function isConstantExpr(e: Expr): bool`
-<sub>línea 200</sub>
+<sub>línea 211</sub>
 
 `public function checkMain(): void`
-<sub>línea 227</sub>
+<sub>línea 238</sub>
 
 ---
 

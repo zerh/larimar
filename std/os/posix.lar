@@ -12,19 +12,19 @@ public class PosixSystem implements System, UnixPlatform {
         static void lm_os_on_signal(int s) { (void)s; lm_os_terminating = 1; }
     }
 
-    native function processId(): int64 { return (int64_t)getpid(); }
+    override native function processId(): int64 { return (int64_t)getpid(); }
 
-    native function cwd(into: byte[]): bool { return getcwd((char*)into, (size_t)into_length - 1) != NULL; }
+    override native function cwd(into: byte[]): bool { return getcwd((char*)into, (size_t)into_length - 1) != NULL; }
 
-    native function programPath(into: byte[]): void { readlink("/proc/self/exe", (char*)into, (size_t)into_length - 1); }
+    override native function programPath(into: byte[]): void { readlink("/proc/self/exe", (char*)into, (size_t)into_length - 1); }
 
-    native function shell(command: String): int32 {
+    override native function shell(command: String): int32 {
         int r = system(command);
         if (r != -1 && WIFEXITED(r)) r = WEXITSTATUS(r);          /* the exit status, not the wait status */
         return (int32_t)r;
     }
 
-    native function catchTermination(): void {
+    override native function catchTermination(): void {
         struct sigaction a;
         memset(&a, 0, sizeof a);
         a.sa_handler = lm_os_on_signal;
@@ -33,5 +33,5 @@ public class PosixSystem implements System, UnixPlatform {
         sigaction(SIGTERM, &a, NULL);
     }
 
-    native function terminating(): bool { return lm_os_terminating != 0; }
+    override native function terminating(): bool { return lm_os_terminating != 0; }
 }

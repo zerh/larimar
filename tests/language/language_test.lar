@@ -150,9 +150,38 @@ test function interfaceExtends(): void {
     failsWith(raw"""
         interface Named { function name(): String; }
         interface Greeter extends Named { function greet(): String; }
-        class Dog implements Greeter { function greet(): String { return "woof"; } }
+        class Dog implements Greeter { override function greet(): String { return "woof"; } }
         function main(): int32 { return 0; }
         """, "name");
+}
+
+// override: on a method the class did not introduce, one of its superclass or of an interface it implements.
+test function anInterfaceMethodIsMarkedOverride(): void {
+    runs("tests/cases/language/interface_override.lar", [
+        "woof Rex, grr Rex, woof Tim"
+    ]);
+    failsWith(raw"""
+        interface Named { function name(): String; }
+        class Dog implements Named { function name(): String { return "Rex"; } }
+        function main(): int32 { return 0; }
+        """, "Method 'name' in class 'Dog' implements 'Named' and REQUIRES the 'override' keyword");
+    failsWith(raw"""
+        interface Named { function name(): String; }
+        class Dog implements Named {
+            override function name(): String { return "Rex"; }
+            override function bark(): String { return "woof"; }
+        }
+        function main(): int32 { return 0; }
+        """, "Method 'bark' in class 'Dog' has 'override' but redefines nothing: the class has no superclass, and no interface it implements has it");
+    failsWith(raw"""
+        class Dog { override function bark(): String { return "woof"; } }
+        function main(): int32 { return 0; }
+        """, "the class has no superclass, and implements no interface");
+    failsWith(raw"""
+        class Animal { function name(): String { return "?"; } }
+        class Dog extends Animal { override function bark(): String { return "woof"; } }
+        function main(): int32 { return 0; }
+        """, "it is not in 'Animal', and implements no interface");
 }
 
 // static function in an interface: Shape.unit(). Its other methods are signatures: a body is an error.

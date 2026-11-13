@@ -50,8 +50,8 @@ case "runner" in *"$FILTER"*)
 import std.test { check, checkInt, fail, skip, TestSetup };
 enum Oops { Bad }
 class Broken implements TestSetup {
-    function beforeEach(): void { fail("no database"); }
-    function afterEach(): void { println("afterEach ran"); }
+    override function beforeEach(): void { fail("no database"); }
+    override function afterEach(): void { println("afterEach ran"); }
 }
 function boom(): void throws Oops { throw Oops.Bad; }
 test function passes(): void { checkInt(4, 2 + 2); }

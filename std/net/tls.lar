@@ -50,7 +50,7 @@ native function lm_tls_close(t: TlsHandle): void;
 public class SystemTls implements TlsProvider {
     let verify: bool = true;
 
-    function connect(host: String, port: int32, timeout: int32): Connection throws NetError {
+    override function connect(host: String, port: int32, timeout: int32): Connection throws NetError {
         let c: SystemTlsConnection = {};
         if (lm_tls_needs_socket()) {             // Linux, Windows: TLS over a TcpSocket
             c.tcp = TcpSocket.connect(host, port);
@@ -80,24 +80,24 @@ class SystemTlsConnection implements Connection, InputStream, OutputStream {
     let tcp: TcpSocket? = null;
     let tls: TlsHandle? = null;
 
-    function read(buffer: byte[]): int32 throws IoError {
+    override function read(buffer: byte[]): int32 throws IoError {
         let n: int32 = lm_tls_read(self.tls!, buffer);
         if (n < 0) { fail(self.tls!); }
         return n;
     }
 
-    function write(bytes: byte[]): void throws IoError {
+    override function write(bytes: byte[]): void throws IoError {
         if (lm_tls_write(self.tls!, bytes) < 0) { fail(self.tls!); }
     }
 
-    function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+    override function writeText(text: String): void throws IoError { self.write(text.bytes()); }
 
-    function input(): InputStream { return self; }
-    function output(): OutputStream { return self; }
+    override function input(): InputStream { return self; }
+    override function output(): OutputStream { return self; }
 
-    function flush(): void throws IoError {}
+    override function flush(): void throws IoError {}
 
-    function close(): void throws IoError {
+    override function close(): void throws IoError {
         lm_tls_close(self.tls!);
         if (self.tcp != null) { self.tcp!.close(); }
     }

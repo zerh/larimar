@@ -5,7 +5,7 @@
 # It downloads the release from GitHub, checks its SHA-256, puts it in %USERPROFILE%\.larimar (no
 # administrator) and adds its bin folder to your user Path. Plugins already in .larimar\plugins are kept.
 #
-#   $env:LARIMAR_VERSION = "v1.0.0"   a given version (default: the latest)
+#   $env:LARIMAR_VERSION = "v1.7.0"   a given version (default: the latest)
 #   $env:LARIMAR_INSTALL = "folder"   another folder (default: %USERPROFILE%\.larimar)
 
 $ErrorActionPreference = 'Stop'

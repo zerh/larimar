@@ -11,7 +11,7 @@ class Counting implements TlsProvider {
     let inner: SystemTls = { verify: false };
     let count: int32 = 0;
 
-    function connect(host: String, port: int32, timeout: int32): Connection throws NetError {
+    override function connect(host: String, port: int32, timeout: int32): Connection throws NetError {
         self.count += 1;
         return self.inner.connect(host, port, timeout);
     }

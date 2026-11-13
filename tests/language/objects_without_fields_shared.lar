@@ -18,7 +18,7 @@ synchronized class Total {
 let total: Total = {};
 
 class Pages implements Routes {
-    function routes(r: Router in self): void {
+    override function routes(r: Router in self): void {
         r.get(self::index);
         r.get(self::twice);
     }

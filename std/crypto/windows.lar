@@ -10,5 +10,5 @@ public class WindowsRandomSource implements RandomSource, WindowsPlatform {
         BOOLEAN NTAPI SystemFunction036(PVOID buffer, ULONG length);     /* RtlGenRandom, in advapi32 */
     }
 
-    native function fill(items: byte[]): bool { return SystemFunction036(items, (ULONG)items_length) != 0; }
+    override native function fill(items: byte[]): bool { return SystemFunction036(items, (ULONG)items_length) != 0; }
 }

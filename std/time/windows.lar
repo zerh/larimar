@@ -12,14 +12,14 @@ public class WindowsClock implements Clock, WindowsPlatform {
         #endif
     }
 
-    native function now(): int64 {
+    override native function now(): int64 {
         FILETIME f;
         GetSystemTimeAsFileTime(&f);
         uint64_t t = ((uint64_t)f.dwHighDateTime << 32) | f.dwLowDateTime;     /* 100 ns since 1601 */
         return (int64_t)(t / 10000) - 11644473600000LL;
     }
 
-    native function monotonic(): int64 { return (int64_t)GetTickCount64(); }
+    override native function monotonic(): int64 { return (int64_t)GetTickCount64(); }
 
-    native function sleep(ms: int64): void { if (ms > 0) Sleep((DWORD)ms); }
+    override native function sleep(ms: int64): void { if (ms > 0) Sleep((DWORD)ms); }
 }

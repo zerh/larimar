@@ -13,15 +13,15 @@ public class WindowsFolders implements FolderSystem, WindowsPlatform {
         typedef struct LmFind { HANDLE h; WIN32_FIND_DATAA data; int pending; } LmFind;
     }
 
-    native function makeDirectory(path: String): int32 { return _mkdir(path); }
+    override native function makeDirectory(path: String): int32 { return _mkdir(path); }
 
-    native function removeDirectory(path: String): int32 { return _rmdir(path); }
+    override native function removeDirectory(path: String): int32 { return _rmdir(path); }
 
-    native function makeWritable(path: String): void { _chmod(path, _S_IWRITE); }
+    override native function makeWritable(path: String): void { _chmod(path, _S_IWRITE); }
 
-    native function copyPermissions(from: String, to: String): void { (void)from; (void)to; }
+    override native function copyPermissions(from: String, to: String): void { (void)from; (void)to; }
 
-    native function listOpen(path: String): int64 {
+    override native function listOpen(path: String): int64 {
         size_t n = strlen(path);
         char* pattern = (char*)malloc(n + 3);
         LmFind* f = (LmFind*)calloc(1, sizeof(LmFind));
@@ -35,7 +35,7 @@ public class WindowsFolders implements FolderSystem, WindowsPlatform {
         return (int64_t)(intptr_t)f;
     }
 
-    native function listNext(list: int64, into: byte[]): bool {
+    override native function listNext(list: int64, into: byte[]): bool {
         LmFind* f = (LmFind*)(intptr_t)list;
         if (!f->pending && !FindNextFileA(f->h, &f->data)) return false;
         f->pending = 0;
@@ -43,7 +43,7 @@ public class WindowsFolders implements FolderSystem, WindowsPlatform {
         return true;
     }
 
-    native function listClose(list: int64): void {
+    override native function listClose(list: int64): void {
         LmFind* f = (LmFind*)(intptr_t)list;
         FindClose(f->h);
         free(f);

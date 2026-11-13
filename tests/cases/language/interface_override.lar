@@ -1,0 +1,29 @@
+// override marks a method the class did not introduce: one of an interface it implements, one of its
+// superclass, or one that is both. A method of its own has no override.
+interface Named { function name(): String; }
+interface Loud { function sound(): String; }
+
+class Animal implements Named {
+    let n: String;
+    override function name(): String { return self.n; }             // of Named
+    function sound(): String { return "..."; }                      // its own
+    function says(): String { return "${self.sound()} ${self.name()}"; }
+}
+
+class Dog extends Animal implements Loud {
+    override function sound(): String { return "woof"; }            // of Animal, and of Loud: one override
+}
+
+class Wolf extends Dog {
+    override function sound(): String { return "grr"; }
+}
+
+function hear(x: Loud, who: Named): String { return "${x.sound()} ${who.name()}"; }
+
+function main(): int32 {
+    let rex: Dog = { n: "Rex" };
+    let wolf: Wolf = { n: "Rex" };
+    let tim: Dog = { n: "Tim" };
+    println("${rex.says()}, ${wolf.says()}, ${hear(tim, tim)}");
+    return 0;
+}

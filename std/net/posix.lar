@@ -42,9 +42,9 @@ public class PosixNet implements NetSystem, UnixPlatform {
         }
     }
 
-    native function start(): void { signal(SIGPIPE, SIG_IGN); }
+    override native function start(): void { signal(SIGPIPE, SIG_IGN); }
 
-    native function lastError(): int32 {
+    override native function lastError(): int32 {
         int e = errno;
         if (e == ECONNREFUSED) return 2;
         if (e == EAGAIN || e == EWOULDBLOCK || e == ETIMEDOUT) return 3;
@@ -53,11 +53,11 @@ public class PosixNet implements NetSystem, UnixPlatform {
         return 100 + e;
     }
 
-    native function interrupted(): bool { return errno == EINTR; }
+    override native function interrupted(): bool { return errno == EINTR; }
 
-    native function finishWriting(s: Socket): void { shutdown(s, SHUT_WR); }
+    override native function finishWriting(s: Socket): void { shutdown(s, SHUT_WR); }
 
-    native function setTimeout(s: Socket, which: int32, ms: int32): void {
+    override native function setTimeout(s: Socket, which: int32, ms: int32): void {
         struct timeval tv;
         tv.tv_sec = ms / 1000;
         tv.tv_usec = (ms % 1000) * 1000;

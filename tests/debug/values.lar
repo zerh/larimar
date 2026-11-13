@@ -4,7 +4,7 @@ struct Point { let x: int32; let y: int32; }
 class Animal { let name: String; let age: int32 = 3; }
 class Dog extends Animal { let breed: String = "mutt"; }
 interface Named { function name(): String; }
-class Cat implements Named { let n: String = "tom"; function name(): String { return self.n; } }
+class Cat implements Named { let n: String = "tom"; override function name(): String { return self.n; } }
 
 function describe(s: Shape): String {
     switch (s) {

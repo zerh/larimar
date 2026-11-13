@@ -186,5 +186,5 @@ public class PosixProcesses implements UnixPlatform {
 }
 
 public class PosixExecutables implements Executables, UnixPlatform {
-    native function check(path: String): bool { return access(path, X_OK) == 0; }
+    override native function check(path: String): bool { return access(path, X_OK) == 0; }
 }

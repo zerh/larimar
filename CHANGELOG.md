@@ -86,6 +86,15 @@ part of it, in the folder of its name.
 - `docs/libraries.es.md`: the manual of libraries. Every scenario of writing, publishing and using one, and
   every attempt to misuse one that was tried, each with its code and the output it gave when it was run. `docs/compiler-reference.md`: every function of the compiler, with
   its signature and its comment, generated from the source.
+- **A method of an interface is marked `override`** (a change to the language that existing programs must
+  follow): `class Circle implements Drawable { override function draw(): void { … } }`. The rule is now
+  one: `override` marks a method the class did not introduce, of its superclass or of an interface it
+  implements; a method that is both has one. Without it: *Method 'draw' in class 'Circle' implements
+  'Drawable' and REQUIRES the 'override' keyword*. An `override` on a method that is in neither is an
+  error that says so (*has 'override' but redefines nothing: the class has no superclass, and no interface
+  it implements has it*), so a method left behind when an interface changes is found. The standard
+  library, the tests and the manuals follow it.
+- The page said v1.1: it says v1.7.
 - The compiler: what a library does with a function of the program is one module, `codegen/gen/callbacks.lar`,
   whose header tells the whole path and where each piece is; unused imports and an unused function are
   gone. The generated C is the same.

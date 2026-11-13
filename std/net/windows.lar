@@ -39,12 +39,12 @@ public class WindowsNet implements NetSystem, WindowsPlatform {
         }
     }
 
-    native function start(): void {
+    override native function start(): void {
         WSADATA data;
         WSAStartup(MAKEWORD(2, 2), &data);
     }
 
-    native function lastError(): int32 {
+    override native function lastError(): int32 {
         int e = WSAGetLastError();
         if (e == WSAECONNREFUSED) return 2;
         if (e == WSAETIMEDOUT || e == WSAEWOULDBLOCK) return 3;
@@ -53,11 +53,11 @@ public class WindowsNet implements NetSystem, WindowsPlatform {
         return 100 + e;
     }
 
-    native function interrupted(): bool { return WSAGetLastError() == WSAEINTR; }
+    override native function interrupted(): bool { return WSAGetLastError() == WSAEINTR; }
 
-    native function finishWriting(s: Socket): void { shutdown(s, SD_SEND); }
+    override native function finishWriting(s: Socket): void { shutdown(s, SD_SEND); }
 
-    native function setTimeout(s: Socket, which: int32, ms: int32): void {
+    override native function setTimeout(s: Socket, which: int32, ms: int32): void {
         DWORD w = (DWORD)ms;
         setsockopt(s, SOL_SOCKET, which, (const char*)&w, (int)sizeof w);
     }

@@ -261,7 +261,7 @@ public class TcpSocket implements InputStream, OutputStream, Closeable, Connecti
     }
 
     /** Reads what has arrived, up to the length of buffer; 0 when the other side closed. */
-    function read(buffer: byte[]): int32 throws IoError {
+    override function read(buffer: byte[]): int32 throws IoError {
         let s: Socket = self.live();
         self.prepare(false);
         if (buffer.length == 0) { return 0; }
@@ -274,7 +274,7 @@ public class TcpSocket implements InputStream, OutputStream, Closeable, Connecti
     }
 
     /** Writes all the bytes, or throws. */
-    function write(bytes: byte[]): void throws IoError {
+    override function write(bytes: byte[]): void throws IoError {
         let s: Socket = self.live();
         self.prepare(true);
         let n: int64 = 0;
@@ -291,13 +291,13 @@ public class TcpSocket implements InputStream, OutputStream, Closeable, Connecti
     }
 
     /** Writes a text (its UTF-8 bytes). */
-    function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+    override function writeText(text: String): void throws IoError { self.write(text.bytes()); }
 
-    function input(): InputStream { return self; }
-    function output(): OutputStream { return self; }
+    override function input(): InputStream { return self; }
+    override function output(): OutputStream { return self; }
 
     /** Nothing to do: what is written goes to the system at once (TCP_NODELAY). */
-    function flush(): void throws IoError {}
+    override function flush(): void throws IoError {}
 
     /** How long read and write wait before failing with a timeout (0: no limit). */
     function setTimeout(ms: int32): void {
@@ -328,7 +328,7 @@ public class TcpSocket implements InputStream, OutputStream, Closeable, Connecti
     function localPort(): int32 { return portOf(self.socket); }
 
     /** Closes it now; otherwise it closes when its memory is freed. */
-    function close(): void throws IoError {
+    override function close(): void throws IoError {
         release(self.socket);
         self.socket = null;
     }
@@ -403,7 +403,7 @@ public class TcpListener implements Closeable {
     /** Its number for the system (the descriptor): what an EventLoop watches; -1 once closed. */
     function number(): int64 { return self.socket != null ? lm_net_number(self.socket!) : -1; }
 
-    function close(): void throws IoError {
+    override function close(): void throws IoError {
         release(self.socket);
         self.socket = null;
     }
@@ -805,7 +805,7 @@ public class UdpSocket implements Closeable {
     function port(): int32 { return portOf(self.socket); }
 
     /** Closes it now; otherwise it closes when its memory is freed. */
-    function close(): void throws IoError {
+    override function close(): void throws IoError {
         release(self.socket);
         self.socket = null;
     }
@@ -933,7 +933,7 @@ public class TlsSocket implements InputStream, OutputStream, Closeable, Connecti
     let session: TlsSessionHandle? = null;
 
     /** Reads what has arrived, up to the length of buffer; 0 when the other side closed. */
-    function read(buffer: byte[]): int32 throws IoError {
+    override function read(buffer: byte[]): int32 throws IoError {
         if (self.session == null) { throw IoError.Closed; }
         if (self.tcp != null) { self.tcp!.prepare(false); }
         let n: int32 = lm_ossl_read(self.session!, buffer);
@@ -942,19 +942,19 @@ public class TlsSocket implements InputStream, OutputStream, Closeable, Connecti
     }
 
     /** Writes all the bytes, or throws. */
-    function write(bytes: byte[]): void throws IoError {
+    override function write(bytes: byte[]): void throws IoError {
         if (self.session == null) { throw IoError.Closed; }
         if (self.tcp != null) { self.tcp!.prepare(true); }
         if (lm_ossl_write(self.session!, bytes) < 0) { tlsFailure(self.session!); }
     }
 
     /** Writes a text (its UTF-8 bytes). */
-    function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+    override function writeText(text: String): void throws IoError { self.write(text.bytes()); }
 
-    function input(): InputStream { return self; }
-    function output(): OutputStream { return self; }
+    override function input(): InputStream { return self; }
+    override function output(): OutputStream { return self; }
 
-    function flush(): void throws IoError {}
+    override function flush(): void throws IoError {}
 
     /** How long read and write wait before failing with a timeout (0: no limit). */
     function setTimeout(ms: int32): void {
@@ -964,7 +964,7 @@ public class TlsSocket implements InputStream, OutputStream, Closeable, Connecti
     function isOpen(): bool { return self.session != null && self.tcp != null && self.tcp!.isOpen(); }
 
     /** Closes it now (it tells the client); otherwise it closes when its memory is freed. */
-    function close(): void throws IoError {
+    override function close(): void throws IoError {
         if (self.session != null) { lm_ossl_close(self.session!); }
         self.session = null;
         if (self.tcp != null) { self.tcp!.close(); }

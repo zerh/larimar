@@ -10,8 +10,8 @@ interface Greeter extends Named {
 interface Loud extends Greeter {}
 
 class Dog implements Loud {
-    function name(): String { return "Rex"; }
-    function greet(): String { return "woof"; }
+    override function name(): String { return "Rex"; }
+    override function greet(): String { return "woof"; }
 }
 
 function show(n: Named): String { return n.name(); }

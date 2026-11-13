@@ -820,7 +820,9 @@ Rexy
 - **Herencia simple**: `extends` una sola clase. Los campos y métodos se heredan.
 - Todos los métodos son **virtuales**: se ejecuta el de la clase real del objeto.
 - Redefinir un método exige **`override`**, y debe tener exactamente la misma firma.
-  Escribir `override` en un método que no existe en el padre también es un error.
+  Escribir `override` en un método que no redefine nada también es un error. La regla es una sola:
+  `override` marca un método que la clase no introdujo, venga de su padre o de una interfaz que
+  implementa ([capítulo 11](#11-interfaces)).
 - `super.method(...)` llama a la versión del padre.
 - Un campo no puede redefinir uno heredado.
 - Un `Dog` se puede usar donde se espera un `Animal`. Al revés no: para pasar de `Animal` a `Dog`
@@ -881,9 +883,15 @@ Hay tres formas de cumplirla:
 ```ts
 class Circle implements Drawable {
     let radius: float64;
-    function draw(): void { println("circle of radius ${self.radius}"); }
+    override function draw(): void { println("circle of radius ${self.radius}"); }
 }
 ```
+
+Un método de la interfaz se marca con **`override`**, igual que uno que redefine el del padre: muestra
+qué métodos le debe la clase a otro. Sin él, el error lo dice (*Method 'draw' in class 'Circle'
+implements 'Drawable' and REQUIRES the 'override' keyword*); y si la interfaz pierde o renombra ese
+método, el `override` que quedó también es un error (*has 'override' but redefines nothing*), en vez de
+un método que nadie llama. Un método que es a la vez del padre y de una interfaz lleva un solo `override`.
 
 **2. Con un literal**, dando cada método como una lambda:
 
@@ -906,7 +914,7 @@ interface Drawable {
 
 class Circle implements Drawable {
     let radius: float64;
-    function draw(): void { println("circle of radius ${self.radius}"); }
+    override function draw(): void { println("circle of radius ${self.radius}"); }
 }
 
 function main(): int32 {
@@ -941,8 +949,8 @@ interface Pet extends Named {
 }
 
 class Dog implements Pet {
-    function name(): String { return "Rex"; }
-    function sound(): String { return "woof"; }
+    override function name(): String { return "Rex"; }
+    override function sound(): String { return "woof"; }
 }
 
 let n: Named = Dog {};          // un Dog es un Pet, y por eso un Named
@@ -963,7 +971,7 @@ interface Shape {
 
 class Square implements Shape {
     let side: float64;
-    function area(): float64 { return self.side * self.side; }
+    override function area(): float64 { return self.side * self.side; }
 }
 
 let s: Shape = Shape.unit();
@@ -2253,7 +2261,7 @@ En lugar de una lambda, `run` puede ser un objeto `synchronized` que implemente 
 ```ts
 synchronized class Download implements Runnable {
     let done: bool = false;
-    function run(): void { self.done = true; }
+    override function run(): void { self.done = true; }
     function finished(): bool { return self.done; }
 }
 
@@ -2611,9 +2619,9 @@ class PosixClock implements Clock, UnixPlatform {
         }
     }
 
-    native function monotonic(): int64 { return ms_of(CLOCK_MONOTONIC); }
+    override native function monotonic(): int64 { return ms_of(CLOCK_MONOTONIC); }
 
-    native function sleep(ms: int64): void {
+    override native function sleep(ms: int64): void {
         struct timespec t = { (time_t)(ms / 1000), (long)(ms % 1000) * 1000000L };
         nanosleep(&t, NULL);
     }
@@ -2622,9 +2630,9 @@ class PosixClock implements Clock, UnixPlatform {
 class WindowsClock implements Clock, WindowsPlatform {
     cinclude "<windows.h>";
 
-    native function monotonic(): int64 { return (int64_t)GetTickCount64(); }
+    override native function monotonic(): int64 { return (int64_t)GetTickCount64(); }
 
-    native function sleep(ms: int64): void { Sleep((DWORD)ms); }
+    override native function sleep(ms: int64): void { Sleep((DWORD)ms); }
 }
 
 let clock: Clock = switch (Platform.current()) {
@@ -4171,7 +4179,7 @@ public class MbedTls implements TlsProvider {
     let caFile: String = "/etc/ssl/certs/ca-certificates.crt";     // Debian/Ubuntu; macOS: /etc/ssl/cert.pem
     let verify: bool = true;
 
-    function connect(host: String, port: int32, timeout: int32): Connection throws NetError {
+    override function connect(host: String, port: int32, timeout: int32): Connection throws NetError {
         let c: MbedConnection = {};                   // what is returned: created where the caller says
         c.tcp = TcpSocket.connect(host, port);        // ...and these, in c's memory
         c.tcp!.setTimeout(timeout);
@@ -4187,22 +4195,22 @@ class MbedConnection implements Connection, InputStream, OutputStream {
     let tcp: TcpSocket? = null;
     let tls: MbedHandle? = null;
 
-    function read(buffer: byte[]): int32 throws IoError {
+    override function read(buffer: byte[]): int32 throws IoError {
         let n: int32 = mbed_read(self.tls!, buffer);
         if (n < 0) { throw IoError.Failed("mbedtls: ${mbed_error_text(self.tls!)}"); }
         return n;
     }
 
-    function write(bytes: byte[]): void throws IoError {
+    override function write(bytes: byte[]): void throws IoError {
         if (mbed_write(self.tls!, bytes) < 0) { throw IoError.Failed("mbedtls: ${mbed_error_text(self.tls!)}"); }
     }
 
-    function writeText(text: String): void throws IoError { self.write(text.bytes()); }
-    function input(): InputStream { return self; }
-    function output(): OutputStream { return self; }
-    function flush(): void throws IoError {}
+    override function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+    override function input(): InputStream { return self; }
+    override function output(): OutputStream { return self; }
+    override function flush(): void throws IoError {}
 
-    function close(): void throws IoError {
+    override function close(): void throws IoError {
         release(self.tls);                            // the session first, then its socket
         self.tcp!.close();
     }
@@ -4822,11 +4830,11 @@ import std.io { IoError };
 class TempFile implements TestSetup {
     let path: String = "build/test/tmp.txt";
 
-    function beforeEach(): void {
+    override function beforeEach(): void {
         try { Files.writeString(self.path, "hola"); } catch (IoError e) { fail("cannot write ${self.path}"); }
     }
 
-    function afterEach(): void {
+    override function afterEach(): void {
         try { Files.delete(self.path); } catch (IoError e) { }
     }
 }

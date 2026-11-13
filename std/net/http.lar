@@ -125,7 +125,7 @@ public class Body implements InputStream, Closeable {
     let left: int64 = 0;           // bytes left: of the body (BY_LENGTH) or of the chunk (CHUNKED)
     let done: bool = false;
 
-    function read(buffer: byte[]): int32 throws IoError {
+    override function read(buffer: byte[]): int32 throws IoError {
         if (self.done || self.from == null || buffer.length == 0) { return 0; }
         let from: Reader = self.from!;
         if (self.mode == UNTIL_CLOSE) {
@@ -168,7 +168,7 @@ public class Body implements InputStream, Closeable {
     function useTcp(): void { self.connection = self.tcp!; }
 
     /** Closes the connection (what was not read is lost). */
-    function close(): void throws IoError {
+    override function close(): void throws IoError {
         self.done = true;
         if (self.connection != null) { self.connection!.close(); }
     }
@@ -239,7 +239,7 @@ public class Response implements Closeable {
     }
 
     /** Closes the connection now; otherwise it closes when the Response's memory is freed. */
-    function close(): void throws IoError { self.body.close(); }
+    override function close(): void throws IoError { self.body.close(); }
 }
 
 /** A GET with a Client {} (the system's TLS for https://). */

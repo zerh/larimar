@@ -208,5 +208,5 @@ public class WindowsProcesses implements WindowsPlatform {
 }
 
 public class WindowsExecutables implements Executables, WindowsPlatform {
-    native function check(path: String): bool { return _access(path, 0) == 0; }
+    override native function check(path: String): bool { return _access(path, 0) == 0; }
 }

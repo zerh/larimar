@@ -6,7 +6,7 @@
 # It downloads the release for this system from GitHub, checks its SHA-256, puts it in ~/.larimar (no sudo)
 # and adds ~/.larimar/bin to the PATH of your shell. Plugins already in ~/.larimar/plugins are kept.
 #
-#   LARIMAR_VERSION=v1.0.0   a given version (default: the latest)
+#   LARIMAR_VERSION=v1.7.0   a given version (default: the latest)
 #   LARIMAR_INSTALL=folder   another folder (default: ~/.larimar)
 set -eu
 

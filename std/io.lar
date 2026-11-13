@@ -85,7 +85,7 @@ public class MemoryInputStream implements InputStream {
     let data: String;
     let position: int32 = 0;
 
-    function read(buffer: byte[]): int32 throws IoError {
+    override function read(buffer: byte[]): int32 throws IoError {
         let count: int32 = 0;
         while (count < buffer.length && self.position < self.data.length) {   // a memcpy, when Bytes.copy exists
             buffer[count] = self.data[self.position];
@@ -100,11 +100,11 @@ public class MemoryInputStream implements InputStream {
 public class MemoryOutputStream implements OutputStream {
     let data: byte[*] = [];
 
-    function write(bytes: byte[]): void throws IoError {
+    override function write(bytes: byte[]): void throws IoError {
         for (b in bytes) { self.data.push(b); }                               // one append, when ByteBuffer exists
     }
 
-    function flush(): void throws IoError {}                                  // already in memory
+    override function flush(): void throws IoError {}                                  // already in memory
 
     /** What was written, as text (a copy). */
     function toString(): String { return stringOf(self.data); }
@@ -187,7 +187,7 @@ public class Reader implements InputStream {
     }
 
     /** As an InputStream: readInto(buffer, buffer.length). */
-    function read(buffer: byte[]): int32 throws IoError { return self.readInto(buffer, buffer.length); }
+    override function read(buffer: byte[]): int32 throws IoError { return self.readInto(buffer, buffer.length); }
 
     /** Everything that is left. */
     function readAll(): String throws IoError {

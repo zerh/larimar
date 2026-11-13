@@ -14,7 +14,7 @@ interface Shape {
 
 class Square implements Shape {
     let side: float64;
-    function area(): float64 { return self.side * self.side; }
+    override function area(): float64 { return self.side * self.side; }
 }
 
 function main(): int32 {

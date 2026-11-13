@@ -16,17 +16,17 @@ public class WindowsSystem implements System, WindowsPlatform {
         }
     }
 
-    native function processId(): int64 { return (int64_t)GetCurrentProcessId(); }
+    override native function processId(): int64 { return (int64_t)GetCurrentProcessId(); }
 
-    native function cwd(into: byte[]): bool { return _getcwd((char*)into, into_length - 1) != NULL; }
+    override native function cwd(into: byte[]): bool { return _getcwd((char*)into, into_length - 1) != NULL; }
 
-    native function programPath(into: byte[]): void { GetModuleFileNameA(NULL, (char*)into, (DWORD)into_length - 1); }
+    override native function programPath(into: byte[]): void { GetModuleFileNameA(NULL, (char*)into, (DWORD)into_length - 1); }
 
     /**
      * cmd.exe removes the first and the last quote of a command that starts with one ("C:\a b\x.exe" "arg"
      * loses both): the command goes inside one more pair of quotes, which cmd removes, so it runs as written.
      */
-    native function shell(command: String): int32 {
+    override native function shell(command: String): int32 {
         size_t n = strlen(command);
         char* quoted = (char*)malloc(n + 3);
         if (quoted == NULL) return -1;
@@ -39,7 +39,7 @@ public class WindowsSystem implements System, WindowsPlatform {
         return (int32_t)r;
     }
 
-    native function catchTermination(): void { SetConsoleCtrlHandler(lm_os_on_console, TRUE); }
+    override native function catchTermination(): void { SetConsoleCtrlHandler(lm_os_on_console, TRUE); }
 
-    native function terminating(): bool { return InterlockedCompareExchange(&lm_os_terminating, 0, 0) != 0; }
+    override native function terminating(): bool { return InterlockedCompareExchange(&lm_os_terminating, 0, 0) != 0; }
 }

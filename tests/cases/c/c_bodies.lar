@@ -14,9 +14,9 @@ class UnixGreeter implements Greeter, UnixPlatform {
         static int32_t lm_doubled(int32_t x) { return 2 * x; }
     }
 
-    native function twice(x: int32): int32 { return lm_doubled(x); }
+    override native function twice(x: int32): int32 { return lm_doubled(x); }
 
-    native function label(name: String, items: byte[]): String {
+    override native function label(name: String, items: byte[]): String {
         static char out[64];
         snprintf(out, sizeof out, "%s:%d:%d", name, (int)items_length, (int)items[0]);
         return out;
@@ -26,9 +26,9 @@ class UnixGreeter implements Greeter, UnixPlatform {
 class WindowsGreeter implements Greeter, WindowsPlatform {
     cinclude "<windows.h>";
 
-    native function twice(x: int32): int32 { return (int32_t)GetTickCount64() * 0 + 2 * x; }
+    override native function twice(x: int32): int32 { return (int32_t)GetTickCount64() * 0 + 2 * x; }
 
-    native function label(name: String, items: byte[]): String { return "windows"; }
+    override native function label(name: String, items: byte[]): String { return "windows"; }
 }
 
 let greeter: Greeter = switch (Platform.current()) {

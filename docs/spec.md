@@ -476,15 +476,18 @@ with `in` ([§14](#14-memory)): it lives in its variable.
 
 ```
 [ synchronized ] class NAME [ extends NAME ] [ implements NAME ( , NAME )* ]
-    { ( field | static ... | [ override ] function ... | native function ... | native let ... | operator ... )* }
+    { ( field | static ... | [ override ] [ native ] function ... | native let ... | operator ... )* }
 ```
 
 - A class extends at most one class, and implements any number of interfaces.
 - Fields and methods are inherited. A field cannot have the name of an inherited field.
 - Every method is virtual: a call runs the method of the object's actual class.
 - A method that redefines an inherited one is marked `override` and has exactly the same signature,
-  the same `in` on its parameters and the same `throws`. `override` on a method that redefines nothing
-  is an error, and so is redefining without `override`.
+  the same `in` on its parameters and the same `throws`. So is a method that an interface the class
+  implements declares (§9.4). `override` on a method that redefines nothing (it is neither in the
+  superclass nor in an interface the class implements) is an error, and so is redefining or
+  implementing without `override`. A method that is both inherited and of an interface has one
+  `override`.
 - `super.name(...)` calls the parent's version of a method.
 - `==` between objects compares identity, unless the class defines `operator ==`.
 - A value of a class is used where a parent class is expected. To go from a parent to a subclass, a type
@@ -510,7 +513,8 @@ interface type is one of:
 3. a **lambda**, when the interface has exactly one method.
 
 A class that implements an interface defines each of its methods with the same signature, `in` and
-`throws`. A class that implements `A` implements also every interface `A` extends: its objects convert to
+`throws`, marked `override` (a method it inherits from its superclass fulfills the interface as it is).
+A class that implements `A` implements also every interface `A` extends: its objects convert to
 each of them. A value whose type is the interface `A` does not convert to `B` (only objects of classes do).
 
 ### 9.5 Enums
@@ -1811,7 +1815,7 @@ topLevel             = const NAME : Type = expression ;
                      | export function NAME parameters [ : Type ] [ = NAME ] block
                      | struct NAME { ( field | static staticMember | function | operator )* }
                      | [ synchronized ] class NAME [ extends qualifiedName ] [ implements qualifiedName ( , qualifiedName )* ]
-                           { ( field | static staticMember | [ override ] function | native ( nativeFunction | nativeLet ) | operator
+                           { ( field | static staticMember | [ override ] function | [ override ] native nativeFunction | native nativeLet | operator
                                | cinclude "TEXT" ; | ccode { C TEXT } )* }
                      | interface NAME [ extends qualifiedName ( , qualifiedName )* ]
                            { ( function NAME parameters [ : Type ] [ throws Type ] ; | static function )* }

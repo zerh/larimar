@@ -113,7 +113,7 @@ public function printError(text: String): void {
 
 /** One byte per read: what has arrived, never waiting for more than one (a Reader over it works on a terminal). */
 class ConsoleInputStream implements InputStream {
-    function read(buffer: byte[]): int32 throws IoError {
+    override function read(buffer: byte[]): int32 throws IoError {
         if (buffer.length == 0) { return 0; }
         let b: int32 = fgetc(stdin);
         if (b == EOF) {
@@ -130,14 +130,14 @@ class ConsoleInputStream implements InputStream {
 
 class ConsoleOutputStream implements OutputStream {
     let error: bool;
-    function write(bytes: byte[]): void throws IoError {
+    override function write(bytes: byte[]): void throws IoError {
         if (bytes.length == 0) { return; }
         let f: CStream = self.error ? stderr : stdout;
         if (fwrite(bytes, 1, bytes.length as uint64, f) != bytes.length as uint64) {
             raise(3, self.error ? "standard error" : "standard output");
         }
     }
-    function flush(): void throws IoError { fflush(self.error ? stderr : stdout); }
+    override function flush(): void throws IoError { fflush(self.error ? stderr : stdout); }
     function close(): void throws IoError { fflush(self.error ? stderr : stdout); }
 }
 

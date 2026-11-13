@@ -5,7 +5,7 @@ import syntax.ast {
 };
 import semantics.types {
     ArrK, buildingLibrary, classes, ClassInfo, classOf, enumOf, FieldInfo, findField, findMethod, FunctionInfo,
-    functionOf, functions, InterfaceInfo, interfaceOf, interfaces, isArray, isError, MethodInfo, P_TEMP, parentOf,
+    functionOf, functions, InterfaceInfo, interfaceMethod, interfaceOf, interfaces, isArray, isError, MethodInfo, P_TEMP, parentOf,
     structs, Symbol, SymK, T_INT32, T_STRING, T_VOID, Type
 };
 import semantics.expressions.conversions { coerce };
@@ -100,13 +100,10 @@ function processClass(c: ClassInfo in default, done: Any): void {
         if (!m.isOperator && (own[m.name] != null || (parent != null && findField(parent.name, m.name) != null))) {
             error(line, "'${m.name}' in class '${c.name}' is both a field and a method.");
         }
+        // override: on a method the class did not introduce, one of its superclass or of an interface it implements
         let isOverride: bool = m.decl.isOverride;
-        if (c.superName == "") {
-            if (isOverride) { error(line, "Method '${m.name}' in class '${c.name}' has 'override' but the class has no superclass."); }
-            continue;
-        }
-        if (parent == null) { continue; }
-        let pm: MethodInfo? = findMethod(parent.name, m.name, m.isOperator, m.sig!.params.length);
+        if (c.superName != "" && parent == null) { continue; }      // its superclass was not found: said already
+        let pm: MethodInfo? = parent == null ? null : findMethod(parent.name, m.name, m.isOperator, m.sig!.params.length);
         if (m.isOperator) {
             if (pm != null) {
                 m.introducer = pm.introducer;
@@ -114,16 +111,30 @@ function processClass(c: ClassInfo in default, done: Any): void {
             }
             continue;
         }
-        if (isOverride && pm == null) {
-            error(line, "Method '${m.name}' in class '${c.name}' has 'override' but does not exist in '${c.superName}'.");
+        let asked: String = implementedOf(c, m.name);
+        if (isOverride && pm == null && asked == "") {
+            let where: String = c.superName == "" ? "the class has no superclass" : "it is not in '${c.superName}'";
+            let ifaces: String = c.interfaces.length == 0 ? "implements no interface" : "no interface it implements has it";
+            error(line, "Method '${m.name}' in class '${c.name}' has 'override' but redefines nothing: ${where}, and ${ifaces}.");
         } else if (!isOverride && pm != null) {
             error(line, "Method '${m.name}' in class '${c.name}' overrides '${c.superName}' and REQUIRES the 'override' keyword.");
+        } else if (!isOverride && asked != "") {
+            error(line, "Method '${m.name}' in class '${c.name}' implements '${asked}' and REQUIRES the 'override' keyword.");
         }
         if (pm != null) {
             m.introducer = pm.introducer;
             checkSameSig(c, m, pm, line);
         }
     }
+}
+
+/** The interface, of those a class implements, that has a method of this name ("" when none does). */
+function implementedOf(c: ClassInfo, name: String): String {
+    for (iname in c.interfaces) {
+        let io: InterfaceInfo? = interfaceOf(iname);
+        if (io != null && interfaceMethod(io, name) != null) { return iname; }
+    }
+    return "";
 }
 
 function sameLives(a: Param[*], b: Param[*]): bool {
