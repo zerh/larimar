@@ -30,7 +30,7 @@ import codegen.gen.classes {
 import codegen.gen.library { exports, plainName };
 import codegen.gen.statements { block, body, ret };
 import codegen.gen.types {
-    define, earlyExport, exportBody, exportHeader, externCType, externDefinition, externPrototype, forward, isCName,
+    callbackThunk, define, earlyExport, exportBody, exportHeader, externCType, externDefinition, externPrototype, forward, isCName,
     isHandle, larInC, larPrototypes, memberBody
 };
 
@@ -250,8 +250,15 @@ public function generate(): String {
         functionsOut.add(body(f.decl!.body, f.sig!.elem!, f.throwsType != null, null, f.paramSymbols, "", f.line));
         functionsOut.add("}\n\n");
     }
-    for (f in functions) {                      // export: the C function C code calls
+    let callbacks: Type[*] = [];                // export: the C function C code calls
+    for (f in functions) {
         if (f.isExtern || f.exportName == "") { continue; }
+        for (p in f.sig!.params) {              // and what makes a function C gives a function of Larimar's
+            if (p.kind == TyK.Func && !callbacks.contains(p)) {
+                callbacks.push(p);
+                functionsOut.add(callbackThunk(p));
+            }
+        }
         functionsOut.add(exportBody(f));
     }
     if (buildingLibrary) {                      // the members of its classes: tk_Counter_add(handle, ...)
@@ -379,7 +386,12 @@ public function generate(): String {
         let ps: String[*] = [] in default;
         for (p in sg.params) { ps.push(externCType(p)); }
         if (ps.length == 0) { ps.push("void"); }
-        part.add("typedef ${externCType(sg.elem!)} (*Ext_${e.name})(${ps.join(", ")});\n");
+        if (e.ctxIndex >= 0 && sg.elem! == T_STRING && e.decl.ofPackage) {     // a library takes its text where it says: the last argument
+            ps.push("void*");
+            part.add("typedef void (*Ext_${e.name})(${ps.join(", ")});\n");
+        } else {
+            part.add("typedef ${externCType(sg.elem!)} (*Ext_${e.name})(${ps.join(", ")});\n");
+        }
     }
     for (t in typeOrder) { forward(part, t); }
     sectionOf(out, "Forward declarations", part);
@@ -554,6 +566,12 @@ public function generate(): String {
         for (c in handleClassNames()) {
             for (m in libraryMembers(c)) { roots.push(m.cName); }
         }
+        for (f in functions) {                  // what a function of C's gives its text with
+            if (f.isExtern || f.exportName == "") { continue; }
+            for (t in f.sig!.params) {
+                if (t.kind == TyK.Func && t.elem! == T_STRING) { roots.push("${libraryPrefix != "" ? "${libraryPrefix}_" : ""}give"); }
+            }
+        }
     }
     let program: String = prune(out.toString(), roots);     // only what main, the exports and the ccode reach
     let head: StringBuilder = {} in default;
@@ -639,6 +657,8 @@ function libraryGlue(out: StringBuilder): void {
     out.add("#if defined(__GNUC__) || defined(__clang__) || defined(__TINYC__)\n");
     out.add("__attribute__((constructor)) static void lm_library_load(void) { lm_library_init(); }\n#endif\n");
     out.add("void ${p}free(void* text) { free(text); }\n");
+    // what a function of C's, called back, gives a text with (cut when no function of the library takes one)
+    out.add("void ${p}give(void* out, const char* text) { ((RtTextOut*)out)->set((RtTextOut*)out, text ? text : \"\", text ? strlen(text) : 0); }\n");
     for (c in handleClasses()) { out.add("void ${p}${c}_release(void* handle) { rt_handle_release(handle); }\n"); }
     out.add("const char ${p}larimar_interface[] = \"larimar-interface:${INTERFACE_MARK}\";\n");
     out.add("const char* ${p}interface(void) { return ${p}larimar_interface + 18; }\n");
@@ -656,7 +676,12 @@ public function handleClassNames(): String[*] {
     for (f in functions) {
         if (f.isExtern || f.exportName == "" || f.sig == null) { continue; }
         addHandles(f.sig!.elem!, out);
-        for (t in f.sig!.params) { addHandles(t, out); }
+        for (t in f.sig!.params) {
+            addHandles(t, out);
+            if (t.kind == TyK.Func) {           // what a function of the program is given
+                for (pt in t.params) { addHandles(pt, out); }
+            }
+        }
     }
     let i: int32 = 0;
     while (i < out.length && buildingLibrary) {
@@ -767,6 +792,7 @@ function resources(out: StringBuilder): void {
             if (r->state == 1) { r->state = 2; r->release(r); r->state = 0; }
         }
         static inline void rt_res_release(void* p) { if (p) rt_res_final(p); }
+        static void rt_res_lent(RtRes* r) { (void)r; }      /* a resource given to a callback: its owner releases it */
         """);
     for (e in externInfos) {
         if (e.decl.releasedBy == "" || e.sig != null) { continue; }

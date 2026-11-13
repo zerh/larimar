@@ -299,8 +299,11 @@ static inline void rt_mem_on_free(RtMem* m, void (*fn)(void*), void* p, int line
 #endif
 }
 
+/* A function that C gave a library, with the void* that C wants back on each call. */
+typedef struct RtCCallback { void (*fn)(void); void* data; } RtCCallback;
+
 /* The default memory: grows, lives for the whole program. */
-RtMem rt_default_mem = { NULL, 0, 0, 0, 0, 0, NULL, NULL, 0, true, NULL, true };
+static RtMem rt_default_mem = { NULL, 0, 0, 0, 0, 0, NULL, NULL, 0, true, NULL, true };
 
 #ifdef RT_THREADS
 }

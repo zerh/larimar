@@ -182,7 +182,7 @@ public function interfaceImplementations(out: StringBuilder): void {
                 out.add("static ${cType(im.sig!.elem!)} ${c.name}__${iname}__${im.name}(void* self${argsDecl(pt, th)}) { ");
                 out.add("${retWord(im.sig!.elem!)}${dispatchName(m.introducer, m)}((${m.introducer}*)self${argsPass(pt.length, th)}); }\n");
             }
-            out.add("const ${iname}_Table ${c.name}__${iname}_table = { &rtclass_${c.name}");
+            out.add("${internal()}const ${iname}_Table ${c.name}__${iname}_table = { &rtclass_${c.name}");
             for (im in i.methods) { out.add(", ${c.name}__${iname}__${im.name}"); }
             out.add(" };\n");
         }
@@ -194,7 +194,7 @@ public function samTable(out: StringBuilder, i: InterfaceInfo in default): void 
     out.add("static ${cType(m.sig!.elem!)} ${i.name}__sam_${m.name}(void* self");
     for (k, p in paramCTypes(m)) { out.add(", ${p} a${k}"); }
     out.add(");\n");
-    out.add("const ${i.name}_Table ${i.name}__sam_table = { NULL, ${i.name}__sam_${m.name} };\n");
+    out.add("${internal()}const ${i.name}_Table ${i.name}__sam_table = { NULL, ${i.name}__sam_${m.name} };\n");
 }
 
 public function samThunk(out: StringBuilder, i: InterfaceInfo in default): void {

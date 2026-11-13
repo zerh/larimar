@@ -1371,6 +1371,9 @@ A value of type `F thread safe` can be called by several threads at once.
 - A lambda written where a `thread safe` type is expected is checked like the `run` of a thread
   ([§18.5](#185-what-a-thread-can-use)), and the functions it calls cannot modify globals.
 - A `thread safe` value can be shared between threads and passed to synchronized methods.
+- An object of a synchronized class is created with values ([§18.5](#185-what-a-thread-can-use)), or with a
+  list or an object written right there (of values, or of what is written there too): what its creator
+  still has would be used without the lock. A field that is a function is `thread safe`.
 - A `thread safe` function is assignable to the plain type; a plain function value is not assignable to
   the `thread safe` type (only a lambda written there, which is checked).
 
@@ -1567,10 +1570,10 @@ given by the project (by default, its name; it may be empty). In a library:
 - An export function is called `<prefix>_NAME` in C, unless it says `= NAME`; the names above are not
   available to it.
 - Its parameters and results may be only numbers, `bool`, `String`, `String?` and the library's classes and
-  their optionals. A parameter may also be a `Context`, or a C function type
-  ([§19.8](#198-c-function-pointers-and-callbacks)) of numbers, `bool` and `String` that has a `Context`;
-  both may say `in default` (the library keeps the function), the only place `in` is allowed on a parameter
-  of an export function.
+  their optionals. In a library a parameter may also be a function type whose parameters are numbers,
+  `bool`, `String` and the library's classes, and whose result is a number, a `bool`, a `String` or
+  nothing: C gives a function and a `void*`. It may say `in default` (the library keeps the function),
+  the only place `in` is allowed on a parameter of an export function.
 - A class is a **handle** in C (`<prefix>_<Class>*`). An object returned to C lives, with everything it
   creates afterwards, in a memory of its own, freed by `<prefix>_<Class>_release`. A `NULL` handle passed
   where a class is expected is a panic; where an optional is expected, it is `null`.

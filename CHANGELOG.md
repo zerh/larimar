@@ -35,11 +35,22 @@ part of it, in the folder of its name.
 - A file of a copy of the standard library (a repository's `std/crypto.lar`, open in an editor whose
   installed Larimar is another) is checked against that copy: it showed *Switch value: expected
   RandomSource but got std.crypto.posix.UrandomSource*.
-- A library takes **callbacks**: an export function may take a C function type with a `Context` (of
-  numbers, `bool` and `String`) and its `Context`. A Larimar program gives it a lambda, with what it
-  captures; a C program, a function and a `void*`. `in default` on those parameters says the library keeps
-  the function, and then the compiler checks that what the program's function uses lives as long as the
-  program.
+- A library takes **functions of the program**: a parameter of a function type in an export function
+  (`handler: (Request) -> String`), called inside like any function. A Larimar program gives it a lambda,
+  with what it captures; a C program, a function and a `void*`. The function gets objects of the library
+  (it uses them, and cannot keep them) and gives a number, a `bool`, nothing or a text, which lives in the
+  block of the library that called it (C gives it with `<prefix>_give`). `in default` on the parameter
+  says the library keeps the function: what it uses then lives as long as the program.
+- A Larimar program uses the package of a library; a library compiled with `--static` or `--dynamic` is
+  for C programs, and is no longer named in `[packages]`.
+- **Fixed**: an object of a synchronized class could be created around a list that its creator kept using,
+  or with a plain function that touched a global: two threads then used the same data without the lock (a
+  data race, found by review and confirmed with the thread sanitizer). Now it is created with values or
+  with what is written right there, and a field that is a function is `thread safe`. A library that calls
+  the program's function from another thread has that in its `.lar`, and the function is checked for it.
+- **Fixed**: a library that created something `in default`, or gave a lambda where an interface is
+  expected (a `Thread`'s `run`), did not link with a program that did the same (*multiple definition of
+  rt_default_mem*): those two names of its C were not its own. Now only its export functions are seen.
 - **Fixed**: a method that a subclass overrides now has what the override returns. A call through the
   base class could keep, for the whole program, a text that the override returned from an argument that
   lived only in a block (a use after free). Found by review, with its test.
@@ -68,6 +79,9 @@ part of it, in the folder of its name.
 - `[packages]` is the one way to use a library written in Larimar. `[dependencies]` with `deps/` (Larimar
   code used as source) is gone, and a library is no longer found among `static_libraries` by its
   `.interface`. The plugin example in the manuals is a generic `mytool`.
+- `docs/libraries.es.md`: every scenario of writing, publishing and using a library, each with the code that
+  was run and the test that covers it. `docs/compiler-reference.md`: every function of the compiler, with
+  its signature and its comment, generated from the source.
 - The manuals and the specification are in `docs/`, next to the page that shows them (`manual.html`
   reads the ones published with it). The manual explains `native struct` and `native type`, and where
   `c"..."` is needed; the page no longer speaks of `#when`.

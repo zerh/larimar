@@ -248,10 +248,14 @@ function trampoline(ext: Type, view: Type): String {
     let sig: Type = e.sig!;
     let ps: String[*] = [] in default;
     let args: StringBuilder = {} in default;
+    let lent: StringBuilder = {} in default;
     for (i, p in sig.params) {
         ps.push("${externCType(p)} a${i}");
         if (i == e.ctxIndex) { continue; }
-        if (p == T_STRING) {
+        if (isResource(p)) {                    // a resource of whoever calls: used here, not released here
+            lent.add("Res_${p.name} b${i} = { { 1, rt_res_lent }, a${i} }; ");
+            args.add(", &b${i}");
+        } else if (p == T_STRING) {
             args.add(", rt_str_c(a${i})");
         } else if (isOpt(p) && p.elem! == T_STRING) {
             let o: String = cType(p);
@@ -261,8 +265,20 @@ function trampoline(ext: Type, view: Type): String {
         }
     }
     let ret: Type = sig.elem!;
+    if (ret == T_STRING) {                      // the text goes where the caller says: its last argument
+        let made: String = "call_Closure_${view.funcId}(*(${cType(view)}*)a${e.ctxIndex}, &mem${args.toString()})";
+        ctxTrampolines.push("""
+            static void ${name}(${ps.join(", ")}, void* out) {
+                ${lent.toString()}RtMem mem = rt_mem_growable();
+                RtString r = ${made};
+                ((RtTextOut*)out)->set((RtTextOut*)out, r.ptr, (size_t)r.len);
+                rt_mem_free(&mem);
+            }
+            """.clone() in default);
+        return name;
+    }
     let call: String = "call_Closure_${view.funcId}(*(${cType(view)}*)a${e.ctxIndex}${args.toString()})";
-    ctxTrampolines.push("static ${externCType(ret)} ${name}(${ps.join(", ")}) { ${ret == T_VOID ? "" : "return "}${call}; }\n".clone() in default);
+    ctxTrampolines.push("static ${externCType(ret)} ${name}(${ps.join(", ")}) { ${lent.toString()}${ret == T_VOID ? "" : "return "}${call}; }\n".clone() in default);
     return name;
 }
 

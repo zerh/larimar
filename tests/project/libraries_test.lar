@@ -238,39 +238,54 @@ test function aPackageBringsItsC(): void throws IoError {
     check(output.join("").endsWith("6 LARIMAR!\n"), "two packages in one program: ${output.join("")}");
 }
 
-// A library takes a function of the program: a callback type with a Context, in an export function. The
-// program gives it a lambda, with what it captures; `in default` in the library says it keeps the function.
+// A library takes a function of the program: a function type in an export function. The program gives it a
+// lambda, with what it captures; C, a function and a void*. `in default` in the library says it keeps it.
 test function aLibraryCallsTheProgramBack(): void throws IoError {
     if (!onlyLinuxOrMac()) { return; }
     let dir: String = Paths.absolute("build/test/lib-callbacks");
     Files.createDirectories(Paths.join(dir, "src"));
     Files.writeString(Paths.join(dir, "larimar.toml"), "[project]\nname = \"evkit\"\nkind = \"library\"\nmain = \"src/evkit.lar\"\n\n[library]\nprefix = \"ev\"\n");
     Files.writeString(Paths.join(dir, "src/evkit.lar"), raw"""
-        native type Visit = (int32, String, Context) -> int32;
-        let saved: Visit? = null;
-        let savedData: Context? = null;
+        let saved: ((int32, String) -> int32)? = null;
 
-        public export function each(n: int32, visit: Visit, data: Context): int32 {
+        public export function each(n: int32, visit: (int32, String) -> int32): int32 {
             let total: int32 = 0;
-            for (i in 0..n) { total += visit(i, "item ${i}", data); }
+            for (i in 0..n) { total += visit(i, "item ${i}"); }
             return total;
         }
-        public export function keep(visit: Visit in default, data: Context in default): void {
+        public export function keep(visit: (int32, String) -> int32 in default): void {
             saved = visit;
-            savedData = data;
         }
         public export function fire(n: int32): int32 {
-            if (saved == null || savedData == null) { return -1; }
-            return saved!(n, "fired", savedData!);
+            if (saved == null) { return -1; }
+            return saved!(n, "fired");
         }
         """);
     let output: String[*] = [];
     checkInt(0, larimarc(["build", dir], output));
     let lib: String = Paths.join(dir, "build/evkit");
-    check(Files.readString(Paths.join(lib, "evkit.h")).contains("typedef int32_t (*ev_Visit)(int32_t, const char*, void*);"), "the .h has the callback's type: ${output.join("")}");
+    let header: String = Files.readString(Paths.join(lib, "evkit.h"));
+    check(header.contains("typedef int32_t (*ev_each_visit)(int32_t, const char*, void* data);"), "the .h has the function's type: ${output.join("")}");
+    check(header.contains("int32_t ev_each(int32_t n, ev_each_visit visit, void* visit_data);"), "and its void*: ${header}");
     let module: String = Files.readString(Paths.join(lib, "evkit.lar"));
-    check(module.contains("public native type Visit = (int32, String, Context) -> int32;"), "the .lar too: ${module}");
-    check(module.contains("public native function keep(visit: Visit in default, data: Context): void = ev_keep;"), "and which one the library keeps: ${module}");
+    check(module.contains("public native function keep(visit: keep_visit in default, visit_data: Context): void = ev_keep;"), "the .lar says which one the library keeps: ${module}");
+    // from C: a function and a void*
+    let cc: String = (os.env("CC") ?? "").trim() != "" ? (os.env("CC") ?? "").trim() : "cc";
+    Files.writeString(Paths.join(dir, "main.c"), """
+        #include <stdio.h>
+        #include "evkit.h"
+        static int32_t twice(int32_t n, const char* label, void* data) { (void)label; return n * *(int*)data; }
+        int main(void) {
+            int k = 2;
+            printf("%d\\n", ev_each(4, twice, &k));
+            return 0;
+        }
+        """);
+    output.clear();
+    checkInt(0, execute(cc, ["-std=c99", "-I${lib}", Paths.join(dir, "main.c"), Paths.join(lib, "evkit.c"), "-lm", "-o", Paths.join(dir, "demo")], output));
+    output.clear();
+    checkInt(0, execute(Paths.join(dir, "demo"), [], output));
+    check(output.join("") == "12\n", "C gives a function and its data: ${output.join("")}");
     let app: String = Paths.absolute("build/test/lib-callbacks-app");
     Files.createDirectories(Paths.join(app, "src"));
     Files.writeString(Paths.join(app, "larimar.toml"), "[project]\nname = \"app\"\n\n[packages]\nevkit = \"${lib}\"\n");
@@ -300,10 +315,175 @@ test function aLibraryCallsTheProgramBack(): void throws IoError {
         """);
     output.clear();
     checkInt(1, larimarc(["build", app], output));
-    check(output.join("").contains("C keeps the function given to 'evkit.keep' (in default)"), "a kept function with a local: ${output.join("")}");
+    check(output.join("").contains("C keeps the function given to 'evkit.keep' (in default)"), "a kept function with a local: ${output.join("")}");    // the library itself: a function it keeps without saying so
+    Files.writeString(Paths.join(dir, "src/evkit.lar"), raw"""
+        let saved: ((int32) -> int32)? = null;
+        public export function keep(visit: (int32) -> int32): void { saved = visit; }
+        """);
+    output.clear();
+    checkInt(1, larimarc(["build", dir], output));
+    check(output.join("").contains("'saved' lives for the whole program"), "kept without 'in default': ${output.join("")}");
 }
 
 // larimar build also writes the package in one file, <name>.lpk (a zip without compression): a program
+// A function of the program gets an object of the library and gives a text: the object is the library's (the
+// function uses it, and cannot keep it), and the text lives in the block of the library that called.
+test function aCallbackGetsAnObjectAndGivesAText(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let dir: String = Paths.absolute("build/test/lib-handler");
+    Files.createDirectories(Paths.join(dir, "src"));
+    Files.writeString(Paths.join(dir, "larimar.toml"), "[project]\nname = \"webkit\"\nkind = \"library\"\nmain = \"src/webkit.lar\"\n\n[library]\nprefix = \"wk\"\n");
+    Files.writeString(Paths.join(dir, "src/webkit.lar"), raw"""
+        public class Request {
+            let path: String;
+            let name: String = "";
+            function param(key: String): String { return key == "name" ? self.name.clone() : ""; }
+        }
+        public export function serve(path: String, name: String, handler: (Request) -> String): String {
+            let req: Request = { path: path.clone(), name: name.clone() };
+            let body: String = handler(req);
+            return "${body} (${body.length} bytes)";
+        }
+        """);
+    let output: String[*] = [];
+    checkInt(0, larimarc(["build", dir], output));
+    let lib: String = Paths.join(dir, "build/webkit");
+    let header: String = Files.readString(Paths.join(lib, "webkit.h"));
+    check(header.contains("typedef void (*wk_serve_handler)(wk_Request*, void* data, void* out);"), "the function's type in the .h: ${output.join("")}");
+    check(header.contains("void wk_give(void* out, const char* text);"), "and what it gives its text with: ${header}");
+    check(Files.readString(Paths.join(lib, "webkit.lar")).contains("native type serve_handler = (Request, Context) -> String;"), "the .lar has it too");
+    let app: String = Paths.absolute("build/test/lib-handler-app");
+    Files.createDirectories(Paths.join(app, "src"));
+    Files.writeString(Paths.join(app, "larimar.toml"), "[project]\nname = \"app\"\n\n[packages]\nwebkit = \"${lib}\"\n");
+    Files.writeString(Paths.join(app, "src/main.lar"), raw"""
+        import webkit;
+        import webkit { Request };
+        function main(): int32 {
+            let greeting: String = "hola";
+            for (i in 0..2) {
+                println(webkit.serve("/hi", "ana ${i}", (req: Request) -> { return "${greeting} ${req.param("name")} en ${req.path}"; }));
+            }
+            return 0;
+        }
+        """);
+    output.clear();
+    checkInt(0, larimarc(["run", app], output));
+    check(output.join("").endsWith("hola ana 0 en /hi (17 bytes)\nhola ana 1 en /hi (17 bytes)\n"), "the handler: ${output.join("")}");
+    // the object is the library's: the function cannot keep it
+    Files.writeString(Paths.join(app, "src/main.lar"), raw"""
+        import webkit;
+        import webkit { Request };
+        let kept: Request[*] = [] in default;
+        function main(): int32 {
+            println(webkit.serve("/hi", "ana", (req: Request) -> { kept.push(req); return "x"; }));
+            return 0;
+        }
+        """);
+    output.clear();
+    checkInt(1, larimarc(["build", app], output));
+    check(output.join("").contains("This value lives in 'req' (owned by the caller), but the array lives longer"), "keeping the object: ${output.join("")}");
+    // releasing it there does not take it from the library; using it after that stops the program
+    Files.writeString(Paths.join(app, "src/main.lar"), raw"""
+        import webkit;
+        import webkit { Request };
+        function main(): int32 {
+            println(webkit.serve("/hi", "ana", (req: Request) -> { let p: String = req.path; release(req); return p; }));
+            println(webkit.serve("/hi", "ana", (req: Request) -> { release(req); return req.path; }));
+            return 0;
+        }
+        """);
+    output.clear();
+    check(larimarc(["run", app], output) != 0, "a released object stops the program");
+    check(output.join("").contains("/hi (3 bytes)\n") && output.join("").contains("a released Request was used"), "released there: ${output.join("")}");
+    // from C: the text is given with wk_give
+    let cc: String = (os.env("CC") ?? "").trim() != "" ? (os.env("CC") ?? "").trim() : "cc";
+    Files.writeString(Paths.join(dir, "main.c"), """
+        #include <stdio.h>
+        #include "webkit.h"
+        static void hello(wk_Request* req, void* data, void* out) {
+            char text[128];
+            char* name = wk_Request_param(req, "name");
+            snprintf(text, sizeof text, "%s %s", (const char*)data, name);
+            wk_free(name);
+            wk_give(out, text);
+        }
+        int main(void) {
+            char* answer = wk_serve("/hi", "ana", hello, "hola");
+            printf("%s\\n", answer);
+            wk_free(answer);
+            return 0;
+        }
+        """);
+    output.clear();
+    checkInt(0, execute(cc, ["-std=c99", "-I${lib}", Paths.join(dir, "main.c"), Paths.join(lib, "webkit.c"), "-lm", "-o", Paths.join(dir, "demo")], output));
+    output.clear();
+    checkInt(0, execute(Paths.join(dir, "demo"), [], output));
+    check(output.join("") == "hola ana (8 bytes)\n", "from C: ${output.join("")}");
+}
+
+// A library that calls the program's function from another thread says so in its type (thread safe): the
+// .lar has it, and the program's function is checked like the run of a thread.
+test function aLibraryCallsBackFromAnotherThread(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let dir: String = Paths.absolute("build/test/lib-thread");
+    Files.createDirectories(Paths.join(dir, "src"));
+    Files.writeString(Paths.join(dir, "larimar.toml"), "[project]\nname = \"bg\"\nkind = \"library\"\nmain = \"src/bg.lar\"\n");
+    let library: String = raw"""
+        synchronized class Holder {
+            let tick: (int32) -> int32 SAFE;
+            let total: int32 = 0;
+            function fire(i: int32): void { self.total += self.tick(i); }
+            function sum(): int32 { return self.total; }
+        }
+        public export function inBackground(tick: (int32) -> int32 SAFE in default): int32 {
+            let h: Holder = { tick } in default;
+            let t: Thread = { run: () -> { for (i in 0..4) { h.fire(i); } } } in default;
+            t.start();
+            t.join();
+            return h.sum();
+        }
+        """;
+    Files.writeString(Paths.join(dir, "src/bg.lar"), library.replace(" SAFE", ""));
+    let output: String[*] = [];
+    checkInt(1, larimarc(["build", dir], output));
+    check(output.join("").contains("is a function that other threads may call: declare it '(int32) -> int32 thread safe'"), "without thread safe: ${output.join("")}");
+    Files.writeString(Paths.join(dir, "src/bg.lar"), library.replace(" SAFE", " thread safe"));
+    output.clear();
+    checkInt(0, larimarc(["build", dir], output));
+    let lib: String = Paths.join(dir, "build/bg");
+    check(Files.readString(Paths.join(lib, "bg.lar")).contains("native type inBackground_tick = (int32, Context) -> int32 thread safe;"), "the .lar says it: ${output.join("")}");
+    let app: String = Paths.absolute("build/test/lib-thread-app");
+    Files.createDirectories(Paths.join(app, "src"));
+    Files.writeString(Paths.join(app, "larimar.toml"), "[project]\nname = \"app\"\n\n[packages]\nbg = \"${lib}\"\n");
+    Files.writeString(Paths.join(app, "src/main.lar"), raw"""
+        import bg;
+        let seen: int32[*] = [] in default;
+        function main(): int32 {
+            println("${bg.inBackground((n: int32) -> { seen.push(n); return n * 2; })}");
+            return 0;
+        }
+        """);
+    output.clear();
+    checkInt(1, larimarc(["build", app], output));
+    check(output.join("").contains("This 'thread safe' lambda can reach global 'seen'"), "a function that is not safe for threads: ${output.join("")}");
+    Files.writeString(Paths.join(app, "src/main.lar"), raw"""
+        import bg;
+        synchronized class Seen {
+            let count: int32 = 0;
+            function add(): void { self.count += 1; }
+            function get(): int32 { return self.count; }
+        }
+        function main(): int32 {
+            let seen: Seen = { } in default;
+            println("${bg.inBackground((n: int32) -> { seen.add(); return n * 2; })} ${seen.get()}");
+            return 0;
+        }
+        """);
+    output.clear();
+    checkInt(0, larimarc(["run", app], output));
+    check(output.join("").endsWith("12 4\n"), "with its state in a synchronized object: ${output.join("")}");
+}
+
 // names the file, and it is unpacked in its build folder.
 test function aPackageInOneFile(): void throws IoError {
     if (!onlyLinuxOrMac()) { return; }
@@ -393,6 +573,53 @@ test function aPackageBringsCompiledCAndNamesItsPackages(): void throws IoError 
     check(output.join("").endsWith("12\n"), "a package over another, with its compiled C: ${output.join("")}");
 }
 
+// Nothing of a library's C but its export functions is seen by the program: its runtime's memory for
+// `in default` and the tables of its interfaces are its own, also when the program has the same ones.
+test function aLibraryAndItsProgramShareNoNames(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let dir: String = Paths.absolute("build/test/lib-own-names");
+    Files.createDirectories(Paths.join(dir, "src"));
+    Files.writeString(Paths.join(dir, "larimar.toml"), "[project]\nname = \"bgkit\"\nkind = \"library\"\nmain = \"src/bgkit.lar\"\n");
+    Files.writeString(Paths.join(dir, "src/bgkit.lar"), raw"""
+        synchronized class Total {
+            let sum: int32 = 0;
+            function add(n: int32): void { self.sum += n; }
+            function get(): int32 { return self.sum; }
+        }
+        let seen: String[*] = [] in default;
+
+        public export function work(label: String): int32 {
+            seen.push(label.clone() in default);
+            let total: Total = { } in default;
+            let count: int32 = seen.length;
+            let t: Thread = { run: () -> { total.add(count); } } in default;
+            t.start();
+            t.join();
+            return total.get();
+        }
+        """);
+    let output: String[*] = [];
+    checkInt(0, larimarc(["build", dir], output));
+    let app: String = Paths.absolute("build/test/lib-own-names-app");
+    Files.createDirectories(Paths.join(app, "src"));
+    Files.writeString(Paths.join(app, "larimar.toml"), "[project]\nname = \"app\"\n\n[packages]\nbgkit = \"${Paths.join(dir, "build/bgkit.lpk")}\"\n");
+    Files.writeString(Paths.join(app, "src/main.lar"), raw"""
+        import bgkit;
+        let mine: String[*] = [] in default;
+        function main(): int32 {
+            mine.push("a");
+            let t: Thread = { run: () -> { println("in a thread"); } } in default;
+            t.start();
+            t.join();
+            println("${bgkit.work("x")} ${bgkit.work("y")} ${mine.length}");
+            return 0;
+        }
+        """);
+    output.clear();
+    checkInt(0, larimarc(["run", app], output));
+    check(output.join("").endsWith("in a thread\n1 2 1\n"), "the library and the program, each with its own: ${output.join("")}");
+}
+
 test function aPackageIsNamedByItsFolder(): void throws IoError {
     let dir: String = Paths.absolute("build/test/lib-no-package");
     Files.createDirectories(Paths.join(dir, "src"));
@@ -403,7 +630,7 @@ test function aPackageIsNamedByItsFolder(): void throws IoError {
     check(output.join("").contains("package 'textkit': libs/none has no textkit.interface"), "a folder that is not a package: ${output.join("")}");
 }
 
-test function aStaticLibraryForCAndForLarimar(): void throws IoError {
+test function aStaticLibraryForC(): void throws IoError {
     if (!onlyLinuxOrMac()) { return; }
     let lib: String = buildLibrary(writeLibrary("lib-static", ""), ["--static"]);
     if (lib == "") { return; }
@@ -428,11 +655,11 @@ test function aStaticLibraryForCAndForLarimar(): void throws IoError {
     output.clear();
     checkInt(0, execute(exe, [], output));
     checkText("3 Larimar two 3 three 42\n3 mine (copy)\nnull\nsame interface\n", output.join(""));
-    // from Larimar
+    // a Larimar program uses the package, not the compiled library
     let app: String = writeProgram("lib-static-app", lib, PACKAGES);
     output.clear();
-    checkInt(0, larimarc(["run", app], output));
-    check(output.join("").endsWith(LARIMAR_OUTPUT), "the program uses the library: ${output.join("")}");
+    checkInt(1, larimarc(["build", app], output));
+    check(output.join("").contains("is a static library, for C programs: a Larimar program uses the package"), "a compiled library in [packages]: ${output.join("")}");
 }
 
 test function aDynamicLibrary(): void throws IoError {
@@ -442,10 +669,16 @@ test function aDynamicLibrary(): void throws IoError {
     let file: String = Platform.name() == "macos" ? "libtextkit.dylib" : "libtextkit.so";
     check(Files.isFile(Paths.join(lib, file)), "${file} is there");
     check(!Files.isFile(Paths.join(lib, "libtextkit.a")), "and no static library of another build");
-    let app: String = writeProgram("lib-dynamic-app", lib, PACKAGES);
+    // from C: the program loads it when it starts
+    let cc: String = (os.env("CC") ?? "").trim();
+    let exe: String = Paths.join(lib, "c-program");
+    Files.writeString(Paths.join(lib, "c-program.c"), C_PROGRAM);
     let output: String[*] = [];
-    checkInt(0, larimarc(["run", app], output));
-    check(output.join("").endsWith(LARIMAR_OUTPUT), "the program loads the library: ${output.join("")}");
+    let cmd: String[*] = ["-std=c99", "-I${lib}", Paths.join(lib, "c-program.c"), "-L${lib}", "-ltextkit", "-Wl,-rpath,${lib}", "-o", exe];
+    checkInt(0, execute(cc != "" ? cc : "cc", cmd, output));
+    output.clear();
+    checkInt(0, execute(exe, [], output));
+    checkText("3 Larimar two 3 three 42\n3 mine (copy)\nnull\nsame interface\n", output.join(""));
 }
 
 test function anotherBuildIsFoundOut(): void throws IoError {

@@ -107,6 +107,7 @@ public class ExternTypeDecl extends Node {
     let releasedBy: String = "";        // a resource: the function that releases it when its memory is freed
     let platform: String = "";
     let fieldsStruct: String = "";      // native type X = T* { let f: ...; }: the struct (made by the parser) X points to
+    let ofPackage: bool = false;        // of the .lar of a package: a function of this type follows the rules of a library
 }
 
 /** cName: the C function called (it stays when a module renames the declaration); prototype: no cinclude. A

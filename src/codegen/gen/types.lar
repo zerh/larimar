@@ -126,7 +126,14 @@ public function externCType(t: Type): String {
 /** export function: the C function C code calls (C types), which calls the Larimar one. */
 public function exportHeader(f: FunctionInfo, early: bool): String {
     let ps: String[*] = [] in default;
-    for (i, p in f.sig!.params) { ps.push("${abiType(p, early)} ${exportParam(f, i)}"); }
+    for (i, p in f.sig!.params) {
+        if (p.kind == TyK.Func) {               // a function of C's, and the void* it gets back
+            ps.push(callbackC(p, exportParam(f, i)));
+            ps.push("void* ${exportParam(f, i)}_data");
+        } else {
+            ps.push("${abiType(p, early)} ${exportParam(f, i)}");
+        }
+    }
     if (ps.length == 0) { ps.push("void"); }
     let r: Type = f.sig!.elem!;
     let ret: String = r == T_STRING || r == optT(T_STRING) ? "char*" : abiType(r, early);
@@ -142,8 +149,69 @@ public function isHandle(t: Type): bool { return isClass(t) || (isOpt(t) && isCl
  */
 public function exportBody(f: FunctionInfo): String {
     let xs: String[*] = [];
-    for (i, p in f.sig!.params) { xs.push(fromC(p, exportParam(f, i), f.exportName, f.params[i].name)); }
+    for (i, p in f.sig!.params) {
+        let x: String = exportParam(f, i);
+        if (p.kind == TyK.Func) {
+            xs.push("((Closure_${p.funcId}){ .fn = lm_callback_${p.funcId}, .env = { .c = { (void (*)(void))${x}, ${x}_data } } })");
+        } else {
+            xs.push(fromC(p, exportParam(f, i), f.exportName, f.params[i].name));
+        }
+    }
     return "${exportHeader(f, false)} {\n${callToC(f.cName, "", xs, f.sig!.elem!)}}\n\n";
+}
+
+/** A function of C's as a parameter: R (*name)(A..., void*), the void* being the one given with it. */
+public function callbackC(t: Type, name: String): String {
+    let ps: String[*] = [];
+    for (p in t.params) { ps.push(isHandle(p) ? "void*" : externCType(p)); }
+    ps.push("void*");
+    if (t.elem! == T_STRING) {                  // a text is left where C is told, the last argument
+        ps.push("void*");
+        return "void (*${name})(${ps.join(", ")})";
+    }
+    return "${externCType(t.elem!)} (*${name})(${ps.join(", ")})";
+}
+
+/**
+ * What makes a function of C's a function of Larimar's: the function a closure of that type runs, which
+ * calls C's with the arguments as C takes them (a text, ended by a zero, for the time of the call) and
+ * with its void*.
+ */
+public function callbackThunk(t: Type): String {
+    let sb: StringBuilder = {};
+    let ps: StringBuilder = {};
+    let args: String[*] = [];
+    let texts: bool = false;
+    let handles: StringBuilder = {};
+    for (i, p in t.params) {
+        ps.add(", ${cType(p)} a${i}");
+        if (p == T_STRING) {
+            texts = true;
+            args.push("rt_str_cz(a${i}, &mem, 0)");
+        } else if (isHandle(p)) {               // an object of the library, as a handle for the time of the call
+            handles.add("    RtHandle h${i} = { .object = a${i} };\n");
+            args.push("&h${i}");
+        } else {
+            args.push("a${i}");
+        }
+    }
+    args.push("c->data");
+    let r: Type = t.elem!;
+    sb.add("static ${cType(r)} lm_callback_${t.funcId}(void* env${r == T_STRING ? ", RtMem* rt_dest" : ""}${ps.toString()}) {\n");
+    sb.add("    RtCCallback* c = (RtCCallback*)env;\n");
+    sb.add(handles.toString());
+    if (texts) { sb.add("    RtMem mem = rt_mem_growable();\n"); }
+    if (r == T_STRING) {                        // the text is made where the caller of this function said
+        sb.add("    RtTextOut out = { rt_text_out_set, rt_dest, rt_str_c(\"\") };\n");
+        args.push("&out");
+    }
+    let call: String = "((${callbackC(t, "")})c->fn)(${args.join(", ")})";
+    sb.add(r == T_VOID || r == T_STRING ? "    ${call};\n" : "    ${cType(r)} r = ${call};\n");
+    if (texts) { sb.add("    rt_mem_free(&mem);\n"); }
+    if (r == T_STRING) { sb.add("    return out.text;\n"); }
+    else if (r != T_VOID) { sb.add("    return r;\n"); }
+    sb.add("}\n\n");
+    return sb.toString();
 }
 
 /** A value of C as Larimar's: a text, a text or null, the object of a handle. */
@@ -327,6 +395,7 @@ public function define(out: StringBuilder, t: Type): void {
         for (p in t.params) { out.add(", ${cType(p)}"); }
         out.add(");\n    union {");
         for (l in withEnv) { out.add(" Env_${l.id} l_${l.id};"); }
+        if (buildingLibrary) { out.add(" RtCCallback c;"); }          // a function C gave, with its void*
         out.add(" char _none; } env;\n};\n\n");
         return;
     }

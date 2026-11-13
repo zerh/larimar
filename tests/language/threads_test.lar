@@ -182,3 +182,53 @@ test function threadSafe(): void {
         "3"
     ]);
 }
+
+// A synchronized object is created with values, or with what is written right there: a list that whoever
+// creates it still has would be used by two threads without the lock.
+test function aSynchronizedObjectIsNotCreatedAroundSharedData(): void {
+    failsWith(raw"""
+        synchronized class Bag {
+            let items: int32[*];
+            function add(n: int32): void { self.items.push(n); }
+        }
+        function main(): int32 {
+            let shared: int32[*] = [] in default;
+            let b: Bag = { items: shared } in default;
+            let t: Thread = { run: () -> { b.add(1); } } in default;
+            t.start();
+            shared.push(2);
+            t.join();
+            return 0;
+        }
+        """, "Field 'items' of synchronized class 'Bag' is given int32[*] that others may still use, without its lock");
+}
+
+// The same with a function: other threads call it through the object, so it is thread safe.
+test function aFunctionOfASynchronizedObjectIsThreadSafe(): void {
+    failsWith(raw"""
+        synchronized class Holder {
+            let tick: (int32) -> int32;
+            function fire(i: int32): int32 { return self.tick(i); }
+        }
+        let seen: int32[*] = [] in default;
+        function main(): int32 {
+            let h: Holder = { tick: (n: int32) -> { seen.push(n); return n; } } in default;
+            let t: Thread = { run: () -> { h.fire(1); } } in default;
+            t.start();
+            seen.push(2);
+            t.join();
+            return 0;
+        }
+        """, "Field 'tick' of synchronized class 'Holder' is a function that other threads may call: declare it '(int32) -> int32 thread safe'");
+    failsWith(raw"""
+        synchronized class Holder {
+            let tick: (int32) -> int32 thread safe;
+            function fire(i: int32): int32 { return self.tick(i); }
+        }
+        let seen: int32[*] = [] in default;
+        function main(): int32 {
+            let h: Holder = { tick: (n: int32) -> { seen.push(n); return n; } } in default;
+            return 0;
+        }
+        """, "This 'thread safe' lambda can reach global 'seen'");
+}

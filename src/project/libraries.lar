@@ -9,8 +9,8 @@
 //
 // That is type "package", the default: the same folder serves every platform. With --static or --dynamic the
 // library is compiled here instead (libtextkit.a; libtextkit.so, libtextkit.dylib, textkit.dll), for a C program.
-// A program names the folder in [packages] of its larimar.toml, whatever its type, or the package's .lpk:
-// the same folder in one file (project.lpk).
+// A Larimar program names the package in [packages] of its larimar.toml: its .lpk, the same folder in one
+// file (project.lpk), or the folder.
 //
 // The interface hash is the first 8 hex digits of the SHA-256 of the .lar, and the library has it inside
 // ("larimar-interface:<hash>"). A program builds only when the three agree: a .lar edited by hand, or
@@ -149,8 +149,8 @@ function read(name: String, folder: String, verify: bool, problems: String[*]): 
         problems.push("${itf} is not the interface of a library called '${name}' (name and interface in [library])".clone());
         return null;
     }
-    if (kind != "package" && kind != "static" && kind != "dynamic") {
-        problems.push("${itf}: type = \"${kind}\" is not a kind of library (package, static, dynamic)".clone());
+    if (kind != "package") {
+        problems.push("${name} (${itf}) is a ${kind} library, for C programs: a Larimar program uses the package (larimar build, without --${kind})".clone());
         return null;
     }
     let binary: String = Paths.join(folder, libraryFile(name, kind));

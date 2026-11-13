@@ -770,8 +770,7 @@ function build(p: Project, debug: bool): String {
  * dynamic one is next to it (on Linux, one of the system's: -Wl,-Bstatic). A dynamic one
  * (dynamic_libraries) is -l<name> with -L for each of dynamic_library_paths, and the executable looks for
  * it in those folders when it runs (Linux and macOS: rpath; on Windows, next to the .exe or in the PATH).
- * A library of [packages] adds itself: a package, what its C needs; a static one, its file and its links; a
- * dynamic one, its folder.
+ * A package of [packages] adds what its C needs.
  */
 function linkArgs(p: Project, bundled: bool): String[*] {
     let dir: String = p.dir;
@@ -799,23 +798,12 @@ function linkArgs(p: Project, bundled: bool): String[*] {
     if (!windows()) {
         for (lp in p.dynamicLibraryPaths) { out.push("-Wl,-rpath,${resolve(dir, lp)}"); }
     }
-    for (l in p.larimarLibraries) {
-        switch (l.kind) {
-            case "dynamic" -> {
-                out.push("-L${l.dir}");
-                out.push("-l${l.name}");
-                if (!windows()) { out.push("-Wl,-rpath,${l.dir}"); }
-                continue;
-            }
-            case "static" -> { out.push(Paths.join(l.dir, libraryFile(l.name, "static")).clone()); }
-            default -> {                        // a package: the compiled C it brings, and what its C needs of the system
-                for (x in l.objects) { out.push(x.clone()); }
-                try {
-                    for (x in systemLibraries(Files.readString(Paths.join(l.dir, libraryFile(l.name, "package"))))) { out.push(x.clone()); }
-                } catch (IoError e) { }
-                if (!windows()) { out.push("-lm"); }
-            }
-        }
+    for (l in p.larimarLibraries) {             // a package: the compiled C it brings, and what its C needs of the system
+        for (x in l.objects) { out.push(x.clone()); }
+        try {
+            for (x in systemLibraries(Files.readString(Paths.join(l.dir, libraryFile(l.name, "package"))))) { out.push(x.clone()); }
+        } catch (IoError e) { }
+        if (!windows()) { out.push("-lm"); }
         for (x in l.links) { out.push(x.clone()); }
     }
     return out;

@@ -1,6 +1,6 @@
 // semantics.expressions.literals: lambdas, objects, lists, tables and casts.
 
-import syntax.ast { ArrayLit, Call, Cast, Expr, ExprStmt, Ident, Lambda, Member, ObjectLit, Param };
+import syntax.ast { ArrayLit, Call, Cast, Expr, ExprStmt, Ident, Lambda, Member, NullLit, ObjectLit, Param };
 import semantics.types {
     allFields, arrayT, ArrK, ClassInfo, classOf, EnumInfo, enumOf, externInfoOf, externSig, FieldInfo, FrameK,
     InterfaceInfo, interfaceMethod, interfaceOf, isClass, isEnumT, isError, isExternT, isNumeric, isOpt, isPtr,
@@ -12,7 +12,7 @@ import semantics.analyzer { error, popFrame, popScope, pushFrame, pushScope, sco
 import semantics.analyzer.flow { lifetime, lifetimeOf, returnedNames };
 import semantics.analyzer.narrowing { narrow, reassignedNames };
 import semantics.analyzer.statements { analyzeStmts, checkReturns, declareParam };
-import semantics.analyzer.threads { checkThreadRun, currentOwner, edge };
+import semantics.analyzer.threads { checkThreadRun, currentOwner, edge, sendable };
 import semantics.expressions { check, describeExpr, note, noted, resolveTop, resolveType, TC_PARAM };
 import semantics.expressions.calls { checkAllArgs };
 import semantics.expressions.conversions { coerce, hasRefs, placeRegion, regionOf, setRegion };
@@ -107,6 +107,42 @@ function valuesRegion(o: ObjectLit in default): Region {
     return r;
 }
 
+/** A value nobody else has: a list or an object written there, of values or of what is written there too. */
+function writtenHere(e: Expr in default): bool {
+    if (e is NullLit || (e.ty != null && sendable(e.ty!))) { return true; }
+    if (e is ArrayLit a) {
+        for (x in a.elems) {
+            if (!writtenHere(x)) { return false; }
+        }
+        return true;
+    }
+    if (e is ObjectLit o) {
+        for (fi in o.fields) {
+            if (!writtenHere(fi.value)) { return false; }
+        }
+        return true;
+    }
+    return false;
+}
+
+/**
+ * What a synchronized object is created with: values, or what is written right there. A list or an object
+ * that whoever creates it still has would be used by two threads without the lock, and a function could be
+ * called by two at once: that one is `thread safe`.
+ */
+function checkSynchronizedInits(o: ObjectLit in default, typeName: String in default): void {
+    for (fi in o.fields) {
+        for (f in allFields(typeName)) {
+            if (f.name != fi.name || sendable(f.type)) { continue; }
+            if (f.type.kind == TyK.Func) {
+                error(fi.line, "Field '${f.name}' of synchronized class '${typeName}' is a function that other threads may call: declare it '${f.type.text} thread safe'.");
+            } else if (!writtenHere(fi.value)) {
+                error(fi.line, "Field '${f.name}' of synchronized class '${typeName}' is given ${f.type.text} that others may still use, without its lock: give it a value written here ([...] or { ... }), or fill it with its methods.");
+            }
+        }
+    }
+}
+
 public function checkObjectLit(o: ObjectLit in default, expected: Type? in default, place: Place in default): Type {
     let exp: Type? = expected;
     if (exp != null && isOpt(exp)) { exp = exp.elem; }
@@ -143,6 +179,7 @@ public function checkObjectLit(o: ObjectLit in default, expected: Type? in defau
         checkFieldInits(o, allFields(typeName), typeName, place, pr);
         setRegion(o, pr);
         if (co.thread) { checkThreadRun(o); }
+        if (co.sync) { checkSynchronizedInits(o, typeName); }
         return named(typeName, NamedK.Class);
     }
     let ii: InterfaceInfo? = interfaceOf(typeName);

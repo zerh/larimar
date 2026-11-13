@@ -1,8 +1,7 @@
 // codegen.gen.library: a library's interface: its .h (C) and its .lar (Larimar), from its export functions.
 
 import semantics.types {
-    classOf, escapeName, externInfoOf, FieldInfo, FunctionInfo, functions, isContextT, isExternT, isOpt, libraryPrefix,
-    MethodInfo, optT, T_STRING,
+    classOf, escapeName, FieldInfo, FunctionInfo, functions, isOpt, libraryPrefix, MethodInfo, optT, T_STRING, TyK,
     T_VOID, Type
 };
 import semantics.linker { FILE_LINES, fileSources };
@@ -52,16 +51,11 @@ public function libraryProblems(): String[*] {
     return out;
 }
 
-/** The callback types the export functions take, each once, in the order they appear. */
-function callbacks(): Type[*] {
-    let out: Type[*] = [] in default;
-    for (f in exports()) {
-        for (t in f.sig!.params) {
-            if (isExternT(t) && !isContextT(t) && !out.contains(t)) { out.push(t); }
-        }
-    }
-    return out;
-}
+/** The C type of a function a library takes, in its .h: <export name>_<parameter>. */
+function callbackName(f: FunctionInfo, i: int32): String { return "${f.exportName}_${escapeName(f.params[i].name)}"; }
+
+/** The same in the .lar, where only the compiler names it. */
+function bindingCallback(f: FunctionInfo, i: int32): String { return "${plainName(f.name)}_${f.params[i].name}"; }
 
 /** The doc comment (a doc block or // lines) right above a declaration, one line each. */
 function docAbove(encoded: int32): String[*] {
@@ -107,8 +101,6 @@ function docBlock(lines: String[*], indent: String): String {
 /** A type of an export function in the library's .h. */
 function headerType(t: Type, result: bool): String {
     if (t == T_STRING || t == optT(T_STRING)) { return result ? "char*" : "const char*"; }
-    if (isContextT(t)) { return "void*"; }
-    if (isExternT(t)) { return "${libraryPrefix != "" ? "${libraryPrefix}_" : ""}${plainName(t.name)}"; }
     if (isHandle(t)) { return "${libraryPrefix != "" ? "${libraryPrefix}_" : ""}${plainName((isOpt(t) ? t.elem! : t).name)}*"; }
     return t == T_VOID ? "void" : cType(t);
 }
@@ -116,7 +108,15 @@ function headerType(t: Type, result: bool): String {
 /** The C prototype of an export function in the .h. */
 function headerPrototype(f: FunctionInfo): String {
     let ps: String[*] = [] in default;
-    for (i, p in f.sig!.params) { ps.push("${headerType(p, false)} ${escapeName(f.params[i].name)}"); }
+    for (i, p in f.sig!.params) {
+        let name: String = escapeName(f.params[i].name);
+        if (p.kind == TyK.Func) {               // a function of yours, and the void* it gets back
+            ps.push("${callbackName(f, i)} ${name}");
+            ps.push("void* ${name}_data");
+        } else {
+            ps.push("${headerType(p, false)} ${name}");
+        }
+    }
     if (ps.length == 0) { ps.push("void"); }
     return "${headerType(f.sig!.elem!, true)} ${f.exportName}(${ps.join(", ")})";
 }
@@ -153,12 +153,23 @@ public function libraryHeader(name: String, version: String, kind: String, hash:
     sb.add("#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");
     for (c in hs) { sb.add("typedef struct ${p}${c} ${p}${c};\n"); }
     if (hs.length > 0) { sb.add("\n"); }
-    for (t in callbacks()) {                         // the functions the library calls back: yours, with your void*
-        let sig: Type = externInfoOf(t.name)!.sig!;
-        let ps: String[*] = [];
-        for (pt in sig.params) { ps.push(headerType(pt, false)); }
-        sb.add("/** A function of yours that the library calls; the void* is the one you give with it. */\n");
-        sb.add("typedef ${headerType(sig.elem!, false)} (*${headerType(t, false)})(${ps.join(", ")});\n\n");
+    for (f in exports()) {                           // the functions of yours that the library calls
+        for (i, t in f.sig!.params) {
+            if (t.kind != TyK.Func) { continue; }
+            let ps: String[*] = [];
+            for (pt in t.params) { ps.push(headerType(pt, false)); }
+            ps.push("void* data");
+            let text: bool = t.elem! == T_STRING;
+            if (text) { ps.push("void* out"); }
+            sb.add("/**\n * A function of yours that ${f.exportName} calls${t.safe ? ", maybe from another thread and several at once" : ""}: `data` is the void* you give with it");
+            sb.add(f.params[i].lives == "default" ? ", and both are kept:\n * they must stay valid for as long as the program runs.\n" : ".\n");
+            for (pt in t.params) {
+                if (isHandle(pt)) { sb.add(" * A ${headerType(pt, false)} it gets is the library's: use it during the call, do not release it nor keep it.\n"); }
+            }
+            if (text) { sb.add(" * It gives its text with ${p}give(out, text): the library copies it at once.\n"); }
+            sb.add(" */\n");
+            sb.add("typedef ${text ? "void" : headerType(t.elem!, false)} (*${callbackName(f, i)})(${ps.join(", ")});\n\n");
+        }
     }
     for (cls in handleClassNames()) {                // the members of each class: its fields (read) and methods
         let c: String = plainName(cls);
@@ -191,6 +202,13 @@ public function libraryHeader(name: String, version: String, kind: String, hash:
     }
     for (c in hs) { sb.add("/** Gives back a ${c} (NULL does nothing). */\nvoid ${p}${c}_release(${p}${c}* handle);\n\n"); }
     sb.add("/** Frees a text the library returned (NULL does nothing). */\nvoid ${p}free(void* text);\n\n");
+    for (f in exports()) {
+        for (t in f.sig!.params) {
+            if (t.kind == TyK.Func && t.elem! == T_STRING && !sb.toString().contains("void ${p}give(")) {
+                sb.add("/** Inside a function of yours that gives a text: leaves `text` in `out`, the last argument it got. */\nvoid ${p}give(void* out, const char* text);\n\n");
+            }
+        }
+    }
     sb.add("/** The interface hash of the library (as in ${name}.interface): compare it with ${name.toUpperCase()}_INTERFACE. */\n");
     sb.add("const char* ${p}interface(void);\n\n");
     sb.add("#ifdef __cplusplus\n}\n#endif\n\n#endif\n");
@@ -245,7 +263,6 @@ function bindingClass(cls: String in default, p: String): String {
 /** A type of an export function in the library's .lar. */
 function bindingType(t: Type): String {
     if (isHandle(t)) { return isOpt(t) ? "${plainName(t.elem!.name)}?" : plainName(t.name); }
-    if (isExternT(t)) { return plainName(t.name); }
     return t.text;
 }
 
@@ -261,19 +278,28 @@ public function libraryModule(name: String, version: String, kind: String, made:
     sb.add("// of this file, and so does the library inside: a program builds only when they agree.\n\n");
     sb.add("cinclude \"${name}.h\";\n\n");
     for (cls in handleClassNames()) { sb.add(bindingClass(cls, p)); }
-    for (t in callbacks()) {
-        let sig: Type = externInfoOf(t.name)!.sig!;
-        let ps: String[*] = [];
-        for (pt in sig.params) { ps.push(bindingType(pt)); }
-        sb.add("/** A function the library calls: give it any function of yours of this shape, without the Context. */\n");
-        sb.add("public native type ${plainName(t.name)} = (${ps.join(", ")}) -> ${sig.elem! == T_VOID ? "void" : bindingType(sig.elem!)};\n\n");
+    for (f in exports()) {                           // the functions of the program that the library calls
+        for (i, t in f.sig!.params) {
+            if (t.kind != TyK.Func) { continue; }
+            let ps: String[*] = [];
+            for (pt in t.params) { ps.push(bindingType(pt)); }
+            ps.push("Context");
+            // thread safe: the library calls it from another thread, so the program's function is checked for that
+            sb.add("native type ${bindingCallback(f, i)} = (${ps.join(", ")}) -> ${t.elem! == T_VOID ? "void" : bindingType(t.elem!)}${t.safe ? " thread safe" : ""};\n\n");
+        }
     }
     for (f in exports()) {
         let ps: String[*] = [] in default;
         let names: String[*] = [] in default;
         for (i, t in f.sig!.params) {
-            // a function the library keeps ('in default' in the library): what it captures lives as long as the program
-            ps.push("${f.params[i].name}: ${bindingType(t)}${isExternT(t) && !isContextT(t) && f.params[i].lives == "default" ? " in default" : ""}");
+            if (t.kind == TyK.Func) {
+                // a function of the program, given without its Context (the compiler fills it). One the library
+                // keeps ('in default' there): what it uses lives as long as the program
+                ps.push("${f.params[i].name}: ${bindingCallback(f, i)}${f.params[i].lives == "default" ? " in default" : ""}");
+                ps.push("${f.params[i].name}_data: Context");
+                continue;
+            }
+            ps.push("${f.params[i].name}: ${bindingType(t)}");
             names.push(f.params[i].name);
         }
         let n: String = plainName(f.name);

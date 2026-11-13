@@ -5079,8 +5079,8 @@ function main(): int32 {
 Output: `Larimar 3 three`
 
 `import textkit` finds `textkit.lar` there (`larimar check` and the editor too), its `.h` is included, and
-`larimar build` compiles its C with the program's and links what it needs. A folder built with `--static`
-or `--dynamic` is named the same way: its `.interface` says what it is. The `.lar` it reads is plain `native` declarations:
+`larimar build` compiles its C with the program's and links what it needs. A library compiled with
+`--static` or `--dynamic` is for C programs: a Larimar program uses the package. The `.lar` it reads is plain `native` declarations:
 
 ```ts
 cinclude "textkit.h";
@@ -5143,15 +5143,19 @@ What goes to C, and how:
 - **Their types**: numbers, `bool`, `String` and `String?` (`const char*`; `NULL` is `null`), the
   **classes** of the library and their optionals, and **callbacks** (below). Other native types and C
   structs do not go: they belong to C headers that the program would need too.
-- **A callback** is a function of the program that the library calls. The library declares its type with a
-  `Context` (`native type Visit = (int32, String, Context) -> int32;`, of numbers, `bool` and `String`) and
-  takes it with its `Context`: `export function each(n: int32, visit: Visit, data: Context): int32`. Inside,
-  it is called like a function (`visit(i, "item", data)`). A Larimar program gives it any function of that
-  shape without the `Context`, a lambda with what it captures included
-  (`evkit.each(4, (n: int32, label: String) -> { ... })`); a C program gives a function and a `void*`. A
-  library that **keeps** the function to call it later says so with `in default` on both parameters
-  (`visit: Visit in default, data: Context in default`): what the program's function uses must then live
-  as long as the program, and the compiler checks it.
+- **A function of the program** that the library calls is a parameter of a function type, as anywhere
+  in Larimar: `export function serve(path: String, handler: (Request) -> String): String`, called inside
+  like any function (`handler(req)`). Its parameters are numbers, `bool`, `String` and classes of the
+  library; it gives a number, a `bool`, a `String` or nothing. A Larimar program gives it a lambda, with
+  what it captures (`webkit.serve("/hi", (req: Request) -> { return "hola ${req.path}"; })`); a C program
+  gives a function and a `void*`, which the function gets back on each call.
+  - An object the function gets is the library's: the function uses it, and cannot keep it.
+  - A text the function gives lives in the block of the library that called it. A C function gives it with
+    `<prefix>_give(out, text)`.
+  - A function that can fail handles it inside (`try`/`catch`): a lambda cannot throw.
+  - A library that **keeps** the function to call it later says so with `in default` on the parameter:
+    what the program's function uses must then live as long as the program, and the compiler checks it.
+
 - **A text it returns** is a copy (`char*`) for the caller: C frees it with `<prefix>_free`.
 - **An object it returns** is a **handle**: C keeps it (`tk_Counter*`), passes it to its methods and
   to other export functions, and gives it back with `<prefix>_<Class>_release`. The handle has its own memory: what the
@@ -5215,8 +5219,8 @@ library to its code too.
   `static_library_paths` goes in the package and is linked into the program. It is for one platform: in
   `[c.linux]`, `[c.macos]` or `[c.windows]` each system gets its own; in `[c]`, the package serves only the
   platform that file was compiled for.
-- **Not yet**: lists and errors (`throws`) do not cross a library, a callback does not return a `String`
-  nor take an object of the library; they go as texts, handles
+- **Not yet**: lists and errors (`throws`) do not cross a library, and a method of a class does not take
+  a function (an export function does); they go as texts, handles
   and numbers (an error code), or stay inside. A program does not create objects of the library with
   `Counter {}`, nor extend its classes: they are made by its functions and methods.
 

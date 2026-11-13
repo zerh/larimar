@@ -359,6 +359,15 @@ function visit(m: Module in default): void {
         mods.push(dep);
         modIndex[dep.path] = mods.length - 1;
         parse(dep, source);
+        if (dep.program != null && !isStd(imp.path)) {          // the .lar of a package: larimar build wrote it
+            let file: String = moduleFile(imp.path);
+            for (d in libraryRoots) {
+                if (!file.startsWith(d)) { continue; }
+                for (decl in dep.program!.decls) {
+                    if (decl is ExternTypeDecl e) { e.ofPackage = true; }
+                }
+            }
+        }
         if (dep.program != null) { visit(dep); }
     }
     order.push(m);

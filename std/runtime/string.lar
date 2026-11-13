@@ -36,6 +36,14 @@ static inline RtString rt_str_clone(RtString s, RtMem* m, int line) {
     return rt_str(p, s.len);
 }
 
+/* Where a function that is called back leaves a text: whoever calls gives it, and finds the text in it.
+   Only `set` is known to both sides (a library and its program each have their runtime). */
+typedef struct RtTextOut { void (*set)(struct RtTextOut*, const char*, size_t); RtMem* dest; RtString text; } RtTextOut;
+
+static void rt_text_out_set(RtTextOut* o, const char* p, size_t n) {
+    o->text = rt_str_clone(rt_str(p, (int32_t)n), o->dest, 0);
+}
+
 static inline void rt_print(RtString s) { fwrite(s.ptr, 1, (size_t)s.len, stdout); }
 static inline void rt_println(RtString s) { rt_print(s); fputc('\n', stdout); }
 

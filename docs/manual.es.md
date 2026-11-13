@@ -5077,8 +5077,8 @@ function main(): int32 {
 Salida: `Larimar 3 three`
 
 `import textkit` encuentra ahí `textkit.lar` (también `larimar check` y el editor), se incluye su `.h`, y
-`larimar build` compila su C con el del programa y enlaza lo que necesita. Una carpeta construida con
-`--static` o `--dynamic` se nombra igual: su `.interface` dice qué es. El `.lar` que lee son declaraciones `native` normales:
+`larimar build` compila su C con el del programa y enlaza lo que necesita. Una biblioteca compilada con
+`--static` o `--dynamic` es para programas de C: un programa de Larimar usa el paquete. El `.lar` que lee son declaraciones `native` normales:
 
 ```ts
 cinclude "textkit.h";
@@ -5141,15 +5141,20 @@ Qué va a C, y cómo:
 - **Sus tipos**: números, `bool`, `String` y `String?` (`const char*`; `NULL` es `null`), las **clases**
   de la biblioteca y sus opcionales, y los **callbacks** (abajo). Los demás tipos native y los structs de C
   no van: son de cabeceras de C que el programa también necesitaría.
-- **Un callback** es una función del programa que la biblioteca llama. La biblioteca declara su tipo con un
-  `Context` (`native type Visit = (int32, String, Context) -> int32;`, de números, `bool` y `String`) y lo
-  recibe con su `Context`: `export function each(n: int32, visit: Visit, data: Context): int32`. Dentro se
-  llama como una función (`visit(i, "item", data)`). Un programa de Larimar le da cualquier función de esa
-  forma sin el `Context`, también una lambda con lo que captura
-  (`evkit.each(4, (n: int32, label: String) -> { ... })`); un programa de C le da una función y un `void*`.
-  Una biblioteca que **guarda** la función para llamarla después lo dice con `in default` en los dos
-  parámetros (`visit: Visit in default, data: Context in default`): lo que usa la función del programa
-  tiene entonces que vivir tanto como el programa, y el compilador lo comprueba.
+- **Una función del programa** que la biblioteca llama es un parámetro de tipo función, como en
+  cualquier parte de Larimar: `export function serve(path: String, handler: (Request) -> String): String`,
+  llamada dentro como cualquier función (`handler(req)`). Sus parámetros son números, `bool`, `String` y
+  clases de la biblioteca; da un número, un `bool`, un `String` o nada. Un programa de Larimar le da una
+  lambda, con lo que captura (`webkit.serve("/hi", (req: Request) -> { return "hola ${req.path}"; })`);
+  un programa de C le da una función y un `void*`, que la función recibe de vuelta en cada llamada.
+  - Un objeto que la función recibe es de la biblioteca: la función lo usa, y no puede guardarlo.
+  - Un texto que la función da vive en el bloque de la biblioteca que la llamó. Una función de C lo da con
+    `<prefijo>_give(out, text)`.
+  - Una función que puede fallar lo maneja dentro (`try`/`catch`): una lambda no puede lanzar.
+  - Una biblioteca que **guarda** la función para llamarla después lo dice con `in default` en el
+    parámetro: lo que usa la función del programa tiene entonces que vivir tanto como el programa, y el
+    compilador lo comprueba.
+
 - **Un texto que devuelve** es una copia (`char*`) para quien llama: C la libera con `<prefijo>_free`.
 - **Un objeto que devuelve** es un **handle**: C lo guarda (`tk_Counter*`), lo pasa a sus métodos y a
   otras export functions, y lo devuelve con `<prefijo>_<Clase>_release`. El handle tiene su propia memoria: lo que el
@@ -5213,8 +5218,8 @@ aplican a su código las reglas de una biblioteca.
   `static_library_paths` va en el paquete y se enlaza en el programa. Es para una plataforma: en
   `[c.linux]`, `[c.macos]` o `[c.windows]` cada sistema recibe el suyo; en `[c]`, el paquete sirve solo
   para la plataforma para la que se compiló ese archivo.
-- **Todavía no**: las listas y los errores (`throws`) no cruzan una biblioteca, un callback no devuelve un
-  `String` ni recibe un objeto de la biblioteca; van como
+- **Todavía no**: las listas y los errores (`throws`) no cruzan una biblioteca, y un método de una clase
+  no recibe una función (una función exportada sí); van como
   textos, handles y números (un código de error), o se quedan dentro. Un programa no crea objetos de la
   biblioteca con `Counter {}`, ni extiende sus clases: los hacen sus funciones y métodos.
 
