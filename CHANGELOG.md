@@ -48,6 +48,7 @@ part of it, in the folder of its name.
   data race, found by review and confirmed with the thread sanitizer). Now it is created with values or
   with what is written right there, and a field that is a function is `thread safe`. A library that calls
   the program's function from another thread has that in its `.lar`, and the function is checked for it.
+- **Fixed**: an export function of a library could be declared to return a function, which does not cross.
 - **Fixed**: a library that created something `in default`, or gave a lambda where an interface is
   expected (a `Thread`'s `run`), did not link with a program that did the same (*multiple definition of
   rt_default_mem*): those two names of its C were not its own. Now only its export functions are seen.
@@ -79,8 +80,8 @@ part of it, in the folder of its name.
 - `[packages]` is the one way to use a library written in Larimar. `[dependencies]` with `deps/` (Larimar
   code used as source) is gone, and a library is no longer found among `static_libraries` by its
   `.interface`. The plugin example in the manuals is a generic `mytool`.
-- `docs/libraries.es.md`: every scenario of writing, publishing and using a library, each with the code that
-  was run and the test that covers it. `docs/compiler-reference.md`: every function of the compiler, with
+- `docs/libraries.es.md`: the manual of libraries. Every scenario of writing, publishing and using one, and
+  every attempt to misuse one that was tried, each with its code and the output it gave when it was run. `docs/compiler-reference.md`: every function of the compiler, with
   its signature and its comment, generated from the source.
 - The manuals and the specification are in `docs/`, next to the page that shows them (`manual.html`
   reads the ones published with it). The manual explains `native struct` and `native type`, and where

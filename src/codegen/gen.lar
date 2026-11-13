@@ -566,12 +566,7 @@ public function generate(): String {
         for (c in handleClassNames()) {
             for (m in libraryMembers(c)) { roots.push(m.cName); }
         }
-        for (f in functions) {                  // what a function of C's gives its text with
-            if (f.isExtern || f.exportName == "") { continue; }
-            for (t in f.sig!.params) {
-                if (t.kind == TyK.Func && t.elem! == T_STRING) { roots.push("${libraryPrefix != "" ? "${libraryPrefix}_" : ""}give"); }
-            }
-        }
+        if (takesTextFunctions()) { roots.push("${libraryPrefix != "" ? "${libraryPrefix}_" : ""}give"); }
     }
     let program: String = prune(out.toString(), roots);     // only what main, the exports and the ccode reach
     let head: StringBuilder = {} in default;
@@ -657,8 +652,9 @@ function libraryGlue(out: StringBuilder): void {
     out.add("#if defined(__GNUC__) || defined(__clang__) || defined(__TINYC__)\n");
     out.add("__attribute__((constructor)) static void lm_library_load(void) { lm_library_init(); }\n#endif\n");
     out.add("void ${p}free(void* text) { free(text); }\n");
-    // what a function of C's, called back, gives a text with (cut when no function of the library takes one)
-    out.add("void ${p}give(void* out, const char* text) { ((RtTextOut*)out)->set((RtTextOut*)out, text ? text : \"\", text ? strlen(text) : 0); }\n");
+    if (takesTextFunctions()) {             // what a function of C's, called back, gives its text with
+        out.add("void ${p}give(void* out, const char* text) { ((RtTextOut*)out)->set((RtTextOut*)out, text ? text : \"\", text ? strlen(text) : 0); }\n");
+    }
     for (c in handleClasses()) { out.add("void ${p}${c}_release(void* handle) { rt_handle_release(handle); }\n"); }
     out.add("const char ${p}larimar_interface[] = \"larimar-interface:${INTERFACE_MARK}\";\n");
     out.add("const char* ${p}interface(void) { return ${p}larimar_interface + 18; }\n");
@@ -666,6 +662,17 @@ function libraryGlue(out: StringBuilder): void {
 
 /** Where the interface hash goes in a library's C: larimar build writes it once the .lar is written. */
 public const INTERFACE_MARK: String = "@INTERFACE@";
+
+/** Does an export function take a function that gives a text? */
+function takesTextFunctions(): bool {
+    for (f in functions) {
+        if (f.isExtern || f.exportName == "") { continue; }
+        for (t in f.sig!.params) {
+            if (t.kind == TyK.Func && t.elem! == T_STRING) { return true; }
+        }
+    }
+    return false;
+}
 
 /**
  * The classes C knows as handles, in order (their names in the C of the library): those that the export

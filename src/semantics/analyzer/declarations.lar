@@ -387,7 +387,8 @@ function checkExport(f: FunctionInfo in default, fd: FunctionDecl in default): v
     for (g in functions) {
         if (g.isExtern && g.cName == n) { error(f.line, "'${n}' is already the name of a native function: C would have two functions with that name."); }
     }
-    let what: String = libraryRules ? "numbers, bool, String, String?, the library's classes, and functions of those" : "numbers, bool, String, String?, native types and C structs";
+    let what: String = libraryRules ? "numbers, bool, String, String? and the library's classes" : "numbers, bool, String, String?, native types and C structs";
+    let functions: String = libraryRules ? ", and functions of the program (of numbers, bool, String and the library's classes)" : "";
     for (i, p in fd.params) {
         let pt: Type = f.sig!.params[i];
         // a function of the program that the library keeps: 'in default' says so, and what it uses then lives as long as the program
@@ -395,11 +396,11 @@ function checkExport(f: FunctionInfo in default, fd: FunctionDecl in default): v
         if (p.lives != "" && !kept) { error(p.line, "'in ${p.lives}' is not allowed on the parameters of an export function: C gives plain values."); }
         if (!isError(pt) && !exportable(pt)) {
             error(p.line, isClass(pt) ? "Parameter '${p.name}' of export function '${n}': a class goes to C only from a library ([project] kind = \"library\"), where C keeps it as a handle."
-                                      : "Parameter '${p.name}' of export function '${n}': C can only pass ${what}.");
+                                      : "Parameter '${p.name}' of export function '${n}': C can only pass ${what}${functions}.");
         }
     }
     let ret: Type = f.sig!.elem!;
-    if (!isError(ret) && ret != T_VOID && !exportable(ret)) {
+    if (!isError(ret) && ret != T_VOID && (!exportable(ret) || ret.kind == TyK.Func)) {
         error(f.line, isClass(ret) ? "Export function '${n}' returns a class: only a library ([project] kind = \"library\") gives C its objects, as handles."
                                    : "Export function '${n}' can only return void or ${what}.");
     }

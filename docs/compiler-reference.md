@@ -6,7 +6,7 @@ Cada módulo de `src/`, con su descripción y **todas** sus funciones, clases y 
 
 Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver la guía de mantenimiento. Aquí está el detalle.
 
-**50 módulos, 1122 funciones y métodos** (572 con comentario, 550 sin él).
+**50 módulos, 1123 funciones y métodos** (573 con comentario, 550 sin él).
 
 ## Módulos
 
@@ -45,7 +45,7 @@ Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver
 - [`src/codegen/expressions/operators.lar`](#codegen-expressions-operators) — 12 funciones
 - [`src/codegen/expressions/patterns.lar`](#codegen-expressions-patterns) — 2 funciones
 - [`src/codegen/expressions/strings.lar`](#codegen-expressions-strings) — 8 funciones
-- [`src/codegen/gen.lar`](#codegen-gen) — 32 funciones
+- [`src/codegen/gen.lar`](#codegen-gen) — 33 funciones
 - [`src/codegen/gen/classes.lar`](#codegen-gen-classes) — 28 funciones
 - [`src/codegen/gen/library.lar`](#codegen-gen-library) — 15 funciones
 - [`src/codegen/gen/statements.lar`](#codegen-gen-statements) — 31 funciones
@@ -1111,7 +1111,7 @@ One branch of an if for platforms, checked for `platform`; what it declares is h
 
 ## semantics.analyzer.declarations
 
-`src/semantics/analyzer/declarations.lar` · 813 líneas · 32 funciones
+`src/semantics/analyzer/declarations.lar` · 814 líneas · 32 funciones
 semantics.analyzer.declarations: what a program declares: the system of each class, C declarations, constants and signatures.
 
 `function requireAscii(name: String, line: int32, what: String): void`
@@ -1179,56 +1179,56 @@ export function: C calls it by its name, with C types.
 
 `function instanceMethodNamed(t: String in default, name: String): bool`  
 An instance method `name` of the type `t` (to reject a static function with the same name).  
-<sub>línea 411</sub>
+<sub>línea 412</sub>
 
 `function functionNameTaken(name: String, line: int32): bool`
-<sub>línea 421</sub>
+<sub>línea 422</sub>
 
 `public function constants(program: Program in default): void`
-<sub>línea 436</sub>
+<sub>línea 437</sub>
 
 `public function constIntText(v: ConstVal): String`
-<sub>línea 468</sub>
+<sub>línea 469</sub>
 
 `public function signatures(program: Program in default): void`
-<sub>línea 475</sub>
+<sub>línea 476</sub>
 
 `public function externValue(v: ExternValueDecl in default): void`  
 extern const NAME: T;  extern let NAME: T;  a name C has (a constant, a macro, a global).  
-<sub>línea 665</sub>
+<sub>línea 666</sub>
 
 `function externResource(e: ExternTypeInfo in default): void`  
 released by f: f takes exactly one X and returns nothing useful; only release() calls it.  
-<sub>línea 683</sub>
+<sub>línea 684</sub>
 
 `function textReleaser(f: FunctionInfo in default): void`  
 ...: String = c_f released by r: r is a native function that takes the text (one String); only the compiler calls it.  
-<sub>línea 706</sub>
+<sub>línea 707</sub>
 
 `function externResourceRules(f: FunctionInfo in default): void`  
 A C function that makes a resource returns X? (C fails: null). A resource goes to C as X, not X?.  
-<sub>línea 728</sub>
+<sub>línea 729</sub>
 
 `function resolveMethodSig(mi: MethodInfo in default, m: FunctionDecl in default): void`
-<sub>línea 740</sub>
+<sub>línea 741</sub>
 
 `function resolveSig(params: Param[*] in default, ret: TypeRef in default): Type`
-<sub>línea 761</sub>
+<sub>línea 762</sub>
 
 `function isPlainNumber(t: Type): bool`  
 A number or bool: what a T[] given to C may hold (C sees an array of them).  
-<sub>línea 778</sub>
+<sub>línea 779</sub>
 
 `function resolveThrows(t: TypeRef? in default): Type?`
-<sub>línea 782</sub>
+<sub>línea 783</sub>
 
 `public function isByteArrayRef(t: TypeRef): bool`  
 byte[N], byte[], byte[*] as written.  
-<sub>línea 795</sub>
+<sub>línea 796</sub>
 
 `function memoryParams(params: Param[*] in default, body: Stmt[*] in default): bool[*]`  
 byte-array parameters used after `in` inside the body are memory parameters.  
-<sub>línea 802</sub>
+<sub>línea 803</sub>
 
 ---
 
@@ -3159,7 +3159,7 @@ Writes the parts of an interpolated text into a builder (sbRef: an RtSb*).
 
 ## codegen.gen
 
-`src/codegen/gen.lar` · 895 líneas · 32 funciones
+`src/codegen/gen.lar` · 902 líneas · 33 funciones
 codegen.gen: C99 code generation (Gen.java), part 1: the file, types, classes and interfaces,
 globals, bodies and statements. Expressions are in genexpr.lar.
 
@@ -3232,74 +3232,78 @@ Adds four spaces to every line (like String.indent(4) in Java).
 
 `public function internal(): String`  
 In a library everything but its export functions stays inside it: two libraries (and the program) do not clash.  
-<sub>línea 601</sub>
+<sub>línea 596</sub>
 
 `function exportHelpers(out: StringBuilder): void`  
 What export functions use to give C its texts and the handles of a library's objects (cut when unused).  
-<sub>línea 604</sub>
+<sub>línea 599</sub>
 
 `function libraryGlue(out: StringBuilder): void`  
 What a library gives C besides its export functions: <prefix>_free for its texts, <prefix>_<Class>_release for its handles, <prefix>_interface, and the start: the globals are made before the first call (when the library is loaded, where the C compiler allows it).  
-<sub>línea 650</sub>
+<sub>línea 645</sub>
+
+`function takesTextFunctions(): bool`  
+Does an export function take a function that gives a text?  
+<sub>línea 667</sub>
 
 `public function handleClassNames(): String[*]`  
 The classes C knows as handles, in order (their names in the C of the library): those that the export functions take or return, and those that the members of these give C in turn.  
-<sub>línea 674</sub>
+<sub>línea 681</sub>
 
 `function addHandles(t: Type, out: String[*] in default): void`
-<sub>línea 698</sub>
+<sub>línea 705</sub>
 
 `public function handleClasses(): String[*]`  
 The classes C knows as handles, by the names C and Larimar see (without their module).  
-<sub>línea 705</sub>
+<sub>línea 712</sub>
 
 ### class `LibraryMember`
 A method or a field of a class that a library gives C: <prefix>_<Class>_<name>(handle, ...).
 
 `function crosses(t: Type, field: bool): bool`  
 What can go to C from a member: what an export function takes (a field: not a class, which it keeps).  
-<sub>línea 721</sub>
+<sub>línea 728</sub>
 
 `function memberProblem(m: MethodInfo): String`  
 Why a member of a class does not go to C ("" when it goes).  
-<sub>línea 727</sub>
+<sub>línea 734</sub>
 
 `public function libraryMembers(cls: String in default): LibraryMember[*]`  
 The members of a class that go to C: its fields and methods (and its parents'), the most derived ones.  
-<sub>línea 742</sub>
+<sub>línea 749</sub>
 
 `public function memberSkips(cls: String in default): String[*]`  
 The members of a class that do not go to C, with why: the .lar says it.  
-<sub>línea 756</sub>
+<sub>línea 763</sub>
 
 `function methodsOf(cls: String in default): MethodInfo[*]`  
 The instance methods of a class and its parents, each one by its most derived definition.  
-<sub>línea 769</sub>
+<sub>línea 776</sub>
 
 `function resources(out: StringBuilder): void`  
 Resources (extern type X released by f): a value lives in a cell of the memory it was made in, with its state; the memory releases it when it is freed, unless release(x) already did.  
-<sub>línea 787</sub>
+<sub>línea 794</sub>
 
 `function shortName(n: String): String`  
 A name without its module prefix: std__net__Socket -> Socket.  
-<sub>línea 832</sub>
+<sub>línea 839</sub>
 
 `function sectionOf(out: StringBuilder, title: String, content: StringBuilder): void`
-<sub>línea 837</sub>
+<sub>línea 844</sub>
 
 `public function section(out: StringBuilder, title: String): void`
-<sub>línea 843</sub>
+<sub>línea 850</sub>
 
 `function bodyText(body: String in default): String`  
 A C body as it was written, indented once (its closing line's indentation does not count).  
-<sub>línea 850</sub>
+<sub>línea 857</sub>
 
 `function stripIndent(code: String in default): String`  
 Like Java's stripIndent().strip(): removes the common indentation and the blank lines around.  
-<sub>línea 858</sub>
+<sub>línea 865</sub>
 
 `public function classesByDepth(): ClassInfo[*]`
-<sub>línea 881</sub>
+<sub>línea 888</sub>
 
 ---
 

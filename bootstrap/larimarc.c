@@ -3687,14 +3687,14 @@ struct List_codegen__gen__TryCtx { codegen__gen__TryCtx** items; int32_t length;
 struct List_codegen__gen__ArmCtx { codegen__gen__ArmCtx** items; int32_t length; int32_t capacity; RtMem* mem; };
 struct List_project__libraries__LarimarLibrary { project__libraries__LarimarLibrary** items; int32_t length; int32_t capacity; RtMem* mem; };
 struct List_semantics__types__ClassInfo { semantics__types__ClassInfo** items; int32_t length; int32_t capacity; RtMem* mem; };
-typedef struct Env_0 { List_syntax__ast__TypeRef* parameterTypes_2023; syntax__parser__Parser* p_2020; } Env_0;
-typedef struct Env_1 { syntax__ast__Call* call_2096; syntax__parser__Parser* p_2094; } Env_1;
-typedef struct Env_2 { syntax__parser__Parser* p_2113; syntax__ast__ObjectLit* literal_2116; } Env_2;
-typedef struct Env_3 { syntax__ast__Lambda* lambda_2123; syntax__parser__Parser* p_2122; } Env_3;
-typedef struct Env_4 { syntax__parser__Parser* p_2130; syntax__ast__Pattern* pattern_2132; } Env_4;
-typedef struct Env_5 { List_syntax__ast__Param* list_2262; syntax__parser__Parser* p_2261; } Env_5;
-typedef struct Env_6 { syntax__parser__Parser* p_2308; syntax__ast__EnumDecl* declaration_2310; } Env_6;
-typedef struct Env_7 { syntax__ast__ImportDecl* declaration_2349; syntax__parser__Parser* p_2345; } Env_7;
+typedef struct Env_0 { List_syntax__ast__TypeRef* parameterTypes_2024; syntax__parser__Parser* p_2021; } Env_0;
+typedef struct Env_1 { syntax__ast__Call* call_2097; syntax__parser__Parser* p_2095; } Env_1;
+typedef struct Env_2 { syntax__parser__Parser* p_2114; syntax__ast__ObjectLit* literal_2117; } Env_2;
+typedef struct Env_3 { syntax__ast__Lambda* lambda_2124; syntax__parser__Parser* p_2123; } Env_3;
+typedef struct Env_4 { syntax__parser__Parser* p_2131; syntax__ast__Pattern* pattern_2133; } Env_4;
+typedef struct Env_5 { List_syntax__ast__Param* list_2263; syntax__parser__Parser* p_2262; } Env_5;
+typedef struct Env_6 { syntax__parser__Parser* p_2309; syntax__ast__EnumDecl* declaration_2311; } Env_6;
+typedef struct Env_7 { syntax__ast__ImportDecl* declaration_2350; syntax__parser__Parser* p_2346; } Env_7;
 struct Closure_1 {  /* () -> void */
     void (*fn)(void* env);
     union { Env_0 l_0; Env_1 l_1; Env_2 l_2; Env_3 l_3; Env_4 l_4; Env_5 l_5; Env_6 l_6; Env_7 l_7; char _none; } env;
@@ -4807,7 +4807,7 @@ Opt_s std__os__env(RtMem* rt_dest, RtString name);
 List_u8* std__os__pathBuffer(RtMem* rt_dest);
 RtString std__os__cText(RtMem* rt_dest, Slice_u8 b);
 RtString std__os__cwd(RtMem* rt_dest);
-int32_t std__os__run(RtString command_1612);
+int32_t std__os__run(RtString command_1613);
 RtString std__os__programPath(RtMem* rt_dest);
 RtString std__os__programDir(RtMem* rt_dest);
 bool std__text__isDigit(uint8_t b);
@@ -4820,19 +4820,19 @@ bool std__text__isAscii(RtString s);
 RtString std__text__fromCode(RtMem* rt_dest, int32_t code);
 RtString std__io__path__parent(RtMem* rt_dest, RtString path);
 RtString std__io__path__fileName(RtMem* rt_dest, RtString path);
-RtString std__io__path__join(RtMem* rt_dest, RtString dir, RtString file_1642);
+RtString std__io__path__join(RtMem* rt_dest, RtString dir, RtString file_1643);
 bool std__io__path__isAbsolute(RtString path);
 RtString std__io__path__absolute(RtMem* rt_dest, RtString path);
 RtString std__io__path__normalize(RtMem* rt_dest, RtString path);
-RtString std__io__path__relative(RtMem* rt_dest, RtString base, RtString file_1652);
+RtString std__io__path__relative(RtMem* rt_dest, RtString base, RtString file_1653);
 RtString std__io__message(RtMem* rt_dest, std__io__IoError e);
 void std__io__raise(int32_t code, RtString path, RtError* err_out);
 RtString std__io__files__message(RtMem* rt_dest, std__io__IoError e);
 int32_t std__io__files__code(void);
 List_u8* std__io__files__bytes(RtMem* rt_dest, int32_t n);
 RtString std__io__files__readString(RtMem* rt_dest, RtString path, RtError* err_out);
-void std__io__files__writeFile(RtString path, RtString text_1683, RtString mode, RtError* err_out);
-void std__io__files__writeString(RtString path, RtString text_1689, RtError* err_out);
+void std__io__files__writeFile(RtString path, RtString text_1684, RtString mode, RtError* err_out);
+void std__io__files__writeString(RtString path, RtString text_1690, RtError* err_out);
 int32_t std__io__files__kind(RtString path);
 bool std__io__files__exists(RtString path);
 bool std__io__files__isFile(RtString path);
@@ -4849,14 +4849,14 @@ std__io__files__File* std__io__files__create(RtMem* rt_dest, RtString path, RtEr
 std__io__files__File* std__io__files__openWith(RtMem* rt_dest, RtString path, RtString mode, RtError* err_out);
 Opt_s std__io__console__lineOf(RtMem* rt_dest, Ext_std__io__console__CStream f);
 RtString std__io__console__allOf(RtMem* rt_dest, Ext_std__io__console__CStream f);
-void std__io__console__put(RtString text_1735, bool error);
+void std__io__console__put(RtString text_1736, bool error);
 Opt_s std__io__console__readLine(RtMem* rt_dest);
 RtString std__io__console__read(RtMem* rt_dest, int32_t count);
 int32_t std__io__console__lastCount(void);
-void std__io__console__write(RtString text_1745);
+void std__io__console__write(RtString text_1746);
 void std__io__console__flush(void);
 void std__io__console__binaryMode(void);
-void std__io__console__printError(RtString text_1747);
+void std__io__console__printError(RtString text_1748);
 semantics__types__Type* semantics__types__intern(RtMem* rt_dest, semantics__types__Type* t);
 semantics__types__Type* semantics__types__prim(RtMem* rt_dest, RtString name);
 semantics__types__Type* semantics__types__primByName(RtMem* rt_dest, RtString name);
@@ -5026,7 +5026,7 @@ void syntax__parser__looseList(syntax__parser__Parser* p, syntax__lexer__TT clos
 RtString syntax__parser__lives(RtMem* rt_dest, syntax__parser__Parser* p);
 syntax__ast__Program* syntax__parser__program(RtMem* rt_dest, syntax__parser__Parser* p, int32_t startLine);
 syntax__ast__ImportDecl* syntax__parser__importDeclaration(RtMem* rt_dest, syntax__parser__Parser* p);
-void editor__docstore__setDocument(RtString path, RtString text_2351);
+void editor__docstore__setDocument(RtString path, RtString text_2352);
 void editor__docstore__removeDocument(RtString path);
 Opt_s editor__docstore__document(RtMem* rt_dest, RtString path);
 int32_t editor__docstore__documentCount(void);
@@ -5038,7 +5038,7 @@ syntax__ast__Program* semantics__linker__link(RtMem* rt_dest, RtString mainShown
 void semantics__linker__dictFromSet(RtAny into, RtAny names, RtString prefix);
 void semantics__linker__error(int32_t line, RtString msg);
 void semantics__linker__loadLang(void);
-void semantics__linker__addWords(RtString text_2414);
+void semantics__linker__addWords(RtString text_2415);
 void semantics__linker__cWords(RtString code, RtAny names);
 bool semantics__linker__cCodeUses(RtString code, RtAny cSymbols);
 void semantics__linker__parse(semantics__linker__Module* m, RtString source);
@@ -5086,7 +5086,7 @@ RtAny semantics__linker__publicsOfModule(RtMem* rt_dest, RtString path);
 RtString semantics__linker__fileOfModule(RtMem* rt_dest, RtString path);
 List_semantics__types__Symbol* semantics__analyzer__narrowing__nonNull(RtMem* rt_dest, syntax__ast__Expr* c, bool onTrue);
 void semantics__analyzer__narrowing__facts(syntax__ast__Expr* c, bool onTrue, List_semantics__types__Symbol* out);
-bool semantics__analyzer__narrowing__hasSymbol(List_semantics__types__Symbol* list_2677, semantics__types__Symbol* s);
+bool semantics__analyzer__narrowing__hasSymbol(List_semantics__types__Symbol* list_2678, semantics__types__Symbol* s);
 void semantics__analyzer__narrowing__narrow(List_semantics__types__Symbol* syms);
 void semantics__analyzer__narrowing__unnarrow(List_semantics__types__Symbol* syms);
 bool semantics__analyzer__narrowing__leaves(List_syntax__ast__Stmt* body);
@@ -5098,7 +5098,7 @@ void semantics__analyzer__narrowing__analyzeThrow(syntax__ast__ThrowStmt* t);
 void semantics__analyzer__narrowing__requireHandled(semantics__types__EnumInfo* e, int32_t line, RtString what);
 void semantics__analyzer__narrowing__analyzeYield(syntax__ast__YieldStmt* y);
 void semantics__analyzer__narrowing__analyzeTry(syntax__ast__TryStmt* t);
-bool semantics__analyzer__narrowing__hasEnum(List_semantics__types__EnumInfo* list_2738, semantics__types__EnumInfo* e);
+bool semantics__analyzer__narrowing__hasEnum(List_semantics__types__EnumInfo* list_2739, semantics__types__EnumInfo* e);
 semantics__types__Type* semantics__expressions__literals__checkLambda(RtMem* rt_dest, syntax__ast__Lambda* l, semantics__types__Type* expected);
 semantics__types__Type* semantics__expressions__literals__calledReference(RtMem* rt_dest, syntax__ast__Call* c, syntax__ast__Call* ref);
 RtString semantics__expressions__literals__refText(RtMem* rt_dest, syntax__ast__Call* c);
@@ -5325,9 +5325,9 @@ void semantics__analyzer__flow__lifetime(semantics__types__Region* value, semant
 void semantics__analyzer__flow__lifetimeOf(syntax__ast__Expr* value, semantics__types__Region* storage, int32_t line, RtString msg, RtString role);
 void semantics__analyzer__flow__mustLiveForever(semantics__types__Region* value, int32_t line, RtString msg);
 RtString semantics__analyzer__flow__fill(RtMem* rt_dest, RtString msg, semantics__types__Region* v, semantics__types__Region* st);
-void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* d, bool resolve_4223);
+void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* d, bool resolve_4225);
 RtString semantics__analyzer__flow__placementFor(RtMem* rt_dest, semantics__types__Region* r);
-RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer__Deferred* d, semantics__types__Region* v, semantics__types__Region* st, bool resolve_4233);
+RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer__Deferred* d, semantics__types__Region* v, semantics__types__Region* st, bool resolve_4235);
 bool semantics__analyzer__flow__isFunctionValue(syntax__ast__Expr* e);
 RtString semantics__analyzer__flow__parameterHint(RtMem* rt_dest, RtString name, semantics__types__Region* st);
 RtString semantics__analyzer__flow__viewCulprit(RtMem* rt_dest, syntax__ast__Expr* e, semantics__types__Region* v, RtString target, RtString lives, RtString keep);
@@ -5380,7 +5380,7 @@ semantics__types__Type* semantics__analyzer__narrowedType(RtMem* rt_dest, semant
 void semantics__analyzer__noteCapture(semantics__types__Symbol* s, int32_t line);
 void semantics__analyzer__checkMutations(void);
 void semantics__analyzer__checkMemoryUses(void);
-RtAny std__encoding__json__parse(RtMem* rt_dest, RtString text_4515, RtError* err_out);
+RtAny std__encoding__json__parse(RtMem* rt_dest, RtString text_4517, RtError* err_out);
 RtString std__encoding__json__stringify(RtMem* rt_dest, RtAny v);
 RtString std__encoding__json__quote(RtMem* rt_dest, RtString s);
 bool std__encoding__json__isDigit(uint8_t c);
@@ -5394,11 +5394,11 @@ List_u8* std__crypto__bigEndian(RtMem* rt_dest, Slice_u32 words);
 uint32_t std__crypto__rotr(uint32_t x, uint32_t n);
 RtString std__encoding__hex__encode(RtMem* rt_dest, Slice_u8 bytes);
 RtString std__encoding__toml__message(RtMem* rt_dest, std__encoding__toml__TomlError e);
-RtAny std__encoding__toml__parse(RtMem* rt_dest, RtString text_4636, RtError* err_out);
+RtAny std__encoding__toml__parse(RtMem* rt_dest, RtString text_4638, RtError* err_out);
 void std__encoding__toml__fail(int32_t line, RtString why, RtError* err_out);
 RtAny std__encoding__toml__tableAt(RtMem* rt_dest, RtAny root, RtString name, int32_t line, RtError* err_out);
 bool std__encoding__toml__isTable(RtAny v);
-List_s* std__encoding__toml__splitLines(RtMem* rt_dest, RtString text_4662);
+List_s* std__encoding__toml__splitLines(RtMem* rt_dest, RtString text_4664);
 bool std__encoding__toml__isKey(RtString key);
 bool std__encoding__toml__isSectionName(RtString name);
 bool std__encoding__toml__isNumber(RtString v);
@@ -5416,17 +5416,17 @@ project__lpk__Bytes* project__lpk__contents(RtMem* rt_dest, RtString path, RtErr
 RtString project__libraries__interfaceHash(RtMem* rt_dest, RtString module);
 RtString project__libraries__libraryFile(RtMem* rt_dest, RtString name, RtString kind);
 RtString project__libraries__interfaceMarker(RtMem* rt_dest, RtString hash);
-List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(RtMem* rt_dest, RtString dir, RtAny config, bool verify, List_s* problems_4784);
+List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(RtMem* rt_dest, RtString dir, RtAny config, bool verify, List_s* problems_4786);
 void project__libraries__strings(RtAny section, RtString key, List_s* into);
-project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtString name, RtString folder, bool verify, List_s* problems_4806);
+project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtString name, RtString folder, bool verify, List_s* problems_4808);
 bool project__libraries__fileHas(RtString path, RtString marker, RtError* err_out);
-RtString project__libraries__interfaceText(RtMem* rt_dest, RtString name, RtString version_4840, RtString kind, RtString prefix, RtString hash, RtString made, List_s* links, List_s* sources, List_s* includePaths, List_s* objects, List_s* packages);
-bool editor__session__analyzeFile(RtString main__4860, RtString shownFrom);
-void editor__session__findLibraryRoots(RtString main__4867);
+RtString project__libraries__interfaceText(RtMem* rt_dest, RtString name, RtString version_4842, RtString kind, RtString prefix, RtString hash, RtString made, List_s* links, List_s* sources, List_s* includePaths, List_s* objects, List_s* packages);
+bool editor__session__analyzeFile(RtString main__4862, RtString shownFrom);
+void editor__session__findLibraryRoots(RtString main__4869);
 RtString editor__session__stdDir(RtMem* rt_dest);
 List_editor__session__Diagnostic* editor__session__diagnostics(RtMem* rt_dest);
 editor__session__Diagnostic* editor__session__diagnostic(RtMem* rt_dest, RtString raw);
-RtString editor__session__projectMain(RtMem* rt_dest, RtString file_4888);
+RtString editor__session__projectMain(RtMem* rt_dest, RtString file_4890);
 RtString editor__session__tomlMain(RtMem* rt_dest, RtString path);
 int32_t editor__session__checkCommand(List_s* rest);
 bool project__cc__windows(void);
@@ -5459,14 +5459,14 @@ void project__testing__failed(RtString shown, RtString name, RtString problem);
 void project__testing__skip(RtString shown, RtString name, RtString why);
 void project__testing__fileFailed(RtString shown, RtString problem);
 RtString project__testing__read(RtMem* rt_dest, RtString path);
-RtString project__testing__head(RtMem* rt_dest, RtString text_5013, int32_t count);
+RtString project__testing__head(RtMem* rt_dest, RtString text_5015, int32_t count);
 RtString project__testing__compileC(RtMem* rt_dest, RtString cFile, RtString exe);
 int32_t project__testing__runProgram(RtString exe, List_s* args, RtString outFile, RtString errFile);
 bool project__testing__memoryError(RtString err_);
 RtString project__testing__memoryReport(RtMem* rt_dest, RtString err_);
 RtString project__testing__skipText(RtMem* rt_dest, RtString out);
 RtString project__testing__exeName(RtMem* rt_dest, RtString b);
-void project__testing__runTestFile(RtString file_5048, RtString shown, RtString source);
+void project__testing__runTestFile(RtString file_5050, RtString shown, RtString source);
 editor__ide__Lines* editor__ide__linesOf(RtMem* rt_dest, int32_t index_);
 RtString editor__ide__lineText(RtMem* rt_dest, int32_t index_, int32_t line);
 int32_t editor__ide__lineCount(int32_t index_);
@@ -5476,7 +5476,7 @@ int32_t editor__ide__lineOf(int32_t encoded);
 int32_t editor__ide__utf16Col(RtString line, int32_t byteCol);
 int32_t editor__ide__byteCol(RtString line, int32_t units);
 bool editor__ide__nameByte(uint8_t c);
-List_i32* editor__ide__wordColumns(RtMem* rt_dest, RtString text_5091, RtString word, int32_t dotted);
+List_i32* editor__ide__wordColumns(RtMem* rt_dest, RtString text_5093, RtString word, int32_t dotted);
 editor__ide__Word* editor__ide__wordAt(RtMem* rt_dest, RtString line, int32_t col);
 RtString editor__ide__rangeJson(RtMem* rt_dest, int32_t index_, int32_t line, int32_t from, int32_t to);
 RtString editor__ide__lineRangeJson(RtMem* rt_dest, int32_t index_, int32_t line);
@@ -5522,8 +5522,8 @@ RtString editor__ide__symbolsJson(RtMem* rt_dest, RtString path);
 RtString editor__ide__symbolJson(RtMem* rt_dest, RtString name, int32_t kind, int32_t encoded, RtString word, List_s* kids);
 int32_t editor__ide__blockEnd(int32_t index_, int32_t line);
 void editor__ide__prepareCompletion(RtString path, int32_t line0, int32_t char16, bool signatureHelp);
-RtString editor__ide__probeStatement(RtMem* rt_dest, RtString text_5447, RtString before, int32_t chainStart, RtString indent);
-bool editor__ide__needsNoProbe(RtString text_5453, RtString chain);
+RtString editor__ide__probeStatement(RtMem* rt_dest, RtString text_5449, RtString before, int32_t chainStart, RtString indent);
+bool editor__ide__needsNoProbe(RtString text_5455, RtString chain);
 int32_t editor__ide__openParen(RtString before);
 int32_t editor__ide__commasAfter(RtString before, int32_t open_);
 RtString editor__ide__chainBefore(RtMem* rt_dest, RtString line, int32_t dot);
@@ -5546,7 +5546,7 @@ void editor__lsp__send(RtString body);
 void editor__lsp__respond(RtString id, RtString result);
 void editor__lsp__respondError(RtString id, int32_t code, RtString message);
 void editor__lsp__notify(RtString method, RtString params);
-void editor__lsp__log(RtString text_5610);
+void editor__lsp__log(RtString text_5612);
 RtString editor__lsp__capabilities(RtMem* rt_dest);
 RtString editor__lsp__docPath(RtMem* rt_dest, RtAny msg);
 int32_t editor__lsp__serve(void);
@@ -5555,24 +5555,24 @@ RtString editor__lsp__ask(RtMem* rt_dest, RtString body);
 RtString editor__lsp__answerInChild(RtMem* rt_dest, RtString body);
 RtAny editor__lsp__parsed(RtMem* rt_dest, RtString body);
 RtString editor__lsp__pathOf(RtMem* rt_dest, RtAny msg);
-Opt_s editor__lsp__answer(RtMem* rt_dest, RtAny msg, RtString path, RtString main__5646);
+Opt_s editor__lsp__answer(RtMem* rt_dest, RtAny msg, RtString path, RtString main__5648);
 Opt_s editor__lsp__readFile(RtMem* rt_dest, RtString path);
 RtString editor__lsp__askWorker(RtMem* rt_dest, RtString body);
 RtString editor__lsp__quiet(RtMem* rt_dest);
 int32_t editor__lsp__worker(RtString reqPath, RtString respPath);
-void editor__dap__log(RtString text_5680);
+void editor__dap__log(RtString text_5682);
 RtString editor__dap__withNumber(RtMem* rt_dest, RtString json, RtString key, int32_t value);
 void editor__dap__toEditorRaw(RtString body);
 void editor__dap__emit(RtString body);
 void editor__dap__respond(RtAny req, RtString body);
 void editor__dap__respondError(RtAny req, RtString message);
-RtAny editor__dap__parse(RtMem* rt_dest, RtString text_5704);
-int32_t editor__dap__sendBackend(RtString command_5706, RtString args);
-RtString editor__dap__call(RtMem* rt_dest, RtString command_5710, RtString args);
+RtAny editor__dap__parse(RtMem* rt_dest, RtString text_5706);
+int32_t editor__dap__sendBackend(RtString command_5708, RtString args);
+RtString editor__dap__call(RtMem* rt_dest, RtString command_5712, RtString args);
 Opt_s editor__dap__eval(RtMem* rt_dest, int32_t frame, RtString expr);
 Opt_i64 editor__dap__evalInt(int32_t frame, RtString expr);
 Opt_i64 editor__dap__evalAddress(int32_t frame, RtString expr);
-RtString editor__dap__command(RtMem* rt_dest, int32_t frame, RtString text_5727);
+RtString editor__dap__command(RtMem* rt_dest, int32_t frame, RtString text_5729);
 RtAny editor__dap__tableOf(RtMem* rt_dest, RtAny v);
 int32_t editor__dap__atMost(int64_t n, int32_t limit);
 int64_t editor__dap__hexValue(RtString s);
@@ -5593,8 +5593,8 @@ bool editor__dap__hasFunction(RtString cName);
 RtAny editor__dap__functionEntry(RtMem* rt_dest, RtString cName);
 List_s* editor__dap__localVariables(RtMem* rt_dest, int32_t frame);
 List_s* editor__dap__globalVariables(RtMem* rt_dest, int32_t frame);
-editor__dap__Resolved* editor__dap__resolvePath(RtMem* rt_dest, int32_t frame, RtString text_5895);
-List_s* editor__dap__splitPath(RtMem* rt_dest, RtString text_5909);
+editor__dap__Resolved* editor__dap__resolvePath(RtMem* rt_dest, int32_t frame, RtString text_5897);
+List_s* editor__dap__splitPath(RtMem* rt_dest, RtString text_5911);
 bool editor__dap__isNameByte(uint8_t c);
 bool editor__dap__step(int32_t frame, editor__dap__Resolved* r, RtString part);
 bool editor__dap__fromEditor(RtString body);
@@ -5617,13 +5617,13 @@ int32_t editor__dap__serveDebugger(List_s* args);
 bool codegen__prune__rootSection(RtString title);
 RtString codegen__prune__prune(RtMem* rt_dest, RtString program, List_s* roots);
 void codegen__prune__flush(List_codegen__prune__Piece* pieces, List_s* lines, bool root);
-RtString codegen__prune__runtimeC(RtMem* rt_dest, RtString file_6084);
+RtString codegen__prune__runtimeC(RtMem* rt_dest, RtString file_6086);
 RtString codegen__prune__runtimeSource(RtMem* rt_dest);
 RtString codegen__prune__headerNames(RtMem* rt_dest, int32_t i);
 RtString codegen__prune__selectRuntime(RtMem* rt_dest, RtString program, bool threads, bool files, bool allHeaders);
 void codegen__prune__paragraph(List_codegen__prune__Piece* pieces, List_s* lines);
 codegen__prune__Piece* codegen__prune__includePiece(RtMem* rt_dest, RtString line);
-List_s* codegen__prune__resolve(RtMem* rt_dest, RtString text_6119, bool threads, bool files);
+List_s* codegen__prune__resolve(RtMem* rt_dest, RtString text_6121, bool threads, bool files);
 List_b* codegen__prune__reach(RtMem* rt_dest, List_codegen__prune__Piece* pieces, List_s* wanted);
 bool codegen__prune__kept(List_codegen__prune__Piece* pieces, List_b* keep, int32_t i);
 void codegen__prune__describe(codegen__prune__Piece* p);
@@ -5652,11 +5652,11 @@ RtString codegen__expressions__operators__anyAs(RtMem* rt_dest, RtString v, sema
 RtString codegen__expressions__strings__string(RtMem* rt_dest, syntax__ast__StringLit* s, RtString memOverride);
 Opt_s codegen__expressions__strings__printDirect(RtMem* rt_dest, syntax__ast__StringLit* s, bool newline);
 RtString codegen__expressions__strings__decodeRaw(RtMem* rt_dest, RtString raw);
-RtString codegen__expressions__strings__cLiteral(RtMem* rt_dest, RtString text_6328);
+RtString codegen__expressions__strings__cLiteral(RtMem* rt_dest, RtString text_6330);
 void codegen__expressions__strings__appendPieces(syntax__ast__StringLit* s, RtString sbRef);
 RtString codegen__expressions__strings__stringLiteral(RtMem* rt_dest, RtString raw);
 RtString codegen__expressions__strings__cBytes(RtMem* rt_dest, RtString raw);
-void codegen__expressions__strings__cByte(StringBuilder* sb, uint8_t v, RtString text_6350);
+void codegen__expressions__strings__cByte(StringBuilder* sb, uint8_t v, RtString text_6352);
 bool codegen__gen__statements__usesErrors(List_syntax__ast__Stmt* body);
 RtString codegen__gen__statements__body(RtMem* rt_dest, List_syntax__ast__Stmt* stmts, semantics__types__Type* ret, bool throwsOut, semantics__types__LambdaInfo* lambda, List_semantics__types__Symbol* ps, RtString lock, int32_t declLine);
 bool codegen__gen__statements__endsWithJump(List_syntax__ast__Stmt* stmts);
@@ -5728,7 +5728,7 @@ RtString codegen__expressions__calls__builtin(RtMem* rt_dest, syntax__ast__Call*
 RtString codegen__expressions__calls__printCall(RtMem* rt_dest, syntax__ast__Call* c, bool newline);
 RtString codegen__expressions__calls__stringMethod(RtMem* rt_dest, syntax__ast__Call* c);
 RtString codegen__expressions__calls__splitText(RtMem* rt_dest, syntax__ast__Call* c, RtString s, RtString sep, bool isLines);
-void codegen__expressions__calls__lines(RtString text_6801);
+void codegen__expressions__calls__lines(RtString text_6803);
 RtString codegen__expressions__calls__anyRemoveIf(RtMem* rt_dest, syntax__ast__Call* c);
 RtString codegen__expressions__calls__sortList(RtMem* rt_dest, syntax__ast__Call* c, semantics__types__Type* at);
 RtString codegen__expressions__calls__mapFilter(RtMem* rt_dest, syntax__ast__Call* c, semantics__types__CallInfo* b);
@@ -5842,10 +5842,10 @@ RtString codegen__gen__library__headerType(RtMem* rt_dest, semantics__types__Typ
 RtString codegen__gen__library__headerPrototype(RtMem* rt_dest, semantics__types__FunctionInfo* f);
 RtString codegen__gen__library__resultNote(RtMem* rt_dest, semantics__types__FunctionInfo* f);
 RtString codegen__gen__library__typeNote(RtMem* rt_dest, semantics__types__Type* r);
-RtString codegen__gen__library__libraryHeader(RtMem* rt_dest, RtString name, RtString version_7326, RtString kind, RtString hash, RtString made);
+RtString codegen__gen__library__libraryHeader(RtMem* rt_dest, RtString name, RtString version_7328, RtString kind, RtString hash, RtString made);
 RtString codegen__gen__library__bindingClass(RtMem* rt_dest, RtString cls, RtString p);
 RtString codegen__gen__library__bindingType(RtMem* rt_dest, semantics__types__Type* t);
-RtString codegen__gen__library__libraryModule(RtMem* rt_dest, RtString name, RtString version_7375, RtString kind, RtString made);
+RtString codegen__gen__library__libraryModule(RtMem* rt_dest, RtString name, RtString version_7377, RtString kind, RtString made);
 codegen__gen__Fn* codegen__gen__newFn(RtMem* rt_dest);
 void codegen__gen__internalError(int32_t line, RtString msg);
 RtString codegen__gen__lineMark(RtMem* rt_dest, int32_t encoded);
@@ -5854,7 +5854,7 @@ RtString codegen__gen__spreadLines(RtMem* rt_dest, RtString c, RtString cFile);
 RtString codegen__gen__firstMark(RtMem* rt_dest, List_s* all, int32_t k);
 void codegen__gen__line(RtString s);
 RtString codegen__gen__tmp(RtMem* rt_dest, RtString prefix);
-RtString codegen__gen__indent4(RtMem* rt_dest, RtString text_7424);
+RtString codegen__gen__indent4(RtMem* rt_dest, RtString text_7426);
 void codegen__gen__pushBlock(codegen__gen__Block* b);
 void codegen__gen__popBlock(void);
 codegen__gen__Block* codegen__gen__topBlock(RtMem* rt_dest);
@@ -5863,6 +5863,7 @@ RtString codegen__gen__generate(RtMem* rt_dest);
 RtString codegen__gen__internal(RtMem* rt_dest);
 void codegen__gen__exportHelpers(StringBuilder* out);
 void codegen__gen__libraryGlue(StringBuilder* out);
+bool codegen__gen__takesTextFunctions(void);
 List_s* codegen__gen__handleClassNames(RtMem* rt_dest);
 void codegen__gen__addHandles(semantics__types__Type* t, List_s* out);
 List_s* codegen__gen__handleClasses(RtMem* rt_dest);
@@ -5895,15 +5896,15 @@ int32_t command(Slice_s args);
 int32_t newProject(List_s* rest);
 int32_t buildProject(bool run, List_s* rest, List_s* programArgs);
 int32_t test(List_s* rest);
-int32_t file(RtString main__7727, List_s* rest, List_s* programArgs);
-int32_t writeC(RtString main__7733, RtString output);
+int32_t file(RtString main__7729, List_s* rest, List_s* programArgs);
+int32_t writeC(RtString main__7735, RtString output);
 int32_t plugin(RtString cmd, Slice_s args);
 int32_t version(void);
 int32_t usage(void);
 RtString larimarHome(RtMem* rt_dest);
-List_Plugin* plugins(RtMem* rt_dest, List_s* problems_7748);
+List_Plugin* plugins(RtMem* rt_dest, List_s* problems_7750);
 int32_t runPlugin(Plugin* pl, Slice_s args);
-RtString compileFile(RtMem* rt_dest, RtString main__7776, RtString shownFrom);
+RtString compileFile(RtMem* rt_dest, RtString main__7778, RtString shownFrom);
 project__cc__CCompiler* testCompiler(RtMem* rt_dest, RtString wanted);
 project__testing__TestSettings* testSettings(RtMem* rt_dest);
 int32_t testMain(List_s* rest);
@@ -5929,14 +5930,14 @@ RtString quotedList(RtMem* rt_dest, List_s* items);
 bool packaged(RtString dir, RtString path, RtString outDir, bool folder);
 void copyFolder(RtString from, RtString to, RtError* err_out);
 bool runC(List_s* cmd, RtString program, RtString dir, RtString cFile);
-int32_t runScript(RtString file_8063, List_s* args);
+int32_t runScript(RtString file_8065, List_s* args);
 int32_t execute(RtString exe, List_s* args);
 int32_t create(RtString path, bool library);
 int32_t createLibrary(RtString path, RtString name);
 std__os__OS std__os__Platform_current(void);
 RtString std__os__Platform_name(RtMem* rt_dest);
-static void StringBuilder_add(StringBuilder* self_, RtString text_8102);
-static void StringBuilder_addLine(StringBuilder* self_, RtString text_8104);
+static void StringBuilder_add(StringBuilder* self_, RtString text_8104);
+static void StringBuilder_addLine(StringBuilder* self_, RtString text_8106);
 static int32_t StringBuilder_length(StringBuilder* self_);
 static RtString StringBuilder_toString(StringBuilder* self_, RtMem* rt_dest);
 static void StringBuilder_clear(StringBuilder* self_);
@@ -5944,14 +5945,14 @@ static void* StringBuilder__clone(void* self_, RtMem* mem, RtCloneMap* cm);
 static int64_t std__os__posix__PosixSystem_processId(std__os__posix__PosixSystem* self_);
 static bool std__os__posix__PosixSystem_cwd(std__os__posix__PosixSystem* self_, Slice_u8 into);
 static void std__os__posix__PosixSystem_programPath(std__os__posix__PosixSystem* self_, Slice_u8 into);
-static int32_t std__os__posix__PosixSystem_shell(std__os__posix__PosixSystem* self_, RtString command_8114);
+static int32_t std__os__posix__PosixSystem_shell(std__os__posix__PosixSystem* self_, RtString command_8116);
 static void std__os__posix__PosixSystem_catchTermination(std__os__posix__PosixSystem* self_);
 static bool std__os__posix__PosixSystem_terminating(std__os__posix__PosixSystem* self_);
 static void* std__os__posix__PosixSystem__clone(void* self_, RtMem* mem, RtCloneMap* cm);
 static int64_t std__os__windows__WindowsSystem_processId(std__os__windows__WindowsSystem* self_);
 static bool std__os__windows__WindowsSystem_cwd(std__os__windows__WindowsSystem* self_, Slice_u8 into);
 static void std__os__windows__WindowsSystem_programPath(std__os__windows__WindowsSystem* self_, Slice_u8 into);
-static int32_t std__os__windows__WindowsSystem_shell(std__os__windows__WindowsSystem* self_, RtString command_8125);
+static int32_t std__os__windows__WindowsSystem_shell(std__os__windows__WindowsSystem* self_, RtString command_8127);
 static void std__os__windows__WindowsSystem_catchTermination(std__os__windows__WindowsSystem* self_);
 static bool std__os__windows__WindowsSystem_terminating(std__os__windows__WindowsSystem* self_);
 static void* std__os__windows__WindowsSystem__clone(void* self_, RtMem* mem, RtCloneMap* cm);
@@ -5960,23 +5961,23 @@ static int32_t std__io__files__posix__PosixFolders_removeDirectory(std__io__file
 static void std__io__files__posix__PosixFolders_makeWritable(std__io__files__posix__PosixFolders* self_, RtString path);
 static void std__io__files__posix__PosixFolders_copyPermissions(std__io__files__posix__PosixFolders* self_, RtString from, RtString to);
 static int64_t std__io__files__posix__PosixFolders_listOpen(std__io__files__posix__PosixFolders* self_, RtString path);
-static bool std__io__files__posix__PosixFolders_listNext(std__io__files__posix__PosixFolders* self_, int64_t list_8166, Slice_u8 into);
-static void std__io__files__posix__PosixFolders_listClose(std__io__files__posix__PosixFolders* self_, int64_t list_8169);
+static bool std__io__files__posix__PosixFolders_listNext(std__io__files__posix__PosixFolders* self_, int64_t list_8168, Slice_u8 into);
+static void std__io__files__posix__PosixFolders_listClose(std__io__files__posix__PosixFolders* self_, int64_t list_8171);
 static void* std__io__files__posix__PosixFolders__clone(void* self_, RtMem* mem, RtCloneMap* cm);
 static int32_t std__io__files__windows__WindowsFolders_makeDirectory(std__io__files__windows__WindowsFolders* self_, RtString path);
 static int32_t std__io__files__windows__WindowsFolders_removeDirectory(std__io__files__windows__WindowsFolders* self_, RtString path);
 static void std__io__files__windows__WindowsFolders_makeWritable(std__io__files__windows__WindowsFolders* self_, RtString path);
 static void std__io__files__windows__WindowsFolders_copyPermissions(std__io__files__windows__WindowsFolders* self_, RtString from, RtString to);
 static int64_t std__io__files__windows__WindowsFolders_listOpen(std__io__files__windows__WindowsFolders* self_, RtString path);
-static bool std__io__files__windows__WindowsFolders_listNext(std__io__files__windows__WindowsFolders* self_, int64_t list_8182, Slice_u8 into);
-static void std__io__files__windows__WindowsFolders_listClose(std__io__files__windows__WindowsFolders* self_, int64_t list_8185);
+static bool std__io__files__windows__WindowsFolders_listNext(std__io__files__windows__WindowsFolders* self_, int64_t list_8184, Slice_u8 into);
+static void std__io__files__windows__WindowsFolders_listClose(std__io__files__windows__WindowsFolders* self_, int64_t list_8187);
 static void* std__io__files__windows__WindowsFolders__clone(void* self_, RtMem* mem, RtCloneMap* cm);
 static Res_std__io__files__FileHandle* std__io__files__File_live(std__io__files__File* self_, RtMem* rt_dest, RtError* err_out);
 static int32_t std__io__files__File_read(std__io__files__File* self_, Slice_u8 buffer, RtError* err_out);
 static Opt_s std__io__files__File_readLine(std__io__files__File* self_, RtMem* rt_dest, RtError* err_out);
 static RtString std__io__files__File_readAll(std__io__files__File* self_, RtMem* rt_dest, RtError* err_out);
 static void std__io__files__File_write(std__io__files__File* self_, Slice_u8 bytes, RtError* err_out);
-static void std__io__files__File_writeText(std__io__files__File* self_, RtString text_8212, RtError* err_out);
+static void std__io__files__File_writeText(std__io__files__File* self_, RtString text_8214, RtError* err_out);
 static void std__io__files__File_flush(std__io__files__File* self_, RtError* err_out);
 static void std__io__files__File_close(std__io__files__File* self_, RtError* err_out);
 static void* std__io__files__File__clone(void* self_, RtMem* mem, RtCloneMap* cm);
@@ -6023,7 +6024,7 @@ static void syntax__lexer__Lexer_run(syntax__lexer__Lexer* self_);
 static bool syntax__lexer__Lexer_inNativeHeader(syntax__lexer__Lexer* self_);
 static void syntax__lexer__Lexer_fail(syntax__lexer__Lexer* self_, int32_t at, RtString msg);
 static uint8_t syntax__lexer__Lexer_peek(syntax__lexer__Lexer* self_, int32_t k);
-static void syntax__lexer__Lexer_add(syntax__lexer__Lexer* self_, syntax__lexer__TT kind, RtString text_8243, int32_t length);
+static void syntax__lexer__Lexer_add(syntax__lexer__Lexer* self_, syntax__lexer__TT kind, RtString text_8245, int32_t length);
 static void syntax__lexer__Lexer_blockComment(syntax__lexer__Lexer* self_);
 static void syntax__lexer__Lexer_identifier(syntax__lexer__Lexer* self_);
 static void syntax__lexer__Lexer_cText(syntax__lexer__Lexer* self_);
@@ -6114,7 +6115,7 @@ static void* std__os__process__posix__PosixExecutables__clone(void* self_, RtMem
 static bool std__os__process__windows__WindowsExecutables_check(std__os__process__windows__WindowsExecutables* self_, RtString path);
 static void* std__os__process__windows__WindowsExecutables__clone(void* self_, RtMem* mem, RtCloneMap* cm);
 static void std__os__process__Process_start(std__os__process__Process* self_, RtError* err_out);
-static void std__os__process__Process_write(std__os__process__Process* self_, RtString text_8419, RtError* err_out);
+static void std__os__process__Process_write(std__os__process__Process* self_, RtString text_8421, RtError* err_out);
 static void std__os__process__Process_closeInput(std__os__process__Process* self_);
 static Opt_s std__os__process__Process_readLine(std__os__process__Process* self_, RtMem* rt_dest, int32_t ms);
 static Opt_s std__os__process__Process_read(std__os__process__Process* self_, RtMem* rt_dest, int32_t count, int32_t ms);
@@ -8200,9 +8201,9 @@ RtString std__os__cwd(RtMem* rt_dest) {
     return (std__os__System_cwd__call(std__os__host, ((Slice_u8){ (b)->items, (b)->length })) ? std__os__cText(rt_dest, ((Slice_u8){ (b)->items, (b)->length })) : rt_str(".", 1));
 }
 
-int32_t std__os__run(RtString command_1612) {
+int32_t std__os__run(RtString command_1613) {
     fflush(stdout);
-    return std__os__System_shell__call(std__os__host, command_1612);
+    return std__os__System_shell__call(std__os__host, command_1613);
 }
 
 RtString std__os__programPath(RtMem* rt_dest) {
@@ -8339,21 +8340,21 @@ RtString std__io__path__fileName(RtMem* rt_dest, RtString path) {
     return ret_29;
 }
 
-RtString std__io__path__join(RtMem* rt_dest, RtString dir, RtString file_1642) {
-    if ((rt_str_eq(dir, rt_str("", 0)) || rt_str_eq(dir, rt_str(".", 1))) || std__io__path__isAbsolute(file_1642)) {
-        return file_1642;
+RtString std__io__path__join(RtMem* rt_dest, RtString dir, RtString file_1643) {
+    if ((rt_str_eq(dir, rt_str("", 0)) || rt_str_eq(dir, rt_str(".", 1))) || std__io__path__isAbsolute(file_1643)) {
+        return file_1643;
     }
     RtString value_38;
     if (String_endsWith(dir, rt_str("/", 1)) || String_endsWith(dir, rt_str("\\", 1))) {
         RtSb sb_36 = rt_sb_mem(rt_dest, 6000038);
         rt_sb_str(&sb_36, dir);
-        rt_sb_str(&sb_36, file_1642);
+        rt_sb_str(&sb_36, file_1643);
         value_38 = rt_sb_finish(&sb_36);
     } else {
         RtSb sb_37 = rt_sb_mem(rt_dest, 6000038);
         rt_sb_str(&sb_37, dir);
         rt_sb_add(&sb_37, "/", 1);
-        rt_sb_str(&sb_37, file_1642);
+        rt_sb_str(&sb_37, file_1643);
         value_38 = rt_sb_finish(&sb_37);
     }
     return value_38;
@@ -8372,8 +8373,8 @@ RtString std__io__path__absolute(RtMem* rt_dest, RtString path) {
 
 RtString std__io__path__normalize(RtMem* rt_dest, RtString path) {
     RtMem mem_1 = rt_mem_growable();
-    RtString text_1646 = String_replace(path, &mem_1, rt_str("\\", 1), rt_str("/", 1));
-    RtString t_41 = text_1646;
+    RtString text_1647 = String_replace(path, &mem_1, rt_str("\\", 1), rt_str("/", 1));
+    RtString t_41 = text_1647;
     List_s* t_42 = List_s_new(&mem_1, 6000054);
     RtString t_43 = rt_str("/", 1);
     if (t_43.len == 0) {
@@ -8411,7 +8412,7 @@ RtString std__io__path__normalize(RtMem* rt_dest, RtString path) {
     }
     RtMem tmp_51 = rt_mem_growable();
     RtSb sb_49 = rt_sb_mem(rt_dest, 6000067);
-    rt_sb_str(&sb_49, (String_startsWith(text_1646, rt_str("/", 1)) ? rt_str("/", 1) : rt_str("", 0)));
+    rt_sb_str(&sb_49, (String_startsWith(text_1647, rt_str("/", 1)) ? rt_str("/", 1) : rt_str("", 0)));
     List_s* t_50 = parts;
     rt_sb_str(&sb_49, rt_str_join(t_50->items, t_50->length, rt_str("/", 1), &tmp_51, 6000067));
     RtString r = rt_sb_finish(&sb_49);
@@ -8421,9 +8422,9 @@ RtString std__io__path__normalize(RtMem* rt_dest, RtString path) {
     return ret_52;
 }
 
-RtString std__io__path__relative(RtMem* rt_dest, RtString base, RtString file_1652) {
+RtString std__io__path__relative(RtMem* rt_dest, RtString base, RtString file_1653) {
     RtString b = std__io__path__absolute(rt_dest, base);
-    RtString f = std__io__path__absolute(rt_dest, file_1652);
+    RtString f = std__io__path__absolute(rt_dest, file_1653);
     if (rt_str_eq(f, b)) {
         return rt_str("", 0);
     }
@@ -8633,7 +8634,7 @@ RtString std__io__files__readString(RtMem* rt_dest, RtString path, RtError* err_
     return ret_86;
 }
 
-void std__io__files__writeFile(RtString path, RtString text_1683, RtString mode, RtError* err_out) {
+void std__io__files__writeFile(RtString path, RtString text_1684, RtString mode, RtError* err_out) {
     RtError err;
     err.kind = 0;
     RtMem mem_4 = rt_mem_growable();
@@ -8648,10 +8649,10 @@ void std__io__files__writeFile(RtString path, RtString text_1683, RtString mode,
             return;
         }
     }
-    uint64_t n = ((uint64_t)((text_1683).len));
+    uint64_t n = ((uint64_t)((text_1684).len));
     bool cond_90 = (n == 0ULL);
     if (!cond_90) {
-        RtString t_88 = text_1683;
+        RtString t_88 = text_1684;
         Slice_u8 t_89 = ((Slice_u8){ (uint8_t*)t_88.ptr, t_88.len });
         cond_90 = (fwrite(((void*)(t_89).items), 1ULL, n, std__io__files__FileHandle__get(((Res_std__io__files__FileHandle*)rt_unwrap((void*)(f), 7000109)), 7000109)) == n);
     }
@@ -8669,10 +8670,10 @@ void std__io__files__writeFile(RtString path, RtString text_1683, RtString mode,
     rt_mem_free(&mem_4);
 }
 
-void std__io__files__writeString(RtString path, RtString text_1689, RtError* err_out) {
+void std__io__files__writeString(RtString path, RtString text_1690, RtError* err_out) {
     RtError err;
     err.kind = 0;
-    std__io__files__writeFile(path, text_1689, rt_str("wb", 2), &err);
+    std__io__files__writeFile(path, text_1690, rt_str("wb", 2), &err);
     if (err.kind != 0) {
         *err_out = err;
         return;
@@ -8761,19 +8762,19 @@ void std__io__files__createDirectories(RtString path, RtError* err_out) {
     RtError err;
     err.kind = 0;
     RtMem mem_6 = rt_mem_growable();
-    RtString text_1708 = String_replace(path, &mem_6, rt_str("\\", 1), rt_str("/", 1));
+    RtString text_1709 = String_replace(path, &mem_6, rt_str("\\", 1), rt_str("/", 1));
     {
-        RtString text_101 = text_1708;
+        RtString text_101 = text_1709;
         for (int32_t i_102 = 0; i_102 < text_101.len; i_102++) {
             int32_t i = i_102;
             uint8_t b = (uint8_t)text_101.ptr[i_102];
-            bool cond_104 = (((b == (uint8_t)47) && (i > 0)) && (!(rt_str_byte(text_1708, (int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), 7000172) == (uint8_t)58)));
+            bool cond_104 = (((b == (uint8_t)47) && (i > 0)) && (!(rt_str_byte(text_1709, (int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), 7000172) == (uint8_t)58)));
             if (cond_104) {
-                RtString t_103 = text_1708;
+                RtString t_103 = text_1709;
                 cond_104 = (!(std__io__files__isDirectory(rt_str_sub(t_103, (int64_t)(0), (int64_t)(i), 7000172))));
             }
             if (cond_104) {
-                RtString t_105 = text_1708;
+                RtString t_105 = text_1709;
                 std__io__raise(std__io__files__makeDirectory(rt_str_sub(t_105, (int64_t)(0), (int64_t)(i), 7000172)), path, &err);
                 if (err.kind != 0) {
                     rt_mem_free(&mem_6);
@@ -8783,7 +8784,7 @@ void std__io__files__createDirectories(RtString path, RtError* err_out) {
             }
         }
     }
-    std__io__raise(std__io__files__makeDirectory(text_1708), path, &err);
+    std__io__raise(std__io__files__makeDirectory(text_1709), path, &err);
     if (err.kind != 0) {
         rt_mem_free(&mem_6);
         *err_out = err;
@@ -8969,16 +8970,16 @@ RtString std__io__console__allOf(RtMem* rt_dest, Ext_std__io__console__CStream f
     return ret_129;
 }
 
-void std__io__console__put(RtString text_1735, bool error) {
-    if ((text_1735).len == 0) {
+void std__io__console__put(RtString text_1736, bool error) {
+    if ((text_1736).len == 0) {
         return;
     }
     if (error) {
         fflush(stdout);
     }
-    RtString t_130 = text_1735;
+    RtString t_130 = text_1736;
     Slice_u8 t_131 = ((Slice_u8){ (uint8_t*)t_130.ptr, t_130.len });
-    uint64_t t_132 = ((uint64_t)((text_1735).len));
+    uint64_t t_132 = ((uint64_t)((text_1736).len));
     fwrite(((void*)(t_131).items), 1ULL, t_132, (error ? stderr : stdout));
     if (error) {
         fflush(stderr);
@@ -9039,8 +9040,8 @@ int32_t std__io__console__lastCount(void) {
     return std__io__console__Counter_get__dispatch((std__io__console__Counter*)std__io__console__lastRead);
 }
 
-void std__io__console__write(RtString text_1745) {
-    std__io__console__put(text_1745, false);
+void std__io__console__write(RtString text_1746) {
+    std__io__console__put(text_1746, false);
 }
 
 void std__io__console__flush(void) {
@@ -9059,8 +9060,8 @@ void std__io__console__binaryMode(void) {
     }
 }
 
-void std__io__console__printError(RtString text_1747) {
-    std__io__console__put(text_1747, true);
+void std__io__console__printError(RtString text_1748) {
+    std__io__console__put(text_1748, true);
     std__io__console__put(rt_str("\n", 1), true);
 }
 
@@ -9233,11 +9234,11 @@ semantics__types__Type* semantics__types__arrayT(RtMem* rt_dest, semantics__type
     }
     rt_panic("no case of the switch matched", 14000126);
     switch_end_170: ;
-    RtString text_1770 = value_169;
+    RtString text_1771 = value_169;
     RtMem* t_174 = &rt_default_mem;
     semantics__types__Type* obj_175 = (semantics__types__Type*)rt_mem_alloc(t_174, sizeof(semantics__types__Type), 14000131);
     List_semantics__types__Type* list_176 = List_semantics__types__Type_new(t_174, 14000023);
-    *obj_175 = (semantics__types__Type){ ._h = { (const void*)&vtable_semantics__types__Type, t_174 }, .kind = ((semantics__types__TyK){ .tag = semantics__types__TyK_Array }), .name = rt_str("", 0), .nk = ((semantics__types__NamedK){ .tag = semantics__types__NamedK_Struct }), .elem = elem, .ak = ak, .size = size, .params = list_176, .text = text_1770, .used = false, .funcId = (-1), .order = 0, .safe = false, .plain = NULL };
+    *obj_175 = (semantics__types__Type){ ._h = { (const void*)&vtable_semantics__types__Type, t_174 }, .kind = ((semantics__types__TyK){ .tag = semantics__types__TyK_Array }), .name = rt_str("", 0), .nk = ((semantics__types__NamedK){ .tag = semantics__types__NamedK_Struct }), .elem = elem, .ak = ak, .size = size, .params = list_176, .text = text_1771, .used = false, .funcId = (-1), .order = 0, .safe = false, .plain = NULL };
     semantics__types__Type* ret_177 = semantics__types__intern(NULL, obj_175);
     rt_mem_free(&mem_13);
     return ret_177;
@@ -11311,7 +11312,7 @@ syntax__ast__TypeRef* syntax__parser__types__type(RtMem* rt_dest, syntax__parser
     if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_LParen }))) {
         List_syntax__ast__TypeRef* list_396 = List_syntax__ast__TypeRef_new(&rt_default_mem, 21000017);
         List_syntax__ast__TypeRef* parameterTypes = list_396;
-        syntax__parser__strictList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), ((Closure_1){ .fn = lambda_0, .env = { .l_0 = { .parameterTypes_2023 = parameterTypes, .p_2020 = p } } }));
+        syntax__parser__strictList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), ((Closure_1){ .fn = lambda_0, .env = { .l_0 = { .parameterTypes_2024 = parameterTypes, .p_2021 = p } } }));
         syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), rt_str("Expected ')' in type", 20));
         if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Arrow }))) {
             RtMem* t_397 = &rt_default_mem;
@@ -11966,7 +11967,7 @@ syntax__ast__Expr* syntax__parser__expressions__postfix(RtMem* rt_dest, syntax__
             List_syntax__ast__Expr* list_535 = List_syntax__ast__Expr_new(t_532, 13000344);
             *obj_533 = (syntax__ast__Call){ ._super = { ._super = { ._h = { (const void*)&vtable_syntax__ast__Call, t_532 }, .line = (syntax__parser__Parser_previous__dispatch((syntax__parser__Parser*)p, NULL))->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_534, .computed = rt_str("", 0) } }, .callee = value, .args = list_535 };
             syntax__ast__Call* call = obj_533;
-            syntax__parser__strictList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), ((Closure_1){ .fn = lambda_1, .env = { .l_1 = { .call_2096 = call, .p_2094 = p } } }));
+            syntax__parser__strictList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), ((Closure_1){ .fn = lambda_1, .env = { .l_1 = { .call_2097 = call, .p_2095 = p } } }));
             syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), rt_str("Expected ')' after arguments", 28));
             value = ((syntax__ast__Expr*)(call));
         } else {
@@ -12197,7 +12198,7 @@ syntax__ast__ObjectLit* syntax__parser__expressions__objectLiteral(RtMem* rt_des
     *obj_603 = (syntax__ast__ObjectLit){ ._super = { ._super = { ._h = { (const void*)&vtable_syntax__ast__ObjectLit, t_602 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_604, .computed = rt_str("", 0) } }, .typeName = typeName, .fields = list_605 };
     syntax__ast__ObjectLit* literal = obj_603;
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_LBrace }), rt_str("Expected '{' to open object literal", 35));
-    syntax__parser__looseList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), ((Closure_1){ .fn = lambda_2, .env = { .l_2 = { .p_2113 = p, .literal_2116 = literal } } }));
+    syntax__parser__looseList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), ((Closure_1){ .fn = lambda_2, .env = { .l_2 = { .p_2114 = p, .literal_2117 = literal } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), rt_str("Expected '}' to close object literal", 36));
     return literal;
 }
@@ -12235,7 +12236,7 @@ syntax__ast__Lambda* syntax__parser__expressions__lambda(RtMem* rt_dest, syntax_
     List_syntax__ast__Stmt* list_627 = List_syntax__ast__Stmt_new(t_623, 13000381);
     *obj_624 = (syntax__ast__Lambda){ ._super = { ._super = { ._h = { (const void*)&vtable_syntax__ast__Lambda, t_623 }, .line = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_LParen }), rt_str("Expected '('", 12)))->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_625, .computed = rt_str("", 0) } }, .params = list_626, .body = list_627, .ref = NULL };
     syntax__ast__Lambda* lambda = obj_624;
-    syntax__parser__strictList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), ((Closure_1){ .fn = lambda_3, .env = { .l_3 = { .lambda_2123 = lambda, .p_2122 = p } } }));
+    syntax__parser__strictList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), ((Closure_1){ .fn = lambda_3, .env = { .l_3 = { .lambda_2124 = lambda, .p_2123 = p } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), rt_str("Expected ')' after lambda parameters", 36));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Arrow }), rt_str("Expected '->' after lambda parameters", 37));
     (lambda)->body = syntax__parser__statements__block(NULL, p, rt_str("lambda body", 11));
@@ -12348,7 +12349,7 @@ syntax__ast__Pattern* syntax__parser__expressions__pattern(RtMem* rt_dest, synta
     }
     if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_LBrace }))) {
         (pattern)->kind = 2;
-        syntax__parser__looseList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), ((Closure_1){ .fn = lambda_4, .env = { .l_4 = { .p_2130 = p, .pattern_2132 = pattern } } }));
+        syntax__parser__looseList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), ((Closure_1){ .fn = lambda_4, .env = { .l_4 = { .p_2131 = p, .pattern_2133 = pattern } } }));
         syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), rt_str("Expected '}' after the fields of the pattern", 44));
         if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident }))) {
             (pattern)->binding = (syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)p, NULL))->text;
@@ -12526,19 +12527,19 @@ bool syntax__parser__expressions__optionalFollows(syntax__lexer__TT next) {
 }
 
 RtString syntax__parser__expressions__dottedPath(RtMem* rt_dest, syntax__ast__Expr* value) {
-    syntax__ast__Ident* identifier_2164 = NULL;
-    syntax__ast__Member* member_2165 = NULL;
-    if ((identifier_2164 = (syntax__ast__Ident*)rt_as_class((void*)(value), &rtclass_syntax__ast__Ident)) != NULL) {
-        return (identifier_2164)->name;
+    syntax__ast__Ident* identifier_2165 = NULL;
+    syntax__ast__Member* member_2166 = NULL;
+    if ((identifier_2165 = (syntax__ast__Ident*)rt_as_class((void*)(value), &rtclass_syntax__ast__Ident)) != NULL) {
+        return (identifier_2165)->name;
     }
-    if ((member_2165 = (syntax__ast__Member*)rt_as_class((void*)(value), &rtclass_syntax__ast__Member)) != NULL) {
+    if ((member_2166 = (syntax__ast__Member*)rt_as_class((void*)(value), &rtclass_syntax__ast__Member)) != NULL) {
         RtMem mem_16 = rt_mem_growable();
-        RtString path = syntax__parser__expressions__dottedPath(&mem_16, (member_2165)->object);
+        RtString path = syntax__parser__expressions__dottedPath(&mem_16, (member_2166)->object);
         if (!rt_str_eq(path, rt_str("", 0))) {
             RtSb sb_708 = rt_sb_mem(rt_dest, 19000416);
             rt_sb_str(&sb_708, path);
             rt_sb_add(&sb_708, ".", 1);
-            rt_sb_str(&sb_708, (member_2165)->name);
+            rt_sb_str(&sb_708, (member_2166)->name);
             RtString ret_709 = rt_sb_finish(&sb_708);
             rt_mem_free(&mem_16);
             return ret_709;
@@ -12623,17 +12624,17 @@ RtString syntax__parser__natives__cTarget(RtMem* rt_dest, syntax__parser__Parser
         return rt_str("", 0);
     }
     if (syntax__parser__natives__atCText(p)) {
-        syntax__lexer__Token* text_2178 = syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)p, NULL);
-        if (rt_str_eq(String_trim((text_2178)->text, NULL), rt_str("", 0))) {
+        syntax__lexer__Token* text_2179 = syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)p, NULL);
+        if (rt_str_eq(String_trim((text_2179)->text, NULL), rt_str("", 0))) {
             RtMem tmp_718 = rt_mem_growable();
             RtSb sb_717 = rt_sb_mem(&tmp_718, 22000044);
             rt_sb_add(&sb_717, "The C of ", 9);
             rt_sb_str(&sb_717, what);
             rt_sb_add(&sb_717, " is empty", 9);
-            syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (text_2178)->line, rt_sb_finish(&sb_717));
+            syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (text_2179)->line, rt_sb_finish(&sb_717));
             rt_mem_free(&tmp_718);
         }
-        return (text_2178)->text;
+        return (text_2179)->text;
     }
     if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Struct }))) {
         RtMem tmp_721 = rt_mem_growable();
@@ -13119,19 +13120,19 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(RtMem* rt_dest,
             List_syntax__ast__Param* list_829 = (declaration)->params;
             for (int32_t i_828 = 0; i_828 < list_829->length; i_828++) {
                 int32_t i = i_828;
-                syntax__ast__Param* p_2226 = list_829->items[i_828];
-                bool memory = (((((i == 0) && (!((p_2226)->type == NULL))) && (((((syntax__ast__TypeRef*)rt_unwrap((void*)((p_2226)->type), 22000269)))->kind).tag == (((syntax__ast__TK){ .tag = syntax__ast__TK_Growable })).tag)) && (((((syntax__ast__TypeRef*)rt_unwrap((void*)((((syntax__ast__TypeRef*)rt_unwrap((void*)((p_2226)->type), 22000269)))->inner), 22000269)))->kind).tag == (((syntax__ast__TK){ .tag = syntax__ast__TK_Named })).tag)) && rt_str_eq((((syntax__ast__TypeRef*)rt_unwrap((void*)((((syntax__ast__TypeRef*)rt_unwrap((void*)((p_2226)->type), 22000269)))->inner), 22000269)))->name, rt_str("byte", 4)));
-                bool context = (((!((p_2226)->type == NULL)) && (((((syntax__ast__TypeRef*)rt_unwrap((void*)((p_2226)->type), 22000270)))->kind).tag == (((syntax__ast__TK){ .tag = syntax__ast__TK_Named })).tag)) && rt_str_eq((((syntax__ast__TypeRef*)rt_unwrap((void*)((p_2226)->type), 22000270)))->name, rt_str("Context", 7)));
+                syntax__ast__Param* p_2227 = list_829->items[i_828];
+                bool memory = (((((i == 0) && (!((p_2227)->type == NULL))) && (((((syntax__ast__TypeRef*)rt_unwrap((void*)((p_2227)->type), 22000269)))->kind).tag == (((syntax__ast__TK){ .tag = syntax__ast__TK_Growable })).tag)) && (((((syntax__ast__TypeRef*)rt_unwrap((void*)((((syntax__ast__TypeRef*)rt_unwrap((void*)((p_2227)->type), 22000269)))->inner), 22000269)))->kind).tag == (((syntax__ast__TK){ .tag = syntax__ast__TK_Named })).tag)) && rt_str_eq((((syntax__ast__TypeRef*)rt_unwrap((void*)((((syntax__ast__TypeRef*)rt_unwrap((void*)((p_2227)->type), 22000269)))->inner), 22000269)))->name, rt_str("byte", 4)));
+                bool context = (((!((p_2227)->type == NULL)) && (((((syntax__ast__TypeRef*)rt_unwrap((void*)((p_2227)->type), 22000270)))->kind).tag == (((syntax__ast__TK){ .tag = syntax__ast__TK_Named })).tag)) && rt_str_eq((((syntax__ast__TypeRef*)rt_unwrap((void*)((p_2227)->type), 22000270)))->name, rt_str("Context", 7)));
                 if (memory) {
                     RtCloneMap clones_830 = rt_clone_map();
-                    syntax__ast__Param* copy_831 = clone_syntax__ast__Param(p_2226, &rt_default_mem, &clones_830);
+                    syntax__ast__Param* copy_831 = clone_syntax__ast__Param(p_2227, &rt_default_mem, &clones_830);
                     rt_clone_done(&clones_830);
                     List_syntax__ast__Param_push((cFunction)->params, copy_831);
                 } else {
                     if (context) {
-                        List_syntax__ast__Param_push(late, p_2226);
+                        List_syntax__ast__Param_push(late, p_2227);
                     } else {
-                        List_syntax__ast__Param_push(kept, p_2226);
+                        List_syntax__ast__Param_push(kept, p_2227);
                     }
                 }
             }
@@ -13152,30 +13153,30 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(RtMem* rt_dest,
         {
             List_syntax__ast__Param* list_840 = (declaration)->params;
             for (int32_t i_839 = 0; i_839 < list_840->length; i_839++) {
-                syntax__ast__Param* p_2229 = list_840->items[i_839];
+                syntax__ast__Param* p_2230 = list_840->items[i_839];
                 List_syntax__ast__Param* t_841 = late;
-                syntax__ast__Param* t_842 = p_2229;
+                syntax__ast__Param* t_842 = p_2230;
                 bool found_843 = false;
                 for (int32_t k_844 = 0; k_844 < t_841->length; k_844++) if (t_841->items[k_844] == t_842) { found_843 = true; break; }
                 if (found_843) {
                     RtCloneMap clones_845 = rt_clone_map();
-                    syntax__ast__Param* copy_846 = clone_syntax__ast__Param(p_2229, &rt_default_mem, &clones_845);
+                    syntax__ast__Param* copy_846 = clone_syntax__ast__Param(p_2230, &rt_default_mem, &clones_845);
                     rt_clone_done(&clones_845);
                     List_syntax__ast__Param_push((cFunction)->params, copy_846);
                 } else {
                     List_syntax__ast__Param* t_847 = kept;
-                    syntax__ast__Param* t_848 = p_2229;
+                    syntax__ast__Param* t_848 = p_2230;
                     bool found_849 = false;
                     for (int32_t k_850 = 0; k_850 < t_847->length; k_850++) if (t_847->items[k_850] == t_848) { found_849 = true; break; }
                     if (found_849) {
                         RtCloneMap clones_851 = rt_clone_map();
-                        syntax__ast__Param* copy_852 = clone_syntax__ast__Param(p_2229, &rt_default_mem, &clones_851);
+                        syntax__ast__Param* copy_852 = clone_syntax__ast__Param(p_2230, &rt_default_mem, &clones_851);
                         rt_clone_done(&clones_851);
                         List_syntax__ast__Param_push((cFunction)->params, copy_852);
                         RtMem* t_853 = &rt_default_mem;
                         syntax__ast__Ident* obj_854 = (syntax__ast__Ident*)rt_mem_alloc(t_853, sizeof(syntax__ast__Ident), 22000288);
                         List_semantics__types__PatternInfo* list_855 = List_semantics__types__PatternInfo_new(t_853, 13000047);
-                        *obj_854 = (syntax__ast__Ident){ ._super = { ._super = { ._h = { (const void*)&vtable_syntax__ast__Ident, t_853 }, .line = (c)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_855, .computed = rt_str("", 0) } }, .name = (p_2229)->name };
+                        *obj_854 = (syntax__ast__Ident){ ._super = { ._super = { ._h = { (const void*)&vtable_syntax__ast__Ident, t_853 }, .line = (c)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_855, .computed = rt_str("", 0) } }, .name = (p_2230)->name };
                         List_syntax__ast__Expr_push(args, ((syntax__ast__Expr*)(obj_854)));
                     }
                 }
@@ -13507,50 +13508,50 @@ syntax__ast__Node* syntax__parser__declarations__topLevelDeclaration(RtMem* rt_d
 
 syntax__ast__FunctionDecl* syntax__parser__declarations__testFunction(RtMem* rt_dest, syntax__parser__Parser* p) {
     (void)rt_dest;
-    syntax__ast__FunctionDecl* test_2253 = syntax__parser__declarations__functionDeclaration(NULL, p, false, true);
-    if (!rt_str_eq((test_2253)->typeName, rt_str("", 0))) {
+    syntax__ast__FunctionDecl* test_2254 = syntax__parser__declarations__functionDeclaration(NULL, p, false, true);
+    if (!rt_str_eq((test_2254)->typeName, rt_str("", 0))) {
         RtMem tmp_939 = rt_mem_growable();
         RtSb sb_938 = rt_sb_mem(&tmp_939, 18000073);
         rt_sb_add(&sb_938, "A test function is a plain function, not '", 42);
-        rt_sb_str(&sb_938, (test_2253)->typeName);
+        rt_sb_str(&sb_938, (test_2254)->typeName);
         rt_sb_add(&sb_938, ".", 1);
-        rt_sb_str(&sb_938, (test_2253)->name);
+        rt_sb_str(&sb_938, (test_2254)->name);
         rt_sb_add(&sb_938, "'", 1);
-        syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (test_2253)->_super.line, rt_sb_finish(&sb_938));
+        syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (test_2254)->_super.line, rt_sb_finish(&sb_938));
         rt_mem_free(&tmp_939);
     } else {
-        if (((test_2253)->params)->length > 1) {
+        if (((test_2254)->params)->length > 1) {
             RtMem tmp_941 = rt_mem_growable();
             RtSb sb_940 = rt_sb_mem(&tmp_941, 18000075);
             rt_sb_add(&sb_940, "A test function takes nothing, or one setup: test function ", 59);
-            rt_sb_str(&sb_940, (test_2253)->name);
+            rt_sb_str(&sb_940, (test_2254)->name);
             rt_sb_add(&sb_940, "(s: MySetup)", 12);
-            syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (test_2253)->_super.line, rt_sb_finish(&sb_940));
+            syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (test_2254)->_super.line, rt_sb_finish(&sb_940));
             rt_mem_free(&tmp_941);
         } else {
-            if ((!((((test_2253)->ret)->kind).tag == (((syntax__ast__TK){ .tag = syntax__ast__TK_Named })).tag)) || (!rt_str_eq(((test_2253)->ret)->name, rt_str("void", 4)))) {
+            if ((!((((test_2254)->ret)->kind).tag == (((syntax__ast__TK){ .tag = syntax__ast__TK_Named })).tag)) || (!rt_str_eq(((test_2254)->ret)->name, rt_str("void", 4)))) {
                 RtMem tmp_943 = rt_mem_growable();
                 RtSb sb_942 = rt_sb_mem(&tmp_943, 18000077);
                 rt_sb_add(&sb_942, "A test function returns nothing: test function ", 47);
-                rt_sb_str(&sb_942, (test_2253)->name);
+                rt_sb_str(&sb_942, (test_2254)->name);
                 rt_sb_add(&sb_942, "(): void", 8);
-                syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (test_2253)->_super.line, rt_sb_finish(&sb_942));
+                syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (test_2254)->_super.line, rt_sb_finish(&sb_942));
                 rt_mem_free(&tmp_943);
             } else {
-                if (!rt_str_eq((test_2253)->returnLives, rt_str("", 0))) {
+                if (!rt_str_eq((test_2254)->returnLives, rt_str("", 0))) {
                     RtMem tmp_945 = rt_mem_growable();
                     RtSb sb_944 = rt_sb_mem(&tmp_945, 18000079);
                     rt_sb_add(&sb_944, "A test function returns nothing, so it has no 'in ", 50);
-                    rt_sb_str(&sb_944, (test_2253)->returnLives);
+                    rt_sb_str(&sb_944, (test_2254)->returnLives);
                     rt_sb_add(&sb_944, "'", 1);
-                    syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (test_2253)->_super.line, rt_sb_finish(&sb_944));
+                    syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (test_2254)->_super.line, rt_sb_finish(&sb_944));
                     rt_mem_free(&tmp_945);
                 }
             }
         }
     }
-    (test_2253)->isTest = true;
-    return test_2253;
+    (test_2254)->isTest = true;
+    return test_2254;
 }
 
 syntax__ast__Node* syntax__parser__declarations__constant(RtMem* rt_dest, syntax__parser__Parser* p) {
@@ -13606,10 +13607,10 @@ List_syntax__ast__Param* syntax__parser__declarations__parameters(RtMem* rt_dest
     (void)rt_dest;
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_LParen }), rt_str("Expected '('", 12));
     List_syntax__ast__Param* list_958 = List_syntax__ast__Param_new(&rt_default_mem, 18000111);
-    List_syntax__ast__Param* list_2262 = list_958;
-    syntax__parser__strictList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), ((Closure_1){ .fn = lambda_5, .env = { .l_5 = { .list_2262 = list_2262, .p_2261 = p } } }));
+    List_syntax__ast__Param* list_2263 = list_958;
+    syntax__parser__strictList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), ((Closure_1){ .fn = lambda_5, .env = { .l_5 = { .list_2263 = list_2263, .p_2262 = p } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RParen }), rt_str("Expected ')' after parameters", 29));
-    return list_2262;
+    return list_2263;
 }
 
 syntax__ast__FunctionDecl* syntax__parser__declarations__functionDeclaration(RtMem* rt_dest, syntax__parser__Parser* p, bool isOverride, bool withBody) {
@@ -13938,11 +13939,11 @@ void syntax__parser__declarations__cBodied(syntax__parser__Parser* p, syntax__as
     {
         List_syntax__ast__Param* list_1025 = (declaration)->params;
         for (int32_t i_1024 = 0; i_1024 < list_1025->length; i_1024++) {
-            syntax__ast__Param* p_2295 = list_1025->items[i_1024];
+            syntax__ast__Param* p_2296 = list_1025->items[i_1024];
             RtMem* t_1026 = &rt_default_mem;
             syntax__ast__Ident* obj_1027 = (syntax__ast__Ident*)rt_mem_alloc(t_1026, sizeof(syntax__ast__Ident), 18000277);
             List_semantics__types__PatternInfo* list_1028 = List_semantics__types__PatternInfo_new(t_1026, 13000047);
-            *obj_1027 = (syntax__ast__Ident){ ._super = { ._super = { ._h = { (const void*)&vtable_syntax__ast__Ident, t_1026 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_1028, .computed = rt_str("", 0) } }, .name = (p_2295)->name };
+            *obj_1027 = (syntax__ast__Ident){ ._super = { ._super = { ._h = { (const void*)&vtable_syntax__ast__Ident, t_1026 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_1028, .computed = rt_str("", 0) } }, .name = (p_2296)->name };
             List_syntax__ast__Expr_push((call)->args, ((syntax__ast__Expr*)(obj_1027)));
         }
     }
@@ -14057,7 +14058,7 @@ syntax__ast__EnumDecl* syntax__parser__declarations__enumDeclaration(RtMem* rt_d
     *obj_1046 = (syntax__ast__EnumDecl){ ._super = { ._h = { (const void*)&vtable_syntax__ast__EnumDecl, t_1045 }, .line = (name)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_1047, .computed = rt_str("", 0) }, .name = (name)->text, .variants = list_1048 };
     syntax__ast__EnumDecl* declaration = obj_1046;
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_LBrace }), rt_str("Expected '{' to open enum body", 30));
-    syntax__parser__looseList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), ((Closure_1){ .fn = lambda_6, .env = { .l_6 = { .p_2308 = p, .declaration_2310 = declaration } } }));
+    syntax__parser__looseList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), ((Closure_1){ .fn = lambda_6, .env = { .l_6 = { .p_2309 = p, .declaration_2311 = declaration } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), rt_str("Expected '}' to close enum body (variants are separated by commas)", 66));
     syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Semi }));
     return declaration;
@@ -14166,8 +14167,8 @@ RtString syntax__parser__lives(RtMem* rt_dest, syntax__parser__Parser* p) {
 
 syntax__ast__Program* syntax__parser__program(RtMem* rt_dest, syntax__parser__Parser* p, int32_t startLine) {
     (void)rt_dest;
-    syntax__ast__FunctionDecl* testFunction_2340 = NULL;
-    syntax__ast__FunctionDecl* staticFunction_2341 = NULL;
+    syntax__ast__FunctionDecl* testFunction_2341 = NULL;
+    syntax__ast__FunctionDecl* staticFunction_2342 = NULL;
     RtMem* t_1070 = &rt_default_mem;
     syntax__ast__Program* obj_1071 = (syntax__ast__Program*)rt_mem_alloc(t_1070, sizeof(syntax__ast__Program), 16000150);
     List_semantics__types__PatternInfo* list_1072 = List_semantics__types__PatternInfo_new(t_1070, 13000047);
@@ -14191,10 +14192,10 @@ syntax__ast__Program* syntax__parser__program(RtMem* rt_dest, syntax__parser__Pa
         bool isPublic = syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Public }));
         syntax__lexer__Token* start = syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)p, NULL);
         syntax__ast__Node* declaration = syntax__parser__declarations__topLevelDeclaration(NULL, p);
-        if ((isPublic && ((testFunction_2340 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(declaration), &rtclass_syntax__ast__FunctionDecl)) != NULL)) && (testFunction_2340)->isTest) {
+        if ((isPublic && ((testFunction_2341 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(declaration), &rtclass_syntax__ast__FunctionDecl)) != NULL)) && (testFunction_2341)->isTest) {
             syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (start)->line, rt_str("A test function cannot be 'public': only larimar test calls it", 62));
         } else {
-            if ((isPublic && ((staticFunction_2341 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(declaration), &rtclass_syntax__ast__FunctionDecl)) != NULL)) && (!rt_str_eq((staticFunction_2341)->typeName, rt_str("", 0)))) {
+            if ((isPublic && ((staticFunction_2342 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(declaration), &rtclass_syntax__ast__FunctionDecl)) != NULL)) && (!rt_str_eq((staticFunction_2342)->typeName, rt_str("", 0)))) {
                 syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (start)->line, rt_str("A static function is visible where its type is: mark the type 'public', not the function", 88));
             } else {
                 if (isPublic) {
@@ -14253,7 +14254,7 @@ syntax__ast__ImportDecl* syntax__parser__importDeclaration(RtMem* rt_dest, synta
         if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_LBrace }))) {
             (declaration)->hasNames = true;
             (declaration)->alias = rt_str("", 0);
-            syntax__parser__looseList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), ((Closure_1){ .fn = lambda_7, .env = { .l_7 = { .declaration_2349 = declaration, .p_2345 = p } } }));
+            syntax__parser__looseList(p, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), ((Closure_1){ .fn = lambda_7, .env = { .l_7 = { .declaration_2350 = declaration, .p_2346 = p } } }));
             syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace }), rt_str("Expected '}' after the imported names", 37));
         }
     }
@@ -14261,9 +14262,9 @@ syntax__ast__ImportDecl* syntax__parser__importDeclaration(RtMem* rt_dest, synta
     return declaration;
 }
 
-void editor__docstore__setDocument(RtString path, RtString text_2351) {
+void editor__docstore__setDocument(RtString path, RtString text_2352) {
     RtMem tmp_1085 = rt_mem_growable();
-    lm_lm_doc_set_23000025(rt_str_cz(path, &tmp_1085, 23000054), rt_str_cz(text_2351, &tmp_1085, 23000054));
+    lm_lm_doc_set_23000025(rt_str_cz(path, &tmp_1085, 23000054), rt_str_cz(text_2352, &tmp_1085, 23000054));
     rt_mem_free(&tmp_1085);
 }
 
@@ -14363,7 +14364,7 @@ Opt_s semantics__linker__ownStd(RtMem* rt_dest, RtString mainPath) {
 
 syntax__ast__Program* semantics__linker__link(RtMem* rt_dest, RtString mainShown, RtString mainSource, RtString sourceDir, RtString std, RtString mainPath) {
     (void)rt_dest;
-    syntax__ast__CIncludeDecl* c_2374 = NULL;
+    syntax__ast__CIncludeDecl* c_2375 = NULL;
     semantics__linker__rootDir = sourceDir;
     Opt_s t_1114 = semantics__linker__ownStd(NULL, mainPath);
     RtString value_1113;
@@ -14428,19 +14429,19 @@ syntax__ast__Program* semantics__linker__link(RtMem* rt_dest, RtString mainShown
                     if (langItself && ((const void*)(m) == (const void*)(semantics__linker__root))) {
                         (d)->builtin = true;
                     }
-                    if ((c_2374 = (syntax__ast__CIncludeDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__CIncludeDecl)) != NULL) {
+                    if ((c_2375 = (syntax__ast__CIncludeDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__CIncludeDecl)) != NULL) {
                         RtMem tmp_1135 = rt_mem_growable();
                         RtSb sb_1133 = rt_sb_mem(&rt_default_mem, 15000122);
-                        rt_sb_str(&sb_1133, (c_2374)->header);
+                        rt_sb_str(&sb_1133, (c_2375)->header);
                         rt_sb_add(&sb_1133, "|", 1);
-                        rt_sb_str(&sb_1133, (c_2374)->platform);
+                        rt_sb_str(&sb_1133, (c_2375)->platform);
                         rt_sb_add(&sb_1133, "|", 1);
                         RtString value_1136;
-                        if (!rt_str_eq((c_2374)->owner, rt_str("", 0))) {
+                        if (!rt_str_eq((c_2375)->owner, rt_str("", 0))) {
                             RtSb sb_1134 = rt_sb_mem(&tmp_1135, 15000122);
                             rt_sb_str(&sb_1134, (m)->path);
                             rt_sb_add(&sb_1134, ".", 1);
-                            rt_sb_str(&sb_1134, (c_2374)->owner);
+                            rt_sb_str(&sb_1134, (c_2375)->owner);
                             value_1136 = rt_sb_finish(&sb_1134);
                         } else {
                             value_1136 = rt_str("", 0);
@@ -14499,8 +14500,8 @@ void semantics__linker__error(int32_t line, RtString msg) {
 }
 
 void semantics__linker__loadLang(void) {
-    syntax__ast__FunctionDecl* sf_2395 = NULL;
-    syntax__ast__CCodeDecl* c_2405 = NULL;
+    syntax__ast__FunctionDecl* sf_2396 = NULL;
+    syntax__ast__CCodeDecl* c_2406 = NULL;
     RtMem tmp_1146 = rt_mem_growable();
     Opt_s source = semantics__linker__readSource(NULL, semantics__linker__moduleFile(&tmp_1146, rt_str("std.lang", 8)));
     rt_mem_free(&tmp_1146);
@@ -14561,8 +14562,8 @@ void semantics__linker__loadLang(void) {
                 int32_t i = i_1159;
                 syntax__ast__Node* d = list_1160->items[i_1159];
                 RtString name = syntax__ast__declName(NULL, d);
-                if (((sf_2395 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__FunctionDecl)) != NULL) && (!rt_str_eq((sf_2395)->typeName, rt_str("", 0)))) {
-                    name = (rt_any_contains(semantics__linker__words, rt_any_s((sf_2395)->typeName)) ? (sf_2395)->name : rt_str("", 0));
+                if (((sf_2396 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__FunctionDecl)) != NULL) && (!rt_str_eq((sf_2396)->typeName, rt_str("", 0)))) {
+                    name = (rt_any_contains(semantics__linker__words, rt_any_s((sf_2396)->typeName)) ? (sf_2396)->name : rt_str("", 0));
                 }
                 bool cond_1165 = (rt_any_contains((semantics__linker__root)->ownTypes, rt_any_s(name)) || rt_any_contains((semantics__linker__root)->ownValues, rt_any_s(name)));
                 if (cond_1165) {
@@ -14632,7 +14633,7 @@ void semantics__linker__loadLang(void) {
         for (int32_t i_1174 = 0; i_1174 < list_1175->length; i_1174++) {
             int32_t i = i_1174;
             syntax__ast__Node* d = list_1175->items[i_1174];
-            if (((c_2405 = (syntax__ast__CCodeDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__CCodeDecl)) != NULL) && semantics__linker__cCodeUses((c_2405)->code, cSymbols)) {
+            if (((c_2406 = (syntax__ast__CCodeDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__CCodeDecl)) != NULL) && semantics__linker__cCodeUses((c_2406)->code, cSymbols)) {
                 (kept)->items[rt_index((int64_t)(i), (kept)->length, 15000194)] = true;
             }
         }
@@ -14729,22 +14730,22 @@ void semantics__linker__loadLang(void) {
     semantics__linker__lang = m;
 }
 
-void semantics__linker__addWords(RtString text_2414) {
+void semantics__linker__addWords(RtString text_2415) {
     int32_t i = 0;
-    while (i < (text_2414).len) {
+    while (i < (text_2415).len) {
         int32_t start = i;
-        if (((rt_str_byte(text_2414, (int64_t)(i), 15000221) == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (text_2414).len)) && (rt_str_byte(text_2414, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 15000221) == (uint8_t)47)) {
-            while ((i < (text_2414).len) && (!(rt_str_byte(text_2414, (int64_t)(i), 15000222) == (uint8_t)10))) {
+        if (((rt_str_byte(text_2415, (int64_t)(i), 15000221) == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (text_2415).len)) && (rt_str_byte(text_2415, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 15000221) == (uint8_t)47)) {
+            while ((i < (text_2415).len) && (!(rt_str_byte(text_2415, (int64_t)(i), 15000222) == (uint8_t)10))) {
                 i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
             }
         } else {
-            if (std__text__isIdentifierPart(rt_str_byte(text_2414, (int64_t)(i), 15000223)) && (!(std__text__isDigit(rt_str_byte(text_2414, (int64_t)(i), 15000223))))) {
-                while ((i < (text_2414).len) && std__text__isIdentifierPart(rt_str_byte(text_2414, (int64_t)(i), 15000224))) {
+            if (std__text__isIdentifierPart(rt_str_byte(text_2415, (int64_t)(i), 15000223)) && (!(std__text__isDigit(rt_str_byte(text_2415, (int64_t)(i), 15000223))))) {
+                while ((i < (text_2415).len) && std__text__isIdentifierPart(rt_str_byte(text_2415, (int64_t)(i), 15000224))) {
                     i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
                 }
                 RtAny t_1203 = semantics__linker__words;
                 RtAny t_1204 = t_1203;
-                RtString t_1205 = text_2414;
+                RtString t_1205 = text_2415;
                 rt_any_set(t_1204, rt_str_sub(t_1205, (int64_t)(start), (int64_t)(i), 15000225), rt_any_b(true), 15000225);
             } else {
                 i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
@@ -14793,8 +14794,8 @@ bool semantics__linker__cCodeUses(RtString code, RtAny cSymbols) {
 }
 
 void semantics__linker__parse(semantics__linker__Module* m, RtString source) {
-    syntax__ast__FunctionDecl* f_2430 = NULL;
-    syntax__ast__ExternFunctionDecl* e_2433 = NULL;
+    syntax__ast__FunctionDecl* f_2431 = NULL;
+    syntax__ast__ExternFunctionDecl* e_2434 = NULL;
     semantics__linker__addWords(source);
     syntax__ast__Program* p = syntax__parser__parseProgram(NULL, source, ((int32_t)((uint32_t)(((int32_t)((uint32_t)((m)->index_) * (uint32_t)(1000000)))) + (uint32_t)(1))));
     if (!rt_str_eq((p)->error, rt_str("", 0))) {
@@ -14808,7 +14809,7 @@ void semantics__linker__parse(semantics__linker__Module* m, RtString source) {
             List_syntax__ast__Node* list_1213 = (p)->decls;
             for (int32_t i_1212 = 0; i_1212 < list_1213->length; i_1212++) {
                 syntax__ast__Node* d = list_1213->items[i_1212];
-                if (!((((f_2430 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__FunctionDecl)) != NULL) && (f_2430)->isTest))) {
+                if (!((((f_2431 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__FunctionDecl)) != NULL) && (f_2431)->isTest))) {
                     List_syntax__ast__Node_push(kept, d);
                 }
             }
@@ -14820,13 +14821,13 @@ void semantics__linker__parse(semantics__linker__Module* m, RtString source) {
         for (int32_t i_1214 = 0; i_1214 < list_1215->length; i_1214++) {
             int32_t i = i_1214;
             syntax__ast__Node* d = list_1215->items[i_1214];
-            if (((e_2433 = (syntax__ast__ExternFunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ExternFunctionDecl)) != NULL) && semantics__linker__nativeKnown(m, (e_2433)->name)) {
+            if (((e_2434 = (syntax__ast__ExternFunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ExternFunctionDecl)) != NULL) && semantics__linker__nativeKnown(m, (e_2434)->name)) {
                 List_syntax__ast__Node* t_1216 = (p)->decls;
                 RtMem* t_1217 = &rt_default_mem;
                 syntax__ast__FunctionDecl* obj_1218 = (syntax__ast__FunctionDecl*)rt_mem_alloc(t_1217, sizeof(syntax__ast__FunctionDecl), 15000282);
                 List_semantics__types__PatternInfo* list_1219 = List_semantics__types__PatternInfo_new(t_1217, 13000047);
                 List_syntax__ast__Stmt* list_1220 = List_syntax__ast__Stmt_new(t_1217, 13000157);
-                *obj_1218 = (syntax__ast__FunctionDecl){ ._super = { ._h = { (const void*)&vtable_syntax__ast__FunctionDecl, t_1217 }, .line = (e_2433)->_super.line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_1219, .computed = rt_str("", 0) }, .name = (e_2433)->name, .params = (e_2433)->params, .ret = (e_2433)->ret, .throwsType = NULL, .body = list_1220, .isOverride = false, .isOperator = false, .hasBody = false, .returnLives = rt_str("", 0), .isStatic = false, .cBodied = false, .typeName = rt_str("", 0), .exportName = rt_str("", 0), .exportC = rt_str("", 0), .isTest = false, .isProperty = false, .isNative = true, .forwardsToC = false, .waitUntil = NULL };
+                *obj_1218 = (syntax__ast__FunctionDecl){ ._super = { ._h = { (const void*)&vtable_syntax__ast__FunctionDecl, t_1217 }, .line = (e_2434)->_super.line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_1219, .computed = rt_str("", 0) }, .name = (e_2434)->name, .params = (e_2434)->params, .ret = (e_2434)->ret, .throwsType = NULL, .body = list_1220, .isOverride = false, .isOperator = false, .hasBody = false, .returnLives = rt_str("", 0), .isStatic = false, .cBodied = false, .typeName = rt_str("", 0), .exportName = rt_str("", 0), .exportC = rt_str("", 0), .isTest = false, .isProperty = false, .isNative = true, .forwardsToC = false, .waitUntil = NULL };
                 (t_1216)->items[rt_index((int64_t)(i), (t_1216)->length, 15000282)] = ((syntax__ast__Node*)(obj_1218));
             }
         }
@@ -14972,7 +14973,7 @@ RtString semantics__linker__shownName(RtMem* rt_dest, RtString path) {
 }
 
 void semantics__linker__visit(semantics__linker__Module* m) {
-    syntax__ast__ExternTypeDecl* e_2455 = NULL;
+    syntax__ast__ExternTypeDecl* e_2456 = NULL;
     {
         List_syntax__ast__ImportDecl* list_1254 = (((syntax__ast__Program*)rt_unwrap((void*)((m)->program), 15000344)))->imports;
         for (int32_t i_1253 = 0; i_1253 < list_1254->length; i_1253++) {
@@ -15024,20 +15025,20 @@ void semantics__linker__visit(semantics__linker__Module* m) {
             semantics__linker__parse(dep, source.value);
             if ((!((dep)->program == NULL)) && (!(semantics__linker__isStd((imp)->path)))) {
                 RtMem mem_22 = rt_mem_growable();
-                RtString file_2452 = semantics__linker__moduleFile(&mem_22, (imp)->path);
+                RtString file_2453 = semantics__linker__moduleFile(&mem_22, (imp)->path);
                 {
                     List_s* list_1268 = semantics__linker__libraryRoots;
                     for (int32_t i_1267 = 0; i_1267 < list_1268->length; i_1267++) {
                         RtString d = list_1268->items[i_1267];
-                        if (!(String_startsWith(file_2452, d))) {
+                        if (!(String_startsWith(file_2453, d))) {
                             continue;
                         }
                         {
                             List_syntax__ast__Node* list_1270 = (((syntax__ast__Program*)rt_unwrap((void*)((dep)->program), 15000366)))->decls;
                             for (int32_t i_1269 = 0; i_1269 < list_1270->length; i_1269++) {
                                 syntax__ast__Node* decl = list_1270->items[i_1269];
-                                if ((e_2455 = (syntax__ast__ExternTypeDecl*)rt_as_class((void*)(decl), &rtclass_syntax__ast__ExternTypeDecl)) != NULL) {
-                                    (e_2455)->ofPackage = true;
+                                if ((e_2456 = (syntax__ast__ExternTypeDecl*)rt_as_class((void*)(decl), &rtclass_syntax__ast__ExternTypeDecl)) != NULL) {
+                                    (e_2456)->ofPackage = true;
                                 }
                             }
                         }
@@ -16004,10 +16005,10 @@ syntax__ast__Expr* semantics__linker__exprOpt(RtMem* rt_dest, syntax__ast__Expr*
 
 syntax__ast__Expr* semantics__linker__expr(RtMem* rt_dest, syntax__ast__Expr* e) {
     (void)rt_dest;
-    syntax__ast__Member* m_2574 = NULL;
-    syntax__ast__Ident* obj_2577 = NULL;
+    syntax__ast__Member* m_2575 = NULL;
+    syntax__ast__Ident* obj_2578 = NULL;
     if ((e)->_super.rewritten) {
-        return ((((m_2574 = (syntax__ast__Member*)rt_as_class((void*)(e), &rtclass_syntax__ast__Member)) != NULL) && (!((m_2574)->replaced == NULL))) ? ((syntax__ast__Expr*)rt_unwrap((void*)((m_2574)->replaced), 15000755)) : e);
+        return ((((m_2575 = (syntax__ast__Member*)rt_as_class((void*)(e), &rtclass_syntax__ast__Member)) != NULL) && (!((m_2575)->replaced == NULL))) ? ((syntax__ast__Expr*)rt_unwrap((void*)((m_2575)->replaced), 15000755)) : e);
     }
     (e)->_super.rewritten = true;
     syntax__ast__Expr* subject_1407 = e;
@@ -16022,9 +16023,9 @@ syntax__ast__Expr* semantics__linker__expr(RtMem* rt_dest, syntax__ast__Expr* e)
         if (rt_is_a(rt_obj_class(subject_1407), &rtclass_syntax__ast__Member)) {
             syntax__ast__Member* m = (syntax__ast__Member*)subject_1407;
             {
-                if (((obj_2577 = (syntax__ast__Ident*)rt_as_class((void*)((m)->object), &rtclass_syntax__ast__Ident)) != NULL) && semantics__linker__isAlias((obj_2577)->name)) {
+                if (((obj_2578 = (syntax__ast__Ident*)rt_as_class((void*)((m)->object), &rtclass_syntax__ast__Ident)) != NULL) && semantics__linker__isAlias((obj_2578)->name)) {
                     List_semantics__linker__Module* t_1409 = semantics__linker__mods;
-                    Opt_i32 t_1411 = rt_any_as_i32(rt_any_get((semantics__linker__rm)->aliases, (obj_2577)->name));
+                    Opt_i32 t_1411 = rt_any_as_i32(rt_any_get((semantics__linker__rm)->aliases, (obj_2578)->name));
                     int32_t value_1410;
                     if (t_1411.has) value_1410 = t_1411.value;
                     else {
@@ -16254,10 +16255,10 @@ syntax__ast__Expr* semantics__linker__expr(RtMem* rt_dest, syntax__ast__Expr* e)
 }
 
 bool semantics__linker__asksPlatform(syntax__ast__Expr* e) {
-    syntax__ast__Call* c_2603 = NULL;
-    syntax__ast__Member* m_2604 = NULL;
-    syntax__ast__Ident* t_2605 = NULL;
-    return (((((((c_2603 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL) && (((c_2603)->args)->length == 0)) && ((m_2604 = (syntax__ast__Member*)rt_as_class((void*)((c_2603)->callee), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m_2604)->name, rt_str("current", 7))) && ((t_2605 = (syntax__ast__Ident*)rt_as_class((void*)((m_2604)->object), &rtclass_syntax__ast__Ident)) != NULL)) && rt_str_eq((t_2605)->name, rt_str("std__os__Platform", 17)));
+    syntax__ast__Call* c_2604 = NULL;
+    syntax__ast__Member* m_2605 = NULL;
+    syntax__ast__Ident* t_2606 = NULL;
+    return (((((((c_2604 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL) && (((c_2604)->args)->length == 0)) && ((m_2605 = (syntax__ast__Member*)rt_as_class((void*)((c_2604)->callee), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m_2605)->name, rt_str("current", 7))) && ((t_2606 = (syntax__ast__Ident*)rt_as_class((void*)((m_2605)->object), &rtclass_syntax__ast__Ident)) != NULL)) && rt_str_eq((t_2606)->name, rt_str("std__os__Platform", 17)));
 }
 
 bool semantics__linker__chosen(syntax__ast__SwitchExpr* sw) {
@@ -16487,10 +16488,10 @@ RtString semantics__linker__replaceLines(RtMem* rt_dest, RtString msg, RtString 
             value_1464 = 0LL;
         }
         int64_t n = value_1464;
-        int32_t file_2636 = ((int32_t)(rt_div_i64(n, 1000000LL, 15000947)));
+        int32_t file_2637 = ((int32_t)(rt_div_i64(n, 1000000LL, 15000947)));
         RtString name = rt_str("\?", 1);
-        if (file_2636 < (semantics__linker__fileNames)->length) {
-            name = (semantics__linker__fileNames)->items[rt_index((int64_t)(file_2636), (semantics__linker__fileNames)->length, 15000949)];
+        if (file_2637 < (semantics__linker__fileNames)->length) {
+            name = (semantics__linker__fileNames)->items[rt_index((int64_t)(file_2637), (semantics__linker__fileNames)->length, 15000949)];
         }
         RtString t_1466 = msg;
         StringBuilder_add__dispatch((StringBuilder*)sb, rt_str_sub(t_1466, (int64_t)(done), (int64_t)(at.value), 15000950));
@@ -16693,7 +16694,7 @@ List_semantics__types__Symbol* semantics__analyzer__narrowing__nonNull(RtMem* rt
 }
 
 void semantics__analyzer__narrowing__facts(syntax__ast__Expr* c, bool onTrue, List_semantics__types__Symbol* out) {
-    syntax__ast__Ident* oi_2675 = NULL;
+    syntax__ast__Ident* oi_2676 = NULL;
     syntax__ast__Expr* subject_1510 = c;
     {
         if (rt_is_a(rt_obj_class(subject_1510), &rtclass_syntax__ast__Unary)) {
@@ -16732,7 +16733,7 @@ void semantics__analyzer__narrowing__facts(syntax__ast__Expr* c, bool onTrue, Li
                     } else {
                         if ((rt_str_eq((b)->op, rt_str("!=", 2)) || rt_str_eq((b)->op, rt_str("==", 2))) && (rt_str_eq((b)->op, rt_str("!=", 2)) == onTrue)) {
                             syntax__ast__Expr* other = ((rt_as_class((void*)((b)->left), &rtclass_syntax__ast__NullLit) != NULL) ? (b)->right : ((rt_as_class((void*)((b)->right), &rtclass_syntax__ast__NullLit) != NULL) ? (b)->left : NULL));
-                            semantics__types__Symbol* s = (((oi_2675 = (syntax__ast__Ident*)rt_as_class((void*)(other), &rtclass_syntax__ast__Ident)) != NULL) ? (oi_2675)->_super._super.symbol : NULL);
+                            semantics__types__Symbol* s = (((oi_2676 = (syntax__ast__Ident*)rt_as_class((void*)(other), &rtclass_syntax__ast__Ident)) != NULL) ? (oi_2676)->_super._super.symbol : NULL);
                             if ((((!(s == NULL)) && ((((s)->kind).tag == (((semantics__types__SymK){ .tag = semantics__types__SymK_Local })).tag) || (((s)->kind).tag == (((semantics__types__SymK){ .tag = semantics__types__SymK_Param })).tag))) && semantics__types__isOpt((s)->type)) && (!(semantics__analyzer__narrowing__hasSymbol(out, s)))) {
                                 List_semantics__types__Symbol_push(out, s);
                             }
@@ -16753,9 +16754,9 @@ void semantics__analyzer__narrowing__facts(syntax__ast__Expr* c, bool onTrue, Li
     switch_end_1511: ;
 }
 
-bool semantics__analyzer__narrowing__hasSymbol(List_semantics__types__Symbol* list_2677, semantics__types__Symbol* s) {
+bool semantics__analyzer__narrowing__hasSymbol(List_semantics__types__Symbol* list_2678, semantics__types__Symbol* s) {
     {
-        List_semantics__types__Symbol* list_1513 = list_2677;
+        List_semantics__types__Symbol* list_1513 = list_2678;
         for (int32_t i_1512 = 0; i_1512 < list_1513->length; i_1512++) {
             semantics__types__Symbol* x = list_1513->items[i_1512];
             if ((const void*)(x) == (const void*)(s)) {
@@ -16863,8 +16864,8 @@ bool semantics__analyzer__narrowing__leaves(List_syntax__ast__Stmt* body) {
 
 RtAny semantics__analyzer__narrowing__reassignedNames(RtMem* rt_dest, List_syntax__ast__Stmt* body) {
     (void)rt_dest;
-    syntax__ast__AssignStmt* a_2695 = NULL;
-    syntax__ast__Ident* id_2696 = NULL;
+    syntax__ast__AssignStmt* a_2696 = NULL;
+    syntax__ast__Ident* id_2697 = NULL;
     RtTable* table_1526 = rt_table_new(&rt_default_mem, 32000106);
     RtAny out = rt_any_t(table_1526);
     List_syntax__ast__Stmt* list_1527 = List_syntax__ast__Stmt_new(&rt_default_mem, 32000107);
@@ -16874,9 +16875,9 @@ RtAny semantics__analyzer__narrowing__reassignedNames(RtMem* rt_dest, List_synta
         List_syntax__ast__Stmt* list_1529 = ss;
         for (int32_t i_1528 = 0; i_1528 < list_1529->length; i_1528++) {
             syntax__ast__Stmt* s = list_1529->items[i_1528];
-            if (((a_2695 = (syntax__ast__AssignStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__AssignStmt)) != NULL) && ((id_2696 = (syntax__ast__Ident*)rt_as_class((void*)((a_2695)->target), &rtclass_syntax__ast__Ident)) != NULL)) {
+            if (((a_2696 = (syntax__ast__AssignStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__AssignStmt)) != NULL) && ((id_2697 = (syntax__ast__Ident*)rt_as_class((void*)((a_2696)->target), &rtclass_syntax__ast__Ident)) != NULL)) {
                 RtAny t_1530 = out;
-                rt_any_set(t_1530, (id_2696)->name, rt_any_i((int64_t)(1LL), RT_ANY_I64), 32000110);
+                rt_any_set(t_1530, (id_2697)->name, rt_any_i((int64_t)(1LL), RT_ANY_I64), 32000110);
             }
         }
     }
@@ -16884,8 +16885,8 @@ RtAny semantics__analyzer__narrowing__reassignedNames(RtMem* rt_dest, List_synta
 }
 
 bool semantics__analyzer__narrowing__assigns(List_syntax__ast__Stmt* body, RtString name) {
-    syntax__ast__AssignStmt* a_2701 = NULL;
-    syntax__ast__Ident* id_2702 = NULL;
+    syntax__ast__AssignStmt* a_2702 = NULL;
+    syntax__ast__Ident* id_2703 = NULL;
     List_syntax__ast__Stmt* list_1531 = List_syntax__ast__Stmt_new(&rt_default_mem, 32000116);
     List_syntax__ast__Stmt* ss = list_1531;
     syntax__ast__allStmts(body, ss);
@@ -16893,7 +16894,7 @@ bool semantics__analyzer__narrowing__assigns(List_syntax__ast__Stmt* body, RtStr
         List_syntax__ast__Stmt* list_1533 = ss;
         for (int32_t i_1532 = 0; i_1532 < list_1533->length; i_1532++) {
             syntax__ast__Stmt* s = list_1533->items[i_1532];
-            if ((((a_2701 = (syntax__ast__AssignStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__AssignStmt)) != NULL) && ((id_2702 = (syntax__ast__Ident*)rt_as_class((void*)((a_2701)->target), &rtclass_syntax__ast__Ident)) != NULL)) && rt_str_eq((id_2702)->name, name)) {
+            if ((((a_2702 = (syntax__ast__AssignStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__AssignStmt)) != NULL) && ((id_2703 = (syntax__ast__Ident*)rt_as_class((void*)((a_2702)->target), &rtclass_syntax__ast__Ident)) != NULL)) && rt_str_eq((id_2703)->name, name)) {
                 return true;
             }
         }
@@ -17165,9 +17166,9 @@ void semantics__analyzer__narrowing__analyzeTry(syntax__ast__TryStmt* t) {
     }
 }
 
-bool semantics__analyzer__narrowing__hasEnum(List_semantics__types__EnumInfo* list_2738, semantics__types__EnumInfo* e) {
+bool semantics__analyzer__narrowing__hasEnum(List_semantics__types__EnumInfo* list_2739, semantics__types__EnumInfo* e) {
     {
-        List_semantics__types__EnumInfo* list_1579 = list_2738;
+        List_semantics__types__EnumInfo* list_1579 = list_2739;
         for (int32_t i_1578 = 0; i_1578 < list_1579->length; i_1578++) {
             semantics__types__EnumInfo* x = list_1579->items[i_1578];
             if ((const void*)(x) == (const void*)(e)) {
@@ -17363,20 +17364,20 @@ semantics__types__Type* semantics__expressions__literals__calledReference(RtMem*
 }
 
 RtString semantics__expressions__literals__refText(RtMem* rt_dest, syntax__ast__Call* c) {
-    syntax__ast__Member* m_2760 = NULL;
-    syntax__ast__Ident* id_2761 = NULL;
-    if ((m_2760 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) {
+    syntax__ast__Member* m_2761 = NULL;
+    syntax__ast__Ident* id_2762 = NULL;
+    if ((m_2761 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) {
         RtMem tmp_1628 = rt_mem_growable();
         RtSb sb_1627 = rt_sb_mem(rt_dest, 35000081);
-        rt_sb_str(&sb_1627, semantics__expressions__describeExpr(&tmp_1628, (m_2760)->object));
+        rt_sb_str(&sb_1627, semantics__expressions__describeExpr(&tmp_1628, (m_2761)->object));
         rt_sb_add(&sb_1627, "::", 2);
-        rt_sb_str(&sb_1627, (m_2760)->name);
+        rt_sb_str(&sb_1627, (m_2761)->name);
         RtString ret_1629 = rt_sb_finish(&sb_1627);
         rt_mem_free(&tmp_1628);
         return ret_1629;
     }
-    if ((id_2761 = (syntax__ast__Ident*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Ident)) != NULL) {
-        RtString shown = String_replace((id_2761)->name, rt_dest, rt_str("__", 2), rt_str(".", 1));
+    if ((id_2762 = (syntax__ast__Ident*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Ident)) != NULL) {
+        RtString shown = String_replace((id_2762)->name, rt_dest, rt_str("__", 2), rt_str(".", 1));
         Opt_i32 t_1631 = String_lastIndexOf(shown, rt_str(".", 1));
         int32_t value_1630;
         if (t_1631.has) value_1630 = t_1631.value;
@@ -17404,13 +17405,13 @@ RtString semantics__expressions__literals__refText(RtMem* rt_dest, syntax__ast__
 }
 
 bool semantics__expressions__literals__referenceTarget(syntax__ast__Call* c) {
-    syntax__ast__Member* m_2765 = NULL;
-    if (((m_2765 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) && (rt_as_class((void*)((m_2765)->object), &rtclass_syntax__ast__Member) != NULL)) {
+    syntax__ast__Member* m_2766 = NULL;
+    if (((m_2766 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) && (rt_as_class((void*)((m_2766)->object), &rtclass_syntax__ast__Member) != NULL)) {
         RtMem tmp_1638 = rt_mem_growable();
         int32_t t_1636 = (c)->_super._super.line;
         RtSb sb_1637 = rt_sb_mem(&tmp_1638, 35000093);
         rt_sb_add(&sb_1637, "'::' takes a module, a variable or 'self' before it: keep '", 59);
-        rt_sb_str(&sb_1637, semantics__expressions__describeExpr(&tmp_1638, (m_2765)->object));
+        rt_sb_str(&sb_1637, semantics__expressions__describeExpr(&tmp_1638, (m_2766)->object));
         rt_sb_add(&sb_1637, "' in a variable first.", 22);
         semantics__analyzer__error(t_1636, rt_sb_finish(&sb_1637));
         rt_mem_free(&tmp_1638);
@@ -17445,14 +17446,14 @@ semantics__types__Region* semantics__expressions__literals__valuesRegion(RtMem* 
 }
 
 bool semantics__expressions__literals__writtenHere(syntax__ast__Expr* e) {
-    syntax__ast__ArrayLit* a_2772 = NULL;
-    syntax__ast__ObjectLit* o_2774 = NULL;
+    syntax__ast__ArrayLit* a_2773 = NULL;
+    syntax__ast__ObjectLit* o_2775 = NULL;
     if ((rt_as_class((void*)(e), &rtclass_syntax__ast__NullLit) != NULL) || ((!((e)->_super.ty == NULL)) && semantics__analyzer__threads__sendable(((semantics__types__Type*)rt_unwrap((void*)((e)->_super.ty), 35000112))))) {
         return true;
     }
-    if ((a_2772 = (syntax__ast__ArrayLit*)rt_as_class((void*)(e), &rtclass_syntax__ast__ArrayLit)) != NULL) {
+    if ((a_2773 = (syntax__ast__ArrayLit*)rt_as_class((void*)(e), &rtclass_syntax__ast__ArrayLit)) != NULL) {
         {
-            List_syntax__ast__Expr* list_1644 = (a_2772)->elems;
+            List_syntax__ast__Expr* list_1644 = (a_2773)->elems;
             for (int32_t i_1643 = 0; i_1643 < list_1644->length; i_1643++) {
                 syntax__ast__Expr* x = list_1644->items[i_1643];
                 if (!(semantics__expressions__literals__writtenHere(x))) {
@@ -17462,9 +17463,9 @@ bool semantics__expressions__literals__writtenHere(syntax__ast__Expr* e) {
         }
         return true;
     }
-    if ((o_2774 = (syntax__ast__ObjectLit*)rt_as_class((void*)(e), &rtclass_syntax__ast__ObjectLit)) != NULL) {
+    if ((o_2775 = (syntax__ast__ObjectLit*)rt_as_class((void*)(e), &rtclass_syntax__ast__ObjectLit)) != NULL) {
         {
-            List_syntax__ast__FieldInit* list_1646 = (o_2774)->fields;
+            List_syntax__ast__FieldInit* list_1646 = (o_2775)->fields;
             for (int32_t i_1645 = 0; i_1645 < list_1646->length; i_1645++) {
                 syntax__ast__FieldInit* fi = list_1646->items[i_1645];
                 if (!(semantics__expressions__literals__writtenHere((fi)->value))) {
@@ -18367,8 +18368,8 @@ void semantics__analyzer__threads__checkThreadSafeLambda(semantics__types__Lambd
 }
 
 void semantics__analyzer__threads__checkThreadRun(syntax__ast__ObjectLit* o) {
-    syntax__ast__Placed* p_2891 = NULL;
-    syntax__ast__Lambda* l_2893 = NULL;
+    syntax__ast__Placed* p_2892 = NULL;
+    syntax__ast__Lambda* l_2894 = NULL;
     {
         List_syntax__ast__FieldInit* list_1802 = (o)->fields;
         for (int32_t i_1801 = 0; i_1801 < list_1802->length; i_1801++) {
@@ -18376,11 +18377,11 @@ void semantics__analyzer__threads__checkThreadRun(syntax__ast__ObjectLit* o) {
             if (!rt_str_eq((fi)->name, rt_str("run", 3))) {
                 continue;
             }
-            syntax__ast__Expr* v = (((p_2891 = (syntax__ast__Placed*)rt_as_class((void*)((fi)->value), &rtclass_syntax__ast__Placed)) != NULL) ? (p_2891)->expr : (fi)->value);
-            if (((l_2893 = (syntax__ast__Lambda*)rt_as_class((void*)(v), &rtclass_syntax__ast__Lambda)) != NULL) && (!((l_2893)->_super._super.lambda == NULL))) {
+            syntax__ast__Expr* v = (((p_2892 = (syntax__ast__Placed*)rt_as_class((void*)((fi)->value), &rtclass_syntax__ast__Placed)) != NULL) ? (p_2892)->expr : (fi)->value);
+            if (((l_2894 = (syntax__ast__Lambda*)rt_as_class((void*)(v), &rtclass_syntax__ast__Lambda)) != NULL) && (!((l_2894)->_super._super.lambda == NULL))) {
                 RtMem* t_1803 = &rt_default_mem;
                 semantics__analyzer__ThreadRun* obj_1804 = (semantics__analyzer__ThreadRun*)rt_mem_alloc(t_1803, sizeof(semantics__analyzer__ThreadRun), 34000163);
-                *obj_1804 = (semantics__analyzer__ThreadRun){ ._h = { (const void*)&vtable_semantics__analyzer__ThreadRun, t_1803 }, .lambda = ((semantics__types__LambdaInfo*)rt_unwrap((void*)((l_2893)->_super._super.lambda), 34000163)), .line = (o)->_super._super.line, .safe = false };
+                *obj_1804 = (semantics__analyzer__ThreadRun){ ._h = { (const void*)&vtable_semantics__analyzer__ThreadRun, t_1803 }, .lambda = ((semantics__types__LambdaInfo*)rt_unwrap((void*)((l_2894)->_super._super.lambda), 34000163)), .line = (o)->_super._super.line, .safe = false };
                 List_semantics__analyzer__ThreadRun_push(semantics__analyzer__threadRuns, obj_1804);
                 return;
             }
@@ -18629,7 +18630,7 @@ bool semantics__expressions__constants__intFits(int64_t i, bool big, bool huge, 
 }
 
 semantics__expressions__constants__ConstVal* semantics__expressions__constants__evalConst(RtMem* rt_dest, syntax__ast__Expr* e) {
-    syntax__ast__IntLit* n_2932 = NULL;
+    syntax__ast__IntLit* n_2933 = NULL;
     syntax__ast__Expr* subject_1845 = e;
     {
         if (rt_is_a(rt_obj_class(subject_1845), &rtclass_syntax__ast__IntLit)) {
@@ -18723,8 +18724,8 @@ semantics__expressions__constants__ConstVal* semantics__expressions__constants__
         if (rt_is_a(rt_obj_class(subject_1845), &rtclass_syntax__ast__Unary)) {
             syntax__ast__Unary* u = (syntax__ast__Unary*)subject_1845;
             {
-                if (rt_str_eq((u)->op, rt_str("-", 1)) && ((n_2932 = (syntax__ast__IntLit*)rt_as_class((void*)((u)->operand), &rtclass_syntax__ast__IntLit)) != NULL)) {
-                    return semantics__expressions__constants__literalValue(NULL, n_2932, true);
+                if (rt_str_eq((u)->op, rt_str("-", 1)) && ((n_2933 = (syntax__ast__IntLit*)rt_as_class((void*)((u)->operand), &rtclass_syntax__ast__IntLit)) != NULL)) {
+                    return semantics__expressions__constants__literalValue(NULL, n_2933, true);
                 }
                 semantics__expressions__constants__ConstVal* v = semantics__expressions__constants__evalConst(rt_dest, (u)->operand);
                 if (v == NULL) {
@@ -19139,7 +19140,7 @@ void semantics__expressions__operators__convertTo(syntax__ast__Expr* e, semantic
 
 semantics__types__Type* semantics__expressions__operators__checkUnary(RtMem* rt_dest, syntax__ast__Unary* u, semantics__types__Type* expected, semantics__types__Place* place) {
     (void)rt_dest;
-    syntax__ast__IntLit* n_2985 = NULL;
+    syntax__ast__IntLit* n_2986 = NULL;
     if (rt_str_eq((u)->op, rt_str("&", 1))) {
         return semantics__expressions__operators__checkAddress(NULL, u);
     }
@@ -19188,9 +19189,9 @@ semantics__types__Type* semantics__expressions__operators__checkUnary(RtMem* rt_
         rt_mem_free(&tmp_1892);
         return ret_1894;
     }
-    if ((n_2985 = (syntax__ast__IntLit*)rt_as_class((void*)((u)->operand), &rtclass_syntax__ast__IntLit)) != NULL) {
-        semantics__types__Type* t = semantics__expressions__checkIntValue(NULL, semantics__expressions__constants__literalValue(NULL, n_2985, true), (n_2985)->_super._super.line, expected);
-        (n_2985)->_super._super.ty = t;
+    if ((n_2986 = (syntax__ast__IntLit*)rt_as_class((void*)((u)->operand), &rtclass_syntax__ast__IntLit)) != NULL) {
+        semantics__types__Type* t = semantics__expressions__checkIntValue(NULL, semantics__expressions__constants__literalValue(NULL, n_2986, true), (n_2986)->_super._super.line, expected);
+        (n_2986)->_super._super.ty = t;
         return t;
     }
     syntax__ast__Expr* t_1895 = (u)->operand;
@@ -19221,24 +19222,24 @@ semantics__types__Type* semantics__expressions__operators__checkUnary(RtMem* rt_
 
 semantics__types__Type* semantics__expressions__operators__checkAddress(RtMem* rt_dest, syntax__ast__Unary* u) {
     (void)rt_dest;
-    syntax__ast__Ident* id_2990 = NULL;
+    syntax__ast__Ident* id_2991 = NULL;
     if (!(semantics__expressions__operators__externArg)) {
         semantics__expressions__check(NULL, (u)->operand, NULL, semantics__types__P_TEMP);
         return semantics__analyzer__wrong(NULL, (u)->_super._super.line, rt_str("'&' gives a pointer for C: it is only allowed as an argument of a native function, f(&x).", 89));
     }
     semantics__expressions__operators__externArg = false;
-    if (!(((id_2990 = (syntax__ast__Ident*)rt_as_class((void*)((u)->operand), &rtclass_syntax__ast__Ident)) != NULL))) {
+    if (!(((id_2991 = (syntax__ast__Ident*)rt_as_class((void*)((u)->operand), &rtclass_syntax__ast__Ident)) != NULL))) {
         semantics__expressions__check(NULL, (u)->operand, NULL, semantics__types__P_TEMP);
         return semantics__analyzer__wrong(NULL, (u)->_super._super.line, rt_str("'&' takes a variable: &x (to give C a field, copy it to a variable first).", 74));
     }
-    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_2990)->name);
+    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_2991)->name);
     if (s == NULL) {
         RtMem tmp_1901 = rt_mem_growable();
         RtSb sb_1900 = rt_sb_mem(&tmp_1901, 36000182);
         rt_sb_add(&sb_1900, "Use of undeclared variable '", 28);
-        rt_sb_str(&sb_1900, (id_2990)->name);
+        rt_sb_str(&sb_1900, (id_2991)->name);
         rt_sb_add(&sb_1900, "'.", 2);
-        semantics__types__Type* ret_1902 = semantics__analyzer__wrong(NULL, (id_2990)->_super._super.line, rt_sb_finish(&sb_1900));
+        semantics__types__Type* ret_1902 = semantics__analyzer__wrong(NULL, (id_2991)->_super._super.line, rt_sb_finish(&sb_1900));
         rt_mem_free(&tmp_1901);
         return ret_1902;
     }
@@ -19250,7 +19251,7 @@ semantics__types__Type* semantics__expressions__operators__checkAddress(RtMem* r
         RtMem tmp_1904 = rt_mem_growable();
         RtSb sb_1903 = rt_sb_mem(&tmp_1904, 36000185);
         rt_sb_add(&sb_1903, "'&' takes a variable, and '", 27);
-        rt_sb_str(&sb_1903, (id_2990)->name);
+        rt_sb_str(&sb_1903, (id_2991)->name);
         rt_sb_add(&sb_1903, "' is not one.", 13);
         semantics__types__Type* ret_1905 = semantics__analyzer__wrong(NULL, (u)->_super._super.line, rt_sb_finish(&sb_1903));
         rt_mem_free(&tmp_1904);
@@ -19260,7 +19261,7 @@ semantics__types__Type* semantics__expressions__operators__checkAddress(RtMem* r
         RtMem tmp_1907 = rt_mem_growable();
         RtSb sb_1906 = rt_sb_mem(&tmp_1907, 36000186);
         rt_sb_add(&sb_1906, "'", 1);
-        rt_sb_str(&sb_1906, (id_2990)->name);
+        rt_sb_str(&sb_1906, (id_2991)->name);
         rt_sb_add(&sb_1906, "' is a C global: C already has its address.", 43);
         semantics__types__Type* ret_1908 = semantics__analyzer__wrong(NULL, (u)->_super._super.line, rt_sb_finish(&sb_1906));
         rt_mem_free(&tmp_1907);
@@ -19270,7 +19271,7 @@ semantics__types__Type* semantics__expressions__operators__checkAddress(RtMem* r
         RtMem tmp_1910 = rt_mem_growable();
         RtSb sb_1909 = rt_sb_mem(&tmp_1910, 36000187);
         rt_sb_add(&sb_1909, "'", 1);
-        rt_sb_str(&sb_1909, (id_2990)->name);
+        rt_sb_str(&sb_1909, (id_2991)->name);
         rt_sb_add(&sb_1909, "' is a memory: a C function receives it as a memory parameter (byte[*]), not with '&'.", 86);
         semantics__types__Type* ret_1911 = semantics__analyzer__wrong(NULL, (u)->_super._super.line, rt_sb_finish(&sb_1909));
         rt_mem_free(&tmp_1910);
@@ -19280,9 +19281,9 @@ semantics__types__Type* semantics__expressions__operators__checkAddress(RtMem* r
         RtMem tmp_1913 = rt_mem_growable();
         RtSb sb_1912 = rt_sb_mem(&tmp_1913, 36000188);
         rt_sb_add(&sb_1912, "'", 1);
-        rt_sb_str(&sb_1912, (id_2990)->name);
+        rt_sb_str(&sb_1912, (id_2991)->name);
         rt_sb_add(&sb_1912, "' cannot change, and C could write through &", 44);
-        rt_sb_str(&sb_1912, (id_2990)->name);
+        rt_sb_str(&sb_1912, (id_2991)->name);
         rt_sb_add(&sb_1912, ".", 1);
         semantics__types__Type* ret_1914 = semantics__analyzer__wrong(NULL, (u)->_super._super.line, rt_sb_finish(&sb_1912));
         rt_mem_free(&tmp_1913);
@@ -19298,7 +19299,7 @@ semantics__types__Type* semantics__expressions__operators__checkAddress(RtMem* r
         rt_mem_free(&tmp_1916);
         return ret_1917;
     }
-    semantics__analyzer__noteCapture(s, (id_2990)->_super._super.line);
+    semantics__analyzer__noteCapture(s, (id_2991)->_super._super.line);
     if (((s)->kind).tag == (((semantics__types__SymK){ .tag = semantics__types__SymK_Global })).tag) {
         (s)->mutatedGlobal = true;
     } else {
@@ -19320,8 +19321,8 @@ semantics__types__MethodInfo* semantics__expressions__operators__operatorOf(RtMe
 }
 
 bool semantics__expressions__operators__isIntLiteral(syntax__ast__Expr* e) {
-    syntax__ast__Unary* u_2997 = NULL;
-    return ((rt_as_class((void*)(e), &rtclass_syntax__ast__IntLit) != NULL) || ((((u_2997 = (syntax__ast__Unary*)rt_as_class((void*)(e), &rtclass_syntax__ast__Unary)) != NULL) && rt_str_eq((u_2997)->op, rt_str("-", 1))) && (rt_as_class((void*)((u_2997)->operand), &rtclass_syntax__ast__IntLit) != NULL)));
+    syntax__ast__Unary* u_2998 = NULL;
+    return ((rt_as_class((void*)(e), &rtclass_syntax__ast__IntLit) != NULL) || ((((u_2998 = (syntax__ast__Unary*)rt_as_class((void*)(e), &rtclass_syntax__ast__Unary)) != NULL) && rt_str_eq((u_2998)->op, rt_str("-", 1))) && (rt_as_class((void*)((u_2998)->operand), &rtclass_syntax__ast__IntLit) != NULL)));
 }
 
 semantics__types__Type* semantics__expressions__operators__checkBinary(RtMem* rt_dest, syntax__ast__Binary* b, semantics__types__Type* expected, semantics__types__Place* place) {
@@ -19786,7 +19787,7 @@ semantics__types__Type* semantics__expressions__calls__checkCall(RtMem* rt_dest,
 
 semantics__types__Type* semantics__expressions__calls__checkMemoryCall(RtMem* rt_dest, syntax__ast__Call* c, bool compact) {
     (void)rt_dest;
-    syntax__ast__Ident* id_3061 = NULL;
+    syntax__ast__Ident* id_3062 = NULL;
     RtString what = (compact ? rt_str("Memory.compact(m)", 17) : rt_str("Memory.limit(m, bytes)", 22));
     int32_t t_1979 = ((c)->args)->length;
     if (!(t_1979 == (compact ? 1 : 2))) {
@@ -19807,7 +19808,7 @@ semantics__types__Type* semantics__expressions__calls__checkMemoryCall(RtMem* rt
     syntax__ast__Expr* arg = ((c)->args)->items[rt_index((int64_t)(0), ((c)->args)->length, 33000098)];
     semantics__types__Symbol* ms = semantics__expressions__memoryNamed(NULL, arg);
     if (ms == NULL) {
-        if (((id_3061 = (syntax__ast__Ident*)rt_as_class((void*)(arg), &rtclass_syntax__ast__Ident)) != NULL) && rt_str_eq((id_3061)->name, rt_str("default", 7))) {
+        if (((id_3062 = (syntax__ast__Ident*)rt_as_class((void*)(arg), &rtclass_syntax__ast__Ident)) != NULL) && rt_str_eq((id_3062)->name, rt_str("default", 7))) {
             RtMem tmp_1985 = rt_mem_growable();
             RtSb sb_1984 = rt_sb_mem(&tmp_1985, 33000101);
             rt_sb_str(&sb_1984, what);
@@ -20015,11 +20016,11 @@ semantics__types__Type* semantics__expressions__calls__checkFunctionCall(RtMem* 
 }
 
 bool semantics__expressions__calls__namesCFunction(syntax__ast__Expr* a) {
-    syntax__ast__Ident* id_3082 = NULL;
-    if (!(((id_3082 = (syntax__ast__Ident*)rt_as_class((void*)(a), &rtclass_syntax__ast__Ident)) != NULL))) {
+    syntax__ast__Ident* id_3083 = NULL;
+    if (!(((id_3083 = (syntax__ast__Ident*)rt_as_class((void*)(a), &rtclass_syntax__ast__Ident)) != NULL))) {
         return false;
     }
-    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3082)->name);
+    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3083)->name);
     return ((((!(s == NULL)) && (((s)->kind).tag == (((semantics__types__SymK){ .tag = semantics__types__SymK_Function })).tag)) && (!((s)->func == NULL))) && ((((semantics__types__FunctionInfo*)rt_unwrap((void*)((s)->func), 33000192)))->isExtern || (!rt_str_eq((((semantics__types__FunctionInfo*)rt_unwrap((void*)((s)->func), 33000192)))->exportName, rt_str("", 0)))));
 }
 
@@ -20649,9 +20650,9 @@ semantics__types__Region* semantics__expressions__calls__checkArgsLives(RtMem* r
 
 semantics__types__Region* semantics__expressions__calls__checkArgs(RtMem* rt_dest, syntax__ast__Call* c, List_semantics__types__Type* params, bool varargs, List_b* memParams, RtString name, List_semantics__types__Place* places, List_b* flows) {
     (void)rt_dest;
-    syntax__ast__Unary* au_3192 = NULL;
-    syntax__ast__Cast* ac_3193 = NULL;
-    syntax__ast__Unary* acu_3194 = NULL;
+    syntax__ast__Unary* au_3193 = NULL;
+    syntax__ast__Cast* ac_3194 = NULL;
+    syntax__ast__Unary* acu_3195 = NULL;
     List_syntax__ast__Expr* args = (c)->args;
     if (varargs ? ((args)->length < (params)->length) : (!((args)->length == (params)->length))) {
         RtMem tmp_2171 = rt_mem_growable();
@@ -20702,7 +20703,7 @@ semantics__types__Region* semantics__expressions__calls__checkArgs(RtMem* rt_des
                 continue;
             }
             semantics__types__Type* p = (params)->items[rt_index((int64_t)(i), (params)->length, 33000478)];
-            semantics__expressions__operators__externArg = (semantics__expressions__calls__toC && ((((au_3192 = (syntax__ast__Unary*)rt_as_class((void*)(a), &rtclass_syntax__ast__Unary)) != NULL) && rt_str_eq((au_3192)->op, rt_str("&", 1))) || ((((ac_3193 = (syntax__ast__Cast*)rt_as_class((void*)(a), &rtclass_syntax__ast__Cast)) != NULL) && ((acu_3194 = (syntax__ast__Unary*)rt_as_class((void*)((ac_3193)->expr), &rtclass_syntax__ast__Unary)) != NULL)) && rt_str_eq((acu_3194)->op, rt_str("&", 1)))));
+            semantics__expressions__operators__externArg = (semantics__expressions__calls__toC && ((((au_3193 = (syntax__ast__Unary*)rt_as_class((void*)(a), &rtclass_syntax__ast__Unary)) != NULL) && rt_str_eq((au_3193)->op, rt_str("&", 1))) || ((((ac_3194 = (syntax__ast__Cast*)rt_as_class((void*)(a), &rtclass_syntax__ast__Cast)) != NULL) && ((acu_3195 = (syntax__ast__Unary*)rt_as_class((void*)((ac_3194)->expr), &rtclass_syntax__ast__Unary)) != NULL)) && rt_str_eq((acu_3195)->op, rt_str("&", 1)))));
             if (((semantics__expressions__calls__toC && semantics__types__isPtr(p)) && (!(semantics__expressions__operators__externArg))) && (!((rt_as_class((void*)(a), &rtclass_syntax__ast__NullLit) != NULL)))) {
                 semantics__types__Type* at = semantics__expressions__check(NULL, a, NULL, semantics__types__P_TEMP);
                 bool cond_2177 = (((at)->kind).tag == (((semantics__types__TyK){ .tag = semantics__types__TyK_Array })).tag);
@@ -21340,7 +21341,7 @@ semantics__types__Type* semantics__expressions__calls__checkStringMethod(RtMem* 
 
 semantics__types__Type* semantics__expressions__calls__checkAnyMethod(RtMem* rt_dest, syntax__ast__Call* c, syntax__ast__Member* m) {
     (void)rt_dest;
-    syntax__ast__Lambda* l_3268 = NULL;
+    syntax__ast__Lambda* l_3269 = NULL;
     int32_t n = ((c)->args)->length;
     if (rt_str_eq((m)->name, rt_str("length", 6))) {
         if (!(n == 0)) {
@@ -21429,7 +21430,7 @@ semantics__types__Type* semantics__expressions__calls__checkAnyMethod(RtMem* rt_
                     syntax__ast__Expr* a = ((c)->args)->items[rt_index((int64_t)(0), ((c)->args)->length, 33000784)];
                     List_semantics__types__Type* list_2279 = List_semantics__types__Type_new(&rt_default_mem, 33000785);
                     List_semantics__types__Type* ps = list_2279;
-                    if (((l_3268 = (syntax__ast__Lambda*)rt_as_class((void*)(a), &rtclass_syntax__ast__Lambda)) != NULL) && (((l_3268)->params)->length == 2)) {
+                    if (((l_3269 = (syntax__ast__Lambda*)rt_as_class((void*)(a), &rtclass_syntax__ast__Lambda)) != NULL) && (((l_3269)->params)->length == 2)) {
                         List_semantics__types__Type_push(ps, semantics__types__T_STRING);
                     }
                     List_semantics__types__Type_push(ps, semantics__types__T_ANY);
@@ -21509,7 +21510,7 @@ bool semantics__expressions__calls__throughRef(syntax__ast__Expr* target) {
 
 semantics__types__Type* semantics__expressions__switches__analyzeSwitch(RtMem* rt_dest, syntax__ast__SwitchExpr* sw, bool isExpr, semantics__types__Type* expected, semantics__types__Place* place) {
     (void)rt_dest;
-    syntax__ast__BoolLit* b_3299 = NULL;
+    syntax__ast__BoolLit* b_3300 = NULL;
     semantics__types__Type* st = semantics__expressions__check(NULL, (sw)->subject, NULL, semantics__types__P_TEMP);
     RtMem* t_2286 = &rt_default_mem;
     semantics__types__SwitchInfo* obj_2287 = (semantics__types__SwitchInfo*)rt_mem_alloc(t_2286, sizeof(semantics__types__SwitchInfo), 31000022);
@@ -21617,8 +21618,8 @@ semantics__types__Type* semantics__expressions__switches__analyzeSwitch(RtMem* r
                         {
                             if (subject_2301.tag == semantics__types__PatK_Constant) {
                                 {
-                                    if ((b_3299 = (syntax__ast__BoolLit*)rt_as_class((void*)((pi)->constant), &rtclass_syntax__ast__BoolLit)) != NULL) {
-                                        if ((b_3299)->value) {
+                                    if ((b_3300 = (syntax__ast__BoolLit*)rt_as_class((void*)((pi)->constant), &rtclass_syntax__ast__BoolLit)) != NULL) {
+                                        if ((b_3300)->value) {
                                             coversTrue = true;
                                         } else {
                                             coversFalse = true;
@@ -22538,7 +22539,7 @@ void semantics__analyzer__declarations__onlyOn(syntax__ast__ClassDecl* c, RtStri
 }
 
 void semantics__analyzer__declarations__collect(syntax__ast__Program* program) {
-    syntax__ast__FunctionDecl* f_3448 = NULL;
+    syntax__ast__FunctionDecl* f_3449 = NULL;
     semantics__analyzer__declarations__assignPlatforms(program);
     {
         List_syntax__ast__Node* list_2435 = (program)->decls;
@@ -22883,8 +22884,8 @@ void semantics__analyzer__declarations__collect(syntax__ast__Program* program) {
         List_syntax__ast__Node* list_2513 = (program)->decls;
         for (int32_t i_2512 = 0; i_2512 < list_2513->length; i_2512++) {
             syntax__ast__Node* d = list_2513->items[i_2512];
-            if (((f_3448 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__FunctionDecl)) != NULL) && (!rt_str_eq((f_3448)->typeName, rt_str("", 0)))) {
-                semantics__analyzer__declarations__collectStatic(f_3448);
+            if (((f_3449 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__FunctionDecl)) != NULL) && (!rt_str_eq((f_3449)->typeName, rt_str("", 0)))) {
+                semantics__analyzer__declarations__collectStatic(f_3449);
             }
         }
     }
@@ -23171,18 +23172,19 @@ void semantics__analyzer__declarations__checkExport(semantics__types__FunctionIn
             }
         }
     }
-    RtString what = (semantics__types__libraryRules ? rt_str("numbers, bool, String, String\?, the library's classes, and functions of those", 77) : rt_str("numbers, bool, String, String\?, native types and C structs", 58));
+    RtString what = (semantics__types__libraryRules ? rt_str("numbers, bool, String, String\? and the library's classes", 56) : rt_str("numbers, bool, String, String\?, native types and C structs", 58));
+    RtString functions = (semantics__types__libraryRules ? rt_str(", and functions of the program (of numbers, bool, String and the library's classes)", 83) : rt_str("", 0));
     {
         List_syntax__ast__Param* list_2570 = (fd)->params;
         for (int32_t i_2569 = 0; i_2569 < list_2570->length; i_2569++) {
             int32_t i = i_2569;
             syntax__ast__Param* p = list_2570->items[i_2569];
-            List_semantics__types__Type* t_2571 = (((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000392)))->params;
-            semantics__types__Type* pt = t_2571->items[rt_index((int64_t)(i), t_2571->length, 38000392)];
+            List_semantics__types__Type* t_2571 = (((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000393)))->params;
+            semantics__types__Type* pt = t_2571->items[rt_index((int64_t)(i), t_2571->length, 38000393)];
             bool kept = ((rt_str_eq((p)->lives, rt_str("default", 7)) && semantics__types__libraryRules) && semantics__analyzer__declarations__libraryCallback(pt));
             if ((!rt_str_eq((p)->lives, rt_str("", 0))) && (!(kept))) {
                 RtMem tmp_2573 = rt_mem_growable();
-                RtSb sb_2572 = rt_sb_mem(&tmp_2573, 38000395);
+                RtSb sb_2572 = rt_sb_mem(&tmp_2573, 38000396);
                 rt_sb_add(&sb_2572, "'in ", 4);
                 rt_sb_str(&sb_2572, (p)->lives);
                 rt_sb_add(&sb_2572, "' is not allowed on the parameters of an export function: C gives plain values.", 79);
@@ -23194,7 +23196,7 @@ void semantics__analyzer__declarations__checkExport(semantics__types__FunctionIn
                 int32_t t_2574 = (p)->_super.line;
                 RtString value_2578;
                 if (semantics__types__isClass(pt)) {
-                    RtSb sb_2575 = rt_sb_mem(&tmp_2576, 38000397);
+                    RtSb sb_2575 = rt_sb_mem(&tmp_2576, 38000398);
                     rt_sb_add(&sb_2575, "Parameter '", 11);
                     rt_sb_str(&sb_2575, (p)->name);
                     rt_sb_add(&sb_2575, "' of export function '", 22);
@@ -23202,13 +23204,14 @@ void semantics__analyzer__declarations__checkExport(semantics__types__FunctionIn
                     rt_sb_add(&sb_2575, "': a class goes to C only from a library ([project] kind = \"library\"), where C keeps it as a handle.", 100);
                     value_2578 = rt_sb_finish(&sb_2575);
                 } else {
-                    RtSb sb_2577 = rt_sb_mem(&tmp_2576, 38000398);
+                    RtSb sb_2577 = rt_sb_mem(&tmp_2576, 38000399);
                     rt_sb_add(&sb_2577, "Parameter '", 11);
                     rt_sb_str(&sb_2577, (p)->name);
                     rt_sb_add(&sb_2577, "' of export function '", 22);
                     rt_sb_str(&sb_2577, n);
                     rt_sb_add(&sb_2577, "': C can only pass ", 19);
                     rt_sb_str(&sb_2577, what);
+                    rt_sb_str(&sb_2577, functions);
                     rt_sb_add(&sb_2577, ".", 1);
                     value_2578 = rt_sb_finish(&sb_2577);
                 }
@@ -23217,19 +23220,19 @@ void semantics__analyzer__declarations__checkExport(semantics__types__FunctionIn
             }
         }
     }
-    semantics__types__Type* ret = ((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000401)))->elem), 38000401));
-    if (((!(semantics__types__isError(ret))) && (!((const void*)(ret) == (const void*)(semantics__types__T_VOID)))) && (!(semantics__analyzer__declarations__exportable(ret)))) {
+    semantics__types__Type* ret = ((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000402)))->elem), 38000402));
+    if (((!(semantics__types__isError(ret))) && (!((const void*)(ret) == (const void*)(semantics__types__T_VOID)))) && ((!(semantics__analyzer__declarations__exportable(ret))) || (((ret)->kind).tag == (((semantics__types__TyK){ .tag = semantics__types__TyK_Func })).tag))) {
         RtMem tmp_2581 = rt_mem_growable();
         int32_t t_2579 = (f)->line;
         RtString value_2583;
         if (semantics__types__isClass(ret)) {
-            RtSb sb_2580 = rt_sb_mem(&tmp_2581, 38000403);
+            RtSb sb_2580 = rt_sb_mem(&tmp_2581, 38000404);
             rt_sb_add(&sb_2580, "Export function '", 17);
             rt_sb_str(&sb_2580, n);
             rt_sb_add(&sb_2580, "' returns a class: only a library ([project] kind = \"library\") gives C its objects, as handles.", 95);
             value_2583 = rt_sb_finish(&sb_2580);
         } else {
-            RtSb sb_2582 = rt_sb_mem(&tmp_2581, 38000404);
+            RtSb sb_2582 = rt_sb_mem(&tmp_2581, 38000405);
             rt_sb_add(&sb_2582, "Export function '", 17);
             rt_sb_str(&sb_2582, n);
             rt_sb_add(&sb_2582, "' can only return void or ", 26);
@@ -23242,7 +23245,7 @@ void semantics__analyzer__declarations__checkExport(semantics__types__FunctionIn
     }
     if (!rt_str_eq((fd)->returnLives, rt_str("", 0))) {
         RtMem tmp_2585 = rt_mem_growable();
-        RtSb sb_2584 = rt_sb_mem(&tmp_2585, 38000406);
+        RtSb sb_2584 = rt_sb_mem(&tmp_2585, 38000407);
         rt_sb_add(&sb_2584, "Export function '", 17);
         rt_sb_str(&sb_2584, n);
         rt_sb_add(&sb_2584, "' cannot say where its result lives: C receives its own copy (a text) or a handle.", 82);
@@ -23251,7 +23254,7 @@ void semantics__analyzer__declarations__checkExport(semantics__types__FunctionIn
     }
     if (!((f)->throwsType == NULL)) {
         RtMem tmp_2587 = rt_mem_growable();
-        RtSb sb_2586 = rt_sb_mem(&tmp_2587, 38000407);
+        RtSb sb_2586 = rt_sb_mem(&tmp_2587, 38000408);
         rt_sb_add(&sb_2586, "Export function '", 17);
         rt_sb_str(&sb_2586, n);
         rt_sb_add(&sb_2586, "' cannot throw: an error cannot cross into C. Catch it inside.", 62);
@@ -23284,7 +23287,7 @@ bool semantics__analyzer__declarations__functionNameTaken(RtString name, int32_t
     semantics__types__FunctionInfo* f = semantics__types__functionOf(NULL, name);
     if (!(f == NULL)) {
         RtMem tmp_2591 = rt_mem_growable();
-        RtSb sb_2590 = rt_sb_mem(&tmp_2591, 38000424);
+        RtSb sb_2590 = rt_sb_mem(&tmp_2591, 38000425);
         rt_sb_add(&sb_2590, "Function '", 10);
         rt_sb_str(&sb_2590, name);
         rt_sb_add(&sb_2590, "' is already defined (line ", 27);
@@ -23296,7 +23299,7 @@ bool semantics__analyzer__declarations__functionNameTaken(RtString name, int32_t
     }
     if (rt_str_eq(name, rt_str("print", 5)) || rt_str_eq(name, rt_str("println", 7))) {
         RtMem tmp_2593 = rt_mem_growable();
-        RtSb sb_2592 = rt_sb_mem(&tmp_2593, 38000428);
+        RtSb sb_2592 = rt_sb_mem(&tmp_2593, 38000429);
         rt_sb_add(&sb_2592, "'", 1);
         rt_sb_str(&sb_2592, name);
         rt_sb_add(&sb_2592, "' is a built-in function.", 25);
@@ -23308,38 +23311,38 @@ bool semantics__analyzer__declarations__functionNameTaken(RtString name, int32_t
 }
 
 void semantics__analyzer__declarations__constants(syntax__ast__Program* program) {
-    syntax__ast__ConstDecl* c_3489 = NULL;
+    syntax__ast__ConstDecl* c_3491 = NULL;
     {
         List_syntax__ast__Node* list_2595 = (program)->decls;
         for (int32_t i_2594 = 0; i_2594 < list_2595->length; i_2594++) {
             syntax__ast__Node* d = list_2595->items[i_2594];
-            if (!(((c_3489 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL))) {
+            if (!(((c_3491 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL))) {
                 continue;
             }
-            semantics__types__Type* t = semantics__expressions__resolveType(NULL, (c_3489)->type);
-            semantics__expressions__constants__ConstVal* v = semantics__expressions__constants__evalConst(&rt_default_mem, (c_3489)->value);
+            semantics__types__Type* t = semantics__expressions__resolveType(NULL, (c_3491)->type);
+            semantics__expressions__constants__ConstVal* v = semantics__expressions__constants__evalConst(&rt_default_mem, (c_3491)->value);
             if ((v == NULL) || semantics__types__isError(t)) {
                 continue;
             }
             bool ok = ((((semantics__types__isInteger(t) && (((v)->kind).tag == (((semantics__types__ConstK){ .tag = semantics__types__ConstK_Int })).tag)) || (semantics__types__isFloat(t) && ((((v)->kind).tag == (((semantics__types__ConstK){ .tag = semantics__types__ConstK_Float })).tag) || (((v)->kind).tag == (((semantics__types__ConstK){ .tag = semantics__types__ConstK_Int })).tag)))) || (((const void*)(t) == (const void*)(semantics__types__T_BOOL)) && (((v)->kind).tag == (((semantics__types__ConstK){ .tag = semantics__types__ConstK_Bool })).tag))) || (((const void*)(t) == (const void*)(semantics__types__T_STRING)) && (((v)->kind).tag == (((semantics__types__ConstK){ .tag = semantics__types__ConstK_Str })).tag)));
             if (!(ok)) {
                 RtMem tmp_2597 = rt_mem_growable();
-                RtSb sb_2596 = rt_sb_mem(&tmp_2597, 38000445);
+                RtSb sb_2596 = rt_sb_mem(&tmp_2597, 38000446);
                 rt_sb_add(&sb_2596, "Constant '", 10);
-                rt_sb_str(&sb_2596, (c_3489)->name);
+                rt_sb_str(&sb_2596, (c_3491)->name);
                 rt_sb_add(&sb_2596, "' of type ", 10);
                 rt_sb_str(&sb_2596, (t)->text);
                 rt_sb_add(&sb_2596, " cannot hold that value; constants are numbers, bool or String literals.", 72);
-                semantics__analyzer__error((c_3489)->_super.line, rt_sb_finish(&sb_2596));
+                semantics__analyzer__error((c_3491)->_super.line, rt_sb_finish(&sb_2596));
                 rt_mem_free(&tmp_2597);
                 continue;
             }
             if (((((v)->kind).tag == (((semantics__types__ConstK){ .tag = semantics__types__ConstK_Int })).tag) && semantics__types__isInteger(t)) && (!(semantics__expressions__constants__intFits((v)->i, (v)->big, (v)->huge, t)))) {
                 RtMem tmp_2600 = rt_mem_growable();
-                int32_t t_2598 = (c_3489)->_super.line;
-                RtSb sb_2599 = rt_sb_mem(&tmp_2600, 38000449);
+                int32_t t_2598 = (c_3491)->_super.line;
+                RtSb sb_2599 = rt_sb_mem(&tmp_2600, 38000450);
                 rt_sb_add(&sb_2599, "Constant '", 10);
-                rt_sb_str(&sb_2599, (c_3489)->name);
+                rt_sb_str(&sb_2599, (c_3491)->name);
                 rt_sb_add(&sb_2599, "' = ", 4);
                 rt_sb_str(&sb_2599, semantics__analyzer__declarations__constIntText(&tmp_2600, v));
                 rt_sb_add(&sb_2599, " does not fit in ", 17);
@@ -23353,7 +23356,7 @@ void semantics__analyzer__declarations__constants(syntax__ast__Program* program)
                 rt_mem_free(&tmp_2600);
                 continue;
             }
-            semantics__types__Symbol* s = semantics__analyzer__declare(NULL, (c_3489)->name, ((semantics__types__SymK){ .tag = semantics__types__SymK_Const }), t, (c_3489)->_super.line);
+            semantics__types__Symbol* s = semantics__analyzer__declare(NULL, (c_3491)->name, ((semantics__types__SymK){ .tag = semantics__types__SymK_Const }), t, (c_3491)->_super.line);
             if ((((v)->kind).tag == (((semantics__types__ConstK){ .tag = semantics__types__ConstK_Int })).tag) && semantics__types__isFloat(t)) {
                 (s)->ck = ((semantics__types__ConstK){ .tag = semantics__types__ConstK_Float });
                 (s)->cf = ((v)->big ? ((double)(((uint64_t)((v)->i)))) : ((double)((v)->i)));
@@ -23376,11 +23379,11 @@ RtString semantics__analyzer__declarations__constIntText(RtMem* rt_dest, semanti
     }
     RtString value_2603;
     if ((v)->big) {
-        RtSb sb_2601 = rt_sb_mem(rt_dest, 38000470);
+        RtSb sb_2601 = rt_sb_mem(rt_dest, 38000471);
         rt_sb_u64(&sb_2601, (uint64_t)(((uint64_t)((v)->i))));
         value_2603 = rt_sb_finish(&sb_2601);
     } else {
-        RtSb sb_2602 = rt_sb_mem(rt_dest, 38000470);
+        RtSb sb_2602 = rt_sb_mem(rt_dest, 38000471);
         rt_sb_i64(&sb_2602, (int64_t)((v)->i));
         value_2603 = rt_sb_finish(&sb_2602);
     }
@@ -23388,7 +23391,7 @@ RtString semantics__analyzer__declarations__constIntText(RtMem* rt_dest, semanti
 }
 
 void semantics__analyzer__declarations__signatures(syntax__ast__Program* program) {
-    syntax__ast__ExternValueDecl* v_3543 = NULL;
+    syntax__ast__ExternValueDecl* v_3545 = NULL;
     {
         List_semantics__types__ExternTypeInfo* list_2605 = semantics__types__externInfos;
         for (int32_t i_2604 = 0; i_2604 < list_2605->length; i_2604++) {
@@ -23409,7 +23412,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                         if ((info == NULL) || (!((const void*)((info)->decl) == (const void*)(sd)))) {
                             continue;
                         }
-                        RtTable* table_2610 = rt_table_new(&rt_default_mem, 38000482);
+                        RtTable* table_2610 = rt_table_new(&rt_default_mem, 38000483);
                         RtAny names = rt_any_t(table_2610);
                         {
                             List_syntax__ast__FieldDecl* list_2612 = (sd)->fields;
@@ -23417,7 +23420,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                 syntax__ast__FieldDecl* f = list_2612->items[i_2611];
                                 if (rt_any_contains(names, rt_any_s((f)->name))) {
                                     RtMem tmp_2614 = rt_mem_growable();
-                                    RtSb sb_2613 = rt_sb_mem(&tmp_2614, 38000485);
+                                    RtSb sb_2613 = rt_sb_mem(&tmp_2614, 38000486);
                                     rt_sb_add(&sb_2613, "Field '", 7);
                                     rt_sb_str(&sb_2613, (f)->name);
                                     rt_sb_add(&sb_2613, "' is declared twice in struct '", 31);
@@ -23428,9 +23431,9 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                     continue;
                                 }
                                 RtAny t_2615 = names;
-                                rt_any_set(t_2615, (f)->name, rt_any_b(true), 38000488);
+                                rt_any_set(t_2615, (f)->name, rt_any_b(true), 38000489);
                                 RtMem tmp_2617 = rt_mem_growable();
-                                RtSb sb_2616 = rt_sb_mem(&tmp_2617, 38000489);
+                                RtSb sb_2616 = rt_sb_mem(&tmp_2617, 38000490);
                                 rt_sb_add(&sb_2616, "Field '", 7);
                                 rt_sb_str(&sb_2616, (f)->name);
                                 rt_sb_add(&sb_2616, "'", 1);
@@ -23438,7 +23441,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                 rt_mem_free(&tmp_2617);
                                 if (((!rt_str_eq((sd)->cName, rt_str("", 0))) && (!(semantics__types__isError(ft)))) && (!(semantics__types__isCValue(ft)))) {
                                     RtMem tmp_2619 = rt_mem_growable();
-                                    RtSb sb_2618 = rt_sb_mem(&tmp_2619, 38000491);
+                                    RtSb sb_2618 = rt_sb_mem(&tmp_2619, 38000492);
                                     rt_sb_add(&sb_2618, "Field '", 7);
                                     rt_sb_str(&sb_2618, (f)->name);
                                     rt_sb_add(&sb_2618, "' of C struct '", 15);
@@ -23448,7 +23451,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                     rt_mem_free(&tmp_2619);
                                 }
                                 RtMem* t_2620 = &rt_default_mem;
-                                semantics__types__FieldInfo* obj_2621 = (semantics__types__FieldInfo*)rt_mem_alloc(t_2620, sizeof(semantics__types__FieldInfo), 38000493);
+                                semantics__types__FieldInfo* obj_2621 = (semantics__types__FieldInfo*)rt_mem_alloc(t_2620, sizeof(semantics__types__FieldInfo), 38000494);
                                 *obj_2621 = (semantics__types__FieldInfo){ ._h = { (const void*)&vtable_semantics__types__FieldInfo, t_2620 }, .name = (f)->name, .type = ft, .defaultValue = (f)->defaultValue, .owner = (sd)->name, .line = (f)->_super.line, .cName = (f)->cName };
                                 List_semantics__types__FieldInfo_push((info)->fields, obj_2621);
                             }
@@ -23458,7 +23461,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                             for (int32_t i_2622 = 0; i_2622 < list_2623->length; i_2622++) {
                                 syntax__ast__FunctionDecl* m = list_2623->items[i_2622];
                                 RtMem* t_2624 = &rt_default_mem;
-                                semantics__types__MethodInfo* obj_2625 = (semantics__types__MethodInfo*)rt_mem_alloc(t_2624, sizeof(semantics__types__MethodInfo), 38000496);
+                                semantics__types__MethodInfo* obj_2625 = (semantics__types__MethodInfo*)rt_mem_alloc(t_2624, sizeof(semantics__types__MethodInfo), 38000497);
                                 RtString t_2626 = (m)->name;
                                 RtString t_2627 = (sd)->name;
                                 bool t_2628 = (m)->isOperator;
@@ -23471,7 +23474,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                 semantics__analyzer__declarations__resolveMethodSig(mi, m);
                                 if ((!((m)->isOperator)) && (!rt_any_is_null(rt_any_get(names, (m)->name)))) {
                                     RtMem tmp_2634 = rt_mem_growable();
-                                    RtSb sb_2633 = rt_sb_mem(&tmp_2634, 38000498);
+                                    RtSb sb_2633 = rt_sb_mem(&tmp_2634, 38000499);
                                     rt_sb_add(&sb_2633, "'", 1);
                                     rt_sb_str(&sb_2633, (m)->name);
                                     rt_sb_add(&sb_2633, "' in struct '", 13);
@@ -23482,7 +23485,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                 }
                                 if ((!((m)->isOperator)) && (!(semantics__types__structMethod(NULL, info, (m)->name, false, 0) == NULL))) {
                                     RtMem tmp_2636 = rt_mem_growable();
-                                    RtSb sb_2635 = rt_sb_mem(&tmp_2636, 38000500);
+                                    RtSb sb_2635 = rt_sb_mem(&tmp_2636, 38000501);
                                     rt_sb_add(&sb_2635, "Method '", 8);
                                     rt_sb_str(&sb_2635, (m)->name);
                                     rt_sb_add(&sb_2635, "' is declared twice in struct '", 31);
@@ -23495,11 +23498,11 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                 bool cond_2638 = ((m)->isOperator && (!((mi)->sig == NULL)));
                                 if (cond_2638) {
                                     RtString t_2637 = (m)->name;
-                                    cond_2638 = (!(semantics__types__structMethod(NULL, info, t_2637, true, ((((semantics__types__Type*)rt_unwrap((void*)((mi)->sig), 38000503)))->params)->length) == NULL));
+                                    cond_2638 = (!(semantics__types__structMethod(NULL, info, t_2637, true, ((((semantics__types__Type*)rt_unwrap((void*)((mi)->sig), 38000504)))->params)->length) == NULL));
                                 }
                                 if (cond_2638) {
                                     RtMem tmp_2640 = rt_mem_growable();
-                                    RtSb sb_2639 = rt_sb_mem(&tmp_2640, 38000504);
+                                    RtSb sb_2639 = rt_sb_mem(&tmp_2640, 38000505);
                                     rt_sb_add(&sb_2639, "Operator '", 10);
                                     rt_sb_str(&sb_2639, (m)->name);
                                     rt_sb_add(&sb_2639, "' is declared twice in struct '", 31);
@@ -23531,9 +23534,9 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                 syntax__ast__FieldDecl* f = list_2642->items[i_2641];
                                 RtMem tmp_2647 = rt_mem_growable();
                                 RtMem* t_2643 = &rt_default_mem;
-                                semantics__types__FieldInfo* obj_2644 = (semantics__types__FieldInfo*)rt_mem_alloc(t_2643, sizeof(semantics__types__FieldInfo), 38000515);
+                                semantics__types__FieldInfo* obj_2644 = (semantics__types__FieldInfo*)rt_mem_alloc(t_2643, sizeof(semantics__types__FieldInfo), 38000516);
                                 RtString t_2645 = (f)->name;
-                                RtSb sb_2646 = rt_sb_mem(&tmp_2647, 38000515);
+                                RtSb sb_2646 = rt_sb_mem(&tmp_2647, 38000516);
                                 rt_sb_add(&sb_2646, "Field '", 7);
                                 rt_sb_str(&sb_2646, (f)->name);
                                 rt_sb_add(&sb_2646, "'", 1);
@@ -23547,7 +23550,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                             for (int32_t i_2648 = 0; i_2648 < list_2649->length; i_2648++) {
                                 syntax__ast__FunctionDecl* m = list_2649->items[i_2648];
                                 RtMem* t_2650 = &rt_default_mem;
-                                semantics__types__MethodInfo* obj_2651 = (semantics__types__MethodInfo*)rt_mem_alloc(t_2650, sizeof(semantics__types__MethodInfo), 38000518);
+                                semantics__types__MethodInfo* obj_2651 = (semantics__types__MethodInfo*)rt_mem_alloc(t_2650, sizeof(semantics__types__MethodInfo), 38000519);
                                 RtString t_2652 = (m)->name;
                                 RtString t_2653 = (cd)->name;
                                 bool t_2654 = (m)->isOperator;
@@ -23580,7 +23583,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                 syntax__ast__FunctionDecl* m = list_2660->items[i_2659];
                                 if (!(semantics__types__interfaceMethod(NULL, info, (m)->name) == NULL)) {
                                     RtMem tmp_2662 = rt_mem_growable();
-                                    RtSb sb_2661 = rt_sb_mem(&tmp_2662, 38000529);
+                                    RtSb sb_2661 = rt_sb_mem(&tmp_2662, 38000530);
                                     rt_sb_add(&sb_2661, "Method '", 8);
                                     rt_sb_str(&sb_2661, (m)->name);
                                     rt_sb_add(&sb_2661, "' is declared twice in interface '", 34);
@@ -23591,7 +23594,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                     continue;
                                 }
                                 RtMem* t_2663 = &rt_default_mem;
-                                semantics__types__MethodInfo* obj_2664 = (semantics__types__MethodInfo*)rt_mem_alloc(t_2663, sizeof(semantics__types__MethodInfo), 38000532);
+                                semantics__types__MethodInfo* obj_2664 = (semantics__types__MethodInfo*)rt_mem_alloc(t_2663, sizeof(semantics__types__MethodInfo), 38000533);
                                 RtString t_2665 = (m)->name;
                                 RtString t_2666 = (id)->name;
                                 RtString t_2667 = (id)->name;
@@ -23610,7 +23613,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                         for (int32_t k_2674 = 0; k_2674 < t_2671->length; k_2674++) if (rt_str_eq(t_2671->items[k_2674], t_2672)) { found_2673 = true; break; }
                         if (found_2673) {
                             RtMem tmp_2676 = rt_mem_growable();
-                            RtSb sb_2675 = rt_sb_mem(&tmp_2676, 38000536);
+                            RtSb sb_2675 = rt_sb_mem(&tmp_2676, 38000537);
                             rt_sb_add(&sb_2675, "Interface '", 11);
                             rt_sb_str(&sb_2675, (id)->name);
                             rt_sb_add(&sb_2675, "' extends itself.", 17);
@@ -23624,7 +23627,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                 syntax__ast__InterfaceDecl* parent = semantics__analyzer__declarations__interfaceDecl(NULL, a);
                                 if (parent == NULL) {
                                     RtMem tmp_2680 = rt_mem_growable();
-                                    RtSb sb_2679 = rt_sb_mem(&tmp_2680, 38000540);
+                                    RtSb sb_2679 = rt_sb_mem(&tmp_2680, 38000541);
                                     rt_sb_add(&sb_2679, "'", 1);
                                     rt_sb_str(&sb_2679, a);
                                     rt_sb_add(&sb_2679, "' is not an interface: interface ", 33);
@@ -23642,7 +23645,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                             continue;
                                         }
                                         RtMem* t_2683 = &rt_default_mem;
-                                        semantics__types__MethodInfo* obj_2684 = (semantics__types__MethodInfo*)rt_mem_alloc(t_2683, sizeof(semantics__types__MethodInfo), 38000545);
+                                        semantics__types__MethodInfo* obj_2684 = (semantics__types__MethodInfo*)rt_mem_alloc(t_2683, sizeof(semantics__types__MethodInfo), 38000546);
                                         RtString t_2685 = (m)->name;
                                         RtString t_2686 = (id)->name;
                                         RtString t_2687 = (id)->name;
@@ -23670,7 +23673,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                             for (int32_t i_2691 = 0; i_2691 < list_2692->length; i_2691++) {
                                 int32_t i = i_2691;
                                 syntax__ast__FunctionDecl* m = list_2692->items[i_2691];
-                                semantics__types__MethodInfo* mi = ((semantics__types__MethodInfo*)rt_unwrap((void*)((m)->_super.method), 38000553));
+                                semantics__types__MethodInfo* mi = ((semantics__types__MethodInfo*)rt_unwrap((void*)((m)->_super.method), 38000554));
                                 semantics__analyzer__declarations__resolveMethodSig(mi, m);
                                 {
                                     List_syntax__ast__FunctionDecl* list_2694 = (nd)->methods;
@@ -23680,15 +23683,15 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                         if (j >= i) {
                                             break;
                                         }
-                                        semantics__types__MethodInfo* old = ((semantics__types__MethodInfo*)rt_unwrap((void*)((previous)->_super.method), 38000557));
+                                        semantics__types__MethodInfo* old = ((semantics__types__MethodInfo*)rt_unwrap((void*)((previous)->_super.method), 38000558));
                                         bool cond_2696 = (rt_str_eq((old)->name, (mi)->name) && ((old)->isOperator == (mi)->isOperator));
                                         if (cond_2696) {
-                                            int32_t t_2695 = ((((semantics__types__Type*)rt_unwrap((void*)((old)->sig), 38000559)))->params)->length;
-                                            cond_2696 = (t_2695 == ((((semantics__types__Type*)rt_unwrap((void*)((mi)->sig), 38000559)))->params)->length);
+                                            int32_t t_2695 = ((((semantics__types__Type*)rt_unwrap((void*)((old)->sig), 38000560)))->params)->length;
+                                            cond_2696 = (t_2695 == ((((semantics__types__Type*)rt_unwrap((void*)((mi)->sig), 38000560)))->params)->length);
                                         }
                                         if (cond_2696) {
                                             RtMem tmp_2698 = rt_mem_growable();
-                                            RtSb sb_2697 = rt_sb_mem(&tmp_2698, 38000560);
+                                            RtSb sb_2697 = rt_sb_mem(&tmp_2698, 38000561);
                                             rt_sb_add(&sb_2697, "Native method '", 15);
                                             rt_sb_str(&sb_2697, (m)->name);
                                             rt_sb_add(&sb_2697, "' is declared twice in '", 24);
@@ -23715,7 +23718,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                         }
                         if (((ed)->variants)->length == 0) {
                             RtMem tmp_2700 = rt_mem_growable();
-                            RtSb sb_2699 = rt_sb_mem(&tmp_2700, 38000568);
+                            RtSb sb_2699 = rt_sb_mem(&tmp_2700, 38000569);
                             rt_sb_add(&sb_2699, "Enum '", 6);
                             rt_sb_str(&sb_2699, (ed)->name);
                             rt_sb_add(&sb_2699, "' needs at least one variant.", 29);
@@ -23728,7 +23731,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                 syntax__ast__EnumVariant* v = list_2702->items[i_2701];
                                 if (!(semantics__types__variantOf(NULL, info, (v)->name) == NULL)) {
                                     RtMem tmp_2704 = rt_mem_growable();
-                                    RtSb sb_2703 = rt_sb_mem(&tmp_2704, 38000571);
+                                    RtSb sb_2703 = rt_sb_mem(&tmp_2704, 38000572);
                                     rt_sb_add(&sb_2703, "Variant '", 9);
                                     rt_sb_str(&sb_2703, (v)->name);
                                     rt_sb_add(&sb_2703, "' is declared twice in enum '", 29);
@@ -23739,12 +23742,12 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                     continue;
                                 }
                                 RtMem* t_2705 = &rt_default_mem;
-                                semantics__types__VariantInfo* obj_2706 = (semantics__types__VariantInfo*)rt_mem_alloc(t_2705, sizeof(semantics__types__VariantInfo), 38000574);
+                                semantics__types__VariantInfo* obj_2706 = (semantics__types__VariantInfo*)rt_mem_alloc(t_2705, sizeof(semantics__types__VariantInfo), 38000575);
                                 List_semantics__types__FieldInfo* list_2707 = List_semantics__types__FieldInfo_new(t_2705, 14000618);
                                 *obj_2706 = (semantics__types__VariantInfo){ ._h = { (const void*)&vtable_semantics__types__VariantInfo, t_2705 }, .name = (v)->name, .index_ = ((info)->variants)->length, .line = (v)->_super.line, .fields = list_2707, .hasPayload = (v)->hasPayload };
                                 semantics__types__VariantInfo* vi = obj_2706;
                                 if ((v)->hasPayload) {
-                                    RtTable* table_2708 = rt_table_new(&rt_default_mem, 38000576);
+                                    RtTable* table_2708 = rt_table_new(&rt_default_mem, 38000577);
                                     RtAny names = rt_any_t(table_2708);
                                     {
                                         List_syntax__ast__Param* list_2710 = (v)->fields;
@@ -23752,7 +23755,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                             syntax__ast__Param* p = list_2710->items[i_2709];
                                             if (rt_any_contains(names, rt_any_s((p)->name))) {
                                                 RtMem tmp_2712 = rt_mem_growable();
-                                                RtSb sb_2711 = rt_sb_mem(&tmp_2712, 38000578);
+                                                RtSb sb_2711 = rt_sb_mem(&tmp_2712, 38000579);
                                                 rt_sb_add(&sb_2711, "Field '", 7);
                                                 rt_sb_str(&sb_2711, (p)->name);
                                                 rt_sb_add(&sb_2711, "' is declared twice in variant '", 32);
@@ -23762,16 +23765,16 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                                 rt_mem_free(&tmp_2712);
                                             }
                                             RtAny t_2713 = names;
-                                            rt_any_set(t_2713, (p)->name, rt_any_b(true), 38000579);
+                                            rt_any_set(t_2713, (p)->name, rt_any_b(true), 38000580);
                                             RtMem tmp_2718 = rt_mem_growable();
                                             RtMem* t_2714 = &rt_default_mem;
-                                            semantics__types__FieldInfo* obj_2715 = (semantics__types__FieldInfo*)rt_mem_alloc(t_2714, sizeof(semantics__types__FieldInfo), 38000580);
+                                            semantics__types__FieldInfo* obj_2715 = (semantics__types__FieldInfo*)rt_mem_alloc(t_2714, sizeof(semantics__types__FieldInfo), 38000581);
                                             RtString t_2716 = (p)->name;
-                                            RtSb sb_2717 = rt_sb_mem(&tmp_2718, 38000580);
+                                            RtSb sb_2717 = rt_sb_mem(&tmp_2718, 38000581);
                                             rt_sb_add(&sb_2717, "Field '", 7);
                                             rt_sb_str(&sb_2717, (p)->name);
                                             rt_sb_add(&sb_2717, "'", 1);
-                                            *obj_2715 = (semantics__types__FieldInfo){ ._h = { (const void*)&vtable_semantics__types__FieldInfo, t_2714 }, .name = t_2716, .type = semantics__expressions__resolveTop(NULL, ((syntax__ast__TypeRef*)rt_unwrap((void*)((p)->type), 38000580)), 2, rt_sb_finish(&sb_2717)), .defaultValue = NULL, .owner = (ed)->name, .line = (p)->_super.line, .cName = rt_str("", 0) };
+                                            *obj_2715 = (semantics__types__FieldInfo){ ._h = { (const void*)&vtable_semantics__types__FieldInfo, t_2714 }, .name = t_2716, .type = semantics__expressions__resolveTop(NULL, ((syntax__ast__TypeRef*)rt_unwrap((void*)((p)->type), 38000581)), 2, rt_sb_finish(&sb_2717)), .defaultValue = NULL, .owner = (ed)->name, .line = (p)->_super.line, .cName = rt_str("", 0) };
                                             List_semantics__types__FieldInfo_push((vi)->fields, obj_2715);
                                             rt_mem_free(&tmp_2718);
                                         }
@@ -23801,7 +23804,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
             syntax__ast__FunctionDecl* sd = (f)->decl;
             if (((!(sd == NULL)) && (!rt_str_eq((sd)->typeName, rt_str("", 0)))) && semantics__analyzer__declarations__instanceMethodNamed((sd)->typeName, (sd)->name)) {
                 RtMem tmp_2722 = rt_mem_growable();
-                RtSb sb_2721 = rt_sb_mem(&tmp_2722, 38000592);
+                RtSb sb_2721 = rt_sb_mem(&tmp_2722, 38000593);
                 rt_sb_add(&sb_2721, "'", 1);
                 rt_sb_str(&sb_2721, (sd)->typeName);
                 rt_sb_add(&sb_2721, "' already has a method '", 24);
@@ -23818,7 +23821,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
             semantics__types__FunctionInfo* f = list_2724->items[i_2723];
             syntax__ast__ExternFunctionDecl* e = (f)->ext;
             if (!(e == NULL)) {
-                List_semantics__types__Type* list_2725 = List_semantics__types__Type_new(&rt_default_mem, 38000598);
+                List_semantics__types__Type* list_2725 = List_semantics__types__Type_new(&rt_default_mem, 38000599);
                 List_semantics__types__Type* ps = list_2725;
                 {
                     List_syntax__ast__Param* list_2727 = (e)->params;
@@ -23826,16 +23829,16 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                         int32_t i = i_2726;
                         syntax__ast__Param* p = list_2727->items[i_2726];
                         RtMem tmp_2729 = rt_mem_growable();
-                        RtSb sb_2728 = rt_sb_mem(&tmp_2729, 38000600);
+                        RtSb sb_2728 = rt_sb_mem(&tmp_2729, 38000601);
                         rt_sb_add(&sb_2728, "Parameter '", 11);
                         rt_sb_str(&sb_2728, (p)->name);
                         rt_sb_add(&sb_2728, "'", 1);
-                        semantics__types__Type* pt = semantics__expressions__resolveTop(NULL, ((syntax__ast__TypeRef*)rt_unwrap((void*)((p)->type), 38000600)), 0, rt_sb_finish(&sb_2728));
+                        semantics__types__Type* pt = semantics__expressions__resolveTop(NULL, ((syntax__ast__TypeRef*)rt_unwrap((void*)((p)->type), 38000601)), 0, rt_sb_finish(&sb_2728));
                         rt_mem_free(&tmp_2729);
                         if (semantics__types__isContextT(pt)) {
                             if ((f)->ctxParam >= 0) {
                                 RtMem tmp_2731 = rt_mem_growable();
-                                RtSb sb_2730 = rt_sb_mem(&tmp_2731, 38000602);
+                                RtSb sb_2730 = rt_sb_mem(&tmp_2731, 38000603);
                                 rt_sb_add(&sb_2730, "'", 1);
                                 rt_sb_str(&sb_2730, (f)->name);
                                 rt_sb_add(&sb_2730, "' takes two Contexts: a C function gives one to its callback.", 61);
@@ -23847,7 +23850,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                         if (!(semantics__types__contextView(NULL, pt) == NULL)) {
                             if ((f)->ctxCallback >= 0) {
                                 RtMem tmp_2733 = rt_mem_growable();
-                                RtSb sb_2732 = rt_sb_mem(&tmp_2733, 38000606);
+                                RtSb sb_2732 = rt_sb_mem(&tmp_2733, 38000607);
                                 rt_sb_add(&sb_2732, "'", 1);
                                 rt_sb_str(&sb_2732, (f)->name);
                                 rt_sb_add(&sb_2732, "' takes two callbacks with a Context: only one can get it.", 58);
@@ -23864,7 +23867,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                             if (rt_str_eq((p)->lives, rt_str("default", 7))) {
                                 value_2737 = rt_str("'in default' on a parameter of a native function goes on a callback that gets a Context (C keeps it, so what it uses must live as long as the program).", 151);
                             } else {
-                                RtSb sb_2735 = rt_sb_mem(&tmp_2736, 38000613);
+                                RtSb sb_2735 = rt_sb_mem(&tmp_2736, 38000614);
                                 rt_sb_add(&sb_2735, "'in ", 4);
                                 rt_sb_str(&sb_2735, (p)->lives);
                                 rt_sb_add(&sb_2735, "' is not allowed on the parameters of a native function (only 'in default', on a callback that C keeps).", 104);
@@ -23873,14 +23876,14 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                             semantics__analyzer__error(t_2734, value_2737);
                             rt_mem_free(&tmp_2736);
                         }
-                        if (semantics__types__isArray(pt, ((semantics__types__ArrK){ .tag = semantics__types__ArrK_Growable })) && ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((pt)->elem), 38000615))) == (const void*)(semantics__types__T_BYTE))) {
+                        if (semantics__types__isArray(pt, ((semantics__types__ArrK){ .tag = semantics__types__ArrK_Growable })) && ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((pt)->elem), 38000616))) == (const void*)(semantics__types__T_BYTE))) {
                             List_b_push((f)->memParams, true);
                         } else {
                             if (semantics__types__isArray(pt, ((semantics__types__ArrK){ .tag = semantics__types__ArrK_Slice }))) {
                                 List_b_push((f)->memParams, false);
-                                if ((!(semantics__types__isError(((semantics__types__Type*)rt_unwrap((void*)((pt)->elem), 38000619))))) && (!(semantics__analyzer__declarations__isPlainNumber(((semantics__types__Type*)rt_unwrap((void*)((pt)->elem), 38000619)))))) {
+                                if ((!(semantics__types__isError(((semantics__types__Type*)rt_unwrap((void*)((pt)->elem), 38000620))))) && (!(semantics__analyzer__declarations__isPlainNumber(((semantics__types__Type*)rt_unwrap((void*)((pt)->elem), 38000620)))))) {
                                     RtMem tmp_2739 = rt_mem_growable();
-                                    RtSb sb_2738 = rt_sb_mem(&tmp_2739, 38000620);
+                                    RtSb sb_2738 = rt_sb_mem(&tmp_2739, 38000621);
                                     rt_sb_add(&sb_2738, "Parameter '", 11);
                                     rt_sb_str(&sb_2738, (p)->name);
                                     rt_sb_add(&sb_2738, "' of native function '", 22);
@@ -23893,7 +23896,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                                 List_b_push((f)->memParams, false);
                                 if (((!(semantics__types__isError(pt))) && (!(semantics__types__isCValue(pt)))) && (!((const void*)(pt) == (const void*)(semantics__types__optT(NULL, semantics__types__T_STRING))))) {
                                     RtMem tmp_2741 = rt_mem_growable();
-                                    RtSb sb_2740 = rt_sb_mem(&tmp_2741, 38000625);
+                                    RtSb sb_2740 = rt_sb_mem(&tmp_2741, 38000626);
                                     rt_sb_add(&sb_2740, "Parameter '", 11);
                                     rt_sb_str(&sb_2740, (p)->name);
                                     rt_sb_add(&sb_2740, "' of native function '", 22);
@@ -23910,7 +23913,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                 semantics__types__Type* ret = semantics__expressions__resolveType(NULL, (e)->ret);
                 if ((((!(semantics__types__isError(ret))) && (!((const void*)(ret) == (const void*)(semantics__types__T_VOID)))) && (!(semantics__types__isCValue(ret)))) && (!((const void*)(ret) == (const void*)(semantics__types__optT(NULL, semantics__types__T_STRING))))) {
                     RtMem tmp_2743 = rt_mem_growable();
-                    RtSb sb_2742 = rt_sb_mem(&tmp_2743, 38000632);
+                    RtSb sb_2742 = rt_sb_mem(&tmp_2743, 38000633);
                     rt_sb_add(&sb_2742, "Native function '", 17);
                     rt_sb_str(&sb_2742, (f)->name);
                     rt_sb_add(&sb_2742, "' can only return numbers, bool, String, void, native types or C structs.", 73);
@@ -23919,7 +23922,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                 }
                 if (((f)->ctxParam >= 0) && ((f)->ctxCallback < 0)) {
                     RtMem tmp_2745 = rt_mem_growable();
-                    RtSb sb_2744 = rt_sb_mem(&tmp_2745, 38000635);
+                    RtSb sb_2744 = rt_sb_mem(&tmp_2745, 38000636);
                     rt_sb_add(&sb_2744, "'", 1);
                     rt_sb_str(&sb_2744, (f)->name);
                     rt_sb_add(&sb_2744, "' takes a Context: it is for a callback, so declare that callback's type with a Context too (native type F = (int32, Context) -> void;).", 136);
@@ -23928,7 +23931,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
                 }
                 (f)->sig = semantics__types__funcT(NULL, ps, ret, false);
             } else {
-                syntax__ast__FunctionDecl* fd = ((syntax__ast__FunctionDecl*)rt_unwrap((void*)((f)->decl), 38000639));
+                syntax__ast__FunctionDecl* fd = ((syntax__ast__FunctionDecl*)rt_unwrap((void*)((f)->decl), 38000640));
                 (f)->sig = semantics__analyzer__declarations__resolveSig(NULL, (f)->params, (fd)->ret);
                 (f)->throwsType = semantics__analyzer__declarations__resolveThrows(NULL, (fd)->throwsType);
                 (f)->memParams = semantics__analyzer__declarations__memoryParams(NULL, (f)->params, (fd)->body);
@@ -23938,7 +23941,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
             }
             RtString t_2746 = (f)->name;
             semantics__types__SymK t_2747 = ((semantics__types__SymK){ .tag = semantics__types__SymK_Function });
-            semantics__types__Symbol* s = semantics__analyzer__declare(NULL, t_2746, t_2747, ((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000645)), (f)->line);
+            semantics__types__Symbol* s = semantics__analyzer__declare(NULL, t_2746, t_2747, ((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000646)), (f)->line);
             (s)->func = f;
             (s)->cName = (f)->cName;
             (s)->immutable = true;
@@ -23948,8 +23951,8 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
         List_syntax__ast__Node* list_2749 = (program)->decls;
         for (int32_t i_2748 = 0; i_2748 < list_2749->length; i_2748++) {
             syntax__ast__Node* d = list_2749->items[i_2748];
-            if ((v_3543 = (syntax__ast__ExternValueDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ExternValueDecl)) != NULL) {
-                semantics__analyzer__declarations__externValue(v_3543);
+            if ((v_3545 = (syntax__ast__ExternValueDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ExternValueDecl)) != NULL) {
+                semantics__analyzer__declarations__externValue(v_3545);
             }
         }
     }
@@ -23975,7 +23978,7 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
 void semantics__analyzer__declarations__externValue(syntax__ast__ExternValueDecl* v) {
     RtString what = ((v)->isConst ? rt_str("native const", 12) : rt_str("native let", 10));
     RtMem tmp_2755 = rt_mem_growable();
-    RtSb sb_2754 = rt_sb_mem(&tmp_2755, 38000667);
+    RtSb sb_2754 = rt_sb_mem(&tmp_2755, 38000668);
     rt_sb_str(&sb_2754, what);
     rt_sb_add(&sb_2754, " '", 2);
     rt_sb_str(&sb_2754, (v)->name);
@@ -23985,7 +23988,7 @@ void semantics__analyzer__declarations__externValue(syntax__ast__ExternValueDecl
     if (!(semantics__types__isError(t))) {
         if (semantics__types__isResource(t)) {
             RtMem tmp_2757 = rt_mem_growable();
-            RtSb sb_2756 = rt_sb_mem(&tmp_2757, 38000670);
+            RtSb sb_2756 = rt_sb_mem(&tmp_2757, 38000671);
             rt_sb_add(&sb_2756, "'", 1);
             rt_sb_str(&sb_2756, (v)->name);
             rt_sb_add(&sb_2756, "': a resource (", 15);
@@ -24001,13 +24004,13 @@ void semantics__analyzer__declarations__externValue(syntax__ast__ExternValueDecl
                 int32_t t_2758 = (v)->_super.line;
                 RtString value_2762;
                 if ((v)->isConst) {
-                    RtSb sb_2759 = rt_sb_mem(&tmp_2760, 38000672);
+                    RtSb sb_2759 = rt_sb_mem(&tmp_2760, 38000673);
                     rt_sb_add(&sb_2759, "'", 1);
                     rt_sb_str(&sb_2759, (v)->name);
                     rt_sb_add(&sb_2759, "': a native const is a number, bool, String, native type, C struct or C pointer.", 80);
                     value_2762 = rt_sb_finish(&sb_2759);
                 } else {
-                    RtSb sb_2761 = rt_sb_mem(&tmp_2760, 38000673);
+                    RtSb sb_2761 = rt_sb_mem(&tmp_2760, 38000674);
                     rt_sb_add(&sb_2761, "'", 1);
                     rt_sb_str(&sb_2761, (v)->name);
                     rt_sb_add(&sb_2761, "': a native let is a number, bool, native type, C struct or C pointer (a C string is a native type).", 100);
@@ -24021,7 +24024,7 @@ void semantics__analyzer__declarations__externValue(syntax__ast__ExternValueDecl
     semantics__types__Symbol* s = semantics__analyzer__declare(NULL, (v)->name, ((semantics__types__SymK){ .tag = semantics__types__SymK_Global }), t, (v)->_super.line);
     RtString value_2764;
     if (!rt_str_eq((v)->cExpr, rt_str("", 0))) {
-        RtSb sb_2763 = rt_sb_mem(rt_obj_mem(s), 38000677);
+        RtSb sb_2763 = rt_sb_mem(rt_obj_mem(s), 38000678);
         rt_sb_add(&sb_2763, "(", 1);
         rt_sb_str(&sb_2763, (v)->cExpr);
         rt_sb_add(&sb_2763, ")", 1);
@@ -24046,7 +24049,7 @@ void semantics__analyzer__declarations__externResource(semantics__types__ExternT
     semantics__types__FunctionInfo* fi = semantics__types__functionOf(NULL, (d)->releasedBy);
     if ((fi == NULL) || ((fi)->sig == NULL)) {
         RtMem tmp_2766 = rt_mem_growable();
-        RtSb sb_2765 = rt_sb_mem(&tmp_2766, 38000692);
+        RtSb sb_2765 = rt_sb_mem(&tmp_2766, 38000693);
         rt_sb_add(&sb_2765, "'", 1);
         rt_sb_str(&sb_2765, (d)->releasedBy);
         rt_sb_add(&sb_2765, "' (that releases '", 18);
@@ -24060,15 +24063,15 @@ void semantics__analyzer__declarations__externResource(semantics__types__ExternT
         rt_mem_free(&tmp_2766);
         return;
     }
-    List_semantics__types__Type* ps = (((semantics__types__Type*)rt_unwrap((void*)((fi)->sig), 38000695)))->params;
+    List_semantics__types__Type* ps = (((semantics__types__Type*)rt_unwrap((void*)((fi)->sig), 38000696)))->params;
     bool cond_2768 = (!((ps)->length == 1));
     if (!cond_2768) {
-        semantics__types__Type* t_2767 = (ps)->items[rt_index((int64_t)(0), (ps)->length, 38000696)];
+        semantics__types__Type* t_2767 = (ps)->items[rt_index((int64_t)(0), (ps)->length, 38000697)];
         cond_2768 = (!((const void*)(t_2767) == (const void*)(semantics__types__named(NULL, (e)->name, ((semantics__types__NamedK){ .tag = semantics__types__NamedK_Extern })))));
     }
     if (cond_2768 || (fi)->varargs) {
         RtMem tmp_2770 = rt_mem_growable();
-        RtSb sb_2769 = rt_sb_mem(&tmp_2770, 38000697);
+        RtSb sb_2769 = rt_sb_mem(&tmp_2770, 38000698);
         rt_sb_add(&sb_2769, "'", 1);
         rt_sb_str(&sb_2769, (d)->releasedBy);
         rt_sb_add(&sb_2769, "' releases '", 12);
@@ -24085,7 +24088,7 @@ void semantics__analyzer__declarations__externResource(semantics__types__ExternT
     }
     if (!((fi)->throwsType == NULL)) {
         RtMem tmp_2772 = rt_mem_growable();
-        RtSb sb_2771 = rt_sb_mem(&tmp_2772, 38000699);
+        RtSb sb_2771 = rt_sb_mem(&tmp_2772, 38000700);
         rt_sb_add(&sb_2771, "'", 1);
         rt_sb_str(&sb_2771, (d)->releasedBy);
         rt_sb_add(&sb_2771, "' releases '", 12);
@@ -24096,7 +24099,7 @@ void semantics__analyzer__declarations__externResource(semantics__types__ExternT
     }
     if ((!rt_str_eq((fi)->releases, rt_str("", 0))) && (!rt_str_eq((fi)->releases, (e)->name))) {
         RtMem tmp_2774 = rt_mem_growable();
-        RtSb sb_2773 = rt_sb_mem(&tmp_2774, 38000700);
+        RtSb sb_2773 = rt_sb_mem(&tmp_2774, 38000701);
         rt_sb_add(&sb_2773, "'", 1);
         rt_sb_str(&sb_2773, (d)->releasedBy);
         rt_sb_add(&sb_2773, "' already releases '", 20);
@@ -24114,10 +24117,10 @@ void semantics__analyzer__declarations__textReleaser(semantics__types__FunctionI
     if ((e == NULL) || rt_str_eq((e)->releasedBy, rt_str("", 0))) {
         return;
     }
-    semantics__types__Type* ret = ((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000709)))->elem), 38000709));
+    semantics__types__Type* ret = ((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000710)))->elem), 38000710));
     if ((!((const void*)(ret) == (const void*)(semantics__types__T_STRING))) && (!((const void*)(ret) == (const void*)(semantics__types__optT(NULL, semantics__types__T_STRING))))) {
         RtMem tmp_2776 = rt_mem_growable();
-        RtSb sb_2775 = rt_sb_mem(&tmp_2776, 38000711);
+        RtSb sb_2775 = rt_sb_mem(&tmp_2776, 38000712);
         rt_sb_add(&sb_2775, "'released by' after a native function goes on a text that C makes ('", 68);
         rt_sb_str(&sb_2775, (f)->name);
         rt_sb_add(&sb_2775, "' returns ", 10);
@@ -24130,7 +24133,7 @@ void semantics__analyzer__declarations__textReleaser(semantics__types__FunctionI
     semantics__types__FunctionInfo* r = semantics__types__functionOf(NULL, (e)->releasedBy);
     if (((r == NULL) || ((r)->sig == NULL)) || (!((r)->isExtern))) {
         RtMem tmp_2778 = rt_mem_growable();
-        RtSb sb_2777 = rt_sb_mem(&tmp_2778, 38000716);
+        RtSb sb_2777 = rt_sb_mem(&tmp_2778, 38000717);
         rt_sb_add(&sb_2777, "'", 1);
         rt_sb_str(&sb_2777, (e)->releasedBy);
         rt_sb_add(&sb_2777, "' (that releases the text of '", 30);
@@ -24142,14 +24145,14 @@ void semantics__analyzer__declarations__textReleaser(semantics__types__FunctionI
         rt_mem_free(&tmp_2778);
         return;
     }
-    bool cond_2780 = (!(((((semantics__types__Type*)rt_unwrap((void*)((r)->sig), 38000719)))->params)->length == 1));
+    bool cond_2780 = (!(((((semantics__types__Type*)rt_unwrap((void*)((r)->sig), 38000720)))->params)->length == 1));
     if (!cond_2780) {
-        List_semantics__types__Type* t_2779 = (((semantics__types__Type*)rt_unwrap((void*)((r)->sig), 38000719)))->params;
-        cond_2780 = (!((const void*)(t_2779->items[rt_index((int64_t)(0), t_2779->length, 38000719)]) == (const void*)(semantics__types__T_STRING)));
+        List_semantics__types__Type* t_2779 = (((semantics__types__Type*)rt_unwrap((void*)((r)->sig), 38000720)))->params;
+        cond_2780 = (!((const void*)(t_2779->items[rt_index((int64_t)(0), t_2779->length, 38000720)]) == (const void*)(semantics__types__T_STRING)));
     }
     if (cond_2780 || (r)->varargs) {
         RtMem tmp_2782 = rt_mem_growable();
-        RtSb sb_2781 = rt_sb_mem(&tmp_2782, 38000720);
+        RtSb sb_2781 = rt_sb_mem(&tmp_2782, 38000721);
         rt_sb_add(&sb_2781, "'", 1);
         rt_sb_str(&sb_2781, (e)->releasedBy);
         rt_sb_add(&sb_2781, "' releases the text of '", 24);
@@ -24162,7 +24165,7 @@ void semantics__analyzer__declarations__textReleaser(semantics__types__FunctionI
     }
     if ((!rt_str_eq((r)->releases, rt_str("", 0))) && (!rt_str_eq((r)->releases, rt_str("String", 6)))) {
         RtMem tmp_2784 = rt_mem_growable();
-        RtSb sb_2783 = rt_sb_mem(&tmp_2784, 38000722);
+        RtSb sb_2783 = rt_sb_mem(&tmp_2784, 38000723);
         rt_sb_add(&sb_2783, "'", 1);
         rt_sb_str(&sb_2783, (e)->releasedBy);
         rt_sb_add(&sb_2783, "' already releases '", 20);
@@ -24176,10 +24179,10 @@ void semantics__analyzer__declarations__textReleaser(semantics__types__FunctionI
 }
 
 void semantics__analyzer__declarations__externResourceRules(semantics__types__FunctionInfo* f) {
-    semantics__types__Type* ret = ((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000729)))->elem), 38000729));
+    semantics__types__Type* ret = ((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000730)))->elem), 38000730));
     if (semantics__types__isResource(ret)) {
         RtMem tmp_2786 = rt_mem_growable();
-        RtSb sb_2785 = rt_sb_mem(&tmp_2786, 38000731);
+        RtSb sb_2785 = rt_sb_mem(&tmp_2786, 38000732);
         rt_sb_add(&sb_2785, "'", 1);
         rt_sb_str(&sb_2785, (f)->name);
         rt_sb_add(&sb_2785, "' makes a ", 10);
@@ -24191,20 +24194,20 @@ void semantics__analyzer__declarations__externResourceRules(semantics__types__Fu
         rt_mem_free(&tmp_2786);
     }
     {
-        List_semantics__types__Type* list_2788 = (((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000733)))->params;
+        List_semantics__types__Type* list_2788 = (((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 38000734)))->params;
         for (int32_t i_2787 = 0; i_2787 < list_2788->length; i_2787++) {
             int32_t i = i_2787;
             semantics__types__Type* p = list_2788->items[i_2787];
-            if (semantics__types__isOpt(p) && semantics__types__isResource(((semantics__types__Type*)rt_unwrap((void*)((p)->elem), 38000734)))) {
+            if (semantics__types__isOpt(p) && semantics__types__isResource(((semantics__types__Type*)rt_unwrap((void*)((p)->elem), 38000735)))) {
                 RtMem tmp_2791 = rt_mem_growable();
-                int32_t t_2789 = (((f)->params)->items[rt_index((int64_t)(i), ((f)->params)->length, 38000735)])->_super.line;
-                RtSb sb_2790 = rt_sb_mem(&tmp_2791, 38000735);
+                int32_t t_2789 = (((f)->params)->items[rt_index((int64_t)(i), ((f)->params)->length, 38000736)])->_super.line;
+                RtSb sb_2790 = rt_sb_mem(&tmp_2791, 38000736);
                 rt_sb_add(&sb_2790, "Parameter '", 11);
-                rt_sb_str(&sb_2790, (((f)->params)->items[rt_index((int64_t)(i), ((f)->params)->length, 38000735)])->name);
+                rt_sb_str(&sb_2790, (((f)->params)->items[rt_index((int64_t)(i), ((f)->params)->length, 38000736)])->name);
                 rt_sb_add(&sb_2790, "' of '", 6);
                 rt_sb_str(&sb_2790, (f)->name);
                 rt_sb_add(&sb_2790, "': a resource goes to C as ", 27);
-                rt_sb_str(&sb_2790, (((semantics__types__Type*)rt_unwrap((void*)((p)->elem), 38000735)))->text);
+                rt_sb_str(&sb_2790, (((semantics__types__Type*)rt_unwrap((void*)((p)->elem), 38000736)))->text);
                 rt_sb_add(&sb_2790, ", not ", 6);
                 rt_sb_str(&sb_2790, (p)->text);
                 rt_sb_add(&sb_2790, ".", 1);
@@ -24218,17 +24221,17 @@ void semantics__analyzer__declarations__externResourceRules(semantics__types__Fu
 void semantics__analyzer__declarations__resolveMethodSig(semantics__types__MethodInfo* mi, syntax__ast__FunctionDecl* m) {
     (mi)->sig = semantics__analyzer__declarations__resolveSig(NULL, (m)->params, (m)->ret);
     if ((m)->forwardsToC) {
-        List_semantics__types__Type* list_2792 = List_semantics__types__Type_new(&rt_default_mem, 38000743);
+        List_semantics__types__Type* list_2792 = List_semantics__types__Type_new(&rt_default_mem, 38000744);
         List_semantics__types__Type* ps = list_2792;
         {
-            List_semantics__types__Type* list_2794 = (((semantics__types__Type*)rt_unwrap((void*)((mi)->sig), 38000744)))->params;
+            List_semantics__types__Type* list_2794 = (((semantics__types__Type*)rt_unwrap((void*)((mi)->sig), 38000745)))->params;
             for (int32_t i_2793 = 0; i_2793 < list_2794->length; i_2793++) {
                 semantics__types__Type* t = list_2794->items[i_2793];
                 semantics__types__Type* view = semantics__types__contextView(NULL, t);
                 List_semantics__types__Type_push(ps, ((!(view == NULL)) ? view : t));
             }
         }
-        (mi)->sig = semantics__types__funcT(NULL, ps, ((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((mi)->sig), 38000748)))->elem), 38000748)), false);
+        (mi)->sig = semantics__types__funcT(NULL, ps, ((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((mi)->sig), 38000749)))->elem), 38000749)), false);
     }
     (mi)->throwsType = semantics__analyzer__declarations__resolveThrows(NULL, (m)->throwsType);
     (mi)->memParams = semantics__analyzer__declarations__memoryParams(NULL, (m)->params, (m)->body);
@@ -24237,16 +24240,16 @@ void semantics__analyzer__declarations__resolveMethodSig(semantics__types__Metho
         bool unaryMinus = (rt_str_eq((m)->name, rt_str("-", 1)) && (n == 0));
         if ((!(unaryMinus)) && (!(n == 1))) {
             RtMem tmp_2796 = rt_mem_growable();
-            RtSb sb_2795 = rt_sb_mem(&tmp_2796, 38000755);
+            RtSb sb_2795 = rt_sb_mem(&tmp_2796, 38000756);
             rt_sb_add(&sb_2795, "Operator '", 10);
             rt_sb_str(&sb_2795, (m)->name);
             rt_sb_add(&sb_2795, "' takes exactly one parameter (the right side).", 47);
             semantics__analyzer__error((m)->_super.line, rt_sb_finish(&sb_2795));
             rt_mem_free(&tmp_2796);
         }
-        if ((rt_str_eq((m)->name, rt_str("==", 2)) || rt_str_eq((m)->name, rt_str("<", 1))) && (!((const void*)(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((mi)->sig), 38000756)))->elem), 38000756))) == (const void*)(semantics__types__T_BOOL)))) {
+        if ((rt_str_eq((m)->name, rt_str("==", 2)) || rt_str_eq((m)->name, rt_str("<", 1))) && (!((const void*)(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((mi)->sig), 38000757)))->elem), 38000757))) == (const void*)(semantics__types__T_BOOL)))) {
             RtMem tmp_2798 = rt_mem_growable();
-            RtSb sb_2797 = rt_sb_mem(&tmp_2798, 38000756);
+            RtSb sb_2797 = rt_sb_mem(&tmp_2798, 38000757);
             rt_sb_add(&sb_2797, "Operator '", 10);
             rt_sb_str(&sb_2797, (m)->name);
             rt_sb_add(&sb_2797, "' must return bool.", 19);
@@ -24261,9 +24264,9 @@ void semantics__analyzer__declarations__resolveMethodSig(semantics__types__Metho
 
 semantics__types__Type* semantics__analyzer__declarations__resolveSig(RtMem* rt_dest, List_syntax__ast__Param* params, syntax__ast__TypeRef* ret) {
     (void)rt_dest;
-    RtTable* table_2799 = rt_table_new(&rt_default_mem, 38000762);
+    RtTable* table_2799 = rt_table_new(&rt_default_mem, 38000763);
     RtAny names = rt_any_t(table_2799);
-    List_semantics__types__Type* list_2800 = List_semantics__types__Type_new(&rt_default_mem, 38000763);
+    List_semantics__types__Type* list_2800 = List_semantics__types__Type_new(&rt_default_mem, 38000764);
     List_semantics__types__Type* ps = list_2800;
     {
         List_syntax__ast__Param* list_2802 = params;
@@ -24271,7 +24274,7 @@ semantics__types__Type* semantics__analyzer__declarations__resolveSig(RtMem* rt_
             syntax__ast__Param* p = list_2802->items[i_2801];
             if (rt_any_contains(names, rt_any_s((p)->name))) {
                 RtMem tmp_2804 = rt_mem_growable();
-                RtSb sb_2803 = rt_sb_mem(&tmp_2804, 38000765);
+                RtSb sb_2803 = rt_sb_mem(&tmp_2804, 38000766);
                 rt_sb_add(&sb_2803, "Duplicate parameter '", 21);
                 rt_sb_str(&sb_2803, (p)->name);
                 rt_sb_add(&sb_2803, "'.", 2);
@@ -24279,13 +24282,13 @@ semantics__types__Type* semantics__analyzer__declarations__resolveSig(RtMem* rt_
                 rt_mem_free(&tmp_2804);
             }
             RtAny t_2805 = names;
-            rt_any_set(t_2805, (p)->name, rt_any_b(true), 38000766);
+            rt_any_set(t_2805, (p)->name, rt_any_b(true), 38000767);
             RtMem tmp_2807 = rt_mem_growable();
-            RtSb sb_2806 = rt_sb_mem(&tmp_2807, 38000767);
+            RtSb sb_2806 = rt_sb_mem(&tmp_2807, 38000768);
             rt_sb_add(&sb_2806, "Parameter '", 11);
             rt_sb_str(&sb_2806, (p)->name);
             rt_sb_add(&sb_2806, "'", 1);
-            List_semantics__types__Type_push(ps, semantics__expressions__resolveTop(NULL, ((syntax__ast__TypeRef*)rt_unwrap((void*)((p)->type), 38000767)), 0, rt_sb_finish(&sb_2806)));
+            List_semantics__types__Type_push(ps, semantics__expressions__resolveTop(NULL, ((syntax__ast__TypeRef*)rt_unwrap((void*)((p)->type), 38000768)), 0, rt_sb_finish(&sb_2806)));
             rt_mem_free(&tmp_2807);
         }
     }
@@ -24312,7 +24315,7 @@ semantics__types__Type* semantics__analyzer__declarations__resolveThrows(RtMem* 
     }
     if (!(semantics__types__isEnumT(r))) {
         RtMem tmp_2809 = rt_mem_growable();
-        RtSb sb_2808 = rt_sb_mem(&tmp_2809, 38000787);
+        RtSb sb_2808 = rt_sb_mem(&tmp_2809, 38000788);
         rt_sb_add(&sb_2808, "Only enums can be thrown; '", 27);
         rt_sb_str(&sb_2808, (r)->text);
         rt_sb_add(&sb_2808, "' is not an enum.", 17);
@@ -24320,7 +24323,7 @@ semantics__types__Type* semantics__analyzer__declarations__resolveThrows(RtMem* 
         rt_mem_free(&tmp_2809);
         return NULL;
     }
-    (((semantics__types__EnumInfo*)rt_unwrap((void*)(semantics__types__enumOf(NULL, (r)->name)), 38000790)))->thrown = true;
+    (((semantics__types__EnumInfo*)rt_unwrap((void*)(semantics__types__enumOf(NULL, (r)->name)), 38000791)))->thrown = true;
     return r;
 }
 
@@ -24334,30 +24337,30 @@ bool semantics__analyzer__declarations__isByteArrayRef(syntax__ast__TypeRef* t) 
 
 List_b* semantics__analyzer__declarations__memoryParams(RtMem* rt_dest, List_syntax__ast__Param* params, List_syntax__ast__Stmt* body) {
     (void)rt_dest;
-    syntax__ast__Placed* p_3585 = NULL;
-    syntax__ast__Ident* m_3586 = NULL;
-    RtTable* table_2810 = rt_table_new(&rt_default_mem, 38000803);
+    syntax__ast__Placed* p_3587 = NULL;
+    syntax__ast__Ident* m_3588 = NULL;
+    RtTable* table_2810 = rt_table_new(&rt_default_mem, 38000804);
     RtAny used = rt_any_t(table_2810);
-    List_syntax__ast__Expr* list_2811 = List_syntax__ast__Expr_new(&rt_default_mem, 38000804);
+    List_syntax__ast__Expr* list_2811 = List_syntax__ast__Expr_new(&rt_default_mem, 38000805);
     List_syntax__ast__Expr* es = list_2811;
     syntax__ast__allExprs(body, true, es);
     {
         List_syntax__ast__Expr* list_2813 = es;
         for (int32_t i_2812 = 0; i_2812 < list_2813->length; i_2812++) {
             syntax__ast__Expr* e = list_2813->items[i_2812];
-            if ((((p_3585 = (syntax__ast__Placed*)rt_as_class((void*)(e), &rtclass_syntax__ast__Placed)) != NULL) && ((p_3585)->mode == 0)) && ((m_3586 = (syntax__ast__Ident*)rt_as_class((void*)((p_3585)->memory), &rtclass_syntax__ast__Ident)) != NULL)) {
+            if ((((p_3587 = (syntax__ast__Placed*)rt_as_class((void*)(e), &rtclass_syntax__ast__Placed)) != NULL) && ((p_3587)->mode == 0)) && ((m_3588 = (syntax__ast__Ident*)rt_as_class((void*)((p_3587)->memory), &rtclass_syntax__ast__Ident)) != NULL)) {
                 RtAny t_2814 = used;
-                rt_any_set(t_2814, (m_3586)->name, rt_any_i((int64_t)(1LL), RT_ANY_I64), 38000807);
+                rt_any_set(t_2814, (m_3588)->name, rt_any_i((int64_t)(1LL), RT_ANY_I64), 38000808);
             }
         }
     }
-    List_b* list_2815 = List_b_new(&rt_default_mem, 38000809);
+    List_b* list_2815 = List_b_new(&rt_default_mem, 38000810);
     List_b* out = list_2815;
     {
         List_syntax__ast__Param* list_2817 = params;
         for (int32_t i_2816 = 0; i_2816 < list_2817->length; i_2816++) {
             syntax__ast__Param* p = list_2817->items[i_2816];
-            List_b_push(out, (semantics__analyzer__declarations__isByteArrayRef(((syntax__ast__TypeRef*)rt_unwrap((void*)((p)->type), 38000810))) && ((((((syntax__ast__TypeRef*)rt_unwrap((void*)((p)->type), 38000810)))->kind).tag == (((syntax__ast__TK){ .tag = syntax__ast__TK_Growable })).tag) || (!rt_any_is_null(rt_any_get(used, (p)->name))))));
+            List_b_push(out, (semantics__analyzer__declarations__isByteArrayRef(((syntax__ast__TypeRef*)rt_unwrap((void*)((p)->type), 38000811))) && ((((((syntax__ast__TypeRef*)rt_unwrap((void*)((p)->type), 38000811)))->kind).tag == (((syntax__ast__TK){ .tag = syntax__ast__TK_Growable })).tag) || (!rt_any_is_null(rt_any_get(used, (p)->name))))));
         }
     }
     return out;
@@ -24632,16 +24635,16 @@ void semantics__analyzer__statements__checkReturns(List_syntax__ast__Stmt* body,
 }
 
 bool semantics__analyzer__statements__isPanic(syntax__ast__Expr* e) {
-    syntax__ast__Call* c_3634 = NULL;
-    if (!(((c_3634 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL))) {
+    syntax__ast__Call* c_3636 = NULL;
+    if (!(((c_3636 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL))) {
         return false;
     }
-    semantics__types__CallInfo* ci = (c_3634)->_super._super.call;
+    semantics__types__CallInfo* ci = (c_3636)->_super._super.call;
     return (((!(ci == NULL)) && (((ci)->kind).tag == (((semantics__types__CallK){ .tag = semantics__types__CallK_Builtin })).tag)) && (((ci)->builtin).tag == (((semantics__types__BK){ .tag = semantics__types__BK_Panic })).tag));
 }
 
 bool semantics__analyzer__statements__alwaysExits(List_syntax__ast__Stmt* body) {
-    syntax__ast__BoolLit* b_3642 = NULL;
+    syntax__ast__BoolLit* b_3644 = NULL;
     if ((body)->length == 0) {
         return false;
     }
@@ -24694,7 +24697,7 @@ bool semantics__analyzer__statements__alwaysExits(List_syntax__ast__Stmt* body) 
     {
         if (rt_is_a(rt_obj_class(subject_2864), &rtclass_syntax__ast__WhileStmt)) {
             syntax__ast__WhileStmt* w = (syntax__ast__WhileStmt*)subject_2864;
-            value_2865 = ((((b_3642 = (syntax__ast__BoolLit*)rt_as_class((void*)((w)->cond), &rtclass_syntax__ast__BoolLit)) != NULL) && (b_3642)->value) && (!(semantics__analyzer__statements__containsBreak((w)->body))));
+            value_2865 = ((((b_3644 = (syntax__ast__BoolLit*)rt_as_class((void*)((w)->cond), &rtclass_syntax__ast__BoolLit)) != NULL) && (b_3644)->value) && (!(semantics__analyzer__statements__containsBreak((w)->body))));
             goto switch_end_2866;
         }
     }
@@ -24828,8 +24831,8 @@ bool semantics__analyzer__statements__containsBreak(List_syntax__ast__Stmt* body
 }
 
 void semantics__analyzer__statements__analyzeStmts(List_syntax__ast__Stmt* body) {
-    syntax__ast__AssignStmt* a_3661 = NULL;
-    syntax__ast__IfStmt* i_3664 = NULL;
+    syntax__ast__AssignStmt* a_3663 = NULL;
+    syntax__ast__IfStmt* i_3666 = NULL;
     if ((semantics__analyzer__scope)->body == NULL) {
         (semantics__analyzer__scope)->body = body;
     }
@@ -24851,7 +24854,7 @@ void semantics__analyzer__statements__analyzeStmts(List_syntax__ast__Stmt* body)
                     }
                 }
             }
-            bool direct = (((a_3661 = (syntax__ast__AssignStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__AssignStmt)) != NULL) && (rt_as_class((void*)((a_3661)->target), &rtclass_syntax__ast__Ident) != NULL));
+            bool direct = (((a_3663 = (syntax__ast__AssignStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__AssignStmt)) != NULL) && (rt_as_class((void*)((a_3663)->target), &rtclass_syntax__ast__Ident) != NULL));
             if (!(direct)) {
                 semantics__analyzer__narrowing__unnarrow(ends);
             }
@@ -24863,11 +24866,11 @@ void semantics__analyzer__statements__analyzeStmts(List_syntax__ast__Stmt* body)
             if (direct) {
                 semantics__analyzer__narrowing__unnarrow(ends);
             }
-            if ((i_3664 = (syntax__ast__IfStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__IfStmt)) != NULL) {
-                bool thenLeaves = semantics__analyzer__narrowing__leaves((i_3664)->thenBody);
-                bool elseLeaves = ((i_3664)->hasElse && semantics__analyzer__narrowing__leaves((i_3664)->elseBody));
+            if ((i_3666 = (syntax__ast__IfStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__IfStmt)) != NULL) {
+                bool thenLeaves = semantics__analyzer__narrowing__leaves((i_3666)->thenBody);
+                bool elseLeaves = ((i_3666)->hasElse && semantics__analyzer__narrowing__leaves((i_3666)->elseBody));
                 if (!(thenLeaves == elseLeaves)) {
-                    semantics__analyzer__narrowing__narrow(semantics__analyzer__narrowing__nonNull(NULL, (i_3664)->cond, elseLeaves));
+                    semantics__analyzer__narrowing__narrow(semantics__analyzer__narrowing__nonNull(NULL, (i_3666)->cond, elseLeaves));
                 }
             }
         }
@@ -25026,13 +25029,13 @@ void semantics__analyzer__statements__requireBool(syntax__ast__Expr* cond, RtStr
 }
 
 void semantics__analyzer__statements__analyzeVarDecl(syntax__ast__VarDecl* v) {
-    syntax__ast__Placed* p_3689 = NULL;
-    syntax__ast__ArrayLit* a_3695 = NULL;
+    syntax__ast__Placed* p_3691 = NULL;
+    syntax__ast__ArrayLit* a_3697 = NULL;
     bool global = (((semantics__analyzer__frame(NULL))->kind).tag == (((semantics__types__FrameK){ .tag = semantics__types__FrameK_Global })).tag);
     semantics__types__SymK kind = (global ? ((semantics__types__SymK){ .tag = semantics__types__SymK_Global }) : ((semantics__types__SymK){ .tag = semantics__types__SymK_Local }));
     syntax__ast__Expr* init = (v)->init;
-    if ((semantics__analyzer__declarations__isByteArrayRef((v)->type) && ((p_3689 = (syntax__ast__Placed*)rt_as_class((void*)(init), &rtclass_syntax__ast__Placed)) != NULL)) && ((p_3689)->mode == 1)) {
-        semantics__analyzer__statements__declareHeapMemory(v, p_3689, kind, global);
+    if ((semantics__analyzer__declarations__isByteArrayRef((v)->type) && ((p_3691 = (syntax__ast__Placed*)rt_as_class((void*)(init), &rtclass_syntax__ast__Placed)) != NULL)) && ((p_3691)->mode == 1)) {
+        semantics__analyzer__statements__declareHeapMemory(v, p_3691, kind, global);
         return;
     }
     RtMem tmp_2896 = rt_mem_growable();
@@ -25113,14 +25116,14 @@ void semantics__analyzer__statements__analyzeVarDecl(syntax__ast__VarDecl* v) {
         (s)->region = semantics__types__rVar(NULL, s);
     }
     (v)->_super._super.symbol = s;
-    if (((((((t)->kind).tag == (((semantics__types__TyK){ .tag = semantics__types__TyK_Array })).tag) && ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((t)->elem), 30000342))) == (const void*)(semantics__types__T_BYTE))) && (((t)->ak).tag == (((semantics__types__ArrK){ .tag = semantics__types__ArrK_Fixed })).tag)) && ((a_3695 = (syntax__ast__ArrayLit*)rt_as_class((void*)(init), &rtclass_syntax__ast__ArrayLit)) != NULL)) && (((a_3695)->elems)->length == 0)) {
+    if (((((((t)->kind).tag == (((semantics__types__TyK){ .tag = semantics__types__TyK_Array })).tag) && ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((t)->elem), 30000342))) == (const void*)(semantics__types__T_BYTE))) && (((t)->ak).tag == (((semantics__types__ArrK){ .tag = semantics__types__ArrK_Fixed })).tag)) && ((a_3697 = (syntax__ast__ArrayLit*)rt_as_class((void*)(init), &rtclass_syntax__ast__ArrayLit)) != NULL)) && (((a_3697)->elems)->length == 0)) {
         (s)->memoryCandidate = true;
     }
 }
 
 void semantics__analyzer__statements__declareHeapMemory(syntax__ast__VarDecl* v, syntax__ast__Placed* p, semantics__types__SymK kind, bool global) {
-    syntax__ast__ArrayLit* a_3700 = NULL;
-    if ((!(((a_3700 = (syntax__ast__ArrayLit*)rt_as_class((void*)((p)->expr), &rtclass_syntax__ast__ArrayLit)) != NULL))) || (((a_3700)->elems)->length > 0)) {
+    syntax__ast__ArrayLit* a_3702 = NULL;
+    if ((!(((a_3702 = (syntax__ast__ArrayLit*)rt_as_class((void*)((p)->expr), &rtclass_syntax__ast__ArrayLit)) != NULL))) || (((a_3702)->elems)->length > 0)) {
         semantics__analyzer__error((v)->_super._super.line, rt_str("A memory in the heap starts empty: let m: byte[*] = [] in heap;", 63));
     }
     syntax__ast__TypeRef* tr = (v)->type;
@@ -25150,28 +25153,28 @@ void semantics__analyzer__statements__declareHeapMemory(syntax__ast__VarDecl* v,
 }
 
 void semantics__analyzer__statements__analyzeAssign(syntax__ast__AssignStmt* asg) {
-    syntax__ast__Ident* id_3713 = NULL;
-    syntax__ast__Member* m_3715 = NULL;
-    syntax__ast__Member* m_3716 = NULL;
-    syntax__ast__Index* x_3719 = NULL;
+    syntax__ast__Ident* id_3715 = NULL;
+    syntax__ast__Member* m_3717 = NULL;
+    syntax__ast__Member* m_3718 = NULL;
+    syntax__ast__Index* x_3721 = NULL;
     syntax__ast__Expr* target = (asg)->target;
     semantics__types__Type* tt = semantics__types__T_ERROR;
     semantics__types__Region* storage = semantics__types__R_STATIC;
     semantics__types__Place* place = semantics__types__P_TEMP;
     semantics__types__Symbol* root = NULL;
     semantics__analyzer__MutK mk = ((semantics__analyzer__MutK){ .tag = semantics__analyzer__MutK_Field });
-    if ((id_3713 = (syntax__ast__Ident*)rt_as_class((void*)(target), &rtclass_syntax__ast__Ident)) != NULL) {
-        semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3713)->name);
+    if ((id_3715 = (syntax__ast__Ident*)rt_as_class((void*)(target), &rtclass_syntax__ast__Ident)) != NULL) {
+        semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3715)->name);
         if (s == NULL) {
             RtMem tmp_2909 = rt_mem_growable();
             RtSb sb_2908 = rt_sb_mem(&tmp_2909, 30000380);
             rt_sb_add(&sb_2908, "Use of undeclared variable '", 28);
-            rt_sb_str(&sb_2908, (id_3713)->name);
+            rt_sb_str(&sb_2908, (id_3715)->name);
             rt_sb_add(&sb_2908, "'.", 2);
-            semantics__analyzer__error((id_3713)->_super._super.line, rt_sb_finish(&sb_2908));
+            semantics__analyzer__error((id_3715)->_super._super.line, rt_sb_finish(&sb_2908));
             rt_mem_free(&tmp_2909);
         } else {
-            (id_3713)->_super._super.symbol = s;
+            (id_3715)->_super._super.symbol = s;
             if (((s)->kind).tag == (((semantics__types__SymK){ .tag = semantics__types__SymK_Function })).tag) {
                 RtMem tmp_2911 = rt_mem_growable();
                 RtSb sb_2910 = rt_sb_mem(&tmp_2911, 30000384);
@@ -25208,9 +25211,9 @@ void semantics__analyzer__statements__analyzeAssign(syntax__ast__AssignStmt* asg
                             semantics__analyzer__error((asg)->_super._super.line, rt_sb_finish(&sb_2916));
                             rt_mem_free(&tmp_2917);
                         } else {
-                            semantics__analyzer__noteCapture(s, (id_3713)->_super._super.line);
+                            semantics__analyzer__noteCapture(s, (id_3715)->_super._super.line);
                             if ((((s)->kind).tag == (((semantics__types__SymK){ .tag = semantics__types__SymK_Global })).tag) && ((s)->externValue == NULL)) {
-                                semantics__analyzer__threads__useGlobal(s, (id_3713)->_super._super.line);
+                                semantics__analyzer__threads__useGlobal(s, (id_3715)->_super._super.line);
                             }
                             tt = (s)->type;
                             storage = ((((s)->kind).tag == (((semantics__types__SymK){ .tag = semantics__types__SymK_Global })).tag) ? semantics__types__R_STATIC : (s)->region);
@@ -25236,25 +25239,25 @@ void semantics__analyzer__statements__analyzeAssign(syntax__ast__AssignStmt* asg
                             }
                             root = s;
                             mk = ((semantics__analyzer__MutK){ .tag = semantics__analyzer__MutK_Reassign });
-                            (id_3713)->_super._super.ty = tt;
+                            (id_3715)->_super._super.ty = tt;
                         }
                     }
                 }
             }
         }
     } else {
-        if (((m_3715 = (syntax__ast__Member*)rt_as_class((void*)(target), &rtclass_syntax__ast__Member)) != NULL) && semantics__analyzer__statements__memberIsAnyKey(m_3715)) {
+        if (((m_3717 = (syntax__ast__Member*)rt_as_class((void*)(target), &rtclass_syntax__ast__Member)) != NULL) && semantics__analyzer__statements__memberIsAnyKey(m_3717)) {
             tt = semantics__types__T_ANY;
-            storage = semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((m_3715)->object)));
+            storage = semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((m_3717)->object)));
             RtMem* t_2923 = &rt_default_mem;
             semantics__types__Place* obj_2924 = (semantics__types__Place*)rt_mem_alloc(t_2923, sizeof(semantics__types__Place), 30000408);
-            *obj_2924 = (semantics__types__Place){ ._h = { (const void*)&vtable_semantics__types__Place, t_2923 }, .kind = ((semantics__types__PlaceK){ .tag = semantics__types__PlaceK_OfAny }), .memory = NULL, .bytes = 0LL, .expr = (m_3715)->object, .scope = NULL };
+            *obj_2924 = (semantics__types__Place){ ._h = { (const void*)&vtable_semantics__types__Place, t_2923 }, .kind = ((semantics__types__PlaceK){ .tag = semantics__types__PlaceK_OfAny }), .memory = NULL, .bytes = 0LL, .expr = (m_3717)->object, .scope = NULL };
             place = obj_2924;
-            root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(m_3715)));
+            root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(m_3717)));
         } else {
-            if ((m_3716 = (syntax__ast__Member*)rt_as_class((void*)(target), &rtclass_syntax__ast__Member)) != NULL) {
-                tt = semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)(m_3716)));
-                semantics__types__MemberInfo* mi = (m_3716)->_super._super.member;
+            if ((m_3718 = (syntax__ast__Member*)rt_as_class((void*)(target), &rtclass_syntax__ast__Member)) != NULL) {
+                tt = semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)(m_3718)));
+                semantics__types__MemberInfo* mi = (m_3718)->_super._super.member;
                 if (((!(mi == NULL)) && (((mi)->kind).tag == (((semantics__types__MbK){ .tag = semantics__types__MbK_Field })).tag)) && semantics__types__isClass(((semantics__types__Type*)rt_unwrap((void*)((mi)->objectType), 30000413)))) {
                     semantics__types__ClassInfo* co = semantics__types__classOf(NULL, (((semantics__types__Type*)rt_unwrap((void*)((mi)->objectType), 30000414)))->name);
                     if ((!(co == NULL)) && (co)->thread) {
@@ -25265,7 +25268,7 @@ void semantics__analyzer__statements__analyzeAssign(syntax__ast__AssignStmt* asg
                     RtMem tmp_2926 = rt_mem_growable();
                     RtSb sb_2925 = rt_sb_mem(&tmp_2926, 30000418);
                     rt_sb_add(&sb_2925, "Field '", 7);
-                    rt_sb_str(&sb_2925, (m_3716)->name);
+                    rt_sb_str(&sb_2925, (m_3718)->name);
                     rt_sb_add(&sb_2925, "' is a C string: it is read (a view of C's text), not assigned.", 63);
                     semantics__analyzer__error((asg)->_super._super.line, rt_sb_finish(&sb_2925));
                     rt_mem_free(&tmp_2926);
@@ -25277,39 +25280,39 @@ void semantics__analyzer__statements__analyzeAssign(syntax__ast__AssignStmt* asg
                         }
                         tt = semantics__types__T_ERROR;
                     } else {
-                        storage = semantics__analyzer__compact__storageRegion(NULL, (m_3716)->object);
-                        place = semantics__analyzer__compact__placeFor(NULL, (m_3716)->object);
-                        root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(m_3716)));
-                        if (((!(semantics__analyzer__compact__isLValue((m_3716)->object))) && (!(semantics__analyzer__compact__isReference(semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)((m_3716)->object))))))) && (!(semantics__types__isPtr(((semantics__types__Type*)rt_unwrap((void*)((mi)->objectType), 30000427)))))) {
+                        storage = semantics__analyzer__compact__storageRegion(NULL, (m_3718)->object);
+                        place = semantics__analyzer__compact__placeFor(NULL, (m_3718)->object);
+                        root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(m_3718)));
+                        if (((!(semantics__analyzer__compact__isLValue((m_3718)->object))) && (!(semantics__analyzer__compact__isReference(semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)((m_3718)->object))))))) && (!(semantics__types__isPtr(((semantics__types__Type*)rt_unwrap((void*)((mi)->objectType), 30000427)))))) {
                             semantics__analyzer__error((asg)->_super._super.line, rt_str("Cannot assign to a field of a temporary value; store it in a variable first.", 76));
                         }
                     }
                 }
             } else {
-                if ((x_3719 = (syntax__ast__Index*)rt_as_class((void*)(target), &rtclass_syntax__ast__Index)) != NULL) {
-                    tt = semantics__expressions__check(NULL, ((syntax__ast__Expr*)(x_3719)), NULL, semantics__types__P_TEMP);
-                    semantics__types__Type* ot = semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)((x_3719)->object)));
-                    storage = semantics__analyzer__compact__storageRegion(NULL, (x_3719)->object);
+                if ((x_3721 = (syntax__ast__Index*)rt_as_class((void*)(target), &rtclass_syntax__ast__Index)) != NULL) {
+                    tt = semantics__expressions__check(NULL, ((syntax__ast__Expr*)(x_3721)), NULL, semantics__types__P_TEMP);
+                    semantics__types__Type* ot = semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)((x_3721)->object)));
+                    storage = semantics__analyzer__compact__storageRegion(NULL, (x_3721)->object);
                     if ((const void*)(ot) == (const void*)(semantics__types__T_STRING)) {
                         semantics__analyzer__error((asg)->_super._super.line, rt_str("A String cannot be changed; build a new one (replace, substring, a StringBuilder or interpolation).", 99));
                     }
                     if ((const void*)(ot) == (const void*)(semantics__types__T_ANY)) {
                         RtMem* t_2927 = &rt_default_mem;
                         semantics__types__Place* obj_2928 = (semantics__types__Place*)rt_mem_alloc(t_2927, sizeof(semantics__types__Place), 30000437);
-                        *obj_2928 = (semantics__types__Place){ ._h = { (const void*)&vtable_semantics__types__Place, t_2927 }, .kind = ((semantics__types__PlaceK){ .tag = semantics__types__PlaceK_OfAny }), .memory = NULL, .bytes = 0LL, .expr = (x_3719)->object, .scope = NULL };
+                        *obj_2928 = (semantics__types__Place){ ._h = { (const void*)&vtable_semantics__types__Place, t_2927 }, .kind = ((semantics__types__PlaceK){ .tag = semantics__types__PlaceK_OfAny }), .memory = NULL, .bytes = 0LL, .expr = (x_3721)->object, .scope = NULL };
                         place = obj_2928;
                     } else {
                         if (semantics__types__isArray(ot, ((semantics__types__ArrK){ .tag = semantics__types__ArrK_Growable }))) {
                             RtMem* t_2929 = &rt_default_mem;
                             semantics__types__Place* obj_2930 = (semantics__types__Place*)rt_mem_alloc(t_2929, sizeof(semantics__types__Place), 30000439);
-                            *obj_2930 = (semantics__types__Place){ ._h = { (const void*)&vtable_semantics__types__Place, t_2929 }, .kind = ((semantics__types__PlaceK){ .tag = semantics__types__PlaceK_OfList }), .memory = NULL, .bytes = 0LL, .expr = (x_3719)->object, .scope = NULL };
+                            *obj_2930 = (semantics__types__Place){ ._h = { (const void*)&vtable_semantics__types__Place, t_2929 }, .kind = ((semantics__types__PlaceK){ .tag = semantics__types__PlaceK_OfList }), .memory = NULL, .bytes = 0LL, .expr = (x_3721)->object, .scope = NULL };
                             place = obj_2930;
                         } else {
-                            place = semantics__analyzer__compact__placeFor(NULL, (x_3719)->object);
+                            place = semantics__analyzer__compact__placeFor(NULL, (x_3721)->object);
                         }
                     }
-                    root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(x_3719)));
-                    if ((!(semantics__analyzer__compact__isLValue((x_3719)->object))) && (!(semantics__analyzer__compact__isReference(ot)))) {
+                    root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(x_3721)));
+                    if ((!(semantics__analyzer__compact__isLValue((x_3721)->object))) && (!(semantics__analyzer__compact__isReference(ot)))) {
                         semantics__analyzer__error((asg)->_super._super.line, rt_str("Cannot assign to an element of a temporary array; store it in a variable first.", 79));
                     }
                 } else {
@@ -25360,27 +25363,27 @@ bool semantics__analyzer__statements__memberIsAnyKey(syntax__ast__Member* m) {
 }
 
 RtString semantics__analyzer__statements__describeTarget(RtMem* rt_dest, syntax__ast__Expr* t) {
-    syntax__ast__Ident* id_3728 = NULL;
-    syntax__ast__Member* m_3729 = NULL;
-    if ((id_3728 = (syntax__ast__Ident*)rt_as_class((void*)(t), &rtclass_syntax__ast__Ident)) != NULL) {
+    syntax__ast__Ident* id_3730 = NULL;
+    syntax__ast__Member* m_3731 = NULL;
+    if ((id_3730 = (syntax__ast__Ident*)rt_as_class((void*)(t), &rtclass_syntax__ast__Ident)) != NULL) {
         RtSb sb_2937 = rt_sb_mem(rt_dest, 30000473);
         rt_sb_add(&sb_2937, "'", 1);
-        rt_sb_str(&sb_2937, (id_3728)->name);
+        rt_sb_str(&sb_2937, (id_3730)->name);
         rt_sb_add(&sb_2937, "'", 1);
         return rt_sb_finish(&sb_2937);
     }
-    if ((m_3729 = (syntax__ast__Member*)rt_as_class((void*)(t), &rtclass_syntax__ast__Member)) != NULL) {
+    if ((m_3731 = (syntax__ast__Member*)rt_as_class((void*)(t), &rtclass_syntax__ast__Member)) != NULL) {
         RtString value_2940;
-        if ((!((m_3729)->_super._super.member == NULL)) && (((((semantics__types__MemberInfo*)rt_unwrap((void*)((m_3729)->_super._super.member), 30000474)))->kind).tag == (((semantics__types__MbK){ .tag = semantics__types__MbK_AnyKey })).tag)) {
+        if ((!((m_3731)->_super._super.member == NULL)) && (((((semantics__types__MemberInfo*)rt_unwrap((void*)((m_3731)->_super._super.member), 30000474)))->kind).tag == (((semantics__types__MbK){ .tag = semantics__types__MbK_AnyKey })).tag)) {
             RtSb sb_2938 = rt_sb_mem(rt_dest, 30000474);
             rt_sb_add(&sb_2938, "entry '", 7);
-            rt_sb_str(&sb_2938, (m_3729)->name);
+            rt_sb_str(&sb_2938, (m_3731)->name);
             rt_sb_add(&sb_2938, "'", 1);
             value_2940 = rt_sb_finish(&sb_2938);
         } else {
             RtSb sb_2939 = rt_sb_mem(rt_dest, 30000474);
             rt_sb_add(&sb_2939, "field '", 7);
-            rt_sb_str(&sb_2939, (m_3729)->name);
+            rt_sb_str(&sb_2939, (m_3731)->name);
             rt_sb_add(&sb_2939, "'", 1);
             value_2940 = rt_sb_finish(&sb_2939);
         }
@@ -25953,20 +25956,20 @@ semantics__types__Type* semantics__expressions__checkIntValue(RtMem* rt_dest, se
     } else {
         value_2991 = (v)->text;
     }
-    RtString text_3791 = value_2991;
+    RtString text_3793 = value_2991;
     if (((((const void*)(p) == (const void*)(semantics__types__T_INT32)) && ((t == NULL) || (!(semantics__types__isInteger(t))))) && (!((v)->big))) && (!((v)->huge))) {
         RtMem tmp_2993 = rt_mem_growable();
         RtSb sb_2992 = rt_sb_mem(&tmp_2993, 29000216);
-        rt_sb_str(&sb_2992, text_3791);
+        rt_sb_str(&sb_2992, text_3793);
         rt_sb_add(&sb_2992, " does not fit in int32; give it a type, e.g. let n: int64 = ", 60);
-        rt_sb_str(&sb_2992, text_3791);
+        rt_sb_str(&sb_2992, text_3793);
         rt_sb_add(&sb_2992, ";", 1);
         semantics__analyzer__error(line, rt_sb_finish(&sb_2992));
         rt_mem_free(&tmp_2993);
     } else {
         RtMem tmp_2995 = rt_mem_growable();
         RtSb sb_2994 = rt_sb_mem(&tmp_2995, 29000218);
-        rt_sb_str(&sb_2994, text_3791);
+        rt_sb_str(&sb_2994, text_3793);
         rt_sb_add(&sb_2994, " does not fit in ", 17);
         rt_sb_str(&sb_2994, (p)->text);
         rt_sb_add(&sb_2994, " (", 2);
@@ -26204,27 +26207,27 @@ RtString semantics__expressions__variantFieldNames(RtMem* rt_dest, semantics__ty
 
 RtString semantics__expressions__typeNamed(RtMem* rt_dest, syntax__ast__Expr* e) {
     (void)rt_dest;
-    syntax__ast__Ident* id_3824 = NULL;
-    if ((!(((id_3824 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL))) || (!(semantics__analyzer__lookup(NULL, (id_3824)->name) == NULL))) {
+    syntax__ast__Ident* id_3826 = NULL;
+    if ((!(((id_3826 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL))) || (!(semantics__analyzer__lookup(NULL, (id_3826)->name) == NULL))) {
         return rt_str("", 0);
     }
-    RtString n = (id_3824)->name;
+    RtString n = (id_3826)->name;
     return (((((((!(semantics__types__structOf(NULL, n) == NULL)) || (!(semantics__types__classOf(NULL, n) == NULL))) || (!(semantics__types__interfaceOf(NULL, n) == NULL))) || (!(semantics__types__enumOf(NULL, n) == NULL))) || (!(semantics__types__primByName(NULL, n) == NULL))) || semantics__types__isExternTypeName(n)) ? n : rt_str("", 0));
 }
 
 semantics__types__EnumInfo* semantics__expressions__enumNamed(RtMem* rt_dest, syntax__ast__Expr* e) {
     (void)rt_dest;
-    syntax__ast__Ident* id_3827 = NULL;
-    return ((((id_3827 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL) && (semantics__analyzer__lookup(NULL, (id_3827)->name) == NULL)) ? semantics__types__enumOf(NULL, (id_3827)->name) : NULL);
+    syntax__ast__Ident* id_3829 = NULL;
+    return ((((id_3829 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL) && (semantics__analyzer__lookup(NULL, (id_3829)->name) == NULL)) ? semantics__types__enumOf(NULL, (id_3829)->name) : NULL);
 }
 
 semantics__types__Symbol* semantics__expressions__memoryNamed(RtMem* rt_dest, syntax__ast__Expr* e) {
     (void)rt_dest;
-    syntax__ast__Ident* id_3829 = NULL;
-    if (!(((id_3829 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL))) {
+    syntax__ast__Ident* id_3831 = NULL;
+    if (!(((id_3831 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL))) {
         return NULL;
     }
-    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3829)->name);
+    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3831)->name);
     return (((!(s == NULL)) && semantics__types__isMemory(s)) ? s : NULL);
 }
 
@@ -26429,8 +26432,8 @@ semantics__types__Type* semantics__expressions__checkMember(RtMem* rt_dest, synt
     semantics__types__MethodInfo* pm = semantics__expressions__methodOf(NULL, ot, (m)->name);
     if ((!(pm == NULL)) && ((pm)->decl)->isProperty) {
         semantics__types__Type* pt = ((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((pm)->sig), 29000420)))->elem), 29000420));
-        bool text_3845 = (((const void*)(pt) == (const void*)(semantics__types__T_STRING)) || ((const void*)(pt) == (const void*)(semantics__types__optT(NULL, semantics__types__T_STRING))));
-        if (semantics__expressions__conversions__hasRefs(pt) && (!(text_3845))) {
+        bool text_3847 = (((const void*)(pt) == (const void*)(semantics__types__T_STRING)) || ((const void*)(pt) == (const void*)(semantics__types__optT(NULL, semantics__types__T_STRING))));
+        if (semantics__expressions__conversions__hasRefs(pt) && (!(text_3847))) {
             RtMem tmp_3075 = rt_mem_growable();
             RtSb sb_3074 = rt_sb_mem(&tmp_3075, 29000422);
             rt_sb_add(&sb_3074, "A native let gives a number, bool, String or String\? ('", 55);
@@ -26453,7 +26456,7 @@ semantics__types__Type* semantics__expressions__checkMember(RtMem* rt_dest, synt
         semantics__types__MemberInfo* obj_3080 = (semantics__types__MemberInfo*)rt_mem_alloc(t_3079, sizeof(semantics__types__MemberInfo), 29000424);
         *obj_3080 = (semantics__types__MemberInfo){ ._h = { (const void*)&vtable_semantics__types__MemberInfo, t_3079 }, .kind = ((semantics__types__MbK){ .tag = semantics__types__MbK_Property }), .field = NULL, .objectType = ot, .enumInfo = NULL, .variant = NULL, .memory = NULL, .stat = rt_str("", 0), .key = rt_str("", 0), .method = pm, .typeName = rt_str("", 0) };
         (m)->_super._super.member = obj_3080;
-        if (text_3845) {
+        if (text_3847) {
             (m)->_super._super.place = place;
             semantics__expressions__conversions__setRegion(((syntax__ast__Node*)(m)), semantics__expressions__calls__placedResult(NULL, ((syntax__ast__Expr*)(m)), pt, place));
         } else {
@@ -26696,7 +26699,7 @@ semantics__types__Place* semantics__expressions__resolvePlacement(RtMem* rt_dest
 
 semantics__types__Type* semantics__expressions__checkPlaced(RtMem* rt_dest, syntax__ast__Placed* p, semantics__types__Type* expected) {
     (void)rt_dest;
-    syntax__ast__Binary* b_3873 = NULL;
+    syntax__ast__Binary* b_3875 = NULL;
     syntax__ast__Expr* inner = (p)->expr;
     semantics__types__Place* place = semantics__expressions__resolvePlacement(NULL, p);
     if (place == NULL) {
@@ -26706,7 +26709,7 @@ semantics__types__Type* semantics__expressions__checkPlaced(RtMem* rt_dest, synt
     if (((!(expected == NULL)) && ((const void*)(expected) == (const void*)(semantics__types__T_ANY))) && (semantics__types__isStruct(t) || semantics__types__isEnumT(t))) {
         (inner)->_super.place = place;
     }
-    bool branches = (((rt_as_class((void*)(inner), &rtclass_syntax__ast__Ternary) != NULL) || (rt_as_class((void*)(inner), &rtclass_syntax__ast__SwitchExpr) != NULL)) || (((b_3873 = (syntax__ast__Binary*)rt_as_class((void*)(inner), &rtclass_syntax__ast__Binary)) != NULL) && rt_str_eq((b_3873)->op, rt_str("\?\?", 2))));
+    bool branches = (((rt_as_class((void*)(inner), &rtclass_syntax__ast__Ternary) != NULL) || (rt_as_class((void*)(inner), &rtclass_syntax__ast__SwitchExpr) != NULL)) || (((b_3875 = (syntax__ast__Binary*)rt_as_class((void*)(inner), &rtclass_syntax__ast__Binary)) != NULL) && rt_str_eq((b_3875)->op, rt_str("\?\?", 2))));
     if ((((inner)->_super.place == NULL) && (!(branches))) && (!(semantics__types__isError(t)))) {
         semantics__analyzer__error((p)->_super._super.line, rt_str("'in' has no effect here: this value does not need memory (it is a number, a literal or a plain value).", 102));
     }
@@ -26721,17 +26724,17 @@ semantics__types__Type* semantics__expressions__checkPlaced(RtMem* rt_dest, synt
 
 semantics__types__Symbol* semantics__expressions__resolveMemory(RtMem* rt_dest, syntax__ast__Expr* e) {
     (void)rt_dest;
-    syntax__ast__Ident* id_3877 = NULL;
-    if (!(((id_3877 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL))) {
+    syntax__ast__Ident* id_3879 = NULL;
+    if (!(((id_3879 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL))) {
         semantics__analyzer__error((e)->_super.line, rt_str("After 'in' write a memory variable, 'heap', or byte[N] for a temporary buffer.", 78));
         return NULL;
     }
-    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3877)->name);
+    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3879)->name);
     if (s == NULL) {
         RtMem tmp_3114 = rt_mem_growable();
         RtSb sb_3113 = rt_sb_mem(&tmp_3114, 29000546);
         rt_sb_add(&sb_3113, "Use of undeclared memory '", 26);
-        rt_sb_str(&sb_3113, (id_3877)->name);
+        rt_sb_str(&sb_3113, (id_3879)->name);
         rt_sb_add(&sb_3113, "'.", 2);
         semantics__analyzer__error((e)->_super.line, rt_sb_finish(&sb_3113));
         rt_mem_free(&tmp_3114);
@@ -27167,13 +27170,13 @@ void semantics__analyzer__compact__resolveRegions(void) {
 
 syntax__ast__Expr* semantics__analyzer__compact__objectOf(RtMem* rt_dest, syntax__ast__Expr* e) {
     (void)rt_dest;
-    syntax__ast__Member* m_3919 = NULL;
-    syntax__ast__Index* x_3920 = NULL;
-    if ((m_3919 = (syntax__ast__Member*)rt_as_class((void*)(e), &rtclass_syntax__ast__Member)) != NULL) {
-        return (m_3919)->object;
+    syntax__ast__Member* m_3921 = NULL;
+    syntax__ast__Index* x_3922 = NULL;
+    if ((m_3921 = (syntax__ast__Member*)rt_as_class((void*)(e), &rtclass_syntax__ast__Member)) != NULL) {
+        return (m_3921)->object;
     }
-    if ((x_3920 = (syntax__ast__Index*)rt_as_class((void*)(e), &rtclass_syntax__ast__Index)) != NULL) {
-        return (x_3920)->object;
+    if ((x_3922 = (syntax__ast__Index*)rt_as_class((void*)(e), &rtclass_syntax__ast__Index)) != NULL) {
+        return (x_3922)->object;
     }
     return NULL;
 }
@@ -27295,7 +27298,7 @@ void semantics__analyzer__compact__analyzeReturn(syntax__ast__ReturnStmt* r) {
 }
 
 void semantics__analyzer__compact__analyzeWhen(syntax__ast__IfStmt* i) {
-    syntax__ast__IfStmt* n_3949 = NULL;
+    syntax__ast__IfStmt* n_3951 = NULL;
     RtString outer = semantics__analyzer__compact__platformCtx;
     semantics__types__Scope* stmtScope = semantics__analyzer__scope;
     semantics__types__Scope* blk = semantics__analyzer__block(NULL);
@@ -27314,8 +27317,8 @@ void semantics__analyzer__compact__analyzeWhen(syntax__ast__IfStmt* i) {
         if (!((cur)->hasElse)) {
             break;
         }
-        if (((((cur)->elseBody)->length == 1) && ((n_3949 = (syntax__ast__IfStmt*)rt_as_class((void*)(((cur)->elseBody)->items[rt_index((int64_t)(0), ((cur)->elseBody)->length, 28000268)]), &rtclass_syntax__ast__IfStmt)) != NULL)) && (n_3949)->chained) {
-            cur = n_3949;
+        if (((((cur)->elseBody)->length == 1) && ((n_3951 = (syntax__ast__IfStmt*)rt_as_class((void*)(((cur)->elseBody)->items[rt_index((int64_t)(0), ((cur)->elseBody)->length, 28000268)]), &rtclass_syntax__ast__IfStmt)) != NULL)) && (n_3951)->chained) {
+            cur = n_3951;
             continue;
         }
         covered = true;
@@ -27839,8 +27842,8 @@ bool semantics__analyzer__flow__creatingMethod(RtString name) {
 
 syntax__ast__Expr* semantics__analyzer__flow__linked(RtMem* rt_dest, syntax__ast__Expr* e) {
     (void)rt_dest;
-    syntax__ast__Member* m_4024 = NULL;
-    return ((((m_4024 = (syntax__ast__Member*)rt_as_class((void*)(e), &rtclass_syntax__ast__Member)) != NULL) && (!((m_4024)->replaced == NULL))) ? ((syntax__ast__Expr*)rt_unwrap((void*)((m_4024)->replaced), 27000181)) : e);
+    syntax__ast__Member* m_4026 = NULL;
+    return ((((m_4026 = (syntax__ast__Member*)rt_as_class((void*)(e), &rtclass_syntax__ast__Member)) != NULL) && (!((m_4026)->replaced == NULL))) ? ((syntax__ast__Expr*)rt_unwrap((void*)((m_4026)->replaced), 27000181)) : e);
 }
 
 bool semantics__analyzer__flow__callMemory(semantics__types__FunctionInfo* f) {
@@ -27932,10 +27935,10 @@ bool semantics__analyzer__flow__lengthIsNumber(RtString name) {
 }
 
 void semantics__analyzer__flow__mentioned(syntax__ast__Expr* e, RtAny out, bool viaPlaced) {
-    syntax__ast__Ident* id_4050 = NULL;
-    syntax__ast__Member* o_4056 = NULL;
-    syntax__ast__Ident* pid_4058 = NULL;
-    syntax__ast__YieldStmt* y_4063 = NULL;
+    syntax__ast__Ident* id_4052 = NULL;
+    syntax__ast__Member* o_4058 = NULL;
+    syntax__ast__Ident* pid_4060 = NULL;
+    syntax__ast__YieldStmt* y_4065 = NULL;
     RtMem mem_45 = rt_mem_growable();
     List_syntax__ast__Expr* list_3320 = List_syntax__ast__Expr_new(&mem_45, 27000233);
     List_syntax__ast__Expr* xs = list_3320;
@@ -27979,8 +27982,8 @@ void semantics__analyzer__flow__mentioned(syntax__ast__Expr* e, RtAny out, bool 
                         {
                             List_syntax__ast__Expr* list_3331 = (t)->exprs;
                             for (int32_t i_3330 = 0; i_3330 < list_3331->length; i_3330++) {
-                                syntax__ast__Expr* x_4048 = list_3331->items[i_3330];
-                                syntax__ast__exprAll(x_4048, true, skip);
+                                syntax__ast__Expr* x_4050 = list_3331->items[i_3330];
+                                syntax__ast__exprAll(x_4050, true, skip);
                             }
                         }
                     }
@@ -27991,7 +27994,7 @@ void semantics__analyzer__flow__mentioned(syntax__ast__Expr* e, RtAny out, bool 
                 if (rt_is_a(rt_obj_class(subject_3328), &rtclass_syntax__ast__Call)) {
                     syntax__ast__Call* c = (syntax__ast__Call*)subject_3328;
                     {
-                        semantics__types__FunctionInfo* f = (((id_4050 = (syntax__ast__Ident*)rt_as_class((void*)(semantics__analyzer__flow__linked(NULL, (c)->callee)), &rtclass_syntax__ast__Ident)) != NULL) ? semantics__types__functionOf(NULL, (id_4050)->name) : semantics__analyzer__flow__staticCallee(NULL, c));
+                        semantics__types__FunctionInfo* f = (((id_4052 = (syntax__ast__Ident*)rt_as_class((void*)(semantics__analyzer__flow__linked(NULL, (c)->callee)), &rtclass_syntax__ast__Ident)) != NULL) ? semantics__types__functionOf(NULL, (id_4052)->name) : semantics__analyzer__flow__staticCallee(NULL, c));
                         if ((!(f == NULL)) && ((!((f)->isExtern)) || semantics__analyzer__flow__callMemory(f))) {
                             {
                                 List_syntax__ast__Expr* list_3333 = (c)->args;
@@ -28018,13 +28021,13 @@ void semantics__analyzer__flow__mentioned(syntax__ast__Expr* e, RtAny out, bool 
                                 syntax__ast__exprAll(((syntax__ast__Expr*)(m)), true, skip);
                             }
                         } else {
-                            if ((((!rt_str_eq(semantics__analyzer__flow__flowSelfClass, rt_str("", 0))) && rt_str_eq((m)->name, rt_str("length", 6))) && ((o_4056 = (syntax__ast__Member*)rt_as_class((void*)((m)->object), &rtclass_syntax__ast__Member)) != NULL)) && (rt_as_class((void*)((o_4056)->object), &rtclass_syntax__ast__SelfExpr) != NULL)) {
-                                semantics__types__FieldInfo* fi = semantics__types__findField(NULL, semantics__analyzer__flow__flowSelfClass, (o_4056)->name);
+                            if ((((!rt_str_eq(semantics__analyzer__flow__flowSelfClass, rt_str("", 0))) && rt_str_eq((m)->name, rt_str("length", 6))) && ((o_4058 = (syntax__ast__Member*)rt_as_class((void*)((m)->object), &rtclass_syntax__ast__Member)) != NULL)) && (rt_as_class((void*)((o_4058)->object), &rtclass_syntax__ast__SelfExpr) != NULL)) {
+                                semantics__types__FieldInfo* fi = semantics__types__findField(NULL, semantics__analyzer__flow__flowSelfClass, (o_4058)->name);
                                 if ((!(fi == NULL)) && (((const void*)((fi)->type) == (const void*)(semantics__types__T_STRING)) || ((((fi)->type)->kind).tag == (((semantics__types__TyK){ .tag = semantics__types__TyK_Array })).tag))) {
                                     syntax__ast__exprAll(((syntax__ast__Expr*)(m)), true, skip);
                                 }
                             } else {
-                                if ((rt_str_eq((m)->name, rt_str("length", 6)) && ((pid_4058 = (syntax__ast__Ident*)rt_as_class((void*)((m)->object), &rtclass_syntax__ast__Ident)) != NULL)) && semantics__analyzer__flow__lengthIsNumber((pid_4058)->name)) {
+                                if ((rt_str_eq((m)->name, rt_str("length", 6)) && ((pid_4060 = (syntax__ast__Ident*)rt_as_class((void*)((m)->object), &rtclass_syntax__ast__Ident)) != NULL)) && semantics__analyzer__flow__lengthIsNumber((pid_4060)->name)) {
                                     syntax__ast__exprAll(((syntax__ast__Expr*)(m)), true, skip);
                                 }
                             }
@@ -28055,8 +28058,8 @@ void semantics__analyzer__flow__mentioned(syntax__ast__Expr* e, RtAny out, bool 
                                     List_syntax__ast__Stmt* list_3338 = stmts;
                                     for (int32_t i_3337 = 0; i_3337 < list_3338->length; i_3337++) {
                                         syntax__ast__Stmt* st = list_3338->items[i_3337];
-                                        if ((y_4063 = (syntax__ast__YieldStmt*)rt_as_class((void*)(st), &rtclass_syntax__ast__YieldStmt)) != NULL) {
-                                            semantics__analyzer__flow__mentioned((y_4063)->value, out, viaPlaced);
+                                        if ((y_4065 = (syntax__ast__YieldStmt*)rt_as_class((void*)(st), &rtclass_syntax__ast__YieldStmt)) != NULL) {
+                                            semantics__analyzer__flow__mentioned((y_4065)->value, out, viaPlaced);
                                         }
                                     }
                                 }
@@ -28186,8 +28189,8 @@ bool semantics__analyzer__flow__returnsArgs(List_syntax__ast__Param* params, Lis
 }
 
 RtAny semantics__analyzer__flow__flowNames(RtMem* rt_dest, List_syntax__ast__Stmt* body, bool viaPlaced) {
-    syntax__ast__ReturnStmt* r_4086 = NULL;
-    syntax__ast__Member* m_4094 = NULL;
+    syntax__ast__ReturnStmt* r_4088 = NULL;
+    syntax__ast__Member* m_4096 = NULL;
     RtMem mem_48 = rt_mem_growable();
     RtTable* table_3349 = rt_table_new(rt_dest, 27000320);
     RtAny flow = rt_any_t(table_3349);
@@ -28201,8 +28204,8 @@ RtAny semantics__analyzer__flow__flowNames(RtMem* rt_dest, List_syntax__ast__Stm
         List_syntax__ast__Stmt* list_3353 = stmts;
         for (int32_t i_3352 = 0; i_3352 < list_3353->length; i_3352++) {
             syntax__ast__Stmt* s = list_3353->items[i_3352];
-            if (((r_4086 = (syntax__ast__ReturnStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__ReturnStmt)) != NULL) && (!((r_4086)->value == NULL))) {
-                semantics__analyzer__flow__mentioned(((syntax__ast__Expr*)rt_unwrap((void*)((r_4086)->value), 27000326)), flow, viaPlaced);
+            if (((r_4088 = (syntax__ast__ReturnStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__ReturnStmt)) != NULL) && (!((r_4088)->value == NULL))) {
+                semantics__analyzer__flow__mentioned(((syntax__ast__Expr*)rt_unwrap((void*)((r_4088)->value), 27000326)), flow, viaPlaced);
             }
         }
     }
@@ -28266,7 +28269,7 @@ RtAny semantics__analyzer__flow__flowNames(RtMem* rt_dest, List_syntax__ast__Stm
                     if (rt_is_a(rt_obj_class(subject_3360), &rtclass_syntax__ast__Call)) {
                         syntax__ast__Call* c = (syntax__ast__Call*)subject_3360;
                         {
-                            if ((((m_4094 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) && rt_any_contains(flow, rt_any_s(semantics__analyzer__flow__rootName(NULL, (m_4094)->object)))) && (rt_str_eq((m_4094)->name, rt_str("push", 4)) || (!(semantics__analyzer__flow__builtinFresh((m_4094)->name))))) {
+                            if ((((m_4096 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) && rt_any_contains(flow, rt_any_s(semantics__analyzer__flow__rootName(NULL, (m_4096)->object)))) && (rt_str_eq((m_4096)->name, rt_str("push", 4)) || (!(semantics__analyzer__flow__builtinFresh((m_4096)->name))))) {
                                 {
                                     List_syntax__ast__Expr* list_3363 = (c)->args;
                                     for (int32_t i_3362 = 0; i_3362 < list_3363->length; i_3362++) {
@@ -28384,8 +28387,8 @@ bool semantics__analyzer__flow__isDeclared(semantics__analyzer__flow__Declared* 
 }
 
 bool semantics__analyzer__flow__createsResult(List_syntax__ast__Stmt* body, semantics__types__Type* ret, List_syntax__ast__Param* params) {
-    syntax__ast__VarDecl* v_4121 = NULL;
-    syntax__ast__Ident* id_4126 = NULL;
+    syntax__ast__VarDecl* v_4123 = NULL;
+    syntax__ast__Ident* id_4128 = NULL;
     RtMem mem_49 = rt_mem_growable();
     if (!(semantics__expressions__conversions__hasRefs(ret))) {
         bool ret_3378 = false;
@@ -28415,9 +28418,9 @@ bool semantics__analyzer__flow__createsResult(List_syntax__ast__Stmt* body, sema
         List_syntax__ast__Stmt* list_3387 = stmts;
         for (int32_t i_3386 = 0; i_3386 < list_3387->length; i_3386++) {
             syntax__ast__Stmt* s = list_3387->items[i_3386];
-            if ((v_4121 = (syntax__ast__VarDecl*)rt_as_class((void*)(s), &rtclass_syntax__ast__VarDecl)) != NULL) {
-                List_s_push((declared)->names, (v_4121)->name);
-                List_Osyntax__ast__TypeRef_push((declared)->types, (v_4121)->type);
+            if ((v_4123 = (syntax__ast__VarDecl*)rt_as_class((void*)(s), &rtclass_syntax__ast__VarDecl)) != NULL) {
+                List_s_push((declared)->names, (v_4123)->name);
+                List_Osyntax__ast__TypeRef_push((declared)->types, (v_4123)->type);
             }
         }
     }
@@ -28445,7 +28448,7 @@ bool semantics__analyzer__flow__createsResult(List_syntax__ast__Stmt* body, sema
             {
                 if (rt_is_a(rt_obj_class(subject_3390), &rtclass_syntax__ast__AssignStmt)) {
                     syntax__ast__AssignStmt* a = (syntax__ast__AssignStmt*)subject_3390;
-                    value_3391 = (((((id_4126 = (syntax__ast__Ident*)rt_as_class((void*)((a)->target), &rtclass_syntax__ast__Ident)) != NULL) && rt_any_contains(flow, rt_any_s((id_4126)->name))) && semantics__analyzer__flow__refsOf(semantics__analyzer__flow__declaredType(NULL, declared, (id_4126)->name))) ? (a)->value : NULL);
+                    value_3391 = (((((id_4128 = (syntax__ast__Ident*)rt_as_class((void*)((a)->target), &rtclass_syntax__ast__Ident)) != NULL) && rt_any_contains(flow, rt_any_s((id_4128)->name))) && semantics__analyzer__flow__refsOf(semantics__analyzer__flow__declaredType(NULL, declared, (id_4128)->name))) ? (a)->value : NULL);
                     goto switch_end_3392;
                 }
             }
@@ -28719,7 +28722,7 @@ bool semantics__analyzer__flow__switchCreates(syntax__ast__SwitchExpr* sw, bool 
 }
 
 bool semantics__analyzer__flow__yieldsCreate(List_syntax__ast__Stmt* block, bool any, semantics__analyzer__flow__Declared* declared) {
-    syntax__ast__YieldStmt* y_4163 = NULL;
+    syntax__ast__YieldStmt* y_4165 = NULL;
     RtMem mem_50 = rt_mem_growable();
     List_syntax__ast__Stmt* list_3406 = List_syntax__ast__Stmt_new(&mem_50, 27000495);
     List_syntax__ast__Stmt* stmts = list_3406;
@@ -28728,7 +28731,7 @@ bool semantics__analyzer__flow__yieldsCreate(List_syntax__ast__Stmt* block, bool
         List_syntax__ast__Stmt* list_3408 = stmts;
         for (int32_t i_3407 = 0; i_3407 < list_3408->length; i_3407++) {
             syntax__ast__Stmt* s = list_3408->items[i_3407];
-            if (((y_4163 = (syntax__ast__YieldStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__YieldStmt)) != NULL) && semantics__analyzer__flow__creates((y_4163)->value, any, declared)) {
+            if (((y_4165 = (syntax__ast__YieldStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__YieldStmt)) != NULL) && semantics__analyzer__flow__creates((y_4165)->value, any, declared)) {
                 bool ret_3409 = true;
                 rt_mem_free(&mem_50);
                 return ret_3409;
@@ -28742,23 +28745,23 @@ bool semantics__analyzer__flow__yieldsCreate(List_syntax__ast__Stmt* block, bool
 
 semantics__types__FunctionInfo* semantics__analyzer__flow__staticCallee(RtMem* rt_dest, syntax__ast__Call* c) {
     (void)rt_dest;
-    syntax__ast__Member* m_4165 = NULL;
-    syntax__ast__Ident* t_4166 = NULL;
-    if ((!(((m_4165 = (syntax__ast__Member*)rt_as_class((void*)(semantics__analyzer__flow__linked(NULL, (c)->callee)), &rtclass_syntax__ast__Member)) != NULL))) || (!(((t_4166 = (syntax__ast__Ident*)rt_as_class((void*)((m_4165)->object), &rtclass_syntax__ast__Ident)) != NULL)))) {
+    syntax__ast__Member* m_4167 = NULL;
+    syntax__ast__Ident* t_4168 = NULL;
+    if ((!(((m_4167 = (syntax__ast__Member*)rt_as_class((void*)(semantics__analyzer__flow__linked(NULL, (c)->callee)), &rtclass_syntax__ast__Member)) != NULL))) || (!(((t_4168 = (syntax__ast__Ident*)rt_as_class((void*)((m_4167)->object), &rtclass_syntax__ast__Ident)) != NULL)))) {
         return NULL;
     }
     RtMem tmp_3412 = rt_mem_growable();
     RtSb sb_3411 = rt_sb_mem(&tmp_3412, 27000506);
-    rt_sb_str(&sb_3411, (t_4166)->name);
+    rt_sb_str(&sb_3411, (t_4168)->name);
     rt_sb_add(&sb_3411, ".", 1);
-    rt_sb_str(&sb_3411, (m_4165)->name);
+    rt_sb_str(&sb_3411, (m_4167)->name);
     semantics__types__FunctionInfo* ret_3413 = semantics__types__functionOf(NULL, rt_sb_finish(&sb_3411));
     rt_mem_free(&tmp_3412);
     return ret_3413;
 }
 
 bool semantics__analyzer__flow__callCreates(syntax__ast__Call* c, bool any, semantics__analyzer__flow__Declared* declared) {
-    syntax__ast__Ident* cid_4174 = NULL;
+    syntax__ast__Ident* cid_4176 = NULL;
     bool args = false;
     {
         List_syntax__ast__Expr* list_3415 = (c)->args;
@@ -28772,7 +28775,7 @@ bool semantics__analyzer__flow__callCreates(syntax__ast__Call* c, bool any, sema
     syntax__ast__Expr* callee = semantics__analyzer__flow__linked(NULL, (c)->callee);
     semantics__types__FunctionInfo* sf = semantics__analyzer__flow__staticCallee(NULL, c);
     if ((rt_as_class((void*)(callee), &rtclass_syntax__ast__Ident) != NULL) || (!(sf == NULL))) {
-        RtString fname = (((cid_4174 = (syntax__ast__Ident*)rt_as_class((void*)(callee), &rtclass_syntax__ast__Ident)) != NULL) ? (cid_4174)->name : rt_str("", 0));
+        RtString fname = (((cid_4176 = (syntax__ast__Ident*)rt_as_class((void*)(callee), &rtclass_syntax__ast__Ident)) != NULL) ? (cid_4176)->name : rt_str("", 0));
         if (rt_str_eq(fname, rt_str("print", 5)) || rt_str_eq(fname, rt_str("println", 7))) {
             return false;
         }
@@ -28830,8 +28833,8 @@ bool semantics__analyzer__flow__callCreates(syntax__ast__Call* c, bool any, sema
 }
 
 bool semantics__analyzer__flow__methodCreates(syntax__ast__Member* m, syntax__ast__Call* c, bool coarse, bool any, semantics__analyzer__flow__Declared* declared) {
-    syntax__ast__Ident* en_4186 = NULL;
-    if ((((en_4186 = (syntax__ast__Ident*)rt_as_class((void*)((m)->object), &rtclass_syntax__ast__Ident)) != NULL) && (!(semantics__types__enumOf(NULL, (en_4186)->name) == NULL))) && (!(semantics__analyzer__flow__isDeclared(declared, (en_4186)->name)))) {
+    syntax__ast__Ident* en_4188 = NULL;
+    if ((((en_4188 = (syntax__ast__Ident*)rt_as_class((void*)((m)->object), &rtclass_syntax__ast__Ident)) != NULL) && (!(semantics__types__enumOf(NULL, (en_4188)->name) == NULL))) && (!(semantics__analyzer__flow__isDeclared(declared, (en_4188)->name)))) {
         return coarse;
     }
     RtString n = (m)->name;
@@ -29011,10 +29014,10 @@ RtString semantics__analyzer__flow__fill(RtMem* rt_dest, RtString msg, semantics
     return ret_3455;
 }
 
-void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* d, bool resolve_4223) {
-    syntax__ast__Ident* id_4227 = NULL;
-    semantics__types__Region* v = (resolve_4223 ? semantics__types__resolveRegion(NULL, (d)->value) : (d)->value);
-    semantics__types__Region* st = (resolve_4223 ? semantics__types__resolveRegion(NULL, (d)->storage) : (d)->storage);
+void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* d, bool resolve_4225) {
+    syntax__ast__Ident* id_4229 = NULL;
+    semantics__types__Region* v = (resolve_4225 ? semantics__types__resolveRegion(NULL, (d)->value) : (d)->value);
+    semantics__types__Region* st = (resolve_4225 ? semantics__types__resolveRegion(NULL, (d)->storage) : (d)->storage);
     if (((d)->kind).tag == (((semantics__analyzer__DefK){ .tag = semantics__analyzer__DefK_ReturnLocal })).tag) {
         bool cond_3457 = (((v)->kind).tag == (((semantics__types__RK){ .tag = semantics__types__RK_Local })).tag);
         if (cond_3457) {
@@ -29023,18 +29026,18 @@ void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* d, bool 
         }
         if (cond_3457) {
             syntax__ast__Expr* e = (d)->expr;
-            if ((!(e == NULL)) && ((id_4227 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL)) {
+            if ((!(e == NULL)) && ((id_4229 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL)) {
                 RtMem tmp_3460 = rt_mem_growable();
                 int32_t t_3458 = (d)->line;
                 RtSb sb_3459 = rt_sb_mem(&tmp_3460, 27000624);
                 rt_sb_add(&sb_3459, "'", 1);
-                rt_sb_str(&sb_3459, (id_4227)->name);
+                rt_sb_str(&sb_3459, (id_4229)->name);
                 rt_sb_add(&sb_3459, "' lives in ", 11);
                 rt_sb_str(&sb_3459, semantics__types__describe(&tmp_3460, v));
                 rt_sb_add(&sb_3459, ", which is freed when the function returns: return ", 51);
-                rt_sb_str(&sb_3459, (id_4227)->name);
+                rt_sb_str(&sb_3459, (id_4229)->name);
                 rt_sb_add(&sb_3459, ".clone(), or create '", 21);
-                rt_sb_str(&sb_3459, (id_4227)->name);
+                rt_sb_str(&sb_3459, (id_4229)->name);
                 rt_sb_add(&sb_3459, "' without 'in'.", 15);
                 semantics__analyzer__error(t_3458, rt_sb_finish(&sb_3459));
                 rt_mem_free(&tmp_3460);
@@ -29053,7 +29056,7 @@ void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* d, bool 
     }
     if (!(semantics__types__outlives(v, st))) {
         RtMem mem_51 = rt_mem_growable();
-        RtString named = semantics__analyzer__flow__culprit(&mem_51, d, v, st, resolve_4223);
+        RtString named = semantics__analyzer__flow__culprit(&mem_51, d, v, st, resolve_4225);
         RtMem tmp_3465 = rt_mem_growable();
         int32_t t_3464 = (d)->line;
         semantics__analyzer__error(t_3464, ((!rt_str_eq(named, rt_str("", 0))) ? named : semantics__analyzer__flow__fill(&tmp_3465, ((((!rt_str_eq((d)->forever, rt_str("", 0))) && (((st)->kind).tag == (((semantics__types__RK){ .tag = semantics__types__RK_Static })).tag)) && (((v)->kind).tag == (((semantics__types__RK){ .tag = semantics__types__RK_Local })).tag)) ? (d)->forever : (d)->msg), v, st)));
@@ -29084,16 +29087,16 @@ RtString semantics__analyzer__flow__placementFor(RtMem* rt_dest, semantics__type
     return ((((r)->kind).tag == (((semantics__types__RK){ .tag = semantics__types__RK_Static })).tag) ? rt_str(" in default", 11) : rt_str("", 0));
 }
 
-RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer__Deferred* d, semantics__types__Region* v, semantics__types__Region* st, bool resolve_4233) {
-    syntax__ast__Placed* p_4236 = NULL;
-    syntax__ast__ObjectLit* o_4240 = NULL;
-    syntax__ast__Ident* id_4243 = NULL;
+RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer__Deferred* d, semantics__types__Region* v, semantics__types__Region* st, bool resolve_4235) {
+    syntax__ast__Placed* p_4238 = NULL;
+    syntax__ast__ObjectLit* o_4242 = NULL;
     syntax__ast__Ident* id_4245 = NULL;
-    syntax__ast__Ident* id_4246 = NULL;
-    syntax__ast__Lambda* l_4248 = NULL;
-    syntax__ast__Member* rm_4253 = NULL;
-    syntax__ast__Ident* id_4256 = NULL;
-    syntax__ast__Ident* id_4257 = NULL;
+    syntax__ast__Ident* id_4247 = NULL;
+    syntax__ast__Ident* id_4248 = NULL;
+    syntax__ast__Lambda* l_4250 = NULL;
+    syntax__ast__Member* rm_4255 = NULL;
+    syntax__ast__Ident* id_4258 = NULL;
+    syntax__ast__Ident* id_4259 = NULL;
     RtMem mem_52 = rt_mem_growable();
     syntax__ast__Expr* given = (d)->expr;
     if (given == NULL) {
@@ -29102,8 +29105,8 @@ RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer_
         return ret_3471;
     }
     syntax__ast__Expr* e = given;
-    if ((p_4236 = (syntax__ast__Placed*)rt_as_class((void*)(e), &rtclass_syntax__ast__Placed)) != NULL) {
-        e = (p_4236)->expr;
+    if ((p_4238 = (syntax__ast__Placed*)rt_as_class((void*)(e), &rtclass_syntax__ast__Placed)) != NULL) {
+        e = (p_4238)->expr;
     }
     RtString value_3474;
     if (!(((st)->kind).tag == (((semantics__types__RK){ .tag = semantics__types__RK_Static })).tag)) {
@@ -29125,20 +29128,20 @@ RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer_
     RtString keep = (((((st)->kind).tag == (((semantics__types__RK){ .tag = semantics__types__RK_Static })).tag) && String_startsWith((d)->target, rt_str("'", 1))) ? rt_str(" in default", 11) : rt_str("", 0));
     RtString keepVariable = semantics__analyzer__flow__placementFor(&mem_52, st);
     if (rt_str_eq((d)->role, rt_str("throw", 5))) {
-        if ((o_4240 = (syntax__ast__ObjectLit*)rt_as_class((void*)(e), &rtclass_syntax__ast__ObjectLit)) != NULL) {
+        if ((o_4242 = (syntax__ast__ObjectLit*)rt_as_class((void*)(e), &rtclass_syntax__ast__ObjectLit)) != NULL) {
             {
-                List_syntax__ast__FieldInit* list_3476 = (o_4240)->fields;
+                List_syntax__ast__FieldInit* list_3476 = (o_4242)->fields;
                 for (int32_t i_3475 = 0; i_3475 < list_3476->length; i_3475++) {
                     syntax__ast__FieldInit* fi = list_3476->items[i_3475];
-                    semantics__types__Region* r = (resolve_4233 ? semantics__types__resolveRegion(NULL, semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((fi)->value)))) : semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((fi)->value))));
-                    if ((!(semantics__types__outlives(r, semantics__types__R_STATIC))) && ((id_4243 = (syntax__ast__Ident*)rt_as_class((void*)((fi)->value), &rtclass_syntax__ast__Ident)) != NULL)) {
+                    semantics__types__Region* r = (resolve_4235 ? semantics__types__resolveRegion(NULL, semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((fi)->value)))) : semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((fi)->value))));
+                    if ((!(semantics__types__outlives(r, semantics__types__R_STATIC))) && ((id_4245 = (syntax__ast__Ident*)rt_as_class((void*)((fi)->value), &rtclass_syntax__ast__Ident)) != NULL)) {
                         RtSb sb_3477 = rt_sb_mem(rt_dest, 27000666);
                         rt_sb_add(&sb_3477, "An error can travel up to main, so '", 36);
-                        rt_sb_str(&sb_3477, (id_4243)->name);
+                        rt_sb_str(&sb_3477, (id_4245)->name);
                         rt_sb_add(&sb_3477, "' must live the whole program: ", 31);
                         rt_sb_str(&sb_3477, (fi)->name);
                         rt_sb_add(&sb_3477, ": ", 2);
-                        rt_sb_str(&sb_3477, (id_4243)->name);
+                        rt_sb_str(&sb_3477, (id_4245)->name);
                         rt_sb_add(&sb_3477, ".clone() in default", 19);
                         RtString ret_3478 = rt_sb_finish(&sb_3477);
                         rt_mem_free(&mem_52);
@@ -29153,37 +29156,37 @@ RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer_
     }
     if (String_startsWith((d)->role, rt_str("field ", 6))) {
         RtString field = String_substring((d)->role, NULL, 6);
-        if (((id_4245 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL) && semantics__analyzer__flow__isFunctionValue(e)) {
+        if (((id_4247 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL) && semantics__analyzer__flow__isFunctionValue(e)) {
             RtMem tmp_3481 = rt_mem_growable();
             RtSb sb_3480 = rt_sb_mem(rt_dest, 27000675);
             rt_sb_add(&sb_3480, "Field '", 7);
             rt_sb_str(&sb_3480, field);
             rt_sb_add(&sb_3480, "' gets the function '", 21);
-            rt_sb_str(&sb_3480, (id_4245)->name);
+            rt_sb_str(&sb_3480, (id_4247)->name);
             rt_sb_add(&sb_3480, "', which lives in {v}, but the object lives ", 44);
             rt_sb_str(&sb_3480, lives);
             rt_sb_add(&sb_3480, ". A function cannot be copied with clone(): make '", 50);
-            rt_sb_str(&sb_3480, (id_4245)->name);
+            rt_sb_str(&sb_3480, (id_4247)->name);
             rt_sb_add(&sb_3480, "' live there", 12);
-            rt_sb_str(&sb_3480, semantics__analyzer__flow__parameterHint(&tmp_3481, (id_4245)->name, st));
+            rt_sb_str(&sb_3480, semantics__analyzer__flow__parameterHint(&tmp_3481, (id_4247)->name, st));
             rt_sb_add(&sb_3480, ".", 1);
             RtString ret_3482 = semantics__analyzer__flow__fill(rt_dest, rt_sb_finish(&sb_3480), v, st);
             rt_mem_free(&tmp_3481);
             rt_mem_free(&mem_52);
             return ret_3482;
         }
-        if ((id_4246 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL) {
+        if ((id_4248 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL) {
             RtSb sb_3483 = rt_sb_mem(rt_dest, 27000678);
             rt_sb_add(&sb_3483, "Field '", 7);
             rt_sb_str(&sb_3483, field);
             rt_sb_add(&sb_3483, "' gets '", 8);
-            rt_sb_str(&sb_3483, (id_4246)->name);
+            rt_sb_str(&sb_3483, (id_4248)->name);
             rt_sb_add(&sb_3483, "', which lives in {v}, but the object lives ", 44);
             rt_sb_str(&sb_3483, lives);
             rt_sb_add(&sb_3483, ": ", 2);
             rt_sb_str(&sb_3483, field);
             rt_sb_add(&sb_3483, ": ", 2);
-            rt_sb_str(&sb_3483, (id_4246)->name);
+            rt_sb_str(&sb_3483, (id_4248)->name);
             rt_sb_add(&sb_3483, ".clone()", 8);
             rt_sb_str(&sb_3483, keep);
             RtString ret_3484 = semantics__analyzer__flow__fill(rt_dest, rt_sb_finish(&sb_3483), v, st);
@@ -29211,9 +29214,9 @@ RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer_
         rt_mem_free(&mem_52);
         return ret_3488;
     }
-    if (((l_4248 = (syntax__ast__Lambda*)rt_as_class((void*)(e), &rtclass_syntax__ast__Lambda)) != NULL) && (!((l_4248)->_super._super.lambda == NULL))) {
+    if (((l_4250 = (syntax__ast__Lambda*)rt_as_class((void*)(e), &rtclass_syntax__ast__Lambda)) != NULL) && (!((l_4250)->_super._super.lambda == NULL))) {
         {
-            List_semantics__types__Symbol* list_3490 = (((semantics__types__LambdaInfo*)rt_unwrap((void*)((l_4248)->_super._super.lambda), 27000685)))->captures;
+            List_semantics__types__Symbol* list_3490 = (((semantics__types__LambdaInfo*)rt_unwrap((void*)((l_4250)->_super._super.lambda), 27000685)))->captures;
             for (int32_t i_3489 = 0; i_3489 < list_3490->length; i_3489++) {
                 semantics__types__Symbol* s = list_3490->items[i_3489];
                 RtMem mem_53 = rt_mem_growable();
@@ -29221,7 +29224,7 @@ RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer_
                     rt_mem_free(&mem_53);
                     continue;
                 }
-                semantics__types__Region* r = (resolve_4233 ? semantics__types__resolveRegion(NULL, (s)->region) : (s)->region);
+                semantics__types__Region* r = (resolve_4235 ? semantics__types__resolveRegion(NULL, (s)->region) : (s)->region);
                 if (semantics__types__outlives(r, st)) {
                     rt_mem_free(&mem_53);
                     continue;
@@ -29239,11 +29242,11 @@ RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer_
                 rt_sb_add(&sb_3491, "; and capture 'kept' instead.", 29);
                 RtString fix = rt_sb_finish(&sb_3491);
                 RtString value_3494;
-                if ((!((l_4248)->ref == NULL)) && ((rm_4253 = (syntax__ast__Member*)rt_as_class((void*)((((syntax__ast__Call*)rt_unwrap((void*)((l_4248)->ref), 27000692)))->callee), &rtclass_syntax__ast__Member)) != NULL)) {
+                if ((!((l_4250)->ref == NULL)) && ((rm_4255 = (syntax__ast__Member*)rt_as_class((void*)((((syntax__ast__Call*)rt_unwrap((void*)((l_4250)->ref), 27000692)))->callee), &rtclass_syntax__ast__Member)) != NULL)) {
                     RtSb sb_3492 = rt_sb_mem(&mem_53, 27000693);
                     rt_sb_str(&sb_3492, (s)->name);
                     rt_sb_add(&sb_3492, "::", 2);
-                    rt_sb_str(&sb_3492, (rm_4253)->name);
+                    rt_sb_str(&sb_3492, (rm_4255)->name);
                     rt_sb_add(&sb_3492, " keeps '", 8);
                     rt_sb_str(&sb_3492, (s)->name);
                     rt_sb_add(&sb_3492, "', which lives in {v}, but ", 27);
@@ -29264,7 +29267,7 @@ RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer_
                     value_3494 = rt_sb_finish(&sb_3493);
                 }
                 RtString start = value_3494;
-                if (semantics__analyzer__flow__clonesInside(l_4248, (s)->name)) {
+                if (semantics__analyzer__flow__clonesInside(l_4250, (s)->name)) {
                     RtSb sb_3495 = rt_sb_mem(rt_dest, 27000696);
                     rt_sb_str(&sb_3495, start);
                     rt_sb_add(&sb_3495, " ", 1);
@@ -29298,35 +29301,35 @@ RtString semantics__analyzer__flow__culprit(RtMem* rt_dest, semantics__analyzer_
         rt_mem_free(&mem_52);
         return ret_3500;
     }
-    if (((id_4256 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL) && semantics__analyzer__flow__isFunctionValue(e)) {
+    if (((id_4258 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL) && semantics__analyzer__flow__isFunctionValue(e)) {
         RtMem tmp_3502 = rt_mem_growable();
         RtSb sb_3501 = rt_sb_mem(rt_dest, 27000705);
         rt_sb_add(&sb_3501, "The function '", 14);
-        rt_sb_str(&sb_3501, (id_4256)->name);
+        rt_sb_str(&sb_3501, (id_4258)->name);
         rt_sb_add(&sb_3501, "' lives in {v}, but ", 20);
         rt_sb_str(&sb_3501, (d)->target);
         rt_sb_add(&sb_3501, " lives ", 7);
         rt_sb_str(&sb_3501, lives);
         rt_sb_add(&sb_3501, ". A function cannot be copied with clone(): make '", 50);
-        rt_sb_str(&sb_3501, (id_4256)->name);
+        rt_sb_str(&sb_3501, (id_4258)->name);
         rt_sb_add(&sb_3501, "' live there", 12);
-        rt_sb_str(&sb_3501, semantics__analyzer__flow__parameterHint(&tmp_3502, (id_4256)->name, st));
+        rt_sb_str(&sb_3501, semantics__analyzer__flow__parameterHint(&tmp_3502, (id_4258)->name, st));
         rt_sb_add(&sb_3501, ".", 1);
         RtString ret_3503 = semantics__analyzer__flow__fill(rt_dest, rt_sb_finish(&sb_3501), v, st);
         rt_mem_free(&tmp_3502);
         rt_mem_free(&mem_52);
         return ret_3503;
     }
-    if (((id_4257 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL) && (((v)->kind).tag == (((semantics__types__RK){ .tag = semantics__types__RK_Local })).tag)) {
+    if (((id_4259 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL) && (((v)->kind).tag == (((semantics__types__RK){ .tag = semantics__types__RK_Local })).tag)) {
         RtSb sb_3504 = rt_sb_mem(rt_dest, 27000708);
         rt_sb_add(&sb_3504, "'", 1);
-        rt_sb_str(&sb_3504, (id_4257)->name);
+        rt_sb_str(&sb_3504, (id_4259)->name);
         rt_sb_add(&sb_3504, "' lives in {v}, but ", 20);
         rt_sb_str(&sb_3504, (d)->target);
         rt_sb_add(&sb_3504, " lives ", 7);
         rt_sb_str(&sb_3504, lives);
         rt_sb_add(&sb_3504, ". Keep a copy there: ", 21);
-        rt_sb_str(&sb_3504, (id_4257)->name);
+        rt_sb_str(&sb_3504, (id_4259)->name);
         rt_sb_add(&sb_3504, ".clone()", 8);
         rt_sb_str(&sb_3504, keep);
         RtString ret_3505 = semantics__analyzer__flow__fill(rt_dest, rt_sb_finish(&sb_3504), v, st);
@@ -29364,17 +29367,17 @@ RtString semantics__analyzer__flow__parameterHint(RtMem* rt_dest, RtString name,
 
 RtString semantics__analyzer__flow__viewCulprit(RtMem* rt_dest, syntax__ast__Expr* e, semantics__types__Region* v, RtString target, RtString lives, RtString keep) {
     (void)v;
-    syntax__ast__Call* c_4267 = NULL;
-    syntax__ast__Member* m_4268 = NULL;
-    syntax__ast__Ident* id_4269 = NULL;
-    syntax__ast__Ident* oid_4271 = NULL;
+    syntax__ast__Call* c_4269 = NULL;
+    syntax__ast__Member* m_4270 = NULL;
+    syntax__ast__Ident* id_4271 = NULL;
+    syntax__ast__Ident* oid_4273 = NULL;
     RtMem mem_54 = rt_mem_growable();
     RtMem tmp_3510 = rt_mem_growable();
-    bool cond_3511 = ((!(((c_4267 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL))) || (!(((m_4268 = (syntax__ast__Member*)rt_as_class((void*)((c_4267)->callee), &rtclass_syntax__ast__Member)) != NULL))));
+    bool cond_3511 = ((!(((c_4269 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL))) || (!(((m_4270 = (syntax__ast__Member*)rt_as_class((void*)((c_4269)->callee), &rtclass_syntax__ast__Member)) != NULL))));
     if (!cond_3511) {
         RtSb sb_3509 = rt_sb_mem(&tmp_3510, 27000725);
         rt_sb_add(&sb_3509, " ", 1);
-        rt_sb_str(&sb_3509, (m_4268)->name);
+        rt_sb_str(&sb_3509, (m_4270)->name);
         rt_sb_add(&sb_3509, " ", 1);
         cond_3511 = (!(String_contains(rt_str(" trim trimStart trimEnd substring bytes split lines toString ", 61), rt_sb_finish(&sb_3509))));
     }
@@ -29386,10 +29389,10 @@ RtString semantics__analyzer__flow__viewCulprit(RtMem* rt_dest, syntax__ast__Exp
     }
     rt_mem_free(&tmp_3510);
     RtString value_3514;
-    if ((id_4269 = (syntax__ast__Ident*)rt_as_class((void*)((m_4268)->object), &rtclass_syntax__ast__Ident)) != NULL) {
+    if ((id_4271 = (syntax__ast__Ident*)rt_as_class((void*)((m_4270)->object), &rtclass_syntax__ast__Ident)) != NULL) {
         RtSb sb_3513 = rt_sb_mem(&mem_54, 27000726);
         rt_sb_add(&sb_3513, "'", 1);
-        rt_sb_str(&sb_3513, (id_4269)->name);
+        rt_sb_str(&sb_3513, (id_4271)->name);
         rt_sb_add(&sb_3513, "'", 1);
         value_3514 = rt_sb_finish(&sb_3513);
     } else {
@@ -29397,13 +29400,13 @@ RtString semantics__analyzer__flow__viewCulprit(RtMem* rt_dest, syntax__ast__Exp
     }
     RtString source = value_3514;
     RtString value_3516;
-    if ((oid_4271 = (syntax__ast__Ident*)rt_as_class((void*)((m_4268)->object), &rtclass_syntax__ast__Ident)) != NULL) {
+    if ((oid_4273 = (syntax__ast__Ident*)rt_as_class((void*)((m_4270)->object), &rtclass_syntax__ast__Ident)) != NULL) {
         RtSb sb_3515 = rt_sb_mem(&mem_54, 27000727);
-        rt_sb_str(&sb_3515, (oid_4271)->name);
+        rt_sb_str(&sb_3515, (oid_4273)->name);
         rt_sb_add(&sb_3515, ".", 1);
-        rt_sb_str(&sb_3515, (m_4268)->name);
+        rt_sb_str(&sb_3515, (m_4270)->name);
         rt_sb_add(&sb_3515, "(", 1);
-        rt_sb_str(&sb_3515, ((((c_4267)->args)->length == 0) ? rt_str("", 0) : rt_str("...", 3)));
+        rt_sb_str(&sb_3515, ((((c_4269)->args)->length == 0) ? rt_str("", 0) : rt_str("...", 3)));
         rt_sb_add(&sb_3515, ")", 1);
         value_3516 = rt_sb_finish(&sb_3515);
     } else {
@@ -29411,7 +29414,7 @@ RtString semantics__analyzer__flow__viewCulprit(RtMem* rt_dest, syntax__ast__Exp
     }
     RtString code = value_3516;
     RtSb sb_3517 = rt_sb_mem(rt_dest, 27000728);
-    rt_sb_str(&sb_3517, (m_4268)->name);
+    rt_sb_str(&sb_3517, (m_4270)->name);
     rt_sb_add(&sb_3517, "() shares the bytes of ", 23);
     rt_sb_str(&sb_3517, source);
     rt_sb_add(&sb_3517, ", which lives in {v}, but ", 26);
@@ -29428,9 +29431,9 @@ RtString semantics__analyzer__flow__viewCulprit(RtMem* rt_dest, syntax__ast__Exp
 }
 
 bool semantics__analyzer__flow__clonesInside(syntax__ast__Lambda* l, RtString name) {
-    syntax__ast__Call* c_4277 = NULL;
-    syntax__ast__Member* m_4278 = NULL;
-    syntax__ast__Ident* id_4279 = NULL;
+    syntax__ast__Call* c_4279 = NULL;
+    syntax__ast__Member* m_4280 = NULL;
+    syntax__ast__Ident* id_4281 = NULL;
     RtMem mem_55 = rt_mem_growable();
     List_syntax__ast__Expr* list_3519 = List_syntax__ast__Expr_new(&mem_55, 27000733);
     List_syntax__ast__Expr* xs = list_3519;
@@ -29439,7 +29442,7 @@ bool semantics__analyzer__flow__clonesInside(syntax__ast__Lambda* l, RtString na
         List_syntax__ast__Expr* list_3521 = xs;
         for (int32_t i_3520 = 0; i_3520 < list_3521->length; i_3520++) {
             syntax__ast__Expr* x = list_3521->items[i_3520];
-            if ((((((c_4277 = (syntax__ast__Call*)rt_as_class((void*)(x), &rtclass_syntax__ast__Call)) != NULL) && ((m_4278 = (syntax__ast__Member*)rt_as_class((void*)((c_4277)->callee), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m_4278)->name, rt_str("clone", 5))) && ((id_4279 = (syntax__ast__Ident*)rt_as_class((void*)((m_4278)->object), &rtclass_syntax__ast__Ident)) != NULL)) && rt_str_eq((id_4279)->name, name)) {
+            if ((((((c_4279 = (syntax__ast__Call*)rt_as_class((void*)(x), &rtclass_syntax__ast__Call)) != NULL) && ((m_4280 = (syntax__ast__Member*)rt_as_class((void*)((c_4279)->callee), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m_4280)->name, rt_str("clone", 5))) && ((id_4281 = (syntax__ast__Ident*)rt_as_class((void*)((m_4280)->object), &rtclass_syntax__ast__Ident)) != NULL)) && rt_str_eq((id_4281)->name, name)) {
                 bool ret_3522 = true;
                 rt_mem_free(&mem_55);
                 return ret_3522;
@@ -29713,22 +29716,22 @@ semantics__types__Conversion* semantics__expressions__conversions__conv(RtMem* r
 
 semantics__types__Type* semantics__expressions__conversions__coerce(RtMem* rt_dest, syntax__ast__Expr* e, semantics__types__Type* target, semantics__types__Place* place, RtString ctx) {
     (void)rt_dest;
-    syntax__ast__Placed* p_4311 = NULL;
-    syntax__ast__Placed* pl_4319 = NULL;
-    syntax__ast__Lambda* l_4321 = NULL;
+    syntax__ast__Placed* p_4313 = NULL;
+    syntax__ast__Placed* pl_4321 = NULL;
+    syntax__ast__Lambda* l_4323 = NULL;
     if (semantics__types__isError(target)) {
         semantics__expressions__check(NULL, e, NULL, place);
         return semantics__types__T_ERROR;
     }
-    if ((((p_4311 = (syntax__ast__Placed*)rt_as_class((void*)(e), &rtclass_syntax__ast__Placed)) != NULL) && (rt_as_class((void*)((p_4311)->expr), &rtclass_syntax__ast__Lambda) != NULL)) && semantics__types__isInterface(target)) {
-        syntax__ast__Expr* t_3556 = (p_4311)->expr;
-        semantics__types__Place* value_3557 = semantics__expressions__resolvePlacement(NULL, p_4311);
+    if ((((p_4313 = (syntax__ast__Placed*)rt_as_class((void*)(e), &rtclass_syntax__ast__Placed)) != NULL) && (rt_as_class((void*)((p_4313)->expr), &rtclass_syntax__ast__Lambda) != NULL)) && semantics__types__isInterface(target)) {
+        syntax__ast__Expr* t_3556 = (p_4313)->expr;
+        semantics__types__Place* value_3557 = semantics__expressions__resolvePlacement(NULL, p_4313);
         if (value_3557 == NULL) {
             value_3557 = semantics__types__P_TEMP;
         }
         semantics__types__Type* t = semantics__expressions__conversions__coerce(NULL, t_3556, target, value_3557, ctx);
         (e)->_super.ty = t;
-        semantics__expressions__conversions__setRegion(((syntax__ast__Node*)(e)), semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((p_4311)->expr))));
+        semantics__expressions__conversions__setRegion(((syntax__ast__Node*)(e)), semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((p_4313)->expr))));
         return t;
     }
     if ((rt_as_class((void*)(e), &rtclass_syntax__ast__Lambda) != NULL) && semantics__types__isInterface(target)) {
@@ -29772,14 +29775,14 @@ semantics__types__Type* semantics__expressions__conversions__coerce(RtMem* rt_de
     }
     semantics__types__Type* bare = semantics__expressions__operators__withoutThreadSafe(NULL, target);
     if (!((const void*)(bare) == (const void*)(target))) {
-        syntax__ast__Expr* inner = (((pl_4319 = (syntax__ast__Placed*)rt_as_class((void*)(e), &rtclass_syntax__ast__Placed)) != NULL) ? (pl_4319)->expr : e);
-        if ((l_4321 = (syntax__ast__Lambda*)rt_as_class((void*)(inner), &rtclass_syntax__ast__Lambda)) != NULL) {
+        syntax__ast__Expr* inner = (((pl_4321 = (syntax__ast__Placed*)rt_as_class((void*)(e), &rtclass_syntax__ast__Placed)) != NULL) ? (pl_4321)->expr : e);
+        if ((l_4323 = (syntax__ast__Lambda*)rt_as_class((void*)(inner), &rtclass_syntax__ast__Lambda)) != NULL) {
             semantics__types__Type* lt = semantics__expressions__conversions__coerce(NULL, e, bare, place, ctx);
             if (semantics__types__isError(lt)) {
                 return semantics__types__T_ERROR;
             }
-            if (!((l_4321)->_super._super.lambda == NULL)) {
-                semantics__analyzer__threads__checkThreadSafeLambda(((semantics__types__LambdaInfo*)rt_unwrap((void*)((l_4321)->_super._super.lambda), 26000153)), (e)->_super.line);
+            if (!((l_4323)->_super._super.lambda == NULL)) {
+                semantics__analyzer__threads__checkThreadSafeLambda(((semantics__types__LambdaInfo*)rt_unwrap((void*)((l_4323)->_super._super.lambda), 26000153)), (e)->_super.line);
             }
             semantics__expressions__note(target);
             return target;
@@ -29835,8 +29838,8 @@ semantics__types__Type* semantics__expressions__conversions__coerce(RtMem* rt_de
 
 void semantics__expressions__conversions__box(syntax__ast__Expr* e, semantics__types__Type* t, semantics__types__Place* place) {
     (void)t;
-    syntax__ast__Placed* p_4330 = NULL;
-    semantics__types__Place* bp = ((((p_4330 = (syntax__ast__Placed*)rt_as_class((void*)(e), &rtclass_syntax__ast__Placed)) != NULL) && (!(((p_4330)->expr)->_super.place == NULL))) ? ((semantics__types__Place*)rt_unwrap((void*)(((p_4330)->expr)->_super.place), 26000182)) : place);
+    syntax__ast__Placed* p_4332 = NULL;
+    semantics__types__Place* bp = ((((p_4332 = (syntax__ast__Placed*)rt_as_class((void*)(e), &rtclass_syntax__ast__Placed)) != NULL) && (!(((p_4332)->expr)->_super.place == NULL))) ? ((semantics__types__Place*)rt_unwrap((void*)(((p_4332)->expr)->_super.place), 26000182)) : place);
     if (((bp)->kind).tag == (((semantics__types__PlaceK){ .tag = semantics__types__PlaceK_Stack })).tag) {
         semantics__analyzer__error((e)->_super.line, rt_str("A value put in an Any is copied into a memory, not into a temporary buffer.", 75));
         return;
@@ -30430,7 +30433,7 @@ void semantics__analyzer__classes__checkFieldDefaults(void) {
 }
 
 bool semantics__analyzer__classes__isConstantExpr(syntax__ast__Expr* e) {
-    syntax__ast__Ident* id_4402 = NULL;
+    syntax__ast__Ident* id_4404 = NULL;
     syntax__ast__Expr* subject_3671 = e;
     bool value_3672;
     memset(&value_3672, 0, sizeof value_3672);
@@ -30509,7 +30512,7 @@ bool semantics__analyzer__classes__isConstantExpr(syntax__ast__Expr* e) {
     {
         if (rt_is_a(rt_obj_class(subject_3671), &rtclass_syntax__ast__Member)) {
             syntax__ast__Member* m = (syntax__ast__Member*)subject_3671;
-            value_3672 = ((((id_4402 = (syntax__ast__Ident*)rt_as_class((void*)((m)->object), &rtclass_syntax__ast__Ident)) != NULL) && (!(semantics__types__enumOf(NULL, (id_4402)->name) == NULL))) && (semantics__analyzer__lookup(NULL, (id_4402)->name) == NULL));
+            value_3672 = ((((id_4404 = (syntax__ast__Ident*)rt_as_class((void*)((m)->object), &rtclass_syntax__ast__Ident)) != NULL) && (!(semantics__types__enumOf(NULL, (id_4404)->name) == NULL))) && (semantics__analyzer__lookup(NULL, (id_4404)->name) == NULL));
             goto switch_end_3673;
         }
     }
@@ -30929,7 +30932,7 @@ semantics__analyzer__FrameState* semantics__analyzer__state(RtMem* rt_dest) {
 }
 
 void semantics__analyzer__analyze(syntax__ast__Program* program) {
-    syntax__ast__VarDecl* v_4464 = NULL;
+    syntax__ast__VarDecl* v_4466 = NULL;
     List_semantics__types__Frame_push(semantics__analyzer__frames, semantics__analyzer__globalFrame);
     semantics__analyzer__frameTop = 1;
     (semantics__analyzer__globalFrame)->root = semantics__analyzer__scope;
@@ -30957,11 +30960,11 @@ void semantics__analyzer__analyze(syntax__ast__Program* program) {
         List_syntax__ast__Node* list_3756 = (program)->decls;
         for (int32_t i_3755 = 0; i_3755 < list_3756->length; i_3755++) {
             syntax__ast__Node* d = list_3756->items[i_3755];
-            if ((v_4464 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) {
-                List_syntax__ast__VarDecl_push(semantics__types__globals, v_4464);
+            if ((v_4466 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) {
+                List_syntax__ast__VarDecl_push(semantics__types__globals, v_4466);
                 semantics__types__Owner* o = semantics__types__newOwner(NULL);
                 (semantics__analyzer__globalFrame)->owner = o;
-                semantics__analyzer__statements__analyzeVarDecl(v_4464);
+                semantics__analyzer__statements__analyzeVarDecl(v_4466);
                 (semantics__analyzer__globalFrame)->owner = NULL;
                 List_semantics__types__Owner_push(initializers, o);
             }
@@ -31298,12 +31301,12 @@ void semantics__analyzer__checkMemoryUses(void) {
     }
 }
 
-RtAny std__encoding__json__parse(RtMem* rt_dest, RtString text_4515, RtError* err_out) {
+RtAny std__encoding__json__parse(RtMem* rt_dest, RtString text_4517, RtError* err_out) {
     RtError err;
     err.kind = 0;
     RtMem* t_3815 = rt_dest;
     std__encoding__json__JsonParser* obj_3816 = (std__encoding__json__JsonParser*)rt_mem_alloc(t_3815, sizeof(std__encoding__json__JsonParser), 41000019);
-    *obj_3816 = (std__encoding__json__JsonParser){ ._h = { (const void*)&vtable_std__encoding__json__JsonParser, t_3815 }, .text = text_4515, .pos = 0 };
+    *obj_3816 = (std__encoding__json__JsonParser){ ._h = { (const void*)&vtable_std__encoding__json__JsonParser, t_3815 }, .text = text_4517, .pos = 0 };
     std__encoding__json__JsonParser* p = obj_3816;
     std__encoding__json__JsonParser_space__dispatch((std__encoding__json__JsonParser*)p);
     RtAny t_3817 = std__encoding__json__JsonParser_value__dispatch((std__encoding__json__JsonParser*)p, rt_dest, &err);
@@ -31315,7 +31318,7 @@ RtAny std__encoding__json__parse(RtMem* rt_dest, RtString text_4515, RtError* er
     }
     RtAny v = t_3817;
     std__encoding__json__JsonParser_space__dispatch((std__encoding__json__JsonParser*)p);
-    if ((p)->pos < (text_4515).len) {
+    if ((p)->pos < (text_4517).len) {
         err.kind = 21;
         err.as.e_std__encoding__json__JsonError = ((std__encoding__json__JsonError){ .tag = std__encoding__json__JsonError_Invalid, .as.Invalid = { .at = (p)->pos, .why = rt_str("text after the value", 20) } });
         *err_out = err;
@@ -31704,7 +31707,7 @@ RtString std__encoding__toml__message(RtMem* rt_dest, std__encoding__toml__TomlE
     return value_3930;
 }
 
-RtAny std__encoding__toml__parse(RtMem* rt_dest, RtString text_4636, RtError* err_out) {
+RtAny std__encoding__toml__parse(RtMem* rt_dest, RtString text_4638, RtError* err_out) {
     RtError err;
     err.kind = 0;
     RtMem mem_59 = rt_mem_growable();
@@ -31713,7 +31716,7 @@ RtAny std__encoding__toml__parse(RtMem* rt_dest, RtString text_4636, RtError* er
     List_s* list_3934 = List_s_new(&mem_59, 48000030);
     List_s* sectionNames = list_3934;
     RtString currentName = rt_str("", 0);
-    List_s* lines = std__encoding__toml__splitLines(&mem_59, text_4636);
+    List_s* lines = std__encoding__toml__splitLines(&mem_59, text_4638);
     int32_t i = 0;
     while (i < (lines)->length) {
         RtMem mem_60 = rt_mem_growable();
@@ -31997,11 +32000,11 @@ bool std__encoding__toml__isTable(RtAny v) {
     return value_3991;
 }
 
-List_s* std__encoding__toml__splitLines(RtMem* rt_dest, RtString text_4662) {
+List_s* std__encoding__toml__splitLines(RtMem* rt_dest, RtString text_4664) {
     List_s* list_3993 = List_s_new(rt_dest, 48000115);
     List_s* out = list_3993;
     {
-        RtString t_3996 = text_4662;
+        RtString t_3996 = text_4664;
         List_s* t_3997 = List_s_new(rt_dest, 48000116);
         RtString t_3998 = rt_str("\n", 1);
         if (t_3998.len == 0) {
@@ -32172,7 +32175,7 @@ RtAny std__encoding__toml__parseValue(RtMem* rt_dest, RtString v, int32_t line, 
         }
         RtString inner = String_trim(rt_str_sub(t_4025, (int64_t)(1), (int64_t)(value_4026), 48000160), NULL);
         RtTable* table_4028 = rt_table_new(rt_dest, 48000161);
-        RtAny list_4677 = rt_any_t(table_4028);
+        RtAny list_4679 = rt_any_t(table_4028);
         int32_t i = 0;
         while (i < (inner).len) {
             uint8_t c = rt_str_byte(inner, (int64_t)(i), 48000164);
@@ -32201,8 +32204,8 @@ RtAny std__encoding__toml__parseValue(RtMem* rt_dest, RtString v, int32_t line, 
                     return zero_4031;
                 }
             }
-            RtAny t_4032 = list_4677;
-            RtAny t_4033 = std__encoding__toml__parseValue(rt_any_mem(list_4677, 48000173), item, line, &err);
+            RtAny t_4032 = list_4679;
+            RtAny t_4033 = std__encoding__toml__parseValue(rt_any_mem(list_4679, 48000173), item, line, &err);
             if (err.kind != 0) {
                 *err_out = err;
                 RtAny zero_4034;
@@ -32212,7 +32215,7 @@ RtAny std__encoding__toml__parseValue(RtMem* rt_dest, RtString v, int32_t line, 
             rt_any_push(t_4032, t_4033, 48000173);
             i = ((int32_t)((uint32_t)(end) + (uint32_t)(1)));
         }
-        return list_4677;
+        return list_4679;
     }
     RtMem tmp_4036 = rt_mem_growable();
     RtSb sb_4035 = rt_sb_mem(&tmp_4036, 48000178);
@@ -32859,7 +32862,7 @@ RtString project__libraries__interfaceMarker(RtMem* rt_dest, RtString hash) {
     return rt_sb_finish(&sb_4166);
 }
 
-List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(RtMem* rt_dest, RtString dir, RtAny config, bool verify, List_s* problems_4784) {
+List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(RtMem* rt_dest, RtString dir, RtAny config, bool verify, List_s* problems_4786) {
     List_project__libraries__LarimarLibrary* list_4167 = List_project__libraries__LarimarLibrary_new(rt_dest, 42000065);
     List_project__libraries__LarimarLibrary* out = list_4167;
     {
@@ -32881,9 +32884,9 @@ List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(Rt
                 rt_sb_str(&sb_4171, name);
                 rt_sb_add(&sb_4171, "\"", 1);
                 RtCloneMap clones_4173 = rt_clone_map();
-                RtString copy_4174 = clone_s(rt_sb_finish(&sb_4171), (problems_4784)->mem, &clones_4173);
+                RtString copy_4174 = clone_s(rt_sb_finish(&sb_4171), (problems_4786)->mem, &clones_4173);
                 rt_clone_done(&clones_4173);
-                List_s_push(problems_4784, copy_4174);
+                List_s_push(problems_4786, copy_4174);
                 rt_mem_free(&tmp_4172);
                 continue;
             }
@@ -32901,9 +32904,9 @@ List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(Rt
                     rt_sb_str(&sb_4176, path.value);
                     rt_sb_add(&sb_4176, " does not exist", 15);
                     RtCloneMap clones_4178 = rt_clone_map();
-                    RtString copy_4179 = clone_s(rt_sb_finish(&sb_4176), (problems_4784)->mem, &clones_4178);
+                    RtString copy_4179 = clone_s(rt_sb_finish(&sb_4176), (problems_4786)->mem, &clones_4178);
                     rt_clone_done(&clones_4178);
-                    List_s_push(problems_4784, copy_4179);
+                    List_s_push(problems_4786, copy_4179);
                     rt_mem_free(&tmp_4177);
                     rt_mem_free(&mem_70);
                     continue;
@@ -32927,9 +32930,9 @@ List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(Rt
                     rt_sb_add(&sb_4183, "': ", 3);
                     rt_sb_str(&sb_4183, wrong);
                     RtCloneMap clones_4185 = rt_clone_map();
-                    RtString copy_4186 = clone_s(rt_sb_finish(&sb_4183), (problems_4784)->mem, &clones_4185);
+                    RtString copy_4186 = clone_s(rt_sb_finish(&sb_4183), (problems_4786)->mem, &clones_4185);
                     rt_clone_done(&clones_4185);
-                    List_s_push(problems_4784, copy_4186);
+                    List_s_push(problems_4786, copy_4186);
                     rt_mem_free(&tmp_4184);
                     rt_mem_free(&mem_70);
                     continue;
@@ -32952,15 +32955,15 @@ List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(Rt
                 rt_sb_str(&sb_4189, name);
                 rt_sb_add(&sb_4189, ".interface (a package is the folder that larimar build makes of a library, or its .lpk)", 87);
                 RtCloneMap clones_4191 = rt_clone_map();
-                RtString copy_4192 = clone_s(rt_sb_finish(&sb_4189), (problems_4784)->mem, &clones_4191);
+                RtString copy_4192 = clone_s(rt_sb_finish(&sb_4189), (problems_4786)->mem, &clones_4191);
                 rt_clone_done(&clones_4191);
-                List_s_push(problems_4784, copy_4192);
+                List_s_push(problems_4786, copy_4192);
                 rt_mem_free(&tmp_4190);
                 rt_mem_free(&tmp_4188);
                 continue;
             }
             rt_mem_free(&tmp_4188);
-            project__libraries__LarimarLibrary* found = project__libraries__read(rt_dest, name, folder, verify, problems_4784);
+            project__libraries__LarimarLibrary* found = project__libraries__read(rt_dest, name, folder, verify, problems_4786);
             if (!(found == NULL)) {
                 List_project__libraries__LarimarLibrary_push(out, found);
             }
@@ -32985,9 +32988,9 @@ List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(Rt
                         rt_sb_str(&sb_4197, n);
                         rt_sb_add(&sb_4197, " = \"...\")", 9);
                         RtCloneMap clones_4199 = rt_clone_map();
-                        RtString copy_4200 = clone_s(rt_sb_finish(&sb_4197), (problems_4784)->mem, &clones_4199);
+                        RtString copy_4200 = clone_s(rt_sb_finish(&sb_4197), (problems_4786)->mem, &clones_4199);
                         rt_clone_done(&clones_4199);
-                        List_s_push(problems_4784, copy_4200);
+                        List_s_push(problems_4786, copy_4200);
                         rt_mem_free(&tmp_4198);
                     }
                 }
@@ -33011,10 +33014,10 @@ void project__libraries__strings(RtAny section, RtString key, List_s* into) {
             int32_t i = i_4203;
             (void)i;
             RtAny item = table_4201->items[i_4203];
-            Opt_s text_4802 = rt_any_as_s(item);
-            if (!(!(text_4802).has)) {
+            Opt_s text_4804 = rt_any_as_s(item);
+            if (!(!(text_4804).has)) {
                 RtCloneMap clones_4204 = rt_clone_map();
-                RtString copy_4205 = clone_s(text_4802.value, (into)->mem, &clones_4204);
+                RtString copy_4205 = clone_s(text_4804.value, (into)->mem, &clones_4204);
                 rt_clone_done(&clones_4204);
                 List_s_push(into, copy_4205);
             }
@@ -33022,7 +33025,7 @@ void project__libraries__strings(RtAny section, RtString key, List_s* into) {
     }
 }
 
-project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtString name, RtString folder, bool verify, List_s* problems_4806) {
+project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtString name, RtString folder, bool verify, List_s* problems_4808) {
     RtError err;
     err.kind = 0;
     RtMem mem_71 = rt_mem_growable();
@@ -33057,9 +33060,9 @@ project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtS
         rt_sb_add(&sb_4212, "cannot read ", 12);
         rt_sb_str(&sb_4212, itf);
         RtCloneMap clones_4214 = rt_clone_map();
-        RtString copy_4215 = clone_s(rt_sb_finish(&sb_4212), (problems_4806)->mem, &clones_4214);
+        RtString copy_4215 = clone_s(rt_sb_finish(&sb_4212), (problems_4808)->mem, &clones_4214);
         rt_clone_done(&clones_4214);
-        List_s_push(problems_4806, copy_4215);
+        List_s_push(problems_4808, copy_4215);
         rt_mem_free(&tmp_4213);
         project__libraries__LarimarLibrary* ret_4216 = NULL;
         rt_mem_free(&mem_71);
@@ -33074,9 +33077,9 @@ project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtS
         rt_sb_add(&sb_4217, ": ", 2);
         rt_sb_str(&sb_4217, std__encoding__toml__message(&tmp_4218, e));
         RtCloneMap clones_4219 = rt_clone_map();
-        RtString copy_4220 = clone_s(rt_sb_finish(&sb_4217), (problems_4806)->mem, &clones_4219);
+        RtString copy_4220 = clone_s(rt_sb_finish(&sb_4217), (problems_4808)->mem, &clones_4219);
         rt_clone_done(&clones_4219);
-        List_s_push(problems_4806, copy_4220);
+        List_s_push(problems_4808, copy_4220);
         rt_mem_free(&tmp_4218);
         project__libraries__LarimarLibrary* ret_4221 = NULL;
         rt_mem_free(&mem_71);
@@ -33201,9 +33204,9 @@ project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtS
         rt_sb_str(&sb_4266, name);
         rt_sb_add(&sb_4266, "' (name and interface in [library])", 35);
         RtCloneMap clones_4268 = rt_clone_map();
-        RtString copy_4269 = clone_s(rt_sb_finish(&sb_4266), (problems_4806)->mem, &clones_4268);
+        RtString copy_4269 = clone_s(rt_sb_finish(&sb_4266), (problems_4808)->mem, &clones_4268);
         rt_clone_done(&clones_4268);
-        List_s_push(problems_4806, copy_4269);
+        List_s_push(problems_4808, copy_4269);
         rt_mem_free(&tmp_4267);
         project__libraries__LarimarLibrary* ret_4270 = NULL;
         rt_mem_free(&mem_71);
@@ -33221,9 +33224,9 @@ project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtS
         rt_sb_str(&sb_4271, kind);
         rt_sb_add(&sb_4271, ")", 1);
         RtCloneMap clones_4273 = rt_clone_map();
-        RtString copy_4274 = clone_s(rt_sb_finish(&sb_4271), (problems_4806)->mem, &clones_4273);
+        RtString copy_4274 = clone_s(rt_sb_finish(&sb_4271), (problems_4808)->mem, &clones_4273);
         rt_clone_done(&clones_4273);
-        List_s_push(problems_4806, copy_4274);
+        List_s_push(problems_4808, copy_4274);
         rt_mem_free(&tmp_4272);
         project__libraries__LarimarLibrary* ret_4275 = NULL;
         rt_mem_free(&mem_71);
@@ -33275,9 +33278,9 @@ project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtS
                 rt_sb_str(&sb_4285, name);
                 rt_sb_add(&sb_4285, ".interface, and its c/)", 23);
                 RtCloneMap clones_4287 = rt_clone_map();
-                RtString copy_4288 = clone_s(rt_sb_finish(&sb_4285), (problems_4806)->mem, &clones_4287);
+                RtString copy_4288 = clone_s(rt_sb_finish(&sb_4285), (problems_4808)->mem, &clones_4287);
                 rt_clone_done(&clones_4287);
-                List_s_push(problems_4806, copy_4288);
+                List_s_push(problems_4808, copy_4288);
                 rt_mem_free(&tmp_4286);
                 project__libraries__LarimarLibrary* ret_4289 = NULL;
                 rt_mem_free(&mem_71);
@@ -33305,9 +33308,9 @@ project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtS
             rt_sb_str(&sb_4293, hash);
             rt_sb_add(&sb_4293, "): it was edited, or comes from another build. Copy the whole folder of one build.", 82);
             RtCloneMap clones_4295 = rt_clone_map();
-            RtString copy_4296 = clone_s(rt_sb_finish(&sb_4293), (problems_4806)->mem, &clones_4295);
+            RtString copy_4296 = clone_s(rt_sb_finish(&sb_4293), (problems_4808)->mem, &clones_4295);
             rt_clone_done(&clones_4295);
-            List_s_push(problems_4806, copy_4296);
+            List_s_push(problems_4808, copy_4296);
             rt_mem_free(&tmp_4294);
             project__libraries__LarimarLibrary* ret_4297 = NULL;
             rt_mem_free(&mem_72);
@@ -33333,9 +33336,9 @@ project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtS
             rt_sb_str(&sb_4300, hash);
             rt_sb_add(&sb_4300, "): copy the whole folder of one build.", 38);
             RtCloneMap clones_4302 = rt_clone_map();
-            RtString copy_4303 = clone_s(rt_sb_finish(&sb_4300), (problems_4806)->mem, &clones_4302);
+            RtString copy_4303 = clone_s(rt_sb_finish(&sb_4300), (problems_4808)->mem, &clones_4302);
             rt_clone_done(&clones_4302);
-            List_s_push(problems_4806, copy_4303);
+            List_s_push(problems_4808, copy_4303);
             rt_mem_free(&tmp_4301);
             project__libraries__LarimarLibrary* ret_4304 = NULL;
             rt_mem_free(&tmp_4298);
@@ -33359,9 +33362,9 @@ project__libraries__LarimarLibrary* project__libraries__read(RtMem* rt_dest, RtS
         rt_sb_add(&sb_4305, " in ", 4);
         rt_sb_str(&sb_4305, folder);
         RtCloneMap clones_4307 = rt_clone_map();
-        RtString copy_4308 = clone_s(rt_sb_finish(&sb_4305), (problems_4806)->mem, &clones_4307);
+        RtString copy_4308 = clone_s(rt_sb_finish(&sb_4305), (problems_4808)->mem, &clones_4307);
         rt_clone_done(&clones_4307);
-        List_s_push(problems_4806, copy_4308);
+        List_s_push(problems_4808, copy_4308);
         rt_mem_free(&tmp_4306);
         project__libraries__LarimarLibrary* ret_4309 = NULL;
         rt_mem_free(&mem_71);
@@ -33444,7 +33447,7 @@ bool project__libraries__fileHas(RtString path, RtString marker, RtError* err_ou
     return ret_4319;
 }
 
-RtString project__libraries__interfaceText(RtMem* rt_dest, RtString name, RtString version_4840, RtString kind, RtString prefix, RtString hash, RtString made, List_s* links, List_s* sources, List_s* includePaths, List_s* objects, List_s* packages) {
+RtString project__libraries__interfaceText(RtMem* rt_dest, RtString name, RtString version_4842, RtString kind, RtString prefix, RtString hash, RtString made, List_s* links, List_s* sources, List_s* includePaths, List_s* objects, List_s* packages) {
     RtMem mem_74 = rt_mem_growable();
     List_s* list_4320 = List_s_new(&mem_74, 42000217);
     List_s* quoted = list_4320;
@@ -33522,7 +33525,7 @@ RtString project__libraries__interfaceText(RtMem* rt_dest, RtString name, RtStri
     rt_sb_add(&sb_4340, " has it inside:\n# a program builds only when they agree.\n\n[library]\nname = \"", 76);
     rt_sb_str(&sb_4340, name);
     rt_sb_add(&sb_4340, "\"\nversion = \"", 13);
-    rt_sb_str(&sb_4340, version_4840);
+    rt_sb_str(&sb_4340, version_4842);
     rt_sb_add(&sb_4340, "\"\ntype = \"", 10);
     rt_sb_str(&sb_4340, kind);
     rt_sb_add(&sb_4340, "\"\nprefix = \"", 12);
@@ -33559,15 +33562,15 @@ RtString project__libraries__interfaceText(RtMem* rt_dest, RtString name, RtStri
     return ret_4347;
 }
 
-bool editor__session__analyzeFile(RtString main__4860, RtString shownFrom) {
+bool editor__session__analyzeFile(RtString main__4862, RtString shownFrom) {
     RtMem mem_75 = rt_mem_growable();
     RtMem tmp_4348 = rt_mem_growable();
     RtCloneMap clones_4349 = rt_clone_map();
-    RtString copy_4350 = clone_s(std__io__path__relative(&tmp_4348, shownFrom, main__4860), &rt_default_mem, &clones_4349);
+    RtString copy_4350 = clone_s(std__io__path__relative(&tmp_4348, shownFrom, main__4862), &rt_default_mem, &clones_4349);
     rt_clone_done(&clones_4349);
     RtString mainName = copy_4350;
     rt_mem_free(&tmp_4348);
-    Opt_s source = semantics__linker__readSource(NULL, main__4860);
+    Opt_s source = semantics__linker__readSource(NULL, main__4862);
     if (!(source).has) {
         RtSb sb_4351 = rt_sb_mem(&rt_default_mem, 40000033);
         rt_sb_add(&sb_4351, "Cannot read ", 12);
@@ -33586,11 +33589,11 @@ bool editor__session__analyzeFile(RtString main__4860, RtString shownFrom) {
     rt_mem_free(&tmp_4353);
     RtMem tmp_4356 = rt_mem_growable();
     RtCloneMap clones_4357 = rt_clone_map();
-    RtString copy_4358 = clone_s(std__io__path__normalize(&tmp_4356, std__io__path__absolute(&tmp_4356, main__4860)), &rt_default_mem, &clones_4357);
+    RtString copy_4358 = clone_s(std__io__path__normalize(&tmp_4356, std__io__path__absolute(&tmp_4356, main__4862)), &rt_default_mem, &clones_4357);
     rt_clone_done(&clones_4357);
     RtString mainPath = copy_4358;
     rt_mem_free(&tmp_4356);
-    RtString root = ((!rt_str_eq(editor__session__sourceRoot, rt_str("", 0))) ? editor__session__sourceRoot : std__io__path__parent(NULL, std__io__path__absolute(&mem_75, main__4860)));
+    RtString root = ((!rt_str_eq(editor__session__sourceRoot, rt_str("", 0))) ? editor__session__sourceRoot : std__io__path__parent(NULL, std__io__path__absolute(&mem_75, main__4862)));
     editor__session__findLibraryRoots(mainPath);
     RtCloneMap clones_4359 = rt_clone_map();
     RtString copy_4360 = clone_s(root, &rt_default_mem, &clones_4359);
@@ -33615,12 +33618,12 @@ bool editor__session__analyzeFile(RtString main__4860, RtString shownFrom) {
     return ret_4365;
 }
 
-void editor__session__findLibraryRoots(RtString main__4867) {
+void editor__session__findLibraryRoots(RtString main__4869) {
     RtError err;
     err.kind = 0;
     ((void)((semantics__linker__libraryRoots)->length = 0));
     semantics__types__libraryRules = false;
-    RtString dir = std__io__path__parent(NULL, main__4867);
+    RtString dir = std__io__path__parent(NULL, main__4869);
     while (!rt_str_eq(dir, rt_str("", 0))) {
         RtMem mem_76 = rt_mem_growable();
         RtString toml = std__io__path__join(&mem_76, dir, rt_str("larimar.toml", 12));
@@ -33786,12 +33789,12 @@ editor__session__Diagnostic* editor__session__diagnostic(RtMem* rt_dest, RtStrin
     }
     int64_t encoded = value_4407;
     int32_t index_ = ((int32_t)(rt_div_i64(encoded, ((int64_t)(1000000)), 40000112)));
-    RtString file_4887 = (((index_ >= 0) && (index_ < (semantics__linker__filePaths)->length)) ? (semantics__linker__filePaths)->items[rt_index((int64_t)(index_), (semantics__linker__filePaths)->length, 40000113)] : rt_str("", 0));
+    RtString file_4889 = (((index_ >= 0) && (index_ < (semantics__linker__filePaths)->length)) ? (semantics__linker__filePaths)->items[rt_index((int64_t)(index_), (semantics__linker__filePaths)->length, 40000113)] : rt_str("", 0));
     RtMem tmp_4414 = rt_mem_growable();
     RtMem* t_4409 = rt_dest;
     editor__session__Diagnostic* obj_4410 = (editor__session__Diagnostic*)rt_mem_alloc(t_4409, sizeof(editor__session__Diagnostic), 40000114);
     RtCloneMap clones_4411 = rt_clone_map();
-    RtString copy_4412 = clone_s(file_4887, rt_dest, &clones_4411);
+    RtString copy_4412 = clone_s(file_4889, rt_dest, &clones_4411);
     rt_clone_done(&clones_4411);
     RtString t_4413 = copy_4412;
     RtCloneMap clones_4415 = rt_clone_map();
@@ -33808,17 +33811,17 @@ editor__session__Diagnostic* editor__session__diagnostic(RtMem* rt_dest, RtStrin
     return ret_4421;
 }
 
-RtString editor__session__projectMain(RtMem* rt_dest, RtString file_4888) {
-    RtString dir = std__io__path__parent(NULL, file_4888);
+RtString editor__session__projectMain(RtMem* rt_dest, RtString file_4890) {
+    RtString dir = std__io__path__parent(NULL, file_4890);
     while (!rt_str_eq(dir, rt_str("", 0))) {
         RtMem mem_78 = rt_mem_growable();
         RtString toml = std__io__path__join(&mem_78, dir, rt_str("larimar.toml", 12));
         if (std__io__files__isFile(toml)) {
             RtMem mem_79 = rt_mem_growable();
-            RtString main__4891 = editor__session__tomlMain(&mem_79, toml);
-            if (!rt_str_eq(main__4891, rt_str("", 0))) {
+            RtString main__4893 = editor__session__tomlMain(&mem_79, toml);
+            if (!rt_str_eq(main__4893, rt_str("", 0))) {
                 RtMem tmp_4422 = rt_mem_growable();
-                RtString ret_4423 = std__io__path__normalize(rt_dest, std__io__path__join(&tmp_4422, dir, main__4891));
+                RtString ret_4423 = std__io__path__normalize(rt_dest, std__io__path__join(&tmp_4422, dir, main__4893));
                 rt_mem_free(&tmp_4422);
                 rt_mem_free(&mem_79);
                 rt_mem_free(&mem_78);
@@ -33834,7 +33837,7 @@ RtString editor__session__projectMain(RtMem* rt_dest, RtString file_4888) {
         dir = up;
         rt_mem_free(&mem_78);
     }
-    return file_4888;
+    return file_4890;
 }
 
 RtString editor__session__tomlMain(RtMem* rt_dest, RtString path) {
@@ -33893,13 +33896,13 @@ int32_t editor__session__checkCommand(List_s* rest) {
         }
     }
     RtMem tmp_4434 = rt_mem_growable();
-    RtString main__4901 = std__io__path__normalize(&mem_80, std__io__path__absolute(&tmp_4434, target));
+    RtString main__4903 = std__io__path__normalize(&mem_80, std__io__path__absolute(&tmp_4434, target));
     rt_mem_free(&tmp_4434);
-    if (std__io__files__isDirectory(main__4901)) {
-        main__4901 = editor__session__projectMain(&mem_80, std__io__path__join(&mem_80, main__4901, rt_str("larimar.toml", 12)));
+    if (std__io__files__isDirectory(main__4903)) {
+        main__4903 = editor__session__projectMain(&mem_80, std__io__path__join(&mem_80, main__4903, rt_str("larimar.toml", 12)));
     }
     RtMem tmp_4435 = rt_mem_growable();
-    bool ok = editor__session__analyzeFile(main__4901, std__os__cwd(&tmp_4435));
+    bool ok = editor__session__analyzeFile(main__4903, std__os__cwd(&tmp_4435));
     rt_mem_free(&tmp_4435);
     List_editor__session__Diagnostic* found = editor__session__diagnostics(&mem_80);
     if (json) {
@@ -34295,7 +34298,7 @@ RtString project__cc__installHint(RtMem* rt_dest) {
 }
 
 List_project__testing__TestFunction* project__testing__testFunctions(RtMem* rt_dest, RtString source) {
-    syntax__ast__FunctionDecl* f_4938 = NULL;
+    syntax__ast__FunctionDecl* f_4940 = NULL;
     List_project__testing__TestFunction* list_4522 = List_project__testing__TestFunction_new(rt_dest, 50000061);
     List_project__testing__TestFunction* out = list_4522;
     syntax__ast__Program* p = syntax__parser__parseProgram(NULL, source, 1);
@@ -34306,19 +34309,19 @@ List_project__testing__TestFunction* project__testing__testFunctions(RtMem* rt_d
         List_syntax__ast__Node* list_4524 = (p)->decls;
         for (int32_t i_4523 = 0; i_4523 < list_4524->length; i_4523++) {
             syntax__ast__Node* d = list_4524->items[i_4523];
-            if (((f_4938 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__FunctionDecl)) != NULL) && (f_4938)->isTest) {
+            if (((f_4940 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__FunctionDecl)) != NULL) && (f_4940)->isTest) {
                 RtString setup = rt_str("", 0);
-                if ((((f_4938)->params)->length == 1) && (!((((f_4938)->params)->items[rt_index((int64_t)(0), ((f_4938)->params)->length, 50000067)])->type == NULL))) {
-                    setup = (((syntax__ast__TypeRef*)rt_unwrap((void*)((((f_4938)->params)->items[rt_index((int64_t)(0), ((f_4938)->params)->length, 50000067)])->type), 50000067)))->name;
+                if ((((f_4940)->params)->length == 1) && (!((((f_4940)->params)->items[rt_index((int64_t)(0), ((f_4940)->params)->length, 50000067)])->type == NULL))) {
+                    setup = (((syntax__ast__TypeRef*)rt_unwrap((void*)((((f_4940)->params)->items[rt_index((int64_t)(0), ((f_4940)->params)->length, 50000067)])->type), 50000067)))->name;
                 }
-                RtString error = ((!((f_4938)->throwsType == NULL)) ? (((syntax__ast__TypeRef*)rt_unwrap((void*)((f_4938)->throwsType), 50000068)))->name : rt_str("", 0));
+                RtString error = ((!((f_4940)->throwsType == NULL)) ? (((syntax__ast__TypeRef*)rt_unwrap((void*)((f_4940)->throwsType), 50000068)))->name : rt_str("", 0));
                 RtMem* t_4525 = (out)->mem;
                 project__testing__TestFunction* obj_4526 = (project__testing__TestFunction*)rt_mem_alloc(t_4525, sizeof(project__testing__TestFunction), 50000069);
                 RtCloneMap clones_4527 = rt_clone_map();
-                RtString copy_4528 = clone_s((f_4938)->name, (out)->mem, &clones_4527);
+                RtString copy_4528 = clone_s((f_4940)->name, (out)->mem, &clones_4527);
                 rt_clone_done(&clones_4527);
                 RtString t_4529 = copy_4528;
-                int32_t t_4530 = (f_4938)->_super.line;
+                int32_t t_4530 = (f_4940)->_super.line;
                 RtCloneMap clones_4531 = rt_clone_map();
                 RtString copy_4532 = clone_s(setup, (out)->mem, &clones_4531);
                 rt_clone_done(&clones_4531);
@@ -34335,13 +34338,13 @@ List_project__testing__TestFunction* project__testing__testFunctions(RtMem* rt_d
 }
 
 bool project__testing__hasMain(RtString source) {
-    syntax__ast__FunctionDecl* f_4944 = NULL;
+    syntax__ast__FunctionDecl* f_4946 = NULL;
     syntax__ast__Program* p = syntax__parser__parseProgram(NULL, source, 1);
     {
         List_syntax__ast__Node* list_4537 = (p)->decls;
         for (int32_t i_4536 = 0; i_4536 < list_4537->length; i_4536++) {
             syntax__ast__Node* d = list_4537->items[i_4536];
-            if ((((f_4944 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__FunctionDecl)) != NULL) && rt_str_eq((f_4944)->name, rt_str("main", 4))) && rt_str_eq((f_4944)->typeName, rt_str("", 0))) {
+            if ((((f_4946 = (syntax__ast__FunctionDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__FunctionDecl)) != NULL) && rt_str_eq((f_4946)->name, rt_str("main", 4))) && rt_str_eq((f_4946)->typeName, rt_str("", 0))) {
                 return true;
             }
         }
@@ -35002,8 +35005,8 @@ RtString project__testing__read(RtMem* rt_dest, RtString path) {
     return zero_4654;
 }
 
-RtString project__testing__head(RtMem* rt_dest, RtString text_5013, int32_t count) {
-    RtString t_4655 = String_trim(text_5013, NULL);
+RtString project__testing__head(RtMem* rt_dest, RtString text_5015, int32_t count) {
+    RtString t_4655 = String_trim(text_5015, NULL);
     List_s* t_4656 = List_s_new(rt_dest, 50000362);
     RtString t_4657 = rt_str("\n", 1);
     if (t_4657.len == 0) {
@@ -35273,7 +35276,7 @@ RtString project__testing__exeName(RtMem* rt_dest, RtString b) {
     return value_4719;
 }
 
-void project__testing__runTestFile(RtString file_5048, RtString shown, RtString source) {
+void project__testing__runTestFile(RtString file_5050, RtString shown, RtString source) {
     (void)source;
     RtMem mem_91 = rt_mem_growable();
     RtString b = project__testing__base(&mem_91, shown);
@@ -35289,7 +35292,7 @@ void project__testing__runTestFile(RtString file_5048, RtString shown, RtString 
     List_s* list_4722 = List_s_new(&mem_91, 50000448);
     List_s_add(list_4722, project__cc__selfPath(&mem_91), 50000448);
     List_s_add(list_4722, rt_str("test-main", 9), 50000448);
-    List_s_add(list_4722, file_5048, 50000448);
+    List_s_add(list_4722, file_5050, 50000448);
     List_s_add(list_4722, rt_str("-o", 2), 50000448);
     List_s_add(list_4722, cFile, 50000448);
     List_s* cmd = list_4722;
@@ -35540,7 +35543,7 @@ bool editor__ide__nameByte(uint8_t c) {
     return (std__text__isIdentifierPart(c) || (c >= (uint8_t)128));
 }
 
-List_i32* editor__ide__wordColumns(RtMem* rt_dest, RtString text_5091, RtString word, int32_t dotted) {
+List_i32* editor__ide__wordColumns(RtMem* rt_dest, RtString text_5093, RtString word, int32_t dotted) {
     (void)rt_dest;
     List_i32* list_4762 = List_i32_new(&rt_default_mem, 53000108);
     List_i32* out = list_4762;
@@ -35549,15 +35552,15 @@ List_i32* editor__ide__wordColumns(RtMem* rt_dest, RtString text_5091, RtString 
     }
     int32_t from = 0;
     while (true) {
-        Opt_i32 at = String_indexOf_2(text_5091, word, from);
+        Opt_i32 at = String_indexOf_2(text_5093, word, from);
         if (!(at).has) {
             break;
         }
         int32_t a = at.value;
         int32_t end = ((int32_t)((uint32_t)(a) + (uint32_t)((word).len)));
-        bool before = ((a > 0) && editor__ide__nameByte(rt_str_byte(text_5091, (int64_t)(((int32_t)((uint32_t)(a) - (uint32_t)(1)))), 53000116)));
-        bool after = ((end < (text_5091).len) && editor__ide__nameByte(rt_str_byte(text_5091, (int64_t)(end), 53000117)));
-        bool dot = ((a > 0) && (rt_str_byte(text_5091, (int64_t)(((int32_t)((uint32_t)(a) - (uint32_t)(1)))), 53000118) == (uint8_t)46));
+        bool before = ((a > 0) && editor__ide__nameByte(rt_str_byte(text_5093, (int64_t)(((int32_t)((uint32_t)(a) - (uint32_t)(1)))), 53000116)));
+        bool after = ((end < (text_5093).len) && editor__ide__nameByte(rt_str_byte(text_5093, (int64_t)(end), 53000117)));
+        bool dot = ((a > 0) && (rt_str_byte(text_5093, (int64_t)(((int32_t)((uint32_t)(a) - (uint32_t)(1)))), 53000118) == (uint8_t)46));
         if (((!(before)) && (!(after))) && ((dotted < 0) || ((dotted == 1) == dot))) {
             List_i32_push(out, a);
         }
@@ -35746,9 +35749,9 @@ RtString editor__ide__typeText(RtMem* rt_dest, semantics__types__Type* t) {
 }
 
 void editor__ide__collect(void) {
-    syntax__ast__VarDecl* v_5150 = NULL;
-    syntax__ast__ConstDecl* c_5151 = NULL;
-    syntax__ast__Lambda* l_5153 = NULL;
+    syntax__ast__VarDecl* v_5152 = NULL;
+    syntax__ast__ConstDecl* c_5153 = NULL;
+    syntax__ast__Lambda* l_5155 = NULL;
     if (editor__ide__collected) {
         return;
     }
@@ -35822,11 +35825,11 @@ void editor__ide__collect(void) {
         List_syntax__ast__Node* list_4811 = (editor__session__program)->decls;
         for (int32_t i_4810 = 0; i_4810 < list_4811->length; i_4810++) {
             syntax__ast__Node* d = list_4811->items[i_4810];
-            if ((v_5150 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) {
-                syntax__ast__exprAll((v_5150)->init, true, editor__ide__exprs);
+            if ((v_5152 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) {
+                syntax__ast__exprAll((v_5152)->init, true, editor__ide__exprs);
             }
-            if ((c_5151 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL) {
-                syntax__ast__exprAll((c_5151)->value, true, editor__ide__exprs);
+            if ((c_5153 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL) {
+                syntax__ast__exprAll((c_5153)->value, true, editor__ide__exprs);
             }
         }
     }
@@ -35834,8 +35837,8 @@ void editor__ide__collect(void) {
         List_syntax__ast__Expr* list_4813 = editor__ide__exprs;
         for (int32_t i_4812 = 0; i_4812 < list_4813->length; i_4812++) {
             syntax__ast__Expr* e = list_4813->items[i_4812];
-            if ((l_5153 = (syntax__ast__Lambda*)rt_as_class((void*)(e), &rtclass_syntax__ast__Lambda)) != NULL) {
-                semantics__types__LambdaInfo* li = (l_5153)->_super._super.lambda;
+            if ((l_5155 = (syntax__ast__Lambda*)rt_as_class((void*)(e), &rtclass_syntax__ast__Lambda)) != NULL) {
+                semantics__types__LambdaInfo* li = (l_5155)->_super._super.lambda;
                 if (!(li == NULL)) {
                     {
                         List_semantics__types__Symbol* list_4815 = (li)->params;
@@ -35846,7 +35849,7 @@ void editor__ide__collect(void) {
                         }
                     }
                 }
-                editor__ide__statements((l_5153)->body);
+                editor__ide__statements((l_5155)->body);
             }
         }
     }
@@ -35872,9 +35875,9 @@ void editor__ide__body(List_syntax__ast__Stmt* b) {
 }
 
 void editor__ide__statements(List_syntax__ast__Stmt* b) {
-    syntax__ast__VarDecl* v_5162 = NULL;
-    syntax__ast__ForStmt* f_5163 = NULL;
-    syntax__ast__TryStmt* t_5164 = NULL;
+    syntax__ast__VarDecl* v_5164 = NULL;
+    syntax__ast__ForStmt* f_5165 = NULL;
+    syntax__ast__TryStmt* t_5166 = NULL;
     List_syntax__ast__Stmt* list_4818 = List_syntax__ast__Stmt_new(&rt_default_mem, 53000299);
     List_syntax__ast__Stmt* all = list_4818;
     syntax__ast__allStmts(b, all);
@@ -35882,20 +35885,20 @@ void editor__ide__statements(List_syntax__ast__Stmt* b) {
         List_syntax__ast__Stmt* list_4820 = all;
         for (int32_t i_4819 = 0; i_4819 < list_4820->length; i_4819++) {
             syntax__ast__Stmt* s = list_4820->items[i_4819];
-            if (((v_5162 = (syntax__ast__VarDecl*)rt_as_class((void*)(s), &rtclass_syntax__ast__VarDecl)) != NULL) && (!((v_5162)->_super._super.symbol == NULL))) {
-                List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)rt_unwrap((void*)((v_5162)->_super._super.symbol), 53000302)));
+            if (((v_5164 = (syntax__ast__VarDecl*)rt_as_class((void*)(s), &rtclass_syntax__ast__VarDecl)) != NULL) && (!((v_5164)->_super._super.symbol == NULL))) {
+                List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)rt_unwrap((void*)((v_5164)->_super._super.symbol), 53000302)));
             }
-            if (((f_5163 = (syntax__ast__ForStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__ForStmt)) != NULL) && (!((f_5163)->_super._super.forInfo == NULL))) {
-                if (!((((semantics__types__ForInfo*)rt_unwrap((void*)((f_5163)->_super._super.forInfo), 53000304)))->index_ == NULL)) {
-                    List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)rt_unwrap((void*)((((semantics__types__ForInfo*)rt_unwrap((void*)((f_5163)->_super._super.forInfo), 53000304)))->index_), 53000304)));
+            if (((f_5165 = (syntax__ast__ForStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__ForStmt)) != NULL) && (!((f_5165)->_super._super.forInfo == NULL))) {
+                if (!((((semantics__types__ForInfo*)rt_unwrap((void*)((f_5165)->_super._super.forInfo), 53000304)))->index_ == NULL)) {
+                    List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)rt_unwrap((void*)((((semantics__types__ForInfo*)rt_unwrap((void*)((f_5165)->_super._super.forInfo), 53000304)))->index_), 53000304)));
                 }
-                if (!((((semantics__types__ForInfo*)rt_unwrap((void*)((f_5163)->_super._super.forInfo), 53000305)))->value == NULL)) {
-                    List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)rt_unwrap((void*)((((semantics__types__ForInfo*)rt_unwrap((void*)((f_5163)->_super._super.forInfo), 53000305)))->value), 53000305)));
+                if (!((((semantics__types__ForInfo*)rt_unwrap((void*)((f_5165)->_super._super.forInfo), 53000305)))->value == NULL)) {
+                    List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)rt_unwrap((void*)((((semantics__types__ForInfo*)rt_unwrap((void*)((f_5165)->_super._super.forInfo), 53000305)))->value), 53000305)));
                 }
             }
-            if ((t_5164 = (syntax__ast__TryStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__TryStmt)) != NULL) {
+            if ((t_5166 = (syntax__ast__TryStmt*)rt_as_class((void*)(s), &rtclass_syntax__ast__TryStmt)) != NULL) {
                 {
-                    List_syntax__ast__CatchClause* list_4822 = (t_5164)->catches;
+                    List_syntax__ast__CatchClause* list_4822 = (t_5166)->catches;
                     for (int32_t i_4821 = 0; i_4821 < list_4822->length; i_4821++) {
                         syntax__ast__CatchClause* c = list_4822->items[i_4821];
                         if ((!((c)->_super.catchInfo == NULL)) && (!((((semantics__types__CatchInfo*)rt_unwrap((void*)((c)->_super.catchInfo), 53000309)))->variable == NULL))) {
@@ -35918,8 +35921,8 @@ editor__ide__Target* editor__ide__none(RtMem* rt_dest) {
 
 editor__ide__Target* editor__ide__ofSymbol(RtMem* rt_dest, semantics__types__Symbol* s) {
     (void)rt_dest;
-    syntax__ast__VarDecl* v_5169 = NULL;
-    syntax__ast__ConstDecl* c_5170 = NULL;
+    syntax__ast__VarDecl* v_5171 = NULL;
+    syntax__ast__ConstDecl* c_5172 = NULL;
     if ((((s)->kind).tag == (((semantics__types__SymK){ .tag = semantics__types__SymK_Function })).tag) && (!((s)->func == NULL))) {
         return editor__ide__ofFunc(NULL, ((semantics__types__FunctionInfo*)rt_unwrap((void*)((s)->func), 53000348)));
     }
@@ -35936,13 +35939,13 @@ editor__ide__Target* editor__ide__ofSymbol(RtMem* rt_dest, semantics__types__Sym
             List_syntax__ast__Node* list_4830 = (editor__session__program)->decls;
             for (int32_t i_4829 = 0; i_4829 < list_4830->length; i_4829++) {
                 syntax__ast__Node* d = list_4830->items[i_4829];
-                if (((v_5169 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) && rt_str_eq((v_5169)->name, (s)->name)) {
-                    (t)->decl = ((syntax__ast__Node*)(v_5169));
-                    (t)->line = (v_5169)->_super._super.line;
+                if (((v_5171 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) && rt_str_eq((v_5171)->name, (s)->name)) {
+                    (t)->decl = ((syntax__ast__Node*)(v_5171));
+                    (t)->line = (v_5171)->_super._super.line;
                 }
-                if (((c_5170 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL) && rt_str_eq((c_5170)->name, (s)->name)) {
-                    (t)->decl = ((syntax__ast__Node*)(c_5170));
-                    (t)->line = (c_5170)->_super.line;
+                if (((c_5172 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL) && rt_str_eq((c_5172)->name, (s)->name)) {
+                    (t)->decl = ((syntax__ast__Node*)(c_5172));
+                    (t)->line = (c_5172)->_super.line;
                 }
             }
         }
@@ -36005,7 +36008,7 @@ editor__ide__Target* editor__ide__ofVariant(RtMem* rt_dest, semantics__types__En
 
 editor__ide__Target* editor__ide__ofType(RtMem* rt_dest, RtString linked) {
     (void)rt_dest;
-    syntax__ast__NativeTypeDecl* n_5184 = NULL;
+    syntax__ast__NativeTypeDecl* n_5186 = NULL;
     int32_t line = 0;
     semantics__types__StructInfo* so = semantics__types__structOf(NULL, linked);
     if (!(so == NULL)) {
@@ -36032,8 +36035,8 @@ editor__ide__Target* editor__ide__ofType(RtMem* rt_dest, RtString linked) {
             List_syntax__ast__Node* list_4854 = (editor__session__program)->decls;
             for (int32_t i_4853 = 0; i_4853 < list_4854->length; i_4853++) {
                 syntax__ast__Node* d = list_4854->items[i_4853];
-                if (((n_5184 = (syntax__ast__NativeTypeDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__NativeTypeDecl)) != NULL) && rt_str_eq((n_5184)->name, linked)) {
-                    line = (n_5184)->_super.line;
+                if (((n_5186 = (syntax__ast__NativeTypeDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__NativeTypeDecl)) != NULL) && rt_str_eq((n_5186)->name, linked)) {
+                    line = (n_5186)->_super.line;
                 }
             }
         }
@@ -36056,8 +36059,8 @@ editor__ide__Target* editor__ide__ofType(RtMem* rt_dest, RtString linked) {
 
 editor__ide__Target* editor__ide__ofLinked(RtMem* rt_dest, RtString linked) {
     (void)rt_dest;
-    syntax__ast__VarDecl* v_5189 = NULL;
-    syntax__ast__ConstDecl* c_5190 = NULL;
+    syntax__ast__VarDecl* v_5191 = NULL;
+    syntax__ast__ConstDecl* c_5192 = NULL;
     editor__ide__Target* t = editor__ide__ofType(NULL, linked);
     if (!((t)->kind == 0)) {
         return t;
@@ -36070,16 +36073,16 @@ editor__ide__Target* editor__ide__ofLinked(RtMem* rt_dest, RtString linked) {
         List_syntax__ast__Node* list_4863 = (editor__session__program)->decls;
         for (int32_t i_4862 = 0; i_4862 < list_4863->length; i_4862++) {
             syntax__ast__Node* d = list_4863->items[i_4862];
-            if ((((v_5189 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) && rt_str_eq((v_5189)->name, linked)) && (!((v_5189)->_super._super.symbol == NULL))) {
-                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)rt_unwrap((void*)((v_5189)->_super._super.symbol), 53000406)));
+            if ((((v_5191 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) && rt_str_eq((v_5191)->name, linked)) && (!((v_5191)->_super._super.symbol == NULL))) {
+                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)rt_unwrap((void*)((v_5191)->_super._super.symbol), 53000406)));
             }
-            if (((c_5190 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL) && rt_str_eq((c_5190)->name, linked)) {
+            if (((c_5192 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL) && rt_str_eq((c_5192)->name, linked)) {
                 RtMem* t_4864 = &rt_default_mem;
                 editor__ide__Target* obj_4865 = (editor__ide__Target*)rt_mem_alloc(t_4864, sizeof(editor__ide__Target), 53000408);
                 RtCloneMap clones_4866 = rt_clone_map();
                 RtString copy_4867 = clone_s(editor__ide__shortName(NULL, linked), &rt_default_mem, &clones_4866);
                 rt_clone_done(&clones_4866);
-                *obj_4865 = (editor__ide__Target){ ._h = { (const void*)&vtable_editor__ide__Target, t_4864 }, .kind = 2, .name = copy_4867, .line = (c_5190)->_super.line, .symbol = NULL, .func = NULL, .method = NULL, .field = NULL, .typeName = rt_str("", 0), .variant = NULL, .enumName = rt_str("", 0), .module = rt_str("", 0), .decl = ((syntax__ast__Node*)(c_5190)) };
+                *obj_4865 = (editor__ide__Target){ ._h = { (const void*)&vtable_editor__ide__Target, t_4864 }, .kind = 2, .name = copy_4867, .line = (c_5192)->_super.line, .symbol = NULL, .func = NULL, .method = NULL, .field = NULL, .typeName = rt_str("", 0), .variant = NULL, .enumName = rt_str("", 0), .module = rt_str("", 0), .decl = ((syntax__ast__Node*)(c_5192)) };
                 return obj_4865;
             }
         }
@@ -36089,18 +36092,18 @@ editor__ide__Target* editor__ide__ofLinked(RtMem* rt_dest, RtString linked) {
 
 editor__ide__Target* editor__ide__targetAt(RtMem* rt_dest, int32_t index_, int32_t line, editor__ide__Word* w) {
     (void)rt_dest;
-    syntax__ast__VarDecl* v_5210 = NULL;
-    syntax__ast__ConstDecl* c_5211 = NULL;
-    syntax__ast__NativeTypeDecl* n_5213 = NULL;
-    syntax__ast__Member* m_5216 = NULL;
-    syntax__ast__Ident* id_5217 = NULL;
-    syntax__ast__Call* c_5219 = NULL;
-    syntax__ast__Member* m_5220 = NULL;
-    syntax__ast__Ident* id_5221 = NULL;
-    syntax__ast__Member* m_5225 = NULL;
-    syntax__ast__Ident* id_5230 = NULL;
-    syntax__ast__Call* c_5232 = NULL;
-    syntax__ast__Ident* id_5233 = NULL;
+    syntax__ast__VarDecl* v_5212 = NULL;
+    syntax__ast__ConstDecl* c_5213 = NULL;
+    syntax__ast__NativeTypeDecl* n_5215 = NULL;
+    syntax__ast__Member* m_5218 = NULL;
+    syntax__ast__Ident* id_5219 = NULL;
+    syntax__ast__Call* c_5221 = NULL;
+    syntax__ast__Member* m_5222 = NULL;
+    syntax__ast__Ident* id_5223 = NULL;
+    syntax__ast__Member* m_5227 = NULL;
+    syntax__ast__Ident* id_5232 = NULL;
+    syntax__ast__Call* c_5234 = NULL;
+    syntax__ast__Ident* id_5235 = NULL;
     editor__ide__collect();
     int32_t enc = ((int32_t)((uint32_t)(((int32_t)((uint32_t)(index_) * (uint32_t)(1000000)))) + (uint32_t)(line)));
     RtString word = (w)->text;
@@ -36228,21 +36231,21 @@ editor__ide__Target* editor__ide__targetAt(RtMem* rt_dest, int32_t index_, int32
         List_syntax__ast__Node* list_4895 = (editor__session__program)->decls;
         for (int32_t i_4894 = 0; i_4894 < list_4895->length; i_4894++) {
             syntax__ast__Node* d = list_4895->items[i_4894];
-            if (((((v_5210 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) && ((v_5210)->_super._super.line == enc)) && rt_str_eq(editor__ide__shortName(NULL, (v_5210)->name), word)) && (!((v_5210)->_super._super.symbol == NULL))) {
-                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)rt_unwrap((void*)((v_5210)->_super._super.symbol), 53000447)));
+            if (((((v_5212 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) && ((v_5212)->_super._super.line == enc)) && rt_str_eq(editor__ide__shortName(NULL, (v_5212)->name), word)) && (!((v_5212)->_super._super.symbol == NULL))) {
+                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)rt_unwrap((void*)((v_5212)->_super._super.symbol), 53000447)));
             }
-            if ((((c_5211 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL) && ((c_5211)->_super.line == enc)) && rt_str_eq(editor__ide__shortName(NULL, (c_5211)->name), word)) {
+            if ((((c_5213 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL) && ((c_5213)->_super.line == enc)) && rt_str_eq(editor__ide__shortName(NULL, (c_5213)->name), word)) {
                 RtMem* t_4896 = &rt_default_mem;
                 editor__ide__Target* obj_4897 = (editor__ide__Target*)rt_mem_alloc(t_4896, sizeof(editor__ide__Target), 53000449);
                 RtCloneMap clones_4898 = rt_clone_map();
                 RtString copy_4899 = clone_s(word, &rt_default_mem, &clones_4898);
                 rt_clone_done(&clones_4898);
-                *obj_4897 = (editor__ide__Target){ ._h = { (const void*)&vtable_editor__ide__Target, t_4896 }, .kind = 2, .name = copy_4899, .line = (c_5211)->_super.line, .symbol = NULL, .func = NULL, .method = NULL, .field = NULL, .typeName = rt_str("", 0), .variant = NULL, .enumName = rt_str("", 0), .module = rt_str("", 0), .decl = ((syntax__ast__Node*)(c_5211)) };
+                *obj_4897 = (editor__ide__Target){ ._h = { (const void*)&vtable_editor__ide__Target, t_4896 }, .kind = 2, .name = copy_4899, .line = (c_5213)->_super.line, .symbol = NULL, .func = NULL, .method = NULL, .field = NULL, .typeName = rt_str("", 0), .variant = NULL, .enumName = rt_str("", 0), .module = rt_str("", 0), .decl = ((syntax__ast__Node*)(c_5213)) };
                 editor__ide__Target* t = obj_4897;
                 return t;
             }
-            if ((((n_5213 = (syntax__ast__NativeTypeDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__NativeTypeDecl)) != NULL) && ((n_5213)->_super.line == enc)) && rt_str_eq((n_5213)->name, word)) {
-                return editor__ide__ofType(NULL, (n_5213)->name);
+            if ((((n_5215 = (syntax__ast__NativeTypeDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__NativeTypeDecl)) != NULL) && ((n_5215)->_super.line == enc)) && rt_str_eq((n_5215)->name, word)) {
+                return editor__ide__ofType(NULL, (n_5215)->name);
             }
         }
     }
@@ -36259,14 +36262,14 @@ editor__ide__Target* editor__ide__targetAt(RtMem* rt_dest, int32_t index_, int32
         List_syntax__ast__Expr* list_4903 = editor__ide__exprs;
         for (int32_t i_4902 = 0; i_4902 < list_4903->length; i_4902++) {
             syntax__ast__Expr* e = list_4903->items[i_4902];
-            if (((((((e)->_super.line == enc) && ((m_5216 = (syntax__ast__Member*)rt_as_class((void*)(e), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m_5216)->name, word)) && (w)->dotted) && (!((m_5216)->replaced == NULL))) && ((id_5217 = (syntax__ast__Ident*)rt_as_class((void*)(((syntax__ast__Expr*)rt_unwrap((void*)((m_5216)->replaced), 53000459))), &rtclass_syntax__ast__Ident)) != NULL)) {
-                editor__ide__Target* byName = editor__ide__ofLinked(NULL, (id_5217)->name);
+            if (((((((e)->_super.line == enc) && ((m_5218 = (syntax__ast__Member*)rt_as_class((void*)(e), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m_5218)->name, word)) && (w)->dotted) && (!((m_5218)->replaced == NULL))) && ((id_5219 = (syntax__ast__Ident*)rt_as_class((void*)(((syntax__ast__Expr*)rt_unwrap((void*)((m_5218)->replaced), 53000459))), &rtclass_syntax__ast__Ident)) != NULL)) {
+                editor__ide__Target* byName = editor__ide__ofLinked(NULL, (id_5219)->name);
                 if (!((byName)->kind == 0)) {
                     return byName;
                 }
             }
-            if ((((((((e)->_super.line == enc) && ((c_5219 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL)) && ((m_5220 = (syntax__ast__Member*)rt_as_class((void*)((c_5219)->callee), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m_5220)->name, word)) && (w)->dotted) && (!((m_5220)->replaced == NULL))) && ((id_5221 = (syntax__ast__Ident*)rt_as_class((void*)(((syntax__ast__Expr*)rt_unwrap((void*)((m_5220)->replaced), 53000463))), &rtclass_syntax__ast__Ident)) != NULL)) {
-                editor__ide__Target* byName = editor__ide__ofLinked(NULL, (id_5221)->name);
+            if ((((((((e)->_super.line == enc) && ((c_5221 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL)) && ((m_5222 = (syntax__ast__Member*)rt_as_class((void*)((c_5221)->callee), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m_5222)->name, word)) && (w)->dotted) && (!((m_5222)->replaced == NULL))) && ((id_5223 = (syntax__ast__Ident*)rt_as_class((void*)(((syntax__ast__Expr*)rt_unwrap((void*)((m_5222)->replaced), 53000463))), &rtclass_syntax__ast__Ident)) != NULL)) {
+                editor__ide__Target* byName = editor__ide__ofLinked(NULL, (id_5223)->name);
                 if (!((byName)->kind == 0)) {
                     return byName;
                 }
@@ -36285,7 +36288,7 @@ editor__ide__Target* editor__ide__targetAt(RtMem* rt_dest, int32_t index_, int32
                 if (rt_is_a(rt_obj_class(subject_4906), &rtclass_syntax__ast__Call)) {
                     syntax__ast__Call* c = (syntax__ast__Call*)subject_4906;
                     {
-                        if ((((m_5225 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) && rt_str_eq((m_5225)->name, word)) && (w)->dotted) {
+                        if ((((m_5227 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) && rt_str_eq((m_5227)->name, word)) && (w)->dotted) {
                             semantics__types__CallInfo* ci = (c)->_super._super.call;
                             if (!(ci == NULL)) {
                                 if (!((ci)->method == NULL)) {
@@ -36351,8 +36354,8 @@ editor__ide__Target* editor__ide__targetAt(RtMem* rt_dest, int32_t index_, int32
         List_syntax__ast__Expr* list_4918 = editor__ide__exprs;
         for (int32_t i_4917 = 0; i_4917 < list_4918->length; i_4917++) {
             syntax__ast__Expr* e = list_4918->items[i_4917];
-            if (((((e)->_super.line == enc) && ((id_5230 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL)) && rt_str_eq(editor__ide__shortName(NULL, (id_5230)->name), word)) && (!((id_5230)->_super._super.symbol == NULL))) {
-                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)rt_unwrap((void*)((id_5230)->_super._super.symbol), 53000496)));
+            if (((((e)->_super.line == enc) && ((id_5232 = (syntax__ast__Ident*)rt_as_class((void*)(e), &rtclass_syntax__ast__Ident)) != NULL)) && rt_str_eq(editor__ide__shortName(NULL, (id_5232)->name), word)) && (!((id_5232)->_super._super.symbol == NULL))) {
+                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)rt_unwrap((void*)((id_5232)->_super._super.symbol), 53000496)));
             }
         }
     }
@@ -36360,8 +36363,8 @@ editor__ide__Target* editor__ide__targetAt(RtMem* rt_dest, int32_t index_, int32
         List_syntax__ast__Expr* list_4920 = editor__ide__exprs;
         for (int32_t i_4919 = 0; i_4919 < list_4920->length; i_4919++) {
             syntax__ast__Expr* e = list_4920->items[i_4919];
-            if (((((((e)->_super.line == enc) && ((c_5232 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL)) && ((id_5233 = (syntax__ast__Ident*)rt_as_class((void*)((c_5232)->callee), &rtclass_syntax__ast__Ident)) != NULL)) && rt_str_eq(editor__ide__shortName(NULL, (id_5233)->name), word)) && (!((c_5232)->_super._super.call == NULL))) && (!((((semantics__types__CallInfo*)rt_unwrap((void*)((c_5232)->_super._super.call), 53000499)))->func == NULL))) {
-                return editor__ide__ofFunc(NULL, ((semantics__types__FunctionInfo*)rt_unwrap((void*)((((semantics__types__CallInfo*)rt_unwrap((void*)((c_5232)->_super._super.call), 53000500)))->func), 53000500)));
+            if (((((((e)->_super.line == enc) && ((c_5234 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL)) && ((id_5235 = (syntax__ast__Ident*)rt_as_class((void*)((c_5234)->callee), &rtclass_syntax__ast__Ident)) != NULL)) && rt_str_eq(editor__ide__shortName(NULL, (id_5235)->name), word)) && (!((c_5234)->_super._super.call == NULL))) && (!((((semantics__types__CallInfo*)rt_unwrap((void*)((c_5234)->_super._super.call), 53000499)))->func == NULL))) {
+                return editor__ide__ofFunc(NULL, ((semantics__types__FunctionInfo*)rt_unwrap((void*)((((semantics__types__CallInfo*)rt_unwrap((void*)((c_5234)->_super._super.call), 53000500)))->func), 53000500)));
             }
         }
     }
@@ -36545,7 +36548,7 @@ RtString editor__ide__methodLabel(RtMem* rt_dest, semantics__types__MethodInfo* 
 }
 
 RtString editor__ide__detail(RtMem* rt_dest, editor__ide__Target* t) {
-    syntax__ast__ConstDecl* c_5266 = NULL;
+    syntax__ast__ConstDecl* c_5268 = NULL;
     int32_t subject_4960 = (t)->kind;
     {
         if (subject_4960 == 1) {
@@ -36584,13 +36587,13 @@ RtString editor__ide__detail(RtMem* rt_dest, editor__ide__Target* t) {
         if (subject_4960 == 2) {
             {
                 syntax__ast__Node* d = (t)->decl;
-                if ((!(d == NULL)) && ((c_5266 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL)) {
+                if ((!(d == NULL)) && ((c_5268 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL)) {
                     RtMem tmp_4971 = rt_mem_growable();
                     RtSb sb_4970 = rt_sb_mem(rt_dest, 53000575);
                     rt_sb_add(&sb_4970, "const ", 6);
-                    rt_sb_str(&sb_4970, editor__ide__shortName(NULL, (c_5266)->name));
+                    rt_sb_str(&sb_4970, editor__ide__shortName(NULL, (c_5268)->name));
                     rt_sb_add(&sb_4970, ": ", 2);
-                    rt_sb_str(&sb_4970, ((!((c_5266)->_super.ty == NULL)) ? editor__ide__typeText(&tmp_4971, (c_5266)->_super.ty) : editor__ide__typeOfConst(NULL, c_5266)));
+                    rt_sb_str(&sb_4970, ((!((c_5268)->_super.ty == NULL)) ? editor__ide__typeText(&tmp_4971, (c_5268)->_super.ty) : editor__ide__typeOfConst(NULL, c_5268)));
                     RtString ret_4972 = rt_sb_finish(&sb_4970);
                     rt_mem_free(&tmp_4971);
                     return ret_4972;
@@ -37474,7 +37477,7 @@ RtString editor__ide__referencesJson(RtMem* rt_dest, RtString path, int32_t line
 }
 
 int32_t editor__ide__refersTo(syntax__ast__Expr* e, editor__ide__Target* t) {
-    syntax__ast__ConstDecl* c_5371 = NULL;
+    syntax__ast__ConstDecl* c_5373 = NULL;
     syntax__ast__Expr* subject_5147 = e;
     {
         if (rt_is_a(rt_obj_class(subject_5147), &rtclass_syntax__ast__Ident)) {
@@ -37495,7 +37498,7 @@ int32_t editor__ide__refersTo(syntax__ast__Expr* e, editor__ide__Target* t) {
                 bool cond_5152 = (((t)->kind == 2) && ((t)->symbol == NULL));
                 if (cond_5152) {
                     RtString t_5151 = (s)->name;
-                    cond_5152 = rt_str_eq(t_5151, (((!((t)->decl == NULL)) && ((c_5371 = (syntax__ast__ConstDecl*)rt_as_class((void*)(((syntax__ast__Node*)rt_unwrap((void*)((t)->decl), 53000870))), &rtclass_syntax__ast__ConstDecl)) != NULL)) ? (c_5371)->name : rt_str("", 0)));
+                    cond_5152 = rt_str_eq(t_5151, (((!((t)->decl == NULL)) && ((c_5373 = (syntax__ast__ConstDecl*)rt_as_class((void*)(((syntax__ast__Node*)rt_unwrap((void*)((t)->decl), 53000870))), &rtclass_syntax__ast__ConstDecl)) != NULL)) ? (c_5373)->name : rt_str("", 0)));
                 }
                 if (cond_5152) {
                     return 0;
@@ -37981,12 +37984,12 @@ int32_t editor__ide__blockEnd(int32_t index_, int32_t line) {
 
 void editor__ide__prepareCompletion(RtString path, int32_t line0, int32_t char16, bool signatureHelp) {
     RtMem mem_115 = rt_mem_growable();
-    Opt_s text_5432 = editor__docstore__document(NULL, path);
-    if (!(text_5432).has) {
+    Opt_s text_5434 = editor__docstore__document(NULL, path);
+    if (!(text_5434).has) {
         rt_mem_free(&mem_115);
         return;
     }
-    RtString t_5271 = text_5432.value;
+    RtString t_5271 = text_5434.value;
     List_s* t_5272 = List_s_new(&mem_115, 53001031);
     RtString t_5273 = rt_str("\n", 1);
     if (t_5273.len == 0) {
@@ -38036,7 +38039,7 @@ void editor__ide__prepareCompletion(RtString path, int32_t line0, int32_t char16
             rt_clone_done(&clones_5281);
             editor__ide__probeChain = copy_5282;
             editor__ide__probeMember = true;
-            replacement = editor__ide__probeStatement(&mem_115, text_5432.value, before, ((int32_t)((uint32_t)(((int32_t)((uint32_t)((name)->from) - (uint32_t)(1)))) - (uint32_t)((editor__ide__probeChain).len))), indent);
+            replacement = editor__ide__probeStatement(&mem_115, text_5434.value, before, ((int32_t)((uint32_t)(((int32_t)((uint32_t)((name)->from) - (uint32_t)(1)))) - (uint32_t)((editor__ide__probeChain).len))), indent);
         }
     } else {
         editor__ide__Word* w = editor__ide__wordAt(NULL, before, (before).len);
@@ -38051,8 +38054,8 @@ void editor__ide__prepareCompletion(RtString path, int32_t line0, int32_t char16
             rt_clone_done(&clones_5285);
             editor__ide__probeChain = copy_5286;
             RtString value_5289;
-            if (rt_str_eq(String_trim(after, NULL), rt_str("", 0)) || editor__ide__needsNoProbe(text_5432.value, editor__ide__probeChain)) {
-                value_5289 = editor__ide__probeStatement(&mem_115, text_5432.value, before, ((int32_t)((uint32_t)(((int32_t)((uint32_t)((w)->from) - (uint32_t)(1)))) - (uint32_t)((editor__ide__probeChain).len))), indent);
+            if (rt_str_eq(String_trim(after, NULL), rt_str("", 0)) || editor__ide__needsNoProbe(text_5434.value, editor__ide__probeChain)) {
+                value_5289 = editor__ide__probeStatement(&mem_115, text_5434.value, before, ((int32_t)((uint32_t)(((int32_t)((uint32_t)((w)->from) - (uint32_t)(1)))) - (uint32_t)((editor__ide__probeChain).len))), indent);
             } else {
                 RtSb sb_5287 = rt_sb_mem(&mem_115, 53001060);
                 RtString t_5288 = before;
@@ -38085,8 +38088,8 @@ void editor__ide__prepareCompletion(RtString path, int32_t line0, int32_t char16
     rt_mem_free(&mem_115);
 }
 
-RtString editor__ide__probeStatement(RtMem* rt_dest, RtString text_5447, RtString before, int32_t chainStart, RtString indent) {
-    if (editor__ide__needsNoProbe(text_5447, editor__ide__probeChain)) {
+RtString editor__ide__probeStatement(RtMem* rt_dest, RtString text_5449, RtString before, int32_t chainStart, RtString indent) {
+    if (editor__ide__needsNoProbe(text_5449, editor__ide__probeChain)) {
         return rt_str("", 0);
     }
     RtString value_5296;
@@ -38116,7 +38119,7 @@ RtString editor__ide__probeStatement(RtMem* rt_dest, RtString text_5447, RtStrin
     return rt_sb_finish(&sb_5298);
 }
 
-bool editor__ide__needsNoProbe(RtString text_5453, RtString chain) {
+bool editor__ide__needsNoProbe(RtString text_5455, RtString chain) {
     {
         RtString text_5299 = chain;
         for (int32_t i_5300 = 0; i_5300 < text_5299.len; i_5300++) {
@@ -38134,7 +38137,7 @@ bool editor__ide__needsNoProbe(RtString text_5453, RtString chain) {
     rt_sb_add(&sb_5301, " as ", 4);
     rt_sb_str(&sb_5301, chain);
     rt_sb_add(&sb_5301, ";", 1);
-    bool ret_5303 = String_contains(text_5453, rt_sb_finish(&sb_5301));
+    bool ret_5303 = String_contains(text_5455, rt_sb_finish(&sb_5301));
     rt_mem_free(&tmp_5302);
     return ret_5303;
 }
@@ -38311,19 +38314,19 @@ RtString editor__ide__completionJson(RtMem* rt_dest, RtString path, int32_t line
 
 syntax__ast__Expr* editor__ide__probeObject(RtMem* rt_dest, int32_t index_) {
     (void)rt_dest;
-    syntax__ast__Member* m_5490 = NULL;
-    syntax__ast__Call* c_5491 = NULL;
-    syntax__ast__Member* m2_5492 = NULL;
+    syntax__ast__Member* m_5492 = NULL;
+    syntax__ast__Call* c_5493 = NULL;
+    syntax__ast__Member* m2_5494 = NULL;
     int32_t enc = ((int32_t)((uint32_t)(((int32_t)((uint32_t)(index_) * (uint32_t)(1000000)))) + (uint32_t)(editor__ide__probeLine)));
     {
         List_syntax__ast__Expr* list_5326 = editor__ide__exprs;
         for (int32_t i_5325 = 0; i_5325 < list_5326->length; i_5325++) {
             syntax__ast__Expr* e = list_5326->items[i_5325];
-            if ((((e)->_super.line == enc) && ((m_5490 = (syntax__ast__Member*)rt_as_class((void*)(e), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m_5490)->name, rt_str("larimarCompletionProbe", 22))) {
-                return (m_5490)->object;
+            if ((((e)->_super.line == enc) && ((m_5492 = (syntax__ast__Member*)rt_as_class((void*)(e), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m_5492)->name, rt_str("larimarCompletionProbe", 22))) {
+                return (m_5492)->object;
             }
-            if (((((e)->_super.line == enc) && ((c_5491 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL)) && ((m2_5492 = (syntax__ast__Member*)rt_as_class((void*)((c_5491)->callee), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m2_5492)->name, rt_str("larimarCompletionProbe", 22))) {
-                return (m2_5492)->object;
+            if (((((e)->_super.line == enc) && ((c_5493 = (syntax__ast__Call*)rt_as_class((void*)(e), &rtclass_syntax__ast__Call)) != NULL)) && ((m2_5494 = (syntax__ast__Member*)rt_as_class((void*)((c_5493)->callee), &rtclass_syntax__ast__Member)) != NULL)) && rt_str_eq((m2_5494)->name, rt_str("larimarCompletionProbe", 22))) {
+                return (m2_5494)->object;
             }
         }
     }
@@ -38593,8 +38596,8 @@ RtString editor__ide__docOf(RtMem* rt_dest, int32_t encoded) {
 }
 
 void editor__ide__nameItem(editor__ide__Items* items, RtString name, RtString linked) {
-    syntax__ast__VarDecl* v_5526 = NULL;
-    syntax__ast__ConstDecl* c_5527 = NULL;
+    syntax__ast__VarDecl* v_5528 = NULL;
+    syntax__ast__ConstDecl* c_5529 = NULL;
     semantics__types__FunctionInfo* f = semantics__types__functionOf(NULL, linked);
     if (!(f == NULL)) {
         RtMem tmp_5390 = rt_mem_growable();
@@ -38637,31 +38640,31 @@ void editor__ide__nameItem(editor__ide__Items* items, RtString name, RtString li
         List_syntax__ast__Node* list_5398 = (editor__session__program)->decls;
         for (int32_t i_5397 = 0; i_5397 < list_5398->length; i_5397++) {
             syntax__ast__Node* d = list_5398->items[i_5397];
-            if (((v_5526 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) && rt_str_eq((v_5526)->name, linked)) {
+            if (((v_5528 = (syntax__ast__VarDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__VarDecl)) != NULL) && rt_str_eq((v_5528)->name, linked)) {
                 RtMem tmp_5400 = rt_mem_growable();
                 RtString value_5401;
-                if (!((v_5526)->_super._super.symbol == NULL)) {
+                if (!((v_5528)->_super._super.symbol == NULL)) {
                     RtSb sb_5399 = rt_sb_mem(&tmp_5400, 53001329);
                     rt_sb_add(&sb_5399, "let ", 4);
                     rt_sb_str(&sb_5399, name);
                     rt_sb_add(&sb_5399, ": ", 2);
-                    rt_sb_str(&sb_5399, editor__ide__typeText(&tmp_5400, (((semantics__types__Symbol*)rt_unwrap((void*)((v_5526)->_super._super.symbol), 53001329)))->type));
+                    rt_sb_str(&sb_5399, editor__ide__typeText(&tmp_5400, (((semantics__types__Symbol*)rt_unwrap((void*)((v_5528)->_super._super.symbol), 53001329)))->type));
                     value_5401 = rt_sb_finish(&sb_5399);
                 } else {
                     value_5401 = rt_str("", 0);
                 }
                 RtString t_5402 = value_5401;
-                editor__ide__add(items, name, 6, t_5402, editor__ide__docOf(&tmp_5400, (v_5526)->_super._super.line));
+                editor__ide__add(items, name, 6, t_5402, editor__ide__docOf(&tmp_5400, (v_5528)->_super._super.line));
                 rt_mem_free(&tmp_5400);
                 return;
             }
-            if (((c_5527 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL) && rt_str_eq((c_5527)->name, linked)) {
+            if (((c_5529 = (syntax__ast__ConstDecl*)rt_as_class((void*)(d), &rtclass_syntax__ast__ConstDecl)) != NULL) && rt_str_eq((c_5529)->name, linked)) {
                 RtMem tmp_5404 = rt_mem_growable();
                 RtSb sb_5403 = rt_sb_mem(&tmp_5404, 53001333);
                 rt_sb_add(&sb_5403, "const ", 6);
                 rt_sb_str(&sb_5403, name);
                 RtString t_5405 = rt_sb_finish(&sb_5403);
-                editor__ide__add(items, name, 21, t_5405, editor__ide__docOf(&tmp_5404, (c_5527)->_super.line));
+                editor__ide__add(items, name, 21, t_5405, editor__ide__docOf(&tmp_5404, (c_5529)->_super.line));
                 rt_mem_free(&tmp_5404);
                 return;
             }
@@ -39016,10 +39019,10 @@ RtString editor__ide__diagnosticsJson(RtMem* rt_dest, RtString requested) {
         List_editor__session__Diagnostic* list_5476 = found;
         for (int32_t i_5475 = 0; i_5475 < list_5476->length; i_5475++) {
             editor__session__Diagnostic* d = list_5476->items[i_5475];
-            RtString file_5587 = ((!rt_str_eq((d)->file, rt_str("", 0))) ? (d)->file : requested);
-            if (!(rt_any_contains_key(byFile, file_5587))) {
+            RtString file_5589 = ((!rt_str_eq((d)->file, rt_str("", 0))) ? (d)->file : requested);
+            if (!(rt_any_contains_key(byFile, file_5589))) {
                 RtAny t_5477 = byFile;
-                rt_any_set(t_5477, file_5587, rt_any_b(true), 53001482);
+                rt_any_set(t_5477, file_5589, rt_any_b(true), 53001482);
             }
         }
     }
@@ -39034,7 +39037,7 @@ RtString editor__ide__diagnosticsJson(RtMem* rt_dest, RtString requested) {
         int32_t n_5481 = table_5480 ? table_5480->count : 0;
         for (int32_t i_5482 = 0; i_5482 < n_5481; i_5482++) {
             if (table_5480->count != n_5481) rt_panic("an Any table cannot gain or lose entries while it is being iterated", 53001486);
-            RtString file_5590 = table_5480->keys[i_5482];
+            RtString file_5592 = table_5480->keys[i_5482];
             RtAny v = table_5480->values[i_5482];
             (void)v;
             RtMem mem_119 = rt_mem_growable();
@@ -39042,7 +39045,7 @@ RtString editor__ide__diagnosticsJson(RtMem* rt_dest, RtString requested) {
                 StringBuilder_add__dispatch((StringBuilder*)sb, rt_str("\n", 1));
             }
             first = false;
-            int32_t index_ = editor__ide__fileIndex(file_5590);
+            int32_t index_ = editor__ide__fileIndex(file_5592);
             List_s* list_5483 = List_s_new(&mem_119, 53001490);
             List_s* ds = list_5483;
             {
@@ -39051,7 +39054,7 @@ RtString editor__ide__diagnosticsJson(RtMem* rt_dest, RtString requested) {
                     editor__session__Diagnostic* d = list_5485->items[i_5484];
                     RtMem mem_120 = rt_mem_growable();
                     RtString df = ((!rt_str_eq((d)->file, rt_str("", 0))) ? (d)->file : requested);
-                    if (!rt_str_eq(df, file_5590)) {
+                    if (!rt_str_eq(df, file_5592)) {
                         rt_mem_free(&mem_120);
                         continue;
                     }
@@ -39084,7 +39087,7 @@ RtString editor__ide__diagnosticsJson(RtMem* rt_dest, RtString requested) {
             RtMem tmp_5491 = rt_mem_growable();
             RtSb sb_5490 = rt_sb_mem(&tmp_5491, 53001499);
             rt_sb_add(&sb_5490, "{\"uri\":", 7);
-            rt_sb_str(&sb_5490, std__encoding__json__quote(&tmp_5491, editor__ide__uriOfPath(&tmp_5491, file_5590)));
+            rt_sb_str(&sb_5490, std__encoding__json__quote(&tmp_5491, editor__ide__uriOfPath(&tmp_5491, file_5592)));
             rt_sb_add(&sb_5490, ",\"diagnostics\":[", 16);
             List_s* t_5492 = ds;
             rt_sb_str(&sb_5490, rt_str_join(t_5492->items, t_5492->length, rt_str(",", 1), &tmp_5491, 53001499));
@@ -39199,11 +39202,11 @@ void editor__lsp__notify(RtString method, RtString params) {
     rt_mem_free(&tmp_5511);
 }
 
-void editor__lsp__log(RtString text_5610) {
+void editor__lsp__log(RtString text_5612) {
     RtMem tmp_5513 = rt_mem_growable();
     RtSb sb_5512 = rt_sb_mem(&tmp_5513, 52000255);
     rt_sb_add(&sb_5512, "[larimar lsp] ", 14);
-    rt_sb_str(&sb_5512, text_5610);
+    rt_sb_str(&sb_5512, text_5612);
     std__io__console__printError(rt_sb_finish(&sb_5512));
     rt_mem_free(&tmp_5513);
 }
@@ -39511,12 +39514,12 @@ RtString editor__lsp__answerInChild(RtMem* rt_dest, RtString body) {
     RtMem mem_127 = rt_mem_growable();
     RtAny msg = editor__lsp__parsed(&mem_127, body);
     RtString path = editor__lsp__pathOf(&mem_127, msg);
-    RtString main__5637 = editor__session__projectMain(&mem_127, path);
-    if (!rt_str_eq(main__5637, path)) {
+    RtString main__5639 = editor__session__projectMain(&mem_127, path);
+    if (!rt_str_eq(main__5639, path)) {
         int32_t tried = lm_lsp_attempt();
         if (tried == 0) {
             RtMem mem_128 = rt_mem_growable();
-            Opt_s out = editor__lsp__answer(&mem_128, msg, path, main__5637);
+            Opt_s out = editor__lsp__answer(&mem_128, msg, path, main__5639);
             if (!(out).has) {
                 lm_lsp_quit(3);
             }
@@ -39576,7 +39579,7 @@ RtString editor__lsp__pathOf(RtMem* rt_dest, RtAny msg) {
     return editor__lsp__docPath(rt_dest, msg);
 }
 
-Opt_s editor__lsp__answer(RtMem* rt_dest, RtAny msg, RtString path, RtString main__5646) {
+Opt_s editor__lsp__answer(RtMem* rt_dest, RtAny msg, RtString path, RtString main__5648) {
     Opt_s t_5568 = rt_any_as_s(rt_any_get(msg, rt_str("method", 6)));
     RtString value_5567;
     if (t_5568.has) value_5567 = t_5568.value;
@@ -39601,15 +39604,15 @@ Opt_s editor__lsp__answer(RtMem* rt_dest, RtAny msg, RtString path, RtString mai
     if (rt_str_eq(method, rt_str("textDocument/completion", 23)) || rt_str_eq(method, rt_str("textDocument/signatureHelp", 26))) {
         if (!(editor__docstore__document(NULL, path)).has) {
             RtMem mem_129 = rt_mem_growable();
-            Opt_s text_5650 = editor__lsp__readFile(&mem_129, path);
-            if (!(!(text_5650).has)) {
-                editor__docstore__setDocument(path, text_5650.value);
+            Opt_s text_5652 = editor__lsp__readFile(&mem_129, path);
+            if (!(!(text_5652).has)) {
+                editor__docstore__setDocument(path, text_5652.value);
             }
             rt_mem_free(&mem_129);
         }
         editor__ide__prepareCompletion(path, line, character, rt_str_eq(method, rt_str("textDocument/signatureHelp", 26)));
     }
-    editor__session__analyzeFile(main__5646, std__io__path__parent(NULL, main__5646));
+    editor__session__analyzeFile(main__5648, std__io__path__parent(NULL, main__5648));
     if (editor__ide__fileIndex(path) < 0) {
         return ((Opt_s){ .has = false });
     }
@@ -39891,8 +39894,8 @@ int32_t editor__lsp__worker(RtString reqPath, RtString respPath) {
     else {
         value_5615 = rt_str("", 0);
     }
-    RtString text_5668 = value_5615;
-    RtAny req = editor__lsp__parsed(&mem_131, text_5668);
+    RtString text_5670 = value_5615;
+    RtAny req = editor__lsp__parsed(&mem_131, text_5670);
     RtAny docs = rt_any_get(req, rt_str("documents", 9));
     {
         RtAny table_5617_v = docs;
@@ -39920,8 +39923,8 @@ int32_t editor__lsp__worker(RtString reqPath, RtString respPath) {
         value_5622 = false;
     }
     bool alone = value_5622;
-    RtString main__5676 = (alone ? path : editor__session__projectMain(&mem_131, path));
-    Opt_s out = editor__lsp__answer(&mem_131, msg, path, main__5676);
+    RtString main__5678 = (alone ? path : editor__session__projectMain(&mem_131, path));
+    Opt_s out = editor__lsp__answer(&mem_131, msg, path, main__5678);
     if ((!(out).has) && alone) {
         out = ((Opt_s){ .has = true, .value = rt_str("null", 4) });
     }
@@ -39991,11 +39994,11 @@ int32_t editor__lsp__worker(RtString reqPath, RtString respPath) {
     return ret_5635;
 }
 
-void editor__dap__log(RtString text_5680) {
+void editor__dap__log(RtString text_5682) {
     RtMem tmp_5637 = rt_mem_growable();
     RtSb sb_5636 = rt_sb_mem(&tmp_5637, 54000371);
     rt_sb_add(&sb_5636, "[larimar dap] ", 14);
-    rt_sb_str(&sb_5636, text_5680);
+    rt_sb_str(&sb_5636, text_5682);
     std__io__console__printError(rt_sb_finish(&sb_5636));
     rt_mem_free(&tmp_5637);
 }
@@ -40146,11 +40149,11 @@ void editor__dap__respondError(RtAny req, RtString message) {
     rt_mem_free(&tmp_5662);
 }
 
-RtAny editor__dap__parse(RtMem* rt_dest, RtString text_5704) {
+RtAny editor__dap__parse(RtMem* rt_dest, RtString text_5706) {
     RtError err;
     err.kind = 0;
     {
-        RtAny t_5667 = std__encoding__json__parse(rt_dest, text_5704, &err);
+        RtAny t_5667 = std__encoding__json__parse(rt_dest, text_5706, &err);
         if (err.kind != 0) {
             goto try_catch_5665;
         }
@@ -40173,7 +40176,7 @@ RtAny editor__dap__parse(RtMem* rt_dest, RtString text_5704) {
     return zero_5669;
 }
 
-int32_t editor__dap__sendBackend(RtString command_5706, RtString args) {
+int32_t editor__dap__sendBackend(RtString command_5708, RtString args) {
     RtMem mem_133 = rt_mem_growable();
     int32_t s = editor__dap__nextSeq;
     editor__dap__nextSeq = ((int32_t)((uint32_t)(editor__dap__nextSeq) + (uint32_t)(1)));
@@ -40182,7 +40185,7 @@ int32_t editor__dap__sendBackend(RtString command_5706, RtString args) {
     rt_sb_add(&sb_5670, "{\"seq\":", 7);
     rt_sb_i64(&sb_5670, (int64_t)(s));
     rt_sb_add(&sb_5670, ",\"type\":\"request\",\"command\":", 28);
-    rt_sb_str(&sb_5670, std__encoding__json__quote(&tmp_5671, command_5706));
+    rt_sb_str(&sb_5670, std__encoding__json__quote(&tmp_5671, command_5708));
     rt_sb_add(&sb_5670, ",\"arguments\":", 13);
     rt_sb_str(&sb_5670, args);
     rt_sb_add(&sb_5670, "}", 1);
@@ -40196,8 +40199,8 @@ int32_t editor__dap__sendBackend(RtString command_5706, RtString args) {
     return ret_5673;
 }
 
-RtString editor__dap__call(RtMem* rt_dest, RtString command_5710, RtString args) {
-    int32_t s = editor__dap__sendBackend(command_5710, args);
+RtString editor__dap__call(RtMem* rt_dest, RtString command_5712, RtString args) {
+    int32_t s = editor__dap__sendBackend(command_5712, args);
     while (true) {
         RtMem mem_134 = rt_mem_growable();
         RtString body = rt_str_c(lm_dap_take(rt_dest, 1));
@@ -40323,13 +40326,13 @@ Opt_i64 editor__dap__evalAddress(int32_t frame, RtString expr) {
     return ret_5700;
 }
 
-RtString editor__dap__command(RtMem* rt_dest, int32_t frame, RtString text_5727) {
+RtString editor__dap__command(RtMem* rt_dest, int32_t frame, RtString text_5729) {
     RtMem tmp_5702 = rt_mem_growable();
     RtSb sb_5701 = rt_sb_mem(&tmp_5702, 54000499);
     rt_sb_add(&sb_5701, "{\"expression\":", 14);
     RtSb sb_5703 = rt_sb_mem(&tmp_5702, 54000499);
     rt_sb_add(&sb_5703, "`", 1);
-    rt_sb_str(&sb_5703, text_5727);
+    rt_sb_str(&sb_5703, text_5729);
     rt_sb_str(&sb_5701, std__encoding__json__quote(&tmp_5702, rt_sb_finish(&sb_5703)));
     rt_sb_add(&sb_5701, ",\"frameId\":", 11);
     rt_sb_i64(&sb_5701, (int64_t)(frame));
@@ -40680,8 +40683,8 @@ Opt_s editor__dap__stringValue(RtMem* rt_dest, int32_t frame, RtString expr) {
         return ret_5774;
     }
     int32_t n = editor__dap__atMost(length.value, 2000);
-    Opt_s text_5760 = editor__dap__readBytes(&mem_138, frame, address.value, n);
-    if (!(text_5760).has) {
+    Opt_s text_5762 = editor__dap__readBytes(&mem_138, frame, address.value, n);
+    if (!(text_5762).has) {
         Opt_s ret_5775 = ((Opt_s){ .has = true, .value = rt_str("<unreadable>", 12) });
         rt_mem_free(&mem_138);
         return ret_5775;
@@ -40690,11 +40693,11 @@ Opt_s editor__dap__stringValue(RtMem* rt_dest, int32_t frame, RtString expr) {
     RtString value_5778;
     if (((int64_t)(n)) < length.value) {
         RtSb sb_5776 = rt_sb_mem(rt_dest, 54000593);
-        rt_sb_str(&sb_5776, editor__dap__quoteText(&tmp_5777, text_5760.value));
+        rt_sb_str(&sb_5776, editor__dap__quoteText(&tmp_5777, text_5762.value));
         rt_sb_add(&sb_5776, "\342\200\246", 3);
         value_5778 = rt_sb_finish(&sb_5776);
     } else {
-        value_5778 = editor__dap__quoteText(rt_dest, text_5760.value);
+        value_5778 = editor__dap__quoteText(rt_dest, text_5762.value);
     }
     Opt_s ret_5779 = ((Opt_s){ .has = true, .value = value_5778 });
     rt_mem_free(&tmp_5777);
@@ -42117,7 +42120,7 @@ List_s* editor__dap__globalVariables(RtMem* rt_dest, int32_t frame) {
     return ret_6102;
 }
 
-editor__dap__Resolved* editor__dap__resolvePath(RtMem* rt_dest, int32_t frame, RtString text_5895) {
+editor__dap__Resolved* editor__dap__resolvePath(RtMem* rt_dest, int32_t frame, RtString text_5897) {
     (void)rt_dest;
     RtMem mem_163 = rt_mem_growable();
     RtMem* t_6103 = &rt_default_mem;
@@ -42125,7 +42128,7 @@ editor__dap__Resolved* editor__dap__resolvePath(RtMem* rt_dest, int32_t frame, R
     RtTable* table_6105 = rt_table_new(t_6103, 54000940);
     *obj_6104 = (editor__dap__Resolved){ ._h = { (const void*)&vtable_editor__dap__Resolved, t_6103 }, .expr = rt_str("", 0), .type = rt_any_t(table_6105), .ok = false };
     editor__dap__Resolved* r = obj_6104;
-    List_s* parts = editor__dap__splitPath(&mem_163, String_trim(text_5895, NULL));
+    List_s* parts = editor__dap__splitPath(&mem_163, String_trim(text_5897, NULL));
     if ((parts)->length == 0) {
         editor__dap__Resolved* ret_6106 = r;
         rt_mem_free(&mem_163);
@@ -42257,16 +42260,16 @@ editor__dap__Resolved* editor__dap__resolvePath(RtMem* rt_dest, int32_t frame, R
     return ret_6141;
 }
 
-List_s* editor__dap__splitPath(RtMem* rt_dest, RtString text_5909) {
+List_s* editor__dap__splitPath(RtMem* rt_dest, RtString text_5911) {
     List_s* list_6142 = List_s_new(rt_dest, 54000987);
     List_s* out = list_6142;
     int32_t i = 0;
-    while (i < (text_5909).len) {
-        uint8_t c = rt_str_byte(text_5909, (int64_t)(i), 54000990);
+    while (i < (text_5911).len) {
+        uint8_t c = rt_str_byte(text_5911, (int64_t)(i), 54000990);
         if ((c == (uint8_t)46) || (i == 0)) {
             int32_t from = ((c == (uint8_t)46) ? ((int32_t)((uint32_t)(i) + (uint32_t)(1))) : i);
             int32_t j = from;
-            while ((j < (text_5909).len) && editor__dap__isNameByte(rt_str_byte(text_5909, (int64_t)(j), 54000994))) {
+            while ((j < (text_5911).len) && editor__dap__isNameByte(rt_str_byte(text_5911, (int64_t)(j), 54000994))) {
                 j = ((int32_t)((uint32_t)(j) + (uint32_t)(1)));
             }
             if (j == from) {
@@ -42277,23 +42280,23 @@ List_s* editor__dap__splitPath(RtMem* rt_dest, RtString text_5909) {
             if (c == (uint8_t)46) {
                 RtSb sb_6144 = rt_sb_mem(&rt_default_mem, 54000996);
                 rt_sb_add(&sb_6144, ".", 1);
-                RtString t_6145 = text_5909;
+                RtString t_6145 = text_5911;
                 rt_sb_str(&sb_6144, rt_str_sub(t_6145, (int64_t)(from), (int64_t)(j), 54000996));
                 value_6147 = rt_sb_finish(&sb_6144);
             } else {
-                RtString t_6146 = text_5909;
+                RtString t_6146 = text_5911;
                 value_6147 = rt_str_sub(t_6146, (int64_t)(from), (int64_t)(j), 54000996);
             }
             List_s_push(out, value_6147);
             i = j;
         } else {
             if (c == (uint8_t)91) {
-                Opt_i32 end = String_indexOf_2(text_5909, rt_str("]", 1), i);
+                Opt_i32 end = String_indexOf_2(text_5911, rt_str("]", 1), i);
                 if (!(end).has) {
                     List_s* list_6148 = List_s_new(&rt_default_mem, 54001000);
                     return list_6148;
                 }
-                RtString t_6149 = text_5909;
+                RtString t_6149 = text_5911;
                 RtString inside = String_trim(rt_str_sub(t_6149, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (int64_t)(end.value), 54001001), NULL);
                 if ((!(String_toInt(inside)).has) && (!((String_startsWith(inside, rt_str("\"", 1)) && String_endsWith(inside, rt_str("\"", 1)))))) {
                     List_s* list_6150 = List_s_new(&rt_default_mem, 54001002);
@@ -42713,10 +42716,10 @@ void editor__dap__forward(RtString body, RtAny msg, RtString args) {
         rt_sb_add(&sb_6222, "}", 1);
         value_6226 = rt_sb_finish(&sb_6222);
     }
-    RtString text_5941 = value_6226;
+    RtString text_5943 = value_6226;
     rt_mem_free(&tmp_6225);
     RtMem tmp_6227 = rt_mem_growable();
-    lm_dap_write(1, rt_str_cz(text_5941, &tmp_6227, 54001108), (text_5941).len);
+    lm_dap_write(1, rt_str_cz(text_5943, &tmp_6227, 54001108), (text_5943).len);
     rt_mem_free(&tmp_6227);
     rt_mem_free(&mem_170);
 }
@@ -43287,39 +43290,39 @@ void editor__dap__scopes(RtAny msg) {
     RtString fn = value_6372;
     rt_mem_free(&tmp_6371);
     List_s* list_6374 = List_s_new(&mem_180, 54001227);
-    List_s* list_5999 = list_6374;
+    List_s* list_6001 = list_6374;
     if (editor__dap__hasFunction(fn)) {
         RtMem mem_181 = rt_mem_growable();
         RtMem tmp_6376 = rt_mem_growable();
-        RtSb sb_6375 = rt_sb_mem((list_5999)->mem, 54001229);
+        RtSb sb_6375 = rt_sb_mem((list_6001)->mem, 54001229);
         rt_sb_add(&sb_6375, "{\"name\":\"Locals\",\"presentationHint\":\"locals\",\"variablesReference\":", 66);
         rt_sb_i64(&sb_6375, (int64_t)(lm_dap_handle(1, frame, 0, rt_str_cz(rt_str("", 0), &tmp_6376, 54001229), rt_str_cz(rt_str("", 0), &tmp_6376, 54001229))));
         rt_sb_add(&sb_6375, ",\"expensive\":false}", 19);
-        List_s_push(list_5999, rt_sb_finish(&sb_6375));
+        List_s_push(list_6001, rt_sb_finish(&sb_6375));
         rt_mem_free(&tmp_6376);
         RtAny gs = editor__dap__tableOf(&mem_181, rt_any_get(editor__dap__map, rt_str("globals", 7)));
         if (rt_any_length(gs) > 0) {
             RtMem tmp_6378 = rt_mem_growable();
-            RtSb sb_6377 = rt_sb_mem((list_5999)->mem, 54001232);
+            RtSb sb_6377 = rt_sb_mem((list_6001)->mem, 54001232);
             rt_sb_add(&sb_6377, "{\"name\":\"Globals\",\"variablesReference\":", 39);
             rt_sb_i64(&sb_6377, (int64_t)(lm_dap_handle(2, frame, 0, rt_str_cz(rt_str("", 0), &tmp_6378, 54001232), rt_str_cz(rt_str("", 0), &tmp_6378, 54001232))));
             rt_sb_add(&sb_6377, ",\"expensive\":false}", 19);
-            List_s_push(list_5999, rt_sb_finish(&sb_6377));
+            List_s_push(list_6001, rt_sb_finish(&sb_6377));
             rt_mem_free(&tmp_6378);
         }
         rt_mem_free(&mem_181);
     }
     RtMem tmp_6380 = rt_mem_growable();
-    RtSb sb_6379 = rt_sb_mem((list_5999)->mem, 54001236);
+    RtSb sb_6379 = rt_sb_mem((list_6001)->mem, 54001236);
     rt_sb_add(&sb_6379, "{\"name\":\"C\",\"variablesReference\":", 33);
     rt_sb_i64(&sb_6379, (int64_t)(lm_dap_handle(5, frame, 0, rt_str_cz(rt_str("", 0), &tmp_6380, 54001236), rt_str_cz(rt_str("", 0), &tmp_6380, 54001236))));
     rt_sb_add(&sb_6379, ",\"expensive\":true}", 18);
-    List_s_push(list_5999, rt_sb_finish(&sb_6379));
+    List_s_push(list_6001, rt_sb_finish(&sb_6379));
     rt_mem_free(&tmp_6380);
     RtMem tmp_6382 = rt_mem_growable();
     RtSb sb_6381 = rt_sb_mem(&tmp_6382, 54001237);
     rt_sb_add(&sb_6381, "{\"scopes\":[", 11);
-    List_s* t_6383 = list_5999;
+    List_s* t_6383 = list_6001;
     rt_sb_str(&sb_6381, rt_str_join(t_6383->items, t_6383->length, rt_str(",", 1), &tmp_6382, 54001237));
     rt_sb_add(&sb_6381, "]}", 2);
     editor__dap__respond(msg, rt_sb_finish(&sb_6381));
@@ -43374,10 +43377,10 @@ void editor__dap__variables(RtAny msg) {
                         rt_sb_add(&sb_6391, "}", 1);
                         RtAny sc = editor__dap__parse(&mem_183, editor__dap__call(&mem_183, rt_str("scopes", 6), rt_sb_finish(&sb_6391)));
                         rt_mem_free(&tmp_6392);
-                        RtAny list_6010 = editor__dap__tableOf(&mem_183, rt_any_get(rt_any_get(sc, rt_str("body", 4)), rt_str("scopes", 6)));
+                        RtAny list_6012 = editor__dap__tableOf(&mem_183, rt_any_get(rt_any_get(sc, rt_str("body", 4)), rt_str("scopes", 6)));
                         int32_t value_6395;
-                        if (rt_any_length(list_6010) > 0) {
-                            Opt_i64 t_6394 = rt_any_as_i64(rt_any_get(rt_any_at(list_6010, (int64_t)(0)), rt_str("variablesReference", 18)));
+                        if (rt_any_length(list_6012) > 0) {
+                            Opt_i64 t_6394 = rt_any_as_i64(rt_any_get(rt_any_at(list_6012, (int64_t)(0)), rt_str("variablesReference", 18)));
                             int64_t value_6393;
                             if (t_6394.has) value_6393 = t_6394.value;
                             else {
@@ -43422,9 +43425,9 @@ List_s* editor__dap__backendVariables(RtMem* rt_dest, int32_t frame, int32_t ref
     rt_sb_add(&sb_6401, "}", 1);
     RtAny r = editor__dap__parse(&mem_184, editor__dap__call(&mem_184, rt_str("variables", 9), rt_sb_finish(&sb_6401)));
     rt_mem_free(&tmp_6402);
-    RtAny list_6015 = editor__dap__tableOf(&mem_184, rt_any_get(rt_any_get(r, rt_str("body", 4)), rt_str("variables", 9)));
+    RtAny list_6017 = editor__dap__tableOf(&mem_184, rt_any_get(rt_any_get(r, rt_str("body", 4)), rt_str("variables", 9)));
     {
-        RtAny table_6403_v = list_6015;
+        RtAny table_6403_v = list_6017;
         RtTable* table_6403 = table_6403_v.kind == RT_ANY_TABLE ? table_6403_v.as.t : NULL;
         int32_t n_6404 = table_6403 ? table_6403->length : 0;
         for (int32_t i_6405 = 0; i_6405 < n_6404; i_6405++) {
@@ -43696,11 +43699,11 @@ void editor__dap__exceptionInfo(RtAny msg) {
     else {
         value_6465 = rt_str("panic", 5);
     }
-    RtString text_6038 = value_6465;
+    RtString text_6040 = value_6465;
     RtMem tmp_6468 = rt_mem_growable();
     RtSb sb_6467 = rt_sb_mem(&tmp_6468, 54001334);
     rt_sb_add(&sb_6467, "{\"exceptionId\":\"panic\",\"description\":", 37);
-    rt_sb_str(&sb_6467, std__encoding__json__quote(&tmp_6468, text_6038));
+    rt_sb_str(&sb_6467, std__encoding__json__quote(&tmp_6468, text_6040));
     rt_sb_add(&sb_6467, ",\"breakMode\":\"always\"}", 22);
     editor__dap__respond(msg, rt_sb_finish(&sb_6467));
     rt_mem_free(&tmp_6468);
@@ -44115,16 +44118,16 @@ void codegen__prune__flush(List_codegen__prune__Piece* pieces, List_s* lines, bo
     ((void)((lines)->length = 0));
 }
 
-RtString codegen__prune__runtimeC(RtMem* rt_dest, RtString file_6084) {
+RtString codegen__prune__runtimeC(RtMem* rt_dest, RtString file_6086) {
     (void)rt_dest;
-    Opt_i32 t_6554 = String_indexOf_1(file_6084, rt_str("ccode {", 7));
+    Opt_i32 t_6554 = String_indexOf_1(file_6086, rt_str("ccode {", 7));
     int32_t value_6553;
     if (t_6554.has) value_6553 = t_6554.value;
     else {
         value_6553 = (-1);
     }
     int32_t marker = value_6553;
-    Opt_i32 t_6556 = String_lastIndexOf(file_6084, rt_str("}", 1));
+    Opt_i32 t_6556 = String_lastIndexOf(file_6086, rt_str("}", 1));
     int32_t value_6555;
     if (t_6556.has) value_6555 = t_6556.value;
     else {
@@ -44133,7 +44136,7 @@ RtString codegen__prune__runtimeC(RtMem* rt_dest, RtString file_6084) {
     int32_t close_ = value_6555;
     RtString value_6558;
     if ((marker >= 0) && (close_ > ((int32_t)((uint32_t)(marker) + (uint32_t)(7))))) {
-        RtString t_6557 = file_6084;
+        RtString t_6557 = file_6086;
         value_6558 = rt_str_sub(t_6557, (int64_t)(((int32_t)((uint32_t)(marker) + (uint32_t)(7)))), (int64_t)(close_), 56000093);
     } else {
         value_6558 = rt_str("", 0);
@@ -44147,7 +44150,7 @@ RtString codegen__prune__runtimeSource(RtMem* rt_dest) {
     if (!(!(codegen__prune__runtimeRead).has)) {
         return Opt_s_unwrap(codegen__prune__runtimeRead, 56000099);
     }
-    RtString text_6087 = rt_str("", 0);
+    RtString text_6089 = rt_str("", 0);
     {
         List_s* list_6560 = codegen__prune__runtimeFiles;
         for (int32_t i_6559 = 0; i_6559 < list_6560->length; i_6559++) {
@@ -44160,14 +44163,14 @@ RtString codegen__prune__runtimeSource(RtMem* rt_dest) {
             {
                 RtMem tmp_6565 = rt_mem_growable();
                 RtSb sb_6564 = rt_sb_mem(rt_dest, 56000104);
-                rt_sb_str(&sb_6564, text_6087);
+                rt_sb_str(&sb_6564, text_6089);
                 RtString t_6566 = std__io__files__readString(&tmp_6565, path, &err);
                 if (err.kind != 0) {
                     rt_mem_free(&tmp_6565);
                     goto try_catch_6562;
                 }
                 rt_sb_str(&sb_6564, codegen__prune__runtimeC(NULL, t_6566));
-                text_6087 = rt_sb_finish(&sb_6564);
+                text_6089 = rt_sb_finish(&sb_6564);
                 rt_mem_free(&tmp_6565);
             }
             goto try_end_6563;
@@ -44177,11 +44180,11 @@ RtString codegen__prune__runtimeSource(RtMem* rt_dest) {
                 (void)e;
                 err.kind = 0;
                 RtSb sb_6567 = rt_sb_mem(rt_dest, 56000106);
-                rt_sb_str(&sb_6567, text_6087);
+                rt_sb_str(&sb_6567, text_6089);
                 rt_sb_add(&sb_6567, "#error \"Larimar's runtime was not found: ", 41);
                 rt_sb_str(&sb_6567, path);
                 rt_sb_add(&sb_6567, " (set LARIMAR_HOME to the folder that has std/)\"\n", 49);
-                text_6087 = rt_sb_finish(&sb_6567);
+                text_6089 = rt_sb_finish(&sb_6567);
             } else {
                 rt_mem_free(&mem_196);
                 rt_panic("uncaught error", 0);
@@ -44191,10 +44194,10 @@ RtString codegen__prune__runtimeSource(RtMem* rt_dest) {
         }
     }
     RtCloneMap clones_6568 = rt_clone_map();
-    RtString copy_6569 = clone_s(text_6087, &rt_default_mem, &clones_6568);
+    RtString copy_6569 = clone_s(text_6089, &rt_default_mem, &clones_6568);
     rt_clone_done(&clones_6568);
     codegen__prune__runtimeRead = ((Opt_s){ .has = true, .value = copy_6569 });
-    return text_6087;
+    return text_6089;
 }
 
 RtString codegen__prune__headerNames(RtMem* rt_dest, int32_t i) {
@@ -44439,7 +44442,7 @@ codegen__prune__Piece* codegen__prune__includePiece(RtMem* rt_dest, RtString lin
     return p;
 }
 
-List_s* codegen__prune__resolve(RtMem* rt_dest, RtString text_6119, bool threads, bool files) {
+List_s* codegen__prune__resolve(RtMem* rt_dest, RtString text_6121, bool threads, bool files) {
     RtMem mem_198 = rt_mem_growable();
     List_s* list_6629 = List_s_new(rt_dest, 56000197);
     List_s* out = list_6629;
@@ -44452,7 +44455,7 @@ List_s* codegen__prune__resolve(RtMem* rt_dest, RtString text_6119, bool threads
     int32_t top = 0;
     bool active = true;
     {
-        RtString t_6635 = text_6119;
+        RtString t_6635 = text_6121;
         List_s* t_6636 = List_s_new(rt_dest, 56000204);
         RtString t_6637 = rt_str("\n", 1);
         if (t_6637.len == 0) {
@@ -44990,9 +44993,9 @@ RtString codegen__expressions__patterns__patternTest(RtMem* rt_dest, semantics__
         rt_mem_free(&mem_202);
         return ret_6699;
     }
-    RtString test_6206 = rt_str("1", 1);
+    RtString test_6208 = rt_str("1", 1);
     if (((pi)->kind).tag == (((semantics__types__PatK){ .tag = semantics__types__PatK_AnyType })).tag) {
-        test_6206 = rt_str("0", 1);
+        test_6208 = rt_str("0", 1);
     } else {
         if (((pi)->kind).tag == (((semantics__types__PatK){ .tag = semantics__types__PatK_Null })).tag) {
             RtString value_6702;
@@ -45008,7 +45011,7 @@ RtString codegen__expressions__patterns__patternTest(RtMem* rt_dest, semantics__
                 rt_sb_add(&sb_6701, ".has", 4);
                 value_6702 = rt_sb_finish(&sb_6701);
             }
-            test_6206 = value_6702;
+            test_6208 = value_6702;
         } else {
             if (((pi)->kind).tag == (((semantics__types__PatK){ .tag = semantics__types__PatK_Variant })).tag) {
                 RtSb sb_6703 = rt_sb_mem(rt_dest, 62000028);
@@ -45017,7 +45020,7 @@ RtString codegen__expressions__patterns__patternTest(RtMem* rt_dest, semantics__
                 rt_sb_str(&sb_6703, (inner)->name);
                 rt_sb_add(&sb_6703, "_", 1);
                 rt_sb_str(&sb_6703, (((semantics__types__VariantInfo*)rt_unwrap((void*)((pi)->variant), 62000028)))->name);
-                test_6206 = rt_sb_finish(&sb_6703);
+                test_6208 = rt_sb_finish(&sb_6703);
             } else {
                 if (((pi)->kind).tag == (((semantics__types__PatK){ .tag = semantics__types__PatK_Constant })).tag) {
                     RtMem mem_203 = rt_mem_growable();
@@ -45038,7 +45041,7 @@ RtString codegen__expressions__patterns__patternTest(RtMem* rt_dest, semantics__
                         rt_sb_str(&sb_6705, c);
                         value_6706 = rt_sb_finish(&sb_6705);
                     }
-                    test_6206 = value_6706;
+                    test_6208 = value_6706;
                     rt_mem_free(&mem_203);
                 } else {
                     if (((pi)->kind).tag == (((semantics__types__PatK){ .tag = semantics__types__PatK_Class })).tag) {
@@ -45051,7 +45054,7 @@ RtString codegen__expressions__patterns__patternTest(RtMem* rt_dest, semantics__
                             rt_sb_add(&sb_6707, ".obj), &rtclass_", 16);
                             rt_sb_str(&sb_6707, (((semantics__types__ClassInfo*)rt_unwrap((void*)((pi)->cls), 62000034)))->name);
                             rt_sb_add(&sb_6707, "))", 2);
-                            test_6206 = rt_sb_finish(&sb_6707);
+                            test_6208 = rt_sb_finish(&sb_6707);
                         } else {
                             RtSb sb_6708 = rt_sb_mem(rt_dest, 62000036);
                             rt_sb_add(&sb_6708, "rt_is_a(rt_obj_class(", 21);
@@ -45059,7 +45062,7 @@ RtString codegen__expressions__patterns__patternTest(RtMem* rt_dest, semantics__
                             rt_sb_add(&sb_6708, "), &rtclass_", 12);
                             rt_sb_str(&sb_6708, (((semantics__types__ClassInfo*)rt_unwrap((void*)((pi)->cls), 62000036)))->name);
                             rt_sb_add(&sb_6708, ")", 1);
-                            test_6206 = rt_sb_finish(&sb_6708);
+                            test_6208 = rt_sb_finish(&sb_6708);
                         }
                     }
                 }
@@ -45072,11 +45075,11 @@ RtString codegen__expressions__patterns__patternTest(RtMem* rt_dest, semantics__
         rt_sb_add(&sb_6709, "(", 1);
         rt_sb_str(&sb_6709, has);
         rt_sb_add(&sb_6709, " && ", 4);
-        rt_sb_str(&sb_6709, test_6206);
+        rt_sb_str(&sb_6709, test_6208);
         rt_sb_add(&sb_6709, ")", 1);
         value_6710 = rt_sb_finish(&sb_6709);
     } else {
-        value_6710 = test_6206;
+        value_6710 = test_6208;
     }
     RtString ret_6711 = value_6710;
     rt_mem_free(&mem_202);
@@ -45213,7 +45216,7 @@ RtString codegen__expressions__operators__wide(RtMem* rt_dest, semantics__types_
 }
 
 RtString codegen__expressions__operators__unary(RtMem* rt_dest, syntax__ast__Unary* u, semantics__types__Type* t) {
-    syntax__ast__IntLit* n_6224 = NULL;
+    syntax__ast__IntLit* n_6226 = NULL;
     RtMem mem_205 = rt_mem_growable();
     semantics__types__MethodInfo* op = (u)->_super._super.opMethod;
     if (!(op == NULL)) {
@@ -45258,8 +45261,8 @@ RtString codegen__expressions__operators__unary(RtMem* rt_dest, syntax__ast__Una
         rt_mem_free(&mem_205);
         return ret_6743;
     }
-    if (((n_6224 = (syntax__ast__IntLit*)rt_as_class((void*)((u)->operand), &rtclass_syntax__ast__IntLit)) != NULL) && semantics__types__isInteger(t)) {
-        RtString ret_6744 = codegen__expressions__intLiteral(rt_dest, ((n_6224)->big ? (n_6224)->num : ((int64_t)((uint64_t)(0LL) - (uint64_t)((n_6224)->num)))), false, t);
+    if (((n_6226 = (syntax__ast__IntLit*)rt_as_class((void*)((u)->operand), &rtclass_syntax__ast__IntLit)) != NULL) && semantics__types__isInteger(t)) {
+        RtString ret_6744 = codegen__expressions__intLiteral(rt_dest, ((n_6226)->big ? (n_6226)->num : ((int64_t)((uint64_t)(0LL) - (uint64_t)((n_6226)->num)))), false, t);
         rt_mem_free(&mem_205);
         return ret_6744;
     }
@@ -45764,14 +45767,14 @@ RtString codegen__expressions__operators__isTest(RtMem* rt_dest, syntax__ast__Is
     rt_sb_add(&sb_6821, ", &rtclass_", 11);
     rt_sb_str(&sb_6821, (((semantics__types__ClassInfo*)rt_unwrap((void*)((x)->_super._super.tested), 64000101)))->name);
     rt_sb_add(&sb_6821, ")", 1);
-    RtString test_6248 = rt_sb_finish(&sb_6821);
+    RtString test_6250 = rt_sb_finish(&sb_6821);
     semantics__types__Symbol* b = (x)->_super._super.symbol;
     RtMem tmp_6824 = rt_mem_growable();
     RtString value_6825;
     if (b == NULL) {
         RtSb sb_6822 = rt_sb_mem(rt_dest, 64000103);
         rt_sb_add(&sb_6822, "(", 1);
-        rt_sb_str(&sb_6822, test_6248);
+        rt_sb_str(&sb_6822, test_6250);
         rt_sb_add(&sb_6822, " != NULL)", 9);
         value_6825 = rt_sb_finish(&sb_6822);
     } else {
@@ -45781,7 +45784,7 @@ RtString codegen__expressions__operators__isTest(RtMem* rt_dest, syntax__ast__Is
         rt_sb_add(&sb_6823, " = (", 4);
         rt_sb_str(&sb_6823, codegen__expressions__tname(&tmp_6824, (((semantics__types__ClassInfo*)rt_unwrap((void*)((x)->_super._super.tested), 64000103)))->name));
         rt_sb_add(&sb_6823, "*)", 2);
-        rt_sb_str(&sb_6823, test_6248);
+        rt_sb_str(&sb_6823, test_6250);
         rt_sb_add(&sb_6823, ") != NULL)", 10);
         value_6825 = rt_sb_finish(&sb_6823);
     }
@@ -46392,10 +46395,10 @@ Opt_s codegen__expressions__strings__printDirect(RtMem* rt_dest, syntax__ast__St
         List_s* list_6947 = texts;
         for (int32_t i_6946 = 0; i_6946 < list_6947->length; i_6946++) {
             int32_t i = i_6946;
-            RtString text_6315 = list_6947->items[i_6946];
+            RtString text_6317 = list_6947->items[i_6946];
             RtMem mem_223 = rt_mem_growable();
             RtMem tmp_6948 = rt_mem_growable();
-            StringBuilder_add__dispatch((StringBuilder*)format, String_replace(text_6315, &tmp_6948, rt_str("%", 1), rt_str("%%", 2)));
+            StringBuilder_add__dispatch((StringBuilder*)format, String_replace(text_6317, &tmp_6948, rt_str("%", 1), rt_str("%%", 2)));
             rt_mem_free(&tmp_6948);
             if (i == ((s)->exprs)->length) {
                 rt_mem_free(&mem_223);
@@ -46542,18 +46545,18 @@ RtString codegen__expressions__strings__decodeRaw(RtMem* rt_dest, RtString raw) 
     return StringBuilder_toString__dispatch((StringBuilder*)sb, rt_dest);
 }
 
-RtString codegen__expressions__strings__cLiteral(RtMem* rt_dest, RtString text_6328) {
+RtString codegen__expressions__strings__cLiteral(RtMem* rt_dest, RtString text_6330) {
     RtMem* t_6970 = &rt_default_mem;
     StringBuilder* obj_6971 = (StringBuilder*)rt_mem_alloc(t_6970, sizeof(StringBuilder), 63000117);
     *obj_6971 = (StringBuilder){ ._h = { (const void*)&vtable_StringBuilder, t_6970 }, .buf = lm_text_buf_new_73000347(t_6970) };
     StringBuilder* sb = obj_6971;
     StringBuilder_add__dispatch((StringBuilder*)sb, rt_str("\"", 1));
     {
-        RtString text_6972 = text_6328;
+        RtString text_6972 = text_6330;
         for (int32_t i_6973 = 0; i_6973 < text_6972.len; i_6973++) {
             int32_t i = i_6973;
             uint8_t b = (uint8_t)text_6972.ptr[i_6973];
-            RtString t_6974 = text_6328;
+            RtString t_6974 = text_6330;
             codegen__expressions__strings__cByte(sb, b, rt_str_sub(t_6974, (int64_t)(i), (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 63000119));
         }
     }
@@ -46566,9 +46569,9 @@ void codegen__expressions__strings__appendPieces(syntax__ast__StringLit* s, RtSt
         List_s* list_6976 = (s)->texts;
         for (int32_t i_6975 = 0; i_6975 < list_6976->length; i_6975++) {
             int32_t i = i_6975;
-            RtString text_6335 = list_6976->items[i_6975];
+            RtString text_6337 = list_6976->items[i_6975];
             RtMem mem_225 = rt_mem_growable();
-            RtString c = codegen__expressions__strings__cBytes(&mem_225, text_6335);
+            RtString c = codegen__expressions__strings__cBytes(&mem_225, text_6337);
             if (codegen__expressions__strings__cLength > 0) {
                 RtMem tmp_6978 = rt_mem_growable();
                 RtSb sb_6977 = rt_sb_mem(&tmp_6978, 63000128);
@@ -46756,7 +46759,7 @@ RtString codegen__expressions__strings__cBytes(RtMem* rt_dest, RtString raw) {
     return StringBuilder_toString__dispatch((StringBuilder*)sb, rt_dest);
 }
 
-void codegen__expressions__strings__cByte(StringBuilder* sb, uint8_t v, RtString text_6350) {
+void codegen__expressions__strings__cByte(StringBuilder* sb, uint8_t v, RtString text_6352) {
     if (v == (uint8_t)34) {
         StringBuilder_add__dispatch((StringBuilder*)sb, rt_str("\\\"", 2));
     } else {
@@ -46773,7 +46776,7 @@ void codegen__expressions__strings__cByte(StringBuilder* sb, uint8_t v, RtString
                         StringBuilder_add__dispatch((StringBuilder*)sb, rt_str("\\t", 2));
                     } else {
                         if ((v >= (uint8_t)32) && (v < (uint8_t)127)) {
-                            StringBuilder_add__dispatch((StringBuilder*)sb, text_6350);
+                            StringBuilder_add__dispatch((StringBuilder*)sb, text_6352);
                         } else {
                             int32_t a = ((int32_t)(((uint8_t)((((uint8_t)((uint32_t)(v) >> ((int)(6) & 7)))) & ((uint8_t)7)))));
                             int32_t b = ((int32_t)(((uint8_t)((((uint8_t)((uint32_t)(v) >> ((int)(3) & 7)))) & ((uint8_t)7)))));
@@ -46798,7 +46801,7 @@ void codegen__expressions__strings__cByte(StringBuilder* sb, uint8_t v, RtString
 }
 
 bool codegen__gen__statements__usesErrors(List_syntax__ast__Stmt* body) {
-    syntax__ast__SwitchExpr* sw_6359 = NULL;
+    syntax__ast__SwitchExpr* sw_6361 = NULL;
     if (!(codegen__gen__hasErrors)) {
         return false;
     }
@@ -46824,9 +46827,9 @@ bool codegen__gen__statements__usesErrors(List_syntax__ast__Stmt* body) {
             if ((rt_as_class((void*)(e), &rtclass_syntax__ast__Call) != NULL) && (e)->_super.throwing) {
                 return true;
             }
-            if ((sw_6359 = (syntax__ast__SwitchExpr*)rt_as_class((void*)(e), &rtclass_syntax__ast__SwitchExpr)) != NULL) {
+            if ((sw_6361 = (syntax__ast__SwitchExpr*)rt_as_class((void*)(e), &rtclass_syntax__ast__SwitchExpr)) != NULL) {
                 {
-                    List_syntax__ast__SwitchCase* list_7014 = (sw_6359)->cases;
+                    List_syntax__ast__SwitchCase* list_7014 = (sw_6361)->cases;
                     for (int32_t i_7013 = 0; i_7013 < list_7014->length; i_7013++) {
                         syntax__ast__SwitchCase* c = list_7014->items[i_7013];
                         if (!((c)->throwStmt == NULL)) {
@@ -47050,11 +47053,11 @@ void codegen__gen__statements__stmt(syntax__ast__Stmt* s) {
     *obj_7046 = (StringBuilder){ ._h = { (const void*)&vtable_StringBuilder, t_7045 }, .buf = lm_text_buf_new_73000347(t_7045) };
     (t_7044)->out = obj_7046;
     codegen__gen__statements__stmtInner(s);
-    RtString text_6396 = StringBuilder_toString__dispatch((StringBuilder*)(codegen__gen__fn)->out, &mem_229);
+    RtString text_6398 = StringBuilder_toString__dispatch((StringBuilder*)(codegen__gen__fn)->out, &mem_229);
     (codegen__gen__fn)->out = outer;
     (codegen__gen__fn)->temp = saved;
     if (rt_str_eq((t)->name, rt_str("", 0))) {
-        StringBuilder_add__dispatch((StringBuilder*)(codegen__gen__fn)->out, text_6396);
+        StringBuilder_add__dispatch((StringBuilder*)(codegen__gen__fn)->out, text_6398);
         rt_mem_free(&mem_229);
         return;
     }
@@ -47065,7 +47068,7 @@ void codegen__gen__statements__stmt(syntax__ast__Stmt* s) {
     rt_sb_add(&sb_7047, " = rt_mem_growable();", 21);
     codegen__gen__line(rt_sb_finish(&sb_7047));
     rt_mem_free(&tmp_7048);
-    StringBuilder_add__dispatch((StringBuilder*)(codegen__gen__fn)->out, text_6396);
+    StringBuilder_add__dispatch((StringBuilder*)(codegen__gen__fn)->out, text_6398);
     RtSb sb_7049 = rt_sb_mem(&mem_229, 61000166);
     rt_sb_add(&sb_7049, "rt_mem_free(&", 13);
     rt_sb_str(&sb_7049, (t)->name);
@@ -47266,14 +47269,14 @@ void codegen__gen__statements__stmtInner(syntax__ast__Stmt* s) {
 }
 
 void codegen__gen__statements__assign(syntax__ast__AssignStmt* s) {
-    syntax__ast__Binary* b_6423 = NULL;
+    syntax__ast__Binary* b_6425 = NULL;
     syntax__ast__Expr* target = (s)->target;
     List_syntax__ast__Expr* list_7066 = List_syntax__ast__Expr_new(&rt_default_mem, 61000230);
     List_syntax__ast__Expr* parts = list_7066;
     codegen__gen__statements__placeParts(target, parts);
     List_syntax__ast__Expr* list_7067 = List_syntax__ast__Expr_new(&rt_default_mem, 61000232);
     List_syntax__ast__Expr* held = list_7067;
-    if (((b_6423 = (syntax__ast__Binary*)rt_as_class((void*)((s)->value), &rtclass_syntax__ast__Binary)) != NULL) && ((const void*)((b_6423)->left) == (const void*)(target))) {
+    if (((b_6425 = (syntax__ast__Binary*)rt_as_class((void*)((s)->value), &rtclass_syntax__ast__Binary)) != NULL) && ((const void*)((b_6425)->left) == (const void*)(target))) {
         {
             List_syntax__ast__Expr* list_7069 = parts;
             for (int32_t i_7068 = 0; i_7068 < list_7069->length; i_7068++) {
@@ -47336,14 +47339,14 @@ void codegen__gen__statements__placeObject(syntax__ast__Expr* o, List_syntax__as
 }
 
 void codegen__gen__statements__assignTo(syntax__ast__AssignStmt* s, syntax__ast__Expr* target) {
-    syntax__ast__Member* m_6435 = NULL;
-    syntax__ast__Index* x_6437 = NULL;
+    syntax__ast__Member* m_6437 = NULL;
+    syntax__ast__Index* x_6439 = NULL;
     RtMem mem_232 = rt_mem_growable();
     semantics__types__MemberInfo* mi = (target)->_super.member;
-    if ((((m_6435 = (syntax__ast__Member*)rt_as_class((void*)(target), &rtclass_syntax__ast__Member)) != NULL) && (!(mi == NULL))) && (((mi)->kind).tag == (((semantics__types__MbK){ .tag = semantics__types__MbK_AnyKey })).tag)) {
+    if ((((m_6437 = (syntax__ast__Member*)rt_as_class((void*)(target), &rtclass_syntax__ast__Member)) != NULL) && (!(mi == NULL))) && (((mi)->kind).tag == (((semantics__types__MbK){ .tag = semantics__types__MbK_AnyKey })).tag)) {
         RtMem mem_230 = rt_mem_growable();
         RtMem tmp_7074 = rt_mem_growable();
-        RtString obj = codegen__expressions__hoist(&mem_230, rt_str("RtAny", 5), codegen__expressions__expr(&tmp_7074, (m_6435)->object));
+        RtString obj = codegen__expressions__hoist(&mem_230, rt_str("RtAny", 5), codegen__expressions__expr(&tmp_7074, (m_6437)->object));
         rt_mem_free(&tmp_7074);
         RtMem tmp_7076 = rt_mem_growable();
         RtSb sb_7075 = rt_sb_mem(&tmp_7076, 61000276);
@@ -47362,14 +47365,14 @@ void codegen__gen__statements__assignTo(syntax__ast__AssignStmt* s, syntax__ast_
         rt_mem_free(&mem_232);
         return;
     }
-    if (((x_6437 = (syntax__ast__Index*)rt_as_class((void*)(target), &rtclass_syntax__ast__Index)) != NULL) && ((const void*)(((x_6437)->object)->_super.ty) == (const void*)(semantics__types__T_ANY))) {
+    if (((x_6439 = (syntax__ast__Index*)rt_as_class((void*)(target), &rtclass_syntax__ast__Index)) != NULL) && ((const void*)(((x_6439)->object)->_super.ty) == (const void*)(semantics__types__T_ANY))) {
         RtMem mem_231 = rt_mem_growable();
         RtMem tmp_7077 = rt_mem_growable();
-        RtString obj = codegen__expressions__hoist(&mem_231, rt_str("RtAny", 5), codegen__expressions__expr(&tmp_7077, (x_6437)->object));
+        RtString obj = codegen__expressions__hoist(&mem_231, rt_str("RtAny", 5), codegen__expressions__expr(&tmp_7077, (x_6439)->object));
         rt_mem_free(&tmp_7077);
-        RtString key = codegen__expressions__expr(&mem_231, (x_6437)->index_);
+        RtString key = codegen__expressions__expr(&mem_231, (x_6439)->index_);
         RtString v = codegen__expressions__value(&mem_231, (s)->value);
-        if ((const void*)(((x_6437)->index_)->_super.ty) == (const void*)(semantics__types__T_STRING)) {
+        if ((const void*)(((x_6439)->index_)->_super.ty) == (const void*)(semantics__types__T_STRING)) {
             RtMem tmp_7079 = rt_mem_growable();
             RtSb sb_7078 = rt_sb_mem(&tmp_7079, 61000284);
             rt_sb_add(&sb_7078, "rt_any_set(", 11);
@@ -47595,7 +47598,7 @@ void codegen__gen__statements__ifStmt(syntax__ast__IfStmt* i) {
 }
 
 void codegen__gen__statements__whenStmt(syntax__ast__IfStmt* i) {
-    syntax__ast__IfStmt* n_6456 = NULL;
+    syntax__ast__IfStmt* n_6458 = NULL;
     List_s* list_7109 = List_s_new(&rt_default_mem, 61000358);
     List_s* above = list_7109;
     syntax__ast__IfStmt* cur = i;
@@ -47616,8 +47619,8 @@ void codegen__gen__statements__whenStmt(syntax__ast__IfStmt* i) {
         if (!((cur)->hasElse)) {
             break;
         }
-        if (((((cur)->elseBody)->length == 1) && ((n_6456 = (syntax__ast__IfStmt*)rt_as_class((void*)(((cur)->elseBody)->items[rt_index((int64_t)(0), ((cur)->elseBody)->length, 61000366)]), &rtclass_syntax__ast__IfStmt)) != NULL)) && (n_6456)->chained) {
-            cur = n_6456;
+        if (((((cur)->elseBody)->length == 1) && ((n_6458 = (syntax__ast__IfStmt*)rt_as_class((void*)(((cur)->elseBody)->items[rt_index((int64_t)(0), ((cur)->elseBody)->length, 61000366)]), &rtclass_syntax__ast__IfStmt)) != NULL)) && (n_6458)->chained) {
+            cur = n_6458;
             continue;
         }
         codegen__gen__line(rt_str("#else", 5));
@@ -47766,7 +47769,7 @@ void codegen__gen__statements__indexVar(semantics__types__Symbol* ix, RtString v
 }
 
 void codegen__gen__statements__forStmt(syntax__ast__ForStmt* f) {
-    syntax__ast__Member* m_6485 = NULL;
+    syntax__ast__Member* m_6487 = NULL;
     semantics__types__ForInfo* info = ((semantics__types__ForInfo*)rt_unwrap((void*)((f)->_super._super.forInfo), 61000432));
     codegen__gen__Block* saved = codegen__gen__loopBlock;
     codegen__gen__line(rt_str("{", 1));
@@ -47834,7 +47837,7 @@ void codegen__gen__statements__forStmt(syntax__ast__ForStmt* f) {
         if (!((info)->any == 0)) {
             RtMem mem_240 = rt_mem_growable();
             bool named = ((info)->any == 2);
-            syntax__ast__Expr* src = ((named && ((m_6485 = (syntax__ast__Member*)rt_as_class((void*)((f)->iterable), &rtclass_syntax__ast__Member)) != NULL)) ? (m_6485)->object : (f)->iterable);
+            syntax__ast__Expr* src = ((named && ((m_6487 = (syntax__ast__Member*)rt_as_class((void*)((f)->iterable), &rtclass_syntax__ast__Member)) != NULL)) ? (m_6487)->object : (f)->iterable);
             RtString tb = codegen__gen__tmp(&mem_240, rt_str("table", 5));
             RtString n = codegen__gen__tmp(&mem_240, rt_str("n", 1));
             RtString idx = codegen__gen__tmp(&mem_240, rt_str("i", 1));
@@ -47941,12 +47944,12 @@ void codegen__gen__statements__forStmt(syntax__ast__ForStmt* f) {
         } else {
             if ((!(((f)->iterable)->_super.ty == NULL)) && ((const void*)(((semantics__types__Type*)rt_unwrap((void*)(((f)->iterable)->_super.ty), 61000464))) == (const void*)(semantics__types__T_STRING))) {
                 RtMem mem_241 = rt_mem_growable();
-                RtString text_6491 = codegen__gen__tmp(&mem_241, rt_str("text", 4));
+                RtString text_6493 = codegen__gen__tmp(&mem_241, rt_str("text", 4));
                 RtString idx = codegen__gen__tmp(&mem_241, rt_str("i", 1));
                 RtMem tmp_7172 = rt_mem_growable();
                 RtSb sb_7171 = rt_sb_mem(&tmp_7172, 61000467);
                 rt_sb_add(&sb_7171, "RtString ", 9);
-                rt_sb_str(&sb_7171, text_6491);
+                rt_sb_str(&sb_7171, text_6493);
                 rt_sb_add(&sb_7171, " = ", 3);
                 rt_sb_str(&sb_7171, codegen__expressions__expr(&tmp_7172, (f)->iterable));
                 rt_sb_add(&sb_7171, ";", 1);
@@ -47959,7 +47962,7 @@ void codegen__gen__statements__forStmt(syntax__ast__ForStmt* f) {
                 rt_sb_add(&sb_7173, " = 0; ", 6);
                 rt_sb_str(&sb_7173, idx);
                 rt_sb_add(&sb_7173, " < ", 3);
-                rt_sb_str(&sb_7173, text_6491);
+                rt_sb_str(&sb_7173, text_6493);
                 rt_sb_add(&sb_7173, ".len; ", 6);
                 rt_sb_str(&sb_7173, idx);
                 rt_sb_add(&sb_7173, "++) {", 5);
@@ -47972,7 +47975,7 @@ void codegen__gen__statements__forStmt(syntax__ast__ForStmt* f) {
                 rt_sb_add(&sb_7175, "uint8_t ", 8);
                 rt_sb_str(&sb_7175, (v)->cName);
                 rt_sb_add(&sb_7175, " = (uint8_t)", 12);
-                rt_sb_str(&sb_7175, text_6491);
+                rt_sb_str(&sb_7175, text_6493);
                 rt_sb_add(&sb_7175, ".ptr[", 5);
                 rt_sb_str(&sb_7175, idx);
                 rt_sb_add(&sb_7175, "];", 2);
@@ -49767,18 +49770,18 @@ RtString codegen__gen__types__envField(RtMem* rt_dest, semantics__types__Symbol*
 
 syntax__ast__Expr* codegen__expressions__calls__receiver(RtMem* rt_dest, syntax__ast__Call* c) {
     (void)rt_dest;
-    syntax__ast__Member* m_6662 = NULL;
-    return (((m_6662 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) ? (m_6662)->object : (c)->callee);
+    syntax__ast__Member* m_6664 = NULL;
+    return (((m_6664 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) ? (m_6664)->object : (c)->callee);
 }
 
 RtString codegen__expressions__calls__calleeName(RtMem* rt_dest, syntax__ast__Call* c) {
     (void)rt_dest;
-    syntax__ast__Member* m_6664 = NULL;
-    return (((m_6664 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) ? (m_6664)->name : rt_str("", 0));
+    syntax__ast__Member* m_6666 = NULL;
+    return (((m_6666 = (syntax__ast__Member*)rt_as_class((void*)((c)->callee), &rtclass_syntax__ast__Member)) != NULL) ? (m_6666)->name : rt_str("", 0));
 }
 
 RtString codegen__expressions__calls__call(RtMem* rt_dest, syntax__ast__Call* c) {
-    syntax__ast__StringLit* s_6680 = NULL;
+    syntax__ast__StringLit* s_6682 = NULL;
     semantics__types__CallInfo* ci = ((semantics__types__CallInfo*)rt_unwrap((void*)((c)->_super._super.call), 60000030));
     if (((ci)->kind).tag == (((semantics__types__CallK){ .tag = semantics__types__CallK_Builtin })).tag) {
         return codegen__expressions__calls__builtin(rt_dest, c, ci);
@@ -49911,13 +49914,13 @@ RtString codegen__expressions__calls__call(RtMem* rt_dest, syntax__ast__Call* c)
         rt_sb_add(&sb_7539, ");", 2);
         codegen__gen__line(rt_sb_finish(&sb_7539));
         rt_mem_free(&tmp_7540);
-        if ((s_6680 = (syntax__ast__StringLit*)rt_as_class((void*)(((c)->args)->items[rt_index((int64_t)(0), ((c)->args)->length, 60000058)]), &rtclass_syntax__ast__StringLit)) != NULL) {
+        if ((s_6682 = (syntax__ast__StringLit*)rt_as_class((void*)(((c)->args)->items[rt_index((int64_t)(0), ((c)->args)->length, 60000058)]), &rtclass_syntax__ast__StringLit)) != NULL) {
             RtMem tmp_7542 = rt_mem_growable();
             RtSb sb_7541 = rt_sb_mem(&tmp_7542, 60000058);
             rt_sb_add(&sb_7541, "&", 1);
             rt_sb_str(&sb_7541, b);
             rt_sb_add(&sb_7541, "->_sb", 5);
-            codegen__expressions__strings__appendPieces(s_6680, rt_sb_finish(&sb_7541));
+            codegen__expressions__strings__appendPieces(s_6682, rt_sb_finish(&sb_7541));
             rt_mem_free(&tmp_7542);
         }
         if (rt_str_eq((((semantics__types__MethodInfo*)rt_unwrap((void*)((ci)->method), 60000059)))->name, rt_str("addLine", 7))) {
@@ -50235,13 +50238,13 @@ List_s* codegen__expressions__calls__first(RtMem* rt_dest, RtString x, List_s* x
 }
 
 bool codegen__expressions__calls__isBuilderAdd(syntax__ast__Call* c, semantics__types__CallInfo* ci) {
-    syntax__ast__StringLit* s_6706 = NULL;
+    syntax__ast__StringLit* s_6708 = NULL;
     semantics__types__MethodInfo* mi = ((semantics__types__MethodInfo*)rt_unwrap((void*)((ci)->method), 60000143));
     semantics__types__ClassInfo* co = semantics__types__classOf(NULL, (mi)->owner);
     if (((co == NULL) || (!((co)->builder))) || (!((rt_str_eq((mi)->name, rt_str("add", 3)) || rt_str_eq((mi)->name, rt_str("addLine", 7)))))) {
         return false;
     }
-    return ((((s_6706 = (syntax__ast__StringLit*)rt_as_class((void*)(((c)->args)->items[rt_index((int64_t)(0), ((c)->args)->length, 60000146)]), &rtclass_syntax__ast__StringLit)) != NULL) && (((s_6706)->exprs)->length > 0)) && ((s_6706)->_super._super.conv == NULL));
+    return ((((s_6708 = (syntax__ast__StringLit*)rt_as_class((void*)(((c)->args)->items[rt_index((int64_t)(0), ((c)->args)->length, 60000146)]), &rtclass_syntax__ast__StringLit)) != NULL) && (((s_6708)->exprs)->length > 0)) && ((s_6708)->_super._super.conv == NULL));
 }
 
 List_s* codegen__expressions__calls__args(RtMem* rt_dest, List_syntax__ast__Expr* asg, List_b* memParams) {
@@ -50943,11 +50946,11 @@ RtString codegen__expressions__calls__builtin(RtMem* rt_dest, syntax__ast__Call*
                 RtString x = codegen__expressions__hoist(&mem_283, t_7722, codegen__expressions__value(&tmp_7721, ((c)->args)->items[rt_index((int64_t)(0), ((c)->args)->length, 60000333)]));
                 rt_mem_free(&tmp_7721);
                 RtString found = codegen__gen__tmp(rt_dest, rt_str("found", 5));
-                RtString k_6775 = codegen__gen__tmp(rt_dest, rt_str("k", 1));
+                RtString k_6777 = codegen__gen__tmp(rt_dest, rt_str("k", 1));
                 RtSb sb_7723 = rt_sb_mem(&mem_283, 60000336);
                 rt_sb_str(&sb_7723, (il)->items[rt_index((int64_t)(0), (il)->length, 60000336)]);
                 rt_sb_add(&sb_7723, "[", 1);
-                rt_sb_str(&sb_7723, k_6775);
+                rt_sb_str(&sb_7723, k_6777);
                 rt_sb_add(&sb_7723, "]", 1);
                 RtString e = rt_sb_finish(&sb_7723);
                 RtString value_7728;
@@ -50988,13 +50991,13 @@ RtString codegen__expressions__calls__builtin(RtMem* rt_dest, syntax__ast__Call*
                 RtMem tmp_7732 = rt_mem_growable();
                 RtSb sb_7731 = rt_sb_mem(&tmp_7732, 60000339);
                 rt_sb_add(&sb_7731, "for (int32_t ", 13);
-                rt_sb_str(&sb_7731, k_6775);
+                rt_sb_str(&sb_7731, k_6777);
                 rt_sb_add(&sb_7731, " = 0; ", 6);
-                rt_sb_str(&sb_7731, k_6775);
+                rt_sb_str(&sb_7731, k_6777);
                 rt_sb_add(&sb_7731, " < ", 3);
                 rt_sb_str(&sb_7731, (il)->items[rt_index((int64_t)(1), (il)->length, 60000339)]);
                 rt_sb_add(&sb_7731, "; ", 2);
-                rt_sb_str(&sb_7731, k_6775);
+                rt_sb_str(&sb_7731, k_6777);
                 rt_sb_add(&sb_7731, "++) if (", 8);
                 rt_sb_str(&sb_7731, eq);
                 rt_sb_add(&sb_7731, ") { ", 4);
@@ -51056,14 +51059,14 @@ RtString codegen__expressions__calls__builtin(RtMem* rt_dest, syntax__ast__Call*
 }
 
 RtString codegen__expressions__calls__printCall(RtMem* rt_dest, syntax__ast__Call* c, bool newline) {
-    syntax__ast__StringLit* s_6783 = NULL;
+    syntax__ast__StringLit* s_6785 = NULL;
     RtString f = (newline ? rt_str("rt_println", 10) : rt_str("rt_print", 8));
     syntax__ast__Expr* arg = ((c)->args)->items[rt_index((int64_t)(0), ((c)->args)->length, 60000351)];
     semantics__types__Place* ap = (arg)->_super.place;
-    if (((s_6783 = (syntax__ast__StringLit*)rt_as_class((void*)(arg), &rtclass_syntax__ast__StringLit)) != NULL) && ((arg)->_super.conv == NULL)) {
+    if (((s_6785 = (syntax__ast__StringLit*)rt_as_class((void*)(arg), &rtclass_syntax__ast__StringLit)) != NULL) && ((arg)->_super.conv == NULL)) {
         bool defaultPlace = ((!(ap == NULL)) && (((ap)->kind).tag == (((semantics__types__PlaceK){ .tag = semantics__types__PlaceK_Temp })).tag));
-        if ((((s_6783)->exprs)->length == 0) || defaultPlace) {
-            Opt_s direct = codegen__expressions__strings__printDirect(rt_dest, s_6783, newline);
+        if ((((s_6785)->exprs)->length == 0) || defaultPlace) {
+            Opt_s direct = codegen__expressions__strings__printDirect(rt_dest, s_6785, newline);
             if (!(!(direct).has)) {
                 return direct.value;
             }
@@ -51282,9 +51285,9 @@ RtString codegen__expressions__calls__splitText(RtMem* rt_dest, syntax__ast__Cal
     return ret_7762;
 }
 
-void codegen__expressions__calls__lines(RtString text_6801) {
+void codegen__expressions__calls__lines(RtString text_6803) {
     RtMem mem_286 = rt_mem_growable();
-    RtString t_7763 = text_6801;
+    RtString t_7763 = text_6803;
     List_s* t_7764 = List_s_new(&mem_286, 60000410);
     RtString t_7765 = rt_str("\n", 1);
     if (t_7765.len == 0) {
@@ -51469,7 +51472,7 @@ RtString codegen__expressions__calls__sortList(RtMem* rt_dest, syntax__ast__Call
     RtMem mem_288 = rt_mem_growable();
     semantics__types__Type* element = ((semantics__types__Type*)rt_unwrap((void*)((at)->elem), 60000462));
     RtString elementC = codegen__expressions__cType(&mem_288, element);
-    List_s* list_6820 = codegen__expressions__calls__itemsOf(NULL, at, codegen__expressions__calls__receiver(NULL, c));
+    List_s* list_6822 = codegen__expressions__calls__itemsOf(NULL, at, codegen__expressions__calls__receiver(NULL, c));
     RtString items = codegen__gen__tmp(&mem_288, rt_str("items", 5));
     RtString count = codegen__gen__tmp(&mem_288, rt_str("count", 5));
     RtString spare = codegen__gen__tmp(&mem_288, rt_str("spare", 5));
@@ -51479,7 +51482,7 @@ RtString codegen__expressions__calls__sortList(RtMem* rt_dest, syntax__ast__Call
     rt_sb_add(&sb_7784, "* ", 2);
     rt_sb_str(&sb_7784, items);
     rt_sb_add(&sb_7784, " = ", 3);
-    rt_sb_str(&sb_7784, (list_6820)->items[rt_index((int64_t)(0), (list_6820)->length, 60000468)]);
+    rt_sb_str(&sb_7784, (list_6822)->items[rt_index((int64_t)(0), (list_6822)->length, 60000468)]);
     rt_sb_add(&sb_7784, ";", 1);
     codegen__gen__line(rt_sb_finish(&sb_7784));
     rt_mem_free(&tmp_7785);
@@ -51488,7 +51491,7 @@ RtString codegen__expressions__calls__sortList(RtMem* rt_dest, syntax__ast__Call
     rt_sb_add(&sb_7786, "int64_t ", 8);
     rt_sb_str(&sb_7786, count);
     rt_sb_add(&sb_7786, " = ", 3);
-    rt_sb_str(&sb_7786, (list_6820)->items[rt_index((int64_t)(1), (list_6820)->length, 60000469)]);
+    rt_sb_str(&sb_7786, (list_6822)->items[rt_index((int64_t)(1), (list_6822)->length, 60000469)]);
     rt_sb_add(&sb_7786, ";", 1);
     codegen__gen__line(rt_sb_finish(&sb_7786));
     rt_mem_free(&tmp_7787);
@@ -53291,8 +53294,8 @@ RtString codegen__gen__classes__mainWrapper(RtMem* rt_dest) {
         rt_mem_free(&mem_311);
         return ret_8114;
     }
-    semantics__types__FunctionInfo* main__6993 = mo;
-    bool withArgs = (((((semantics__types__Type*)rt_unwrap((void*)((main__6993)->sig), 58000286)))->params)->length > 0);
+    semantics__types__FunctionInfo* main__6995 = mo;
+    bool withArgs = (((((semantics__types__Type*)rt_unwrap((void*)((main__6995)->sig), 58000286)))->params)->length > 0);
     RtMem* t_8115 = &rt_default_mem;
     StringBuilder* obj_8116 = (StringBuilder*)rt_mem_alloc(t_8115, sizeof(StringBuilder), 58000287);
     *obj_8116 = (StringBuilder){ ._h = { (const void*)&vtable_StringBuilder, t_8115 }, .buf = lm_text_buf_new_73000347(t_8115) };
@@ -53310,7 +53313,7 @@ RtString codegen__gen__classes__mainWrapper(RtMem* rt_dest) {
         StringBuilder_add__dispatch((StringBuilder*)sb, rt_str("    for (int i = 1; i < argc; i++) args[i - 1] = rt_str_c(argv[i]);\n", 68));
         StringBuilder_add__dispatch((StringBuilder*)sb, rt_str("    Slice_s arg_slice = { args, argc > 1 \? (int32_t)(argc - 1) : 0 };\n", 70));
     }
-    bool throwsOut = (!((main__6993)->throwsType == NULL));
+    bool throwsOut = (!((main__6995)->throwsType == NULL));
     if (throwsOut) {
         StringBuilder_add__dispatch((StringBuilder*)sb, rt_str("    RtError err;\n    err.kind = 0;\n", 35));
     }
@@ -53332,7 +53335,7 @@ RtString codegen__gen__classes__mainWrapper(RtMem* rt_dest) {
     rt_sb_str(&sb_8119, a);
     rt_sb_add(&sb_8119, ")", 1);
     RtString call = rt_sb_finish(&sb_8119);
-    if ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((main__6993)->sig), 58000301)))->elem), 58000301))) == (const void*)(semantics__types__T_VOID)) {
+    if ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((main__6995)->sig), 58000301)))->elem), 58000301))) == (const void*)(semantics__types__T_VOID)) {
         RtMem tmp_8121 = rt_mem_growable();
         RtSb sb_8120 = rt_sb_mem(&tmp_8121, 58000301);
         rt_sb_add(&sb_8120, "    ", 4);
@@ -53369,7 +53372,7 @@ RtString codegen__gen__classes__mainWrapper(RtMem* rt_dest) {
         }
     }
     if (throwsOut) {
-        RtString en = (((semantics__types__Type*)rt_unwrap((void*)((main__6993)->throwsType), 58000310)))->name;
+        RtString en = (((semantics__types__Type*)rt_unwrap((void*)((main__6995)->throwsType), 58000310)))->name;
         RtMem tmp_8129 = rt_mem_growable();
         RtSb sb_8128 = rt_sb_mem(&tmp_8129, 58000311);
         rt_sb_add(&sb_8128, "    if (err.kind != 0) {\n        fflush(stdout);\n        fprintf(stderr, \"uncaught error: ", 90);
@@ -53382,7 +53385,7 @@ RtString codegen__gen__classes__mainWrapper(RtMem* rt_dest) {
         StringBuilder_add__dispatch((StringBuilder*)sb, rt_sb_finish(&sb_8128));
         rt_mem_free(&tmp_8129);
     }
-    if ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((main__6993)->sig), 58000313)))->elem), 58000313))) == (const void*)(semantics__types__T_VOID)) {
+    if ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((main__6995)->sig), 58000313)))->elem), 58000313))) == (const void*)(semantics__types__T_VOID)) {
         StringBuilder_add__dispatch((StringBuilder*)sb, rt_str("    return 0;\n", 14));
     } else {
         StringBuilder_add__dispatch((StringBuilder*)sb, rt_str("    return (int)result;\n", 24));
@@ -54999,10 +55002,10 @@ bool codegen__expressions__isIdentifier(RtString s) {
 }
 
 RtString codegen__expressions__value(RtMem* rt_dest, syntax__ast__Expr* e) {
-    syntax__ast__Lambda* l_7160 = NULL;
+    syntax__ast__Lambda* l_7162 = NULL;
     semantics__types__Conversion* c = (e)->_super.conv;
-    if ((((l_7160 = (syntax__ast__Lambda*)rt_as_class((void*)(e), &rtclass_syntax__ast__Lambda)) != NULL) && (!(c == NULL))) && (((c)->kind).tag == (((semantics__types__ConvK){ .tag = semantics__types__ConvK_SamLambda })).tag)) {
-        return codegen__expressions__lambdas__sam(rt_dest, l_7160, c);
+    if ((((l_7162 = (syntax__ast__Lambda*)rt_as_class((void*)(e), &rtclass_syntax__ast__Lambda)) != NULL) && (!(c == NULL))) && (((c)->kind).tag == (((semantics__types__ConvK){ .tag = semantics__types__ConvK_SamLambda })).tag)) {
+        return codegen__expressions__lambdas__sam(rt_dest, l_7162, c);
     }
     RtString v = codegen__expressions__expr(rt_dest, e);
     return ((c == NULL) ? v : codegen__expressions__convert(rt_dest, v, c, e));
@@ -55881,31 +55884,31 @@ RtString codegen__expressions__unwrap(RtMem* rt_dest, syntax__ast__Unwrap* u) {
 }
 
 RtString codegen__expressions__placed(RtMem* rt_dest, syntax__ast__Expr* inner) {
-    syntax__ast__Lambda* l_7221 = NULL;
+    syntax__ast__Lambda* l_7223 = NULL;
     semantics__types__Conversion* c = (inner)->_super.conv;
-    return (((((l_7221 = (syntax__ast__Lambda*)rt_as_class((void*)(inner), &rtclass_syntax__ast__Lambda)) != NULL) && (!(c == NULL))) && (((c)->kind).tag == (((semantics__types__ConvK){ .tag = semantics__types__ConvK_SamLambda })).tag)) ? codegen__expressions__lambdas__sam(rt_dest, l_7221, c) : codegen__expressions__expr(rt_dest, inner));
+    return (((((l_7223 = (syntax__ast__Lambda*)rt_as_class((void*)(inner), &rtclass_syntax__ast__Lambda)) != NULL) && (!(c == NULL))) && (((c)->kind).tag == (((semantics__types__ConvK){ .tag = semantics__types__ConvK_SamLambda })).tag)) ? codegen__expressions__lambdas__sam(rt_dest, l_7223, c) : codegen__expressions__expr(rt_dest, inner));
 }
 
 RtString codegen__expressions__intLiteral(RtMem* rt_dest, int64_t v, bool big, semantics__types__Type* t) {
     RtMem mem_334 = rt_mem_growable();
     RtSb sb_8515 = rt_sb_mem(&mem_334, 57000504);
     rt_sb_i64(&sb_8515, (int64_t)(v));
-    RtString text_7225 = rt_sb_finish(&sb_8515);
+    RtString text_7227 = rt_sb_finish(&sb_8515);
     if (big) {
         RtSb sb_8516 = rt_sb_mem(&mem_334, 57000505);
         rt_sb_u64(&sb_8516, (uint64_t)(((uint64_t)(v))));
-        text_7225 = rt_sb_finish(&sb_8516);
+        text_7227 = rt_sb_finish(&sb_8516);
     }
     if ((!(t == NULL)) && semantics__types__isFloat(t)) {
         RtString value_8519;
         if ((const void*)(t) == (const void*)(semantics__types__T_FLOAT32)) {
             RtSb sb_8517 = rt_sb_mem(rt_dest, 57000506);
-            rt_sb_str(&sb_8517, text_7225);
+            rt_sb_str(&sb_8517, text_7227);
             rt_sb_add(&sb_8517, ".0f", 3);
             value_8519 = rt_sb_finish(&sb_8517);
         } else {
             RtSb sb_8518 = rt_sb_mem(rt_dest, 57000506);
-            rt_sb_str(&sb_8518, text_7225);
+            rt_sb_str(&sb_8518, text_7227);
             rt_sb_add(&sb_8518, ".0", 2);
             value_8519 = rt_sb_finish(&sb_8518);
         }
@@ -55934,7 +55937,7 @@ RtString codegen__expressions__intLiteral(RtMem* rt_dest, int64_t v, bool big, s
         suffix = rt_str("ULL", 3);
     }
     RtSb sb_8523 = rt_sb_mem(rt_dest, 57000515);
-    rt_sb_str(&sb_8523, text_7225);
+    rt_sb_str(&sb_8523, text_7227);
     rt_sb_str(&sb_8523, suffix);
     RtString s = rt_sb_finish(&sb_8523);
     if (semantics__types__bits(p) < 32) {
@@ -57028,7 +57031,7 @@ RtString codegen__gen__library__typeNote(RtMem* rt_dest, semantics__types__Type*
     return ret_8724;
 }
 
-RtString codegen__gen__library__libraryHeader(RtMem* rt_dest, RtString name, RtString version_7326, RtString kind, RtString hash, RtString made) {
+RtString codegen__gen__library__libraryHeader(RtMem* rt_dest, RtString name, RtString version_7328, RtString kind, RtString hash, RtString made) {
     RtMem mem_344 = rt_mem_growable();
     RtString value_8726;
     if (!rt_str_eq(semantics__types__libraryPrefix, rt_str("", 0))) {
@@ -57057,7 +57060,7 @@ RtString codegen__gen__library__libraryHeader(RtMem* rt_dest, RtString name, RtS
     rt_sb_add(&sb_8731, ".h: ", 4);
     rt_sb_str(&sb_8731, name);
     rt_sb_add(&sb_8731, " ", 1);
-    rt_sb_str(&sb_8731, version_7326);
+    rt_sb_str(&sb_8731, version_7328);
     rt_sb_add(&sb_8731, ", a ", 4);
     rt_sb_str(&sb_8731, kind);
     rt_sb_add(&sb_8731, " library written in Larimar (", 29);
@@ -57156,8 +57159,8 @@ RtString codegen__gen__library__libraryHeader(RtMem* rt_dest, RtString name, RtS
                         }
                     }
                     List_s_push(ps, rt_str("void* data", 10));
-                    bool text_7340 = ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((t)->elem), 67000162))) == (const void*)(semantics__types__T_STRING));
-                    if (text_7340) {
+                    bool text_7342 = ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((t)->elem), 67000162))) == (const void*)(semantics__types__T_STRING));
+                    if (text_7342) {
                         List_s_push(ps, rt_str("void* out", 9));
                     }
                     RtMem tmp_8755 = rt_mem_growable();
@@ -57185,7 +57188,7 @@ RtString codegen__gen__library__libraryHeader(RtMem* rt_dest, RtString name, RtS
                             }
                         }
                     }
-                    if (text_7340) {
+                    if (text_7342) {
                         RtMem tmp_8761 = rt_mem_growable();
                         RtSb sb_8760 = rt_sb_mem(&tmp_8761, 67000169);
                         rt_sb_add(&sb_8760, " * It gives its text with ", 26);
@@ -57198,7 +57201,7 @@ RtString codegen__gen__library__libraryHeader(RtMem* rt_dest, RtString name, RtS
                     RtMem tmp_8763 = rt_mem_growable();
                     RtSb sb_8762 = rt_sb_mem(&tmp_8763, 67000171);
                     rt_sb_add(&sb_8762, "typedef ", 8);
-                    rt_sb_str(&sb_8762, (text_7340 ? rt_str("void", 4) : codegen__gen__library__headerType(&tmp_8763, ((semantics__types__Type*)rt_unwrap((void*)((t)->elem), 67000171)), false)));
+                    rt_sb_str(&sb_8762, (text_7342 ? rt_str("void", 4) : codegen__gen__library__headerType(&tmp_8763, ((semantics__types__Type*)rt_unwrap((void*)((t)->elem), 67000171)), false)));
                     rt_sb_add(&sb_8762, " (*", 3);
                     rt_sb_str(&sb_8762, codegen__gen__library__callbackName(&tmp_8763, f, i));
                     rt_sb_add(&sb_8762, ")(", 2);
@@ -57586,7 +57589,7 @@ RtString codegen__gen__library__bindingType(RtMem* rt_dest, semantics__types__Ty
     return (t)->text;
 }
 
-RtString codegen__gen__library__libraryModule(RtMem* rt_dest, RtString name, RtString version_7375, RtString kind, RtString made) {
+RtString codegen__gen__library__libraryModule(RtMem* rt_dest, RtString name, RtString version_7377, RtString kind, RtString made) {
     RtMem mem_349 = rt_mem_growable();
     RtString value_8849;
     if (!rt_str_eq(semantics__types__libraryPrefix, rt_str("", 0))) {
@@ -57607,7 +57610,7 @@ RtString codegen__gen__library__libraryModule(RtMem* rt_dest, RtString name, RtS
     rt_sb_add(&sb_8852, "// ", 3);
     rt_sb_str(&sb_8852, name);
     rt_sb_add(&sb_8852, " ", 1);
-    rt_sb_str(&sb_8852, version_7375);
+    rt_sb_str(&sb_8852, version_7377);
     rt_sb_add(&sb_8852, ": a ", 4);
     rt_sb_str(&sb_8852, kind);
     rt_sb_add(&sb_8852, " library written in Larimar (", 29);
@@ -58021,15 +58024,15 @@ RtString codegen__gen__tmp(RtMem* rt_dest, RtString prefix) {
     return t;
 }
 
-RtString codegen__gen__indent4(RtMem* rt_dest, RtString text_7424) {
-    if (String_isEmpty(text_7424)) {
+RtString codegen__gen__indent4(RtMem* rt_dest, RtString text_7426) {
+    if (String_isEmpty(text_7426)) {
         return rt_str("", 0);
     }
     RtMem* t_8938 = &rt_default_mem;
     StringBuilder* obj_8939 = (StringBuilder*)rt_mem_alloc(t_8938, sizeof(StringBuilder), 55000205);
     *obj_8939 = (StringBuilder){ ._h = { (const void*)&vtable_StringBuilder, t_8938 }, .buf = lm_text_buf_new_73000347(t_8938) };
     StringBuilder* sb = obj_8939;
-    RtString t_8940 = text_7424;
+    RtString t_8940 = text_7426;
     List_s* t_8941 = List_s_new(rt_dest, 55000206);
     RtString t_8942 = rt_str("\n", 1);
     if (t_8942.len == 0) {
@@ -58328,7 +58331,7 @@ RtString codegen__gen__generate(RtMem* rt_dest) {
         }
     }
     RtString init = codegen__gen__classes__initGlobals(rt_dest);
-    RtString main__7451 = (semantics__types__buildingLibrary ? rt_str("", 0) : codegen__gen__classes__mainWrapper(rt_dest));
+    RtString main__7453 = (semantics__types__buildingLibrary ? rt_str("", 0) : codegen__gen__classes__mainWrapper(rt_dest));
     {
         List_semantics__types__ClassInfo* list_9010 = semantics__types__classes;
         for (int32_t i_9009 = 0; i_9009 < list_9010->length; i_9009++) {
@@ -58387,12 +58390,12 @@ RtString codegen__gen__generate(RtMem* rt_dest) {
                 rt_sb_add(&sb_9021, "\"", 1);
                 value_9022 = rt_sb_finish(&sb_9021);
             }
-            RtString text_7462 = value_9022;
+            RtString text_7464 = value_9022;
             RtMem tmp_9024 = rt_mem_growable();
             RtString value_9026;
             if (rt_str_eq(pw, rt_str("", 0))) {
                 RtSb sb_9023 = rt_sb_mem(&tmp_9024, 55000346);
-                rt_sb_str(&sb_9023, text_7462);
+                rt_sb_str(&sb_9023, text_7464);
                 rt_sb_add(&sb_9023, "\n", 1);
                 value_9026 = rt_sb_finish(&sb_9023);
             } else {
@@ -58400,7 +58403,7 @@ RtString codegen__gen__generate(RtMem* rt_dest) {
                 rt_sb_add(&sb_9025, "#if ", 4);
                 rt_sb_str(&sb_9025, semantics__types__platformCondition(NULL, pw));
                 rt_sb_add(&sb_9025, "\n", 1);
-                rt_sb_str(&sb_9025, text_7462);
+                rt_sb_str(&sb_9025, text_7464);
                 rt_sb_add(&sb_9025, "\n#endif\n", 8);
                 value_9026 = rt_sb_finish(&sb_9025);
             }
@@ -58660,13 +58663,13 @@ RtString codegen__gen__generate(RtMem* rt_dest) {
                 rt_sb_add(&sb_9088, " {\n", 3);
                 rt_sb_str(&sb_9088, codegen__gen__bodyText(&tmp_9089, body));
                 rt_sb_add(&sb_9088, "\n}", 2);
-                RtString text_7488 = rt_sb_finish(&sb_9088);
+                RtString text_7490 = rt_sb_finish(&sb_9088);
                 rt_mem_free(&tmp_9089);
                 RtMem tmp_9091 = rt_mem_growable();
                 RtString value_9093;
                 if (rt_str_eq(pw, rt_str("", 0))) {
                     RtSb sb_9090 = rt_sb_mem(&tmp_9091, 55000433);
-                    rt_sb_str(&sb_9090, text_7488);
+                    rt_sb_str(&sb_9090, text_7490);
                     rt_sb_add(&sb_9090, "\n", 1);
                     value_9093 = rt_sb_finish(&sb_9090);
                 } else {
@@ -58674,7 +58677,7 @@ RtString codegen__gen__generate(RtMem* rt_dest) {
                     rt_sb_add(&sb_9092, "#if ", 4);
                     rt_sb_str(&sb_9092, semantics__types__platformCondition(NULL, pw));
                     rt_sb_add(&sb_9092, "\n", 1);
-                    rt_sb_str(&sb_9092, text_7488);
+                    rt_sb_str(&sb_9092, text_7490);
                     rt_sb_add(&sb_9092, "\n#endif\n", 8);
                     value_9093 = rt_sb_finish(&sb_9092);
                 }
@@ -59103,7 +59106,7 @@ RtString codegen__gen__generate(RtMem* rt_dest) {
     StringBuilder_add__dispatch((StringBuilder*)out, clones);
     codegen__gen__section(out, rt_str("Entry point", 11));
     StringBuilder_add__dispatch((StringBuilder*)out, init);
-    StringBuilder_add__dispatch((StringBuilder*)out, main__7451);
+    StringBuilder_add__dispatch((StringBuilder*)out, main__7453);
     if (semantics__types__buildingLibrary) {
         codegen__gen__libraryGlue(out);
     }
@@ -59133,50 +59136,35 @@ RtString codegen__gen__generate(RtMem* rt_dest) {
                 }
             }
         }
-        {
-            List_semantics__types__FunctionInfo* list_9201 = semantics__types__functions;
-            for (int32_t i_9200 = 0; i_9200 < list_9201->length; i_9200++) {
-                semantics__types__FunctionInfo* f = list_9201->items[i_9200];
-                if ((f)->isExtern || rt_str_eq((f)->exportName, rt_str("", 0))) {
-                    continue;
-                }
-                {
-                    List_semantics__types__Type* list_9203 = (((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 55000571)))->params;
-                    for (int32_t i_9202 = 0; i_9202 < list_9203->length; i_9202++) {
-                        semantics__types__Type* t = list_9203->items[i_9202];
-                        if ((((t)->kind).tag == (((semantics__types__TyK){ .tag = semantics__types__TyK_Func })).tag) && ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((t)->elem), 55000572))) == (const void*)(semantics__types__T_STRING))) {
-                            RtMem tmp_9206 = rt_mem_growable();
-                            RtSb sb_9204 = rt_sb_mem((roots)->mem, 55000572);
-                            RtString value_9207;
-                            if (!rt_str_eq(semantics__types__libraryPrefix, rt_str("", 0))) {
-                                RtSb sb_9205 = rt_sb_mem(&tmp_9206, 55000572);
-                                rt_sb_str(&sb_9205, semantics__types__libraryPrefix);
-                                rt_sb_add(&sb_9205, "_", 1);
-                                value_9207 = rt_sb_finish(&sb_9205);
-                            } else {
-                                value_9207 = rt_str("", 0);
-                            }
-                            rt_sb_str(&sb_9204, value_9207);
-                            rt_sb_add(&sb_9204, "give", 4);
-                            List_s_push(roots, rt_sb_finish(&sb_9204));
-                            rt_mem_free(&tmp_9206);
-                        }
-                    }
-                }
+        if (codegen__gen__takesTextFunctions()) {
+            RtMem tmp_9202 = rt_mem_growable();
+            RtSb sb_9200 = rt_sb_mem((roots)->mem, 55000569);
+            RtString value_9203;
+            if (!rt_str_eq(semantics__types__libraryPrefix, rt_str("", 0))) {
+                RtSb sb_9201 = rt_sb_mem(&tmp_9202, 55000569);
+                rt_sb_str(&sb_9201, semantics__types__libraryPrefix);
+                rt_sb_add(&sb_9201, "_", 1);
+                value_9203 = rt_sb_finish(&sb_9201);
+            } else {
+                value_9203 = rt_str("", 0);
             }
+            rt_sb_str(&sb_9200, value_9203);
+            rt_sb_add(&sb_9200, "give", 4);
+            List_s_push(roots, rt_sb_finish(&sb_9200));
+            rt_mem_free(&tmp_9202);
         }
     }
     RtString program = codegen__prune__prune(rt_dest, StringBuilder_toString__dispatch((StringBuilder*)out, rt_dest), roots);
-    RtMem* t_9208 = &rt_default_mem;
-    StringBuilder* obj_9209 = (StringBuilder*)rt_mem_alloc(t_9208, sizeof(StringBuilder), 55000577);
-    *obj_9209 = (StringBuilder){ ._h = { (const void*)&vtable_StringBuilder, t_9208 }, .buf = lm_text_buf_new_73000347(t_9208) };
-    StringBuilder* head = obj_9209;
+    RtMem* t_9204 = &rt_default_mem;
+    StringBuilder* obj_9205 = (StringBuilder*)rt_mem_alloc(t_9204, sizeof(StringBuilder), 55000572);
+    *obj_9205 = (StringBuilder){ ._h = { (const void*)&vtable_StringBuilder, t_9204 }, .buf = lm_text_buf_new_73000347(t_9204) };
+    StringBuilder* head = obj_9205;
     StringBuilder_add__dispatch((StringBuilder*)head, rt_str("/* Generated by the transpiler. Runtime first, then the program. */\n", 68));
     bool ownC = (((semantics__types__cCode)->length > 0) || ((semantics__types__includes)->length > 0));
     {
-        List_semantics__types__FunctionInfo* list_9211 = semantics__types__functions;
-        for (int32_t i_9210 = 0; i_9210 < list_9211->length; i_9210++) {
-            semantics__types__FunctionInfo* f = list_9211->items[i_9210];
+        List_semantics__types__FunctionInfo* list_9207 = semantics__types__functions;
+        for (int32_t i_9206 = 0; i_9206 < list_9207->length; i_9206++) {
+            semantics__types__FunctionInfo* f = list_9207->items[i_9206];
             if ((f)->isExtern) {
                 ownC = true;
             }
@@ -59186,20 +59174,20 @@ RtString codegen__gen__generate(RtMem* rt_dest) {
     if (String_contains(runtime, rt_str("RT_FILES", 8))) {
         StringBuilder_add__dispatch((StringBuilder*)head, rt_str("#define RT_FILES ", 17));
         {
-            List_s* list_9213 = semantics__types__files;
-            for (int32_t i_9212 = 0; i_9212 < list_9213->length; i_9212++) {
-                int32_t i = i_9212;
-                RtString f = list_9213->items[i_9212];
+            List_s* list_9209 = semantics__types__files;
+            for (int32_t i_9208 = 0; i_9208 < list_9209->length; i_9208++) {
+                int32_t i = i_9208;
+                RtString f = list_9209->items[i_9208];
                 if (i > 0) {
                     StringBuilder_add__dispatch((StringBuilder*)head, rt_str(", ", 2));
                 }
-                RtMem tmp_9215 = rt_mem_growable();
-                RtSb sb_9214 = rt_sb_mem(&tmp_9215, 55000588);
-                rt_sb_add(&sb_9214, "\"", 1);
-                rt_sb_str(&sb_9214, String_replace(f, &tmp_9215, rt_str("\\", 1), rt_str("/", 1)));
-                rt_sb_add(&sb_9214, "\"", 1);
-                StringBuilder_add__dispatch((StringBuilder*)head, rt_sb_finish(&sb_9214));
-                rt_mem_free(&tmp_9215);
+                RtMem tmp_9211 = rt_mem_growable();
+                RtSb sb_9210 = rt_sb_mem(&tmp_9211, 55000583);
+                rt_sb_add(&sb_9210, "\"", 1);
+                rt_sb_str(&sb_9210, String_replace(f, &tmp_9211, rt_str("\\", 1), rt_str("/", 1)));
+                rt_sb_add(&sb_9210, "\"", 1);
+                StringBuilder_add__dispatch((StringBuilder*)head, rt_sb_finish(&sb_9210));
+                rt_mem_free(&tmp_9211);
             }
         }
         StringBuilder_add__dispatch((StringBuilder*)head, rt_str("\n", 1));
@@ -59212,9 +59200,9 @@ RtString codegen__gen__generate(RtMem* rt_dest) {
     }
     StringBuilder_add__dispatch((StringBuilder*)head, runtime);
     StringBuilder_add__dispatch((StringBuilder*)head, program);
-    RtString ret_9216 = StringBuilder_toString__dispatch((StringBuilder*)head, rt_dest);
+    RtString ret_9212 = StringBuilder_toString__dispatch((StringBuilder*)head, rt_dest);
     rt_mem_free(&mem_353);
-    return ret_9216;
+    return ret_9212;
 }
 
 RtString codegen__gen__internal(RtMem* rt_dest) {
@@ -59233,16 +59221,16 @@ void codegen__gen__exportHelpers(StringBuilder* out) {
 void codegen__gen__libraryGlue(StringBuilder* out) {
     RtMem mem_358 = rt_mem_growable();
     codegen__gen__section(out, rt_str("Library", 7));
-    RtString value_9218;
+    RtString value_9214;
     if (!rt_str_eq(semantics__types__libraryPrefix, rt_str("", 0))) {
-        RtSb sb_9217 = rt_sb_mem(&mem_358, 55000652);
-        rt_sb_str(&sb_9217, semantics__types__libraryPrefix);
-        rt_sb_add(&sb_9217, "_", 1);
-        value_9218 = rt_sb_finish(&sb_9217);
+        RtSb sb_9213 = rt_sb_mem(&mem_358, 55000647);
+        rt_sb_str(&sb_9213, semantics__types__libraryPrefix);
+        rt_sb_add(&sb_9213, "_", 1);
+        value_9214 = rt_sb_finish(&sb_9213);
     } else {
-        value_9218 = rt_str("", 0);
+        value_9214 = rt_str("", 0);
     }
-    RtString p = value_9218;
+    RtString p = value_9214;
     StringBuilder_add__dispatch((StringBuilder*)out, rt_str("static int lm_library_ready = 0;\n", 33));
     StringBuilder_add__dispatch((StringBuilder*)out, rt_str("static void lm_library_init(void) {\n    if (lm_library_ready) return;\n    lm_library_ready = 1;\n", 96));
     if (codegen__gen__hasInit) {
@@ -59251,58 +59239,82 @@ void codegen__gen__libraryGlue(StringBuilder* out) {
     StringBuilder_add__dispatch((StringBuilder*)out, rt_str("}\n", 2));
     StringBuilder_add__dispatch((StringBuilder*)out, rt_str("#if defined(__GNUC__) || defined(__clang__) || defined(__TINYC__)\n", 66));
     StringBuilder_add__dispatch((StringBuilder*)out, rt_str("__attribute__((constructor)) static void lm_library_load(void) { lm_library_init(); }\n#endif\n", 93));
-    RtMem tmp_9220 = rt_mem_growable();
-    RtSb sb_9219 = rt_sb_mem(&tmp_9220, 55000659);
-    rt_sb_add(&sb_9219, "void ", 5);
-    rt_sb_str(&sb_9219, p);
-    rt_sb_add(&sb_9219, "free(void* text) { free(text); }\n", 33);
-    StringBuilder_add__dispatch((StringBuilder*)out, rt_sb_finish(&sb_9219));
-    rt_mem_free(&tmp_9220);
-    RtMem tmp_9222 = rt_mem_growable();
-    RtSb sb_9221 = rt_sb_mem(&tmp_9222, 55000661);
-    rt_sb_add(&sb_9221, "void ", 5);
-    rt_sb_str(&sb_9221, p);
-    rt_sb_add(&sb_9221, "give(void* out, const char* text) { ((RtTextOut*)out)->set((RtTextOut*)out, text \? text : \"\", text \? strlen(text) : 0); }\n", 122);
-    StringBuilder_add__dispatch((StringBuilder*)out, rt_sb_finish(&sb_9221));
-    rt_mem_free(&tmp_9222);
+    RtMem tmp_9216 = rt_mem_growable();
+    RtSb sb_9215 = rt_sb_mem(&tmp_9216, 55000654);
+    rt_sb_add(&sb_9215, "void ", 5);
+    rt_sb_str(&sb_9215, p);
+    rt_sb_add(&sb_9215, "free(void* text) { free(text); }\n", 33);
+    StringBuilder_add__dispatch((StringBuilder*)out, rt_sb_finish(&sb_9215));
+    rt_mem_free(&tmp_9216);
+    if (codegen__gen__takesTextFunctions()) {
+        RtMem tmp_9218 = rt_mem_growable();
+        RtSb sb_9217 = rt_sb_mem(&tmp_9218, 55000656);
+        rt_sb_add(&sb_9217, "void ", 5);
+        rt_sb_str(&sb_9217, p);
+        rt_sb_add(&sb_9217, "give(void* out, const char* text) { ((RtTextOut*)out)->set((RtTextOut*)out, text \? text : \"\", text \? strlen(text) : 0); }\n", 122);
+        StringBuilder_add__dispatch((StringBuilder*)out, rt_sb_finish(&sb_9217));
+        rt_mem_free(&tmp_9218);
+    }
     {
-        List_s* list_9224 = codegen__gen__handleClasses(NULL);
-        for (int32_t i_9223 = 0; i_9223 < list_9224->length; i_9223++) {
-            RtString c = list_9224->items[i_9223];
-            RtMem tmp_9226 = rt_mem_growable();
-            RtSb sb_9225 = rt_sb_mem(&tmp_9226, 55000662);
-            rt_sb_add(&sb_9225, "void ", 5);
-            rt_sb_str(&sb_9225, p);
-            rt_sb_str(&sb_9225, c);
-            rt_sb_add(&sb_9225, "_release(void* handle) { rt_handle_release(handle); }\n", 54);
-            StringBuilder_add__dispatch((StringBuilder*)out, rt_sb_finish(&sb_9225));
-            rt_mem_free(&tmp_9226);
+        List_s* list_9220 = codegen__gen__handleClasses(NULL);
+        for (int32_t i_9219 = 0; i_9219 < list_9220->length; i_9219++) {
+            RtString c = list_9220->items[i_9219];
+            RtMem tmp_9222 = rt_mem_growable();
+            RtSb sb_9221 = rt_sb_mem(&tmp_9222, 55000658);
+            rt_sb_add(&sb_9221, "void ", 5);
+            rt_sb_str(&sb_9221, p);
+            rt_sb_str(&sb_9221, c);
+            rt_sb_add(&sb_9221, "_release(void* handle) { rt_handle_release(handle); }\n", 54);
+            StringBuilder_add__dispatch((StringBuilder*)out, rt_sb_finish(&sb_9221));
+            rt_mem_free(&tmp_9222);
         }
     }
-    RtMem tmp_9228 = rt_mem_growable();
-    RtSb sb_9227 = rt_sb_mem(&tmp_9228, 55000663);
-    rt_sb_add(&sb_9227, "const char ", 11);
-    rt_sb_str(&sb_9227, p);
-    rt_sb_add(&sb_9227, "larimar_interface[] = \"larimar-interface:", 41);
-    rt_sb_str(&sb_9227, rt_str("@INTERFACE@", 11));
-    rt_sb_add(&sb_9227, "\";\n", 3);
-    StringBuilder_add__dispatch((StringBuilder*)out, rt_sb_finish(&sb_9227));
-    rt_mem_free(&tmp_9228);
-    RtMem tmp_9230 = rt_mem_growable();
-    RtSb sb_9229 = rt_sb_mem(&tmp_9230, 55000664);
-    rt_sb_add(&sb_9229, "const char* ", 12);
-    rt_sb_str(&sb_9229, p);
-    rt_sb_add(&sb_9229, "interface(void) { return ", 25);
-    rt_sb_str(&sb_9229, p);
-    rt_sb_add(&sb_9229, "larimar_interface + 18; }\n", 26);
-    StringBuilder_add__dispatch((StringBuilder*)out, rt_sb_finish(&sb_9229));
-    rt_mem_free(&tmp_9230);
+    RtMem tmp_9224 = rt_mem_growable();
+    RtSb sb_9223 = rt_sb_mem(&tmp_9224, 55000659);
+    rt_sb_add(&sb_9223, "const char ", 11);
+    rt_sb_str(&sb_9223, p);
+    rt_sb_add(&sb_9223, "larimar_interface[] = \"larimar-interface:", 41);
+    rt_sb_str(&sb_9223, rt_str("@INTERFACE@", 11));
+    rt_sb_add(&sb_9223, "\";\n", 3);
+    StringBuilder_add__dispatch((StringBuilder*)out, rt_sb_finish(&sb_9223));
+    rt_mem_free(&tmp_9224);
+    RtMem tmp_9226 = rt_mem_growable();
+    RtSb sb_9225 = rt_sb_mem(&tmp_9226, 55000660);
+    rt_sb_add(&sb_9225, "const char* ", 12);
+    rt_sb_str(&sb_9225, p);
+    rt_sb_add(&sb_9225, "interface(void) { return ", 25);
+    rt_sb_str(&sb_9225, p);
+    rt_sb_add(&sb_9225, "larimar_interface + 18; }\n", 26);
+    StringBuilder_add__dispatch((StringBuilder*)out, rt_sb_finish(&sb_9225));
+    rt_mem_free(&tmp_9226);
     rt_mem_free(&mem_358);
+}
+
+bool codegen__gen__takesTextFunctions(void) {
+    {
+        List_semantics__types__FunctionInfo* list_9228 = semantics__types__functions;
+        for (int32_t i_9227 = 0; i_9227 < list_9228->length; i_9227++) {
+            semantics__types__FunctionInfo* f = list_9228->items[i_9227];
+            if ((f)->isExtern || rt_str_eq((f)->exportName, rt_str("", 0))) {
+                continue;
+            }
+            {
+                List_semantics__types__Type* list_9230 = (((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 55000670)))->params;
+                for (int32_t i_9229 = 0; i_9229 < list_9230->length; i_9229++) {
+                    semantics__types__Type* t = list_9230->items[i_9229];
+                    if ((((t)->kind).tag == (((semantics__types__TyK){ .tag = semantics__types__TyK_Func })).tag) && ((const void*)(((semantics__types__Type*)rt_unwrap((void*)((t)->elem), 55000671))) == (const void*)(semantics__types__T_STRING))) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
 }
 
 List_s* codegen__gen__handleClassNames(RtMem* rt_dest) {
     (void)rt_dest;
-    List_s* list_9231 = List_s_new(&rt_default_mem, 55000675);
+    List_s* list_9231 = List_s_new(&rt_default_mem, 55000682);
     List_s* out = list_9231;
     {
         List_semantics__types__FunctionInfo* list_9233 = semantics__types__functions;
@@ -59311,9 +59323,9 @@ List_s* codegen__gen__handleClassNames(RtMem* rt_dest) {
             if (((f)->isExtern || rt_str_eq((f)->exportName, rt_str("", 0))) || ((f)->sig == NULL)) {
                 continue;
             }
-            codegen__gen__addHandles(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 55000678)))->elem), 55000678)), out);
+            codegen__gen__addHandles(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 55000685)))->elem), 55000685)), out);
             {
-                List_semantics__types__Type* list_9235 = (((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 55000679)))->params;
+                List_semantics__types__Type* list_9235 = (((semantics__types__Type*)rt_unwrap((void*)((f)->sig), 55000686)))->params;
                 for (int32_t i_9234 = 0; i_9234 < list_9235->length; i_9234++) {
                     semantics__types__Type* t = list_9235->items[i_9234];
                     codegen__gen__addHandles(t, out);
@@ -59333,15 +59345,15 @@ List_s* codegen__gen__handleClassNames(RtMem* rt_dest) {
     int32_t i = 0;
     while ((i < (out)->length) && semantics__types__buildingLibrary) {
         {
-            List_codegen__gen__LibraryMember* list_9239 = codegen__gen__libraryMembers(NULL, (out)->items[rt_index((int64_t)(i), (out)->length, 55000688)]);
+            List_codegen__gen__LibraryMember* list_9239 = codegen__gen__libraryMembers(NULL, (out)->items[rt_index((int64_t)(i), (out)->length, 55000695)]);
             for (int32_t i_9238 = 0; i_9238 < list_9239->length; i_9238++) {
                 codegen__gen__LibraryMember* m = list_9239->items[i_9238];
                 if ((m)->method == NULL) {
                     continue;
                 }
-                codegen__gen__addHandles(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__MethodInfo*)rt_unwrap((void*)((m)->method), 55000690)))->sig), 55000690)))->elem), 55000690)), out);
+                codegen__gen__addHandles(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__MethodInfo*)rt_unwrap((void*)((m)->method), 55000697)))->sig), 55000697)))->elem), 55000697)), out);
                 {
-                    List_semantics__types__Type* list_9241 = (((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__MethodInfo*)rt_unwrap((void*)((m)->method), 55000691)))->sig), 55000691)))->params;
+                    List_semantics__types__Type* list_9241 = (((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__MethodInfo*)rt_unwrap((void*)((m)->method), 55000698)))->sig), 55000698)))->params;
                     for (int32_t i_9240 = 0; i_9240 < list_9241->length; i_9240++) {
                         semantics__types__Type* t = list_9241->items[i_9240];
                         codegen__gen__addHandles(t, out);
@@ -59358,7 +59370,7 @@ void codegen__gen__addHandles(semantics__types__Type* t, List_s* out) {
     if (!(codegen__gen__types__isHandle(t))) {
         return;
     }
-    RtString n = ((semantics__types__isOpt(t) ? ((semantics__types__Type*)rt_unwrap((void*)((t)->elem), 55000700)) : t))->name;
+    RtString n = ((semantics__types__isOpt(t) ? ((semantics__types__Type*)rt_unwrap((void*)((t)->elem), 55000707)) : t))->name;
     List_s* t_9242 = out;
     RtString t_9243 = n;
     bool found_9244 = false;
@@ -59373,7 +59385,7 @@ void codegen__gen__addHandles(semantics__types__Type* t, List_s* out) {
 
 List_s* codegen__gen__handleClasses(RtMem* rt_dest) {
     (void)rt_dest;
-    List_s* list_9248 = List_s_new(&rt_default_mem, 55000706);
+    List_s* list_9248 = List_s_new(&rt_default_mem, 55000713);
     List_s* out = list_9248;
     {
         List_s* list_9250 = codegen__gen__handleClassNames(NULL);
@@ -59400,19 +59412,19 @@ RtString codegen__gen__memberProblem(RtMem* rt_dest, semantics__types__MethodInf
         return rt_str("it throws", 9);
     }
     if (!rt_str_eq(((m)->decl)->returnLives, rt_str("", 0))) {
-        RtSb sb_9251 = rt_sb_mem(rt_dest, 55000730);
+        RtSb sb_9251 = rt_sb_mem(rt_dest, 55000737);
         rt_sb_add(&sb_9251, "its result lives in ", 20);
         rt_sb_str(&sb_9251, ((m)->decl)->returnLives);
         return rt_sb_finish(&sb_9251);
     }
-    if ((!(codegen__gen__crosses(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((m)->sig), 55000731)))->elem), 55000731)), false))) && (!((const void*)(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((m)->sig), 55000731)))->elem), 55000731))) == (const void*)(semantics__types__T_VOID)))) {
-        RtSb sb_9252 = rt_sb_mem(rt_dest, 55000731);
+    if ((!(codegen__gen__crosses(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((m)->sig), 55000738)))->elem), 55000738)), false))) && (!((const void*)(((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((m)->sig), 55000738)))->elem), 55000738))) == (const void*)(semantics__types__T_VOID)))) {
+        RtSb sb_9252 = rt_sb_mem(rt_dest, 55000738);
         rt_sb_add(&sb_9252, "it returns ", 11);
-        rt_sb_str(&sb_9252, (((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((m)->sig), 55000731)))->elem), 55000731)))->text);
+        rt_sb_str(&sb_9252, (((semantics__types__Type*)rt_unwrap((void*)((((semantics__types__Type*)rt_unwrap((void*)((m)->sig), 55000738)))->elem), 55000738)))->text);
         return rt_sb_finish(&sb_9252);
     }
     {
-        List_semantics__types__Type* list_9254 = (((semantics__types__Type*)rt_unwrap((void*)((m)->sig), 55000732)))->params;
+        List_semantics__types__Type* list_9254 = (((semantics__types__Type*)rt_unwrap((void*)((m)->sig), 55000739)))->params;
         for (int32_t i_9253 = 0; i_9253 < list_9254->length; i_9253++) {
             int32_t i = i_9253;
             semantics__types__Type* t = list_9254->items[i_9253];
@@ -59420,12 +59432,12 @@ RtString codegen__gen__memberProblem(RtMem* rt_dest, semantics__types__MethodInf
                 return rt_str("it takes a memory", 17);
             }
             if (!(codegen__gen__crosses(t, false))) {
-                RtSb sb_9255 = rt_sb_mem(rt_dest, 55000734);
+                RtSb sb_9255 = rt_sb_mem(rt_dest, 55000741);
                 rt_sb_add(&sb_9255, "it takes ", 9);
                 rt_sb_str(&sb_9255, (t)->text);
                 return rt_sb_finish(&sb_9255);
             }
-            if (!rt_str_eq(((((m)->decl)->params)->items[rt_index((int64_t)(i), (((m)->decl)->params)->length, 55000735)])->lives, rt_str("", 0))) {
+            if (!rt_str_eq(((((m)->decl)->params)->items[rt_index((int64_t)(i), (((m)->decl)->params)->length, 55000742)])->lives, rt_str("", 0))) {
                 return rt_str("a parameter says where it lives", 31);
             }
         }
@@ -59439,11 +59451,11 @@ RtString codegen__gen__memberProblem(RtMem* rt_dest, semantics__types__MethodInf
 List_codegen__gen__LibraryMember* codegen__gen__libraryMembers(RtMem* rt_dest, RtString cls) {
     (void)rt_dest;
     RtMem mem_359 = rt_mem_growable();
-    List_codegen__gen__LibraryMember* list_9256 = List_codegen__gen__LibraryMember_new(&rt_default_mem, 55000743);
+    List_codegen__gen__LibraryMember* list_9256 = List_codegen__gen__LibraryMember_new(&rt_default_mem, 55000750);
     List_codegen__gen__LibraryMember* out = list_9256;
     RtString value_9258;
     if (!rt_str_eq(semantics__types__libraryPrefix, rt_str("", 0))) {
-        RtSb sb_9257 = rt_sb_mem(&mem_359, 55000744);
+        RtSb sb_9257 = rt_sb_mem(&mem_359, 55000751);
         rt_sb_str(&sb_9257, semantics__types__libraryPrefix);
         rt_sb_add(&sb_9257, "_", 1);
         value_9258 = rt_sb_finish(&sb_9257);
@@ -59451,7 +59463,7 @@ List_codegen__gen__LibraryMember* codegen__gen__libraryMembers(RtMem* rt_dest, R
         value_9258 = rt_str("", 0);
     }
     RtString p = value_9258;
-    RtSb sb_9259 = rt_sb_mem(&mem_359, 55000745);
+    RtSb sb_9259 = rt_sb_mem(&mem_359, 55000752);
     rt_sb_str(&sb_9259, p);
     rt_sb_str(&sb_9259, codegen__gen__library__plainName(NULL, cls));
     rt_sb_add(&sb_9259, "_", 1);
@@ -59462,8 +59474,8 @@ List_codegen__gen__LibraryMember* codegen__gen__libraryMembers(RtMem* rt_dest, R
             semantics__types__FieldInfo* f = list_9261->items[i_9260];
             if (codegen__gen__crosses((f)->type, true)) {
                 RtMem* t_9262 = &rt_default_mem;
-                codegen__gen__LibraryMember* obj_9263 = (codegen__gen__LibraryMember*)rt_mem_alloc(t_9262, sizeof(codegen__gen__LibraryMember), 55000747);
-                RtSb sb_9264 = rt_sb_mem(&rt_default_mem, 55000747);
+                codegen__gen__LibraryMember* obj_9263 = (codegen__gen__LibraryMember*)rt_mem_alloc(t_9262, sizeof(codegen__gen__LibraryMember), 55000754);
+                RtSb sb_9264 = rt_sb_mem(&rt_default_mem, 55000754);
                 rt_sb_str(&sb_9264, c);
                 rt_sb_str(&sb_9264, (f)->name);
                 *obj_9263 = (codegen__gen__LibraryMember){ ._h = { (const void*)&vtable_codegen__gen__LibraryMember, t_9262 }, .cls = cls, .name = (f)->name, .cName = rt_sb_finish(&sb_9264), .method = NULL, .field = f };
@@ -59478,8 +59490,8 @@ List_codegen__gen__LibraryMember* codegen__gen__libraryMembers(RtMem* rt_dest, R
             RtMem tmp_9267 = rt_mem_growable();
             if (rt_str_eq(codegen__gen__memberProblem(&tmp_9267, m), rt_str("", 0))) {
                 RtMem* t_9268 = &rt_default_mem;
-                codegen__gen__LibraryMember* obj_9269 = (codegen__gen__LibraryMember*)rt_mem_alloc(t_9268, sizeof(codegen__gen__LibraryMember), 55000750);
-                RtSb sb_9270 = rt_sb_mem(&rt_default_mem, 55000750);
+                codegen__gen__LibraryMember* obj_9269 = (codegen__gen__LibraryMember*)rt_mem_alloc(t_9268, sizeof(codegen__gen__LibraryMember), 55000757);
+                RtSb sb_9270 = rt_sb_mem(&rt_default_mem, 55000757);
                 rt_sb_str(&sb_9270, c);
                 rt_sb_str(&sb_9270, (m)->name);
                 *obj_9269 = (codegen__gen__LibraryMember){ ._h = { (const void*)&vtable_codegen__gen__LibraryMember, t_9268 }, .cls = cls, .name = (m)->name, .cName = rt_sb_finish(&sb_9270), .method = m, .field = NULL };
@@ -59495,14 +59507,14 @@ List_codegen__gen__LibraryMember* codegen__gen__libraryMembers(RtMem* rt_dest, R
 
 List_s* codegen__gen__memberSkips(RtMem* rt_dest, RtString cls) {
     (void)rt_dest;
-    List_s* list_9272 = List_s_new(&rt_default_mem, 55000757);
+    List_s* list_9272 = List_s_new(&rt_default_mem, 55000764);
     List_s* out = list_9272;
     {
         List_semantics__types__FieldInfo* list_9274 = semantics__types__allFields(NULL, cls);
         for (int32_t i_9273 = 0; i_9273 < list_9274->length; i_9273++) {
             semantics__types__FieldInfo* f = list_9274->items[i_9273];
             if (!(codegen__gen__crosses((f)->type, true))) {
-                RtSb sb_9275 = rt_sb_mem((out)->mem, 55000759);
+                RtSb sb_9275 = rt_sb_mem((out)->mem, 55000766);
                 rt_sb_str(&sb_9275, (f)->name);
                 rt_sb_add(&sb_9275, " (", 2);
                 rt_sb_str(&sb_9275, ((f)->type)->text);
@@ -59518,7 +59530,7 @@ List_s* codegen__gen__memberSkips(RtMem* rt_dest, RtString cls) {
             RtMem mem_360 = rt_mem_growable();
             RtString why = codegen__gen__memberProblem(&mem_360, m);
             if ((!rt_str_eq(why, rt_str("", 0))) && (!((m)->isOperator))) {
-                RtSb sb_9278 = rt_sb_mem((out)->mem, 55000763);
+                RtSb sb_9278 = rt_sb_mem((out)->mem, 55000770);
                 rt_sb_str(&sb_9278, (m)->name);
                 rt_sb_add(&sb_9278, "() (", 4);
                 rt_sb_str(&sb_9278, why);
@@ -59533,9 +59545,9 @@ List_s* codegen__gen__memberSkips(RtMem* rt_dest, RtString cls) {
 
 List_semantics__types__MethodInfo* codegen__gen__methodsOf(RtMem* rt_dest, RtString cls) {
     (void)rt_dest;
-    List_semantics__types__MethodInfo* list_9279 = List_semantics__types__MethodInfo_new(&rt_default_mem, 55000770);
+    List_semantics__types__MethodInfo* list_9279 = List_semantics__types__MethodInfo_new(&rt_default_mem, 55000777);
     List_semantics__types__MethodInfo* out = list_9279;
-    List_s* list_9280 = List_s_new(&rt_default_mem, 55000771);
+    List_s* list_9280 = List_s_new(&rt_default_mem, 55000778);
     List_s* names = list_9280;
     {
         List_semantics__types__ClassInfo* list_9282 = semantics__types__chain(NULL, cls);
@@ -59585,12 +59597,12 @@ void codegen__gen__resources(StringBuilder* out) {
             if (f == NULL) {
                 continue;
             }
-            RtString only = ((f)->isExtern ? (((syntax__ast__ExternFunctionDecl*)rt_unwrap((void*)((f)->ext), 55000802)))->platform : rt_str("", 0));
+            RtString only = ((f)->isExtern ? (((syntax__ast__ExternFunctionDecl*)rt_unwrap((void*)((f)->ext), 55000809)))->platform : rt_str("", 0));
             RtString cType = String_trim(((e)->decl)->cType, NULL);
             RtString valid = (((rt_str_eq(cType, rt_str("", 0)) || String_endsWith(cType, rt_str("*", 1))) || rt_str_eq(cType, rt_str("HANDLE", 6))) ? rt_str("v != NULL && (intptr_t)v != -1", 30) : rt_str("(intmax_t)(v) >= 0", 18));
             if (!rt_str_eq(only, rt_str("", 0))) {
                 RtMem tmp_9294 = rt_mem_growable();
-                RtSb sb_9293 = rt_sb_mem(&tmp_9294, 55000807);
+                RtSb sb_9293 = rt_sb_mem(&tmp_9294, 55000814);
                 rt_sb_add(&sb_9293, "#if ", 4);
                 rt_sb_str(&sb_9293, semantics__types__platformCondition(NULL, only));
                 rt_sb_add(&sb_9293, "\n", 1);
@@ -59598,20 +59610,20 @@ void codegen__gen__resources(StringBuilder* out) {
                 rt_mem_free(&tmp_9294);
             }
             RtMem tmp_9296 = rt_mem_growable();
-            RtSb sb_9295 = rt_sb_mem(&tmp_9296, 55000808);
+            RtSb sb_9295 = rt_sb_mem(&tmp_9296, 55000815);
             rt_sb_add(&sb_9295, "static void ", 12);
             rt_sb_str(&sb_9295, n);
             rt_sb_add(&sb_9295, "__release(RtRes* r) { ", 22);
             RtString value_9299;
             if ((f)->isExtern) {
-                RtSb sb_9297 = rt_sb_mem(&tmp_9296, 55000808);
+                RtSb sb_9297 = rt_sb_mem(&tmp_9296, 55000815);
                 rt_sb_str(&sb_9297, (f)->cName);
                 rt_sb_add(&sb_9297, "(((Res_", 7);
                 rt_sb_str(&sb_9297, n);
                 rt_sb_add(&sb_9297, "*)r)->value)", 12);
                 value_9299 = rt_sb_finish(&sb_9297);
             } else {
-                RtSb sb_9298 = rt_sb_mem(&tmp_9296, 55000808);
+                RtSb sb_9298 = rt_sb_mem(&tmp_9296, 55000815);
                 rt_sb_str(&sb_9298, (f)->cName);
                 rt_sb_add(&sb_9298, "((Res_", 6);
                 rt_sb_str(&sb_9298, n);
@@ -59640,7 +59652,7 @@ void codegen__gen__resources(StringBuilder* out) {
             rt_mem_free(&tmp_9296);
             if (!rt_str_eq(only, rt_str("", 0))) {
                 RtMem tmp_9301 = rt_mem_growable();
-                RtSb sb_9300 = rt_sb_mem(&tmp_9301, 55000820);
+                RtSb sb_9300 = rt_sb_mem(&tmp_9301, 55000827);
                 rt_sb_add(&sb_9300, "#endif\n#if ", 11);
                 rt_sb_str(&sb_9300, semantics__types__platformCondition(NULL, only));
                 rt_sb_add(&sb_9300, "\n", 1);
@@ -59648,7 +59660,7 @@ void codegen__gen__resources(StringBuilder* out) {
                 rt_mem_free(&tmp_9301);
             }
             RtMem tmp_9303 = rt_mem_growable();
-            RtSb sb_9302 = rt_sb_mem(&tmp_9303, 55000821);
+            RtSb sb_9302 = rt_sb_mem(&tmp_9303, 55000828);
             rt_sb_add(&sb_9302, "static inline Ext_", 18);
             rt_sb_str(&sb_9302, n);
             rt_sb_add(&sb_9302, " ", 1);
@@ -59689,7 +59701,7 @@ void codegen__gen__section(StringBuilder* out, RtString title) {
         n = 3;
     }
     RtMem tmp_9306 = rt_mem_growable();
-    RtSb sb_9305 = rt_sb_mem(&tmp_9306, 55000846);
+    RtSb sb_9305 = rt_sb_mem(&tmp_9306, 55000853);
     rt_sb_add(&sb_9305, "\n/* ---- ", 9);
     rt_sb_str(&sb_9305, title);
     rt_sb_add(&sb_9305, " ", 1);
@@ -59702,31 +59714,31 @@ void codegen__gen__section(StringBuilder* out, RtString title) {
 RtString codegen__gen__bodyText(RtMem* rt_dest, RtString body) {
     RtMem mem_361 = rt_mem_growable();
     RtString t_9307 = body;
-    List_s* t_9308 = List_s_new(&mem_361, 55000851);
+    List_s* t_9308 = List_s_new(&mem_361, 55000858);
     RtString t_9309 = rt_str("\n", 1);
     if (t_9309.len == 0) {
-        for (int32_t k_9311 = 0; k_9311 < t_9307.len; k_9311++) List_s_add(t_9308, rt_str(t_9307.ptr + k_9311, 1), 55000851);
+        for (int32_t k_9311 = 0; k_9311 < t_9307.len; k_9311++) List_s_add(t_9308, rt_str(t_9307.ptr + k_9311, 1), 55000858);
     } else if (t_9307.len > 0 || !false) {
         int32_t start_9310 = 0;
         for (;;) {
             int32_t k_9311 = rt_str_find(t_9307, t_9309, start_9310);
             int32_t end_k_9311 = k_9311 < 0 ? t_9307.len : k_9311;
             RtString part_k_9311 = rt_str(t_9307.ptr + start_9310, end_k_9311 - start_9310);
-            List_s_add(t_9308, part_k_9311, 55000851);
+            List_s_add(t_9308, part_k_9311, 55000858);
             if (k_9311 < 0) break;
             start_9310 = k_9311 + t_9309.len;
         }
     }
     List_s* ls = t_9308;
-    if (((ls)->length > 1) && String_isEmpty(String_trim((ls)->items[rt_index((int64_t)(((int32_t)((uint32_t)((ls)->length) - (uint32_t)(1)))), (ls)->length, 55000852)], NULL))) {
-        (void)(ls)->items[rt_pop(&(ls)->length, 55000852)];
+    if (((ls)->length > 1) && String_isEmpty(String_trim((ls)->items[rt_index((int64_t)(((int32_t)((uint32_t)((ls)->length) - (uint32_t)(1)))), (ls)->length, 55000859)], NULL))) {
+        (void)(ls)->items[rt_pop(&(ls)->length, 55000859)];
     }
     List_s* t_9312 = ls;
-    RtString text_7592 = codegen__gen__stripIndent(&mem_361, rt_str_join(t_9312->items, t_9312->length, rt_str("\n", 1), &rt_default_mem, 55000853));
+    RtString text_7594 = codegen__gen__stripIndent(&mem_361, rt_str_join(t_9312->items, t_9312->length, rt_str("\n", 1), &rt_default_mem, 55000860));
     RtMem tmp_9314 = rt_mem_growable();
-    RtSb sb_9313 = rt_sb_mem(rt_dest, 55000854);
+    RtSb sb_9313 = rt_sb_mem(rt_dest, 55000861);
     rt_sb_add(&sb_9313, "    ", 4);
-    rt_sb_str(&sb_9313, String_replace(text_7592, &tmp_9314, rt_str("\n", 1), rt_str("\n    ", 5)));
+    rt_sb_str(&sb_9313, String_replace(text_7594, &tmp_9314, rt_str("\n", 1), rt_str("\n    ", 5)));
     RtString ret_9315 = rt_sb_finish(&sb_9313);
     rt_mem_free(&tmp_9314);
     rt_mem_free(&mem_361);
@@ -59735,17 +59747,17 @@ RtString codegen__gen__bodyText(RtMem* rt_dest, RtString body) {
 
 RtString codegen__gen__stripIndent(RtMem* rt_dest, RtString code) {
     RtString t_9316 = code;
-    List_s* t_9317 = List_s_new(rt_dest, 55000859);
+    List_s* t_9317 = List_s_new(rt_dest, 55000866);
     RtString t_9318 = rt_str("\n", 1);
     if (t_9318.len == 0) {
-        for (int32_t k_9320 = 0; k_9320 < t_9316.len; k_9320++) List_s_add(t_9317, rt_str(t_9316.ptr + k_9320, 1), 55000859);
+        for (int32_t k_9320 = 0; k_9320 < t_9316.len; k_9320++) List_s_add(t_9317, rt_str(t_9316.ptr + k_9320, 1), 55000866);
     } else if (t_9316.len > 0 || !false) {
         int32_t start_9319 = 0;
         for (;;) {
             int32_t k_9320 = rt_str_find(t_9316, t_9318, start_9319);
             int32_t end_k_9320 = k_9320 < 0 ? t_9316.len : k_9320;
             RtString part_k_9320 = rt_str(t_9316.ptr + start_9319, end_k_9320 - start_9319);
-            List_s_add(t_9317, part_k_9320, 55000859);
+            List_s_add(t_9317, part_k_9320, 55000866);
             if (k_9320 < 0) break;
             start_9319 = k_9320 + t_9318.len;
         }
@@ -59763,7 +59775,7 @@ RtString codegen__gen__stripIndent(RtMem* rt_dest, RtString code) {
                 continue;
             }
             int32_t n = 0;
-            while ((n < (l).len) && ((rt_str_byte(l, (int64_t)(n), 55000866) == (uint8_t)32) || (rt_str_byte(l, (int64_t)(n), 55000866) == (uint8_t)9))) {
+            while ((n < (l).len) && ((rt_str_byte(l, (int64_t)(n), 55000873) == (uint8_t)32) || (rt_str_byte(l, (int64_t)(n), 55000873) == (uint8_t)9))) {
                 n = ((int32_t)((uint32_t)(n) + (uint32_t)(1)));
             }
             if (String_isEmpty(trimmedRight)) {
@@ -59778,7 +59790,7 @@ RtString codegen__gen__stripIndent(RtMem* rt_dest, RtString code) {
         minIndent = 0;
     }
     RtMem* t_9323 = &rt_default_mem;
-    StringBuilder* obj_9324 = (StringBuilder*)rt_mem_alloc(t_9323, sizeof(StringBuilder), 55000871);
+    StringBuilder* obj_9324 = (StringBuilder*)rt_mem_alloc(t_9323, sizeof(StringBuilder), 55000878);
     *obj_9324 = (StringBuilder){ ._h = { (const void*)&vtable_StringBuilder, t_9323 }, .buf = lm_text_buf_new_73000347(t_9323) };
     StringBuilder* sb = obj_9324;
     {
@@ -59799,23 +59811,23 @@ RtString codegen__gen__stripIndent(RtMem* rt_dest, RtString code) {
 
 List_semantics__types__ClassInfo* codegen__gen__classesByDepth(RtMem* rt_dest) {
     (void)rt_dest;
-    List_semantics__types__ClassInfo* list_9327 = List_semantics__types__ClassInfo_new(&rt_default_mem, 55000882);
-    List_semantics__types__ClassInfo* list_7605 = list_9327;
+    List_semantics__types__ClassInfo* list_9327 = List_semantics__types__ClassInfo_new(&rt_default_mem, 55000889);
+    List_semantics__types__ClassInfo* list_7607 = list_9327;
     {
         List_semantics__types__ClassInfo* list_9329 = semantics__types__classes;
         for (int32_t i_9328 = 0; i_9328 < list_9329->length; i_9328++) {
             semantics__types__ClassInfo* c = list_9329->items[i_9328];
             int32_t d = semantics__types__classDepth((c)->name);
-            int32_t i = (list_7605)->length;
-            List_semantics__types__ClassInfo_push(list_7605, c);
-            while ((i > 0) && (semantics__types__classDepth(((list_7605)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), (list_7605)->length, 55000887)])->name) > d)) {
-                (list_7605)->items[rt_index((int64_t)(i), (list_7605)->length, 55000888)] = (list_7605)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), (list_7605)->length, 55000888)];
+            int32_t i = (list_7607)->length;
+            List_semantics__types__ClassInfo_push(list_7607, c);
+            while ((i > 0) && (semantics__types__classDepth(((list_7607)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), (list_7607)->length, 55000894)])->name) > d)) {
+                (list_7607)->items[rt_index((int64_t)(i), (list_7607)->length, 55000895)] = (list_7607)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), (list_7607)->length, 55000895)];
                 i = ((int32_t)((uint32_t)(i) - (uint32_t)(1)));
             }
-            (list_7605)->items[rt_index((int64_t)(i), (list_7605)->length, 55000891)] = c;
+            (list_7607)->items[rt_index((int64_t)(i), (list_7607)->length, 55000898)] = c;
         }
     }
-    return list_7605;
+    return list_7607;
 }
 
 RtString codegen__debugmap__debugMap(RtMem* rt_dest) {
@@ -60029,8 +60041,8 @@ RtString codegen__debugmap__fnJson(RtMem* rt_dest, RtString cName, RtString disp
         }
     }
     rt_mem_free(&tmp_9388);
-    int32_t file_7642 = rt_div_i32(line, 1000000, 68000080);
-    RtString path = (((file_7642 >= 0) && (file_7642 < (semantics__linker__filePaths)->length)) ? (semantics__linker__filePaths)->items[rt_index((int64_t)(file_7642), (semantics__linker__filePaths)->length, 68000081)] : rt_str("", 0));
+    int32_t file_7644 = rt_div_i32(line, 1000000, 68000080);
+    RtString path = (((file_7644 >= 0) && (file_7644 < (semantics__linker__filePaths)->length)) ? (semantics__linker__filePaths)->items[rt_index((int64_t)(file_7644), (semantics__linker__filePaths)->length, 68000081)] : rt_str("", 0));
     RtMem tmp_9393 = rt_mem_growable();
     RtSb sb_9392 = rt_sb_mem(rt_dest, 68000082);
     rt_sb_str(&sb_9392, std__encoding__json__quote(&tmp_9393, cName));
@@ -60068,7 +60080,7 @@ RtString codegen__debugmap__varJson(RtMem* rt_dest, RtString name, RtString c, s
 }
 
 List_semantics__types__Symbol* codegen__debugmap__localsOf(RtMem* rt_dest, List_syntax__ast__Stmt* body) {
-    syntax__ast__SwitchExpr* sx_7659 = NULL;
+    syntax__ast__SwitchExpr* sx_7661 = NULL;
     List_semantics__types__Symbol* list_9399 = List_semantics__types__Symbol_new(rt_dest, 68000092);
     List_semantics__types__Symbol* out = list_9399;
     List_syntax__ast__Stmt* list_9400 = List_syntax__ast__Stmt_new(rt_dest, 68000093);
@@ -60150,8 +60162,8 @@ List_semantics__types__Symbol* codegen__debugmap__localsOf(RtMem* rt_dest, List_
             if ((rt_as_class((void*)(e), &rtclass_syntax__ast__IsExpr) != NULL) && (!((e)->_super.symbol == NULL))) {
                 List_semantics__types__Symbol_push(out, ((semantics__types__Symbol*)rt_unwrap((void*)((e)->_super.symbol), 68000116)));
             }
-            if ((sx_7659 = (syntax__ast__SwitchExpr*)rt_as_class((void*)(e), &rtclass_syntax__ast__SwitchExpr)) != NULL) {
-                codegen__debugmap__switchBindings(sx_7659, out);
+            if ((sx_7661 = (syntax__ast__SwitchExpr*)rt_as_class((void*)(e), &rtclass_syntax__ast__SwitchExpr)) != NULL) {
+                codegen__debugmap__switchBindings(sx_7661, out);
             }
         }
     }
@@ -60823,7 +60835,7 @@ int32_t test(List_s* rest) {
     return ret_9553;
 }
 
-int32_t file(RtString main__7727, List_s* rest, List_s* programArgs) {
+int32_t file(RtString main__7729, List_s* rest, List_s* programArgs) {
     RtMem mem_375 = rt_mem_growable();
     List_s* t_9554 = rest;
     RtString t_9555 = rt_str("-o", 2);
@@ -60836,7 +60848,7 @@ int32_t file(RtString main__7727, List_s* rest, List_s* programArgs) {
             return ret_9558;
         }
         codegen__gen__debugLines = debugBuild;
-        int32_t ret_9559 = writeC(main__7727, (rest)->items[rt_index((int64_t)(1), (rest)->length, 171)]);
+        int32_t ret_9559 = writeC(main__7729, (rest)->items[rt_index((int64_t)(1), (rest)->length, 171)]);
         rt_mem_free(&mem_375);
         return ret_9559;
     }
@@ -60856,16 +60868,16 @@ int32_t file(RtString main__7727, List_s* rest, List_s* programArgs) {
             List_s_push(scriptArgs, a);
         }
     }
-    int32_t ret_9565 = runScript(main__7727, scriptArgs);
+    int32_t ret_9565 = runScript(main__7729, scriptArgs);
     rt_mem_free(&mem_375);
     return ret_9565;
 }
 
-int32_t writeC(RtString main__7733, RtString output) {
+int32_t writeC(RtString main__7735, RtString output) {
     RtError err;
     err.kind = 0;
     RtMem mem_376 = rt_mem_growable();
-    RtString generated = compileFile(&mem_376, main__7733, rt_str(".", 1));
+    RtString generated = compileFile(&mem_376, main__7735, rt_str(".", 1));
     if ((compileErrors)->length > 0) {
         int32_t ret_9566 = 1;
         rt_mem_free(&mem_376);
@@ -60921,10 +60933,10 @@ int32_t writeC(RtString main__7733, RtString output) {
 int32_t plugin(RtString cmd, Slice_s args) {
     RtMem mem_377 = rt_mem_growable();
     List_s* list_9576 = List_s_new(&mem_377, 199);
-    List_s* problems_7740 = list_9576;
-    List_Plugin* found = plugins(&mem_377, problems_7740);
+    List_s* problems_7742 = list_9576;
+    List_Plugin* found = plugins(&mem_377, problems_7742);
     {
-        List_s* list_9578 = problems_7740;
+        List_s* list_9578 = problems_7742;
         for (int32_t i_9577 = 0; i_9577 < list_9578->length; i_9577++) {
             RtString m = list_9578->items[i_9577];
             RtMem tmp_9580 = rt_mem_growable();
@@ -60964,8 +60976,8 @@ int32_t usage(void) {
     RtMem mem_378 = rt_mem_growable();
     printf("larimar %.*s (language %.*s)\n\n  larimar new <name> [--library] create a project in a new folder (a program, or a library)\n  larimar build [folder]        compile the project (larimar.toml) to an executable, or a library:\n                                build/<name>.lpk, a package (a program names it in [packages]),\n                                and build/<name>/ with what it has: <name>.c, .h, .lar, .interface\n  larimar build --static | --dynamic  a library compiled for C (lib<name>.a, .so), instead of a package\n  larimar run [folder] [-- args] build, then run it with the arguments\n  larimar build --debug         with -g -O0 and the .lar lines, for a debugger (lldb, gdb, VS Code)\n  larimar check [file|folder]   find the errors without generating C (--json for tools)\n  larimar test [file|folder]... run the tests (tests/ by default; --only <text>, --test <name>,\n                                --list, --json, --no-sanitize)\n  larimar lsp                   language server for editors (speaks LSP on stdin/stdout)\n  larimar dap [--backend <lldb-dap>]  debugger for editors (DAP on stdin/stdout, over lldb-dap)\n  larimar <file.lar> [args]     build one file and run it (with the bundled tcc when there is one:\n                                it starts fast); its own arguments after '--' when they look like ours\n  larimar c <file.lar>          print the generated C of a file\n  larimar <file.lar> -o <out.c> write the generated C of a file\n  larimar build --cc <program>  build with that C compiler instead of the project's ('tcc': the bundled one)\n  larimar ... --target <platform>  generate the C of one platform only (linux, macos, windows, unix),\n                                with no #if: by default the same C builds on every one\n\n", (int)(rt_str("1.7.0", 5)).len, (rt_str("1.7.0", 5)).ptr, (int)(rt_str("1.0", 3)).len, (rt_str("1.0", 3)).ptr);
     List_s* list_9586 = List_s_new(&mem_378, 237);
-    List_s* problems_7744 = list_9586;
-    List_Plugin* found = plugins(&mem_378, problems_7744);
+    List_s* problems_7746 = list_9586;
+    List_Plugin* found = plugins(&mem_378, problems_7746);
     if ((found)->length > 0) {
         fputs("  from plugins ($LARIMAR_HOME/plugins):\n", stdout);
         {
@@ -60984,7 +60996,7 @@ int32_t usage(void) {
         fputs("\n", stdout);
     }
     {
-        List_s* list_9595 = problems_7744;
+        List_s* list_9595 = problems_7746;
         for (int32_t i_9594 = 0; i_9594 < list_9595->length; i_9594++) {
             RtString m = list_9595->items[i_9594];
             printf("  problem: %.*s\n", (int)(m).len, (m).ptr);
@@ -60999,7 +61011,7 @@ RtString larimarHome(RtMem* rt_dest) {
     return std__io__path__parent(NULL, editor__session__stdDir(rt_dest));
 }
 
-List_Plugin* plugins(RtMem* rt_dest, List_s* problems_7748) {
+List_Plugin* plugins(RtMem* rt_dest, List_s* problems_7750) {
     RtError err;
     err.kind = 0;
     RtMem mem_379 = rt_mem_growable();
@@ -61091,9 +61103,9 @@ List_Plugin* plugins(RtMem* rt_dest, List_s* problems_7748) {
                 rt_sb_add(&sb_9616, "cannot read ", 12);
                 rt_sb_str(&sb_9616, shown);
                 RtCloneMap clones_9618 = rt_clone_map();
-                RtString copy_9619 = clone_s(rt_sb_finish(&sb_9616), (problems_7748)->mem, &clones_9618);
+                RtString copy_9619 = clone_s(rt_sb_finish(&sb_9616), (problems_7750)->mem, &clones_9618);
                 rt_clone_done(&clones_9618);
-                List_s_push(problems_7748, copy_9619);
+                List_s_push(problems_7750, copy_9619);
                 rt_mem_free(&tmp_9617);
                 continue;
             } else if (err.kind == 22) {
@@ -61106,9 +61118,9 @@ List_Plugin* plugins(RtMem* rt_dest, List_s* problems_7748) {
                 rt_sb_add(&sb_9620, ": ", 2);
                 rt_sb_str(&sb_9620, std__encoding__toml__message(&tmp_9621, e));
                 RtCloneMap clones_9622 = rt_clone_map();
-                RtString copy_9623 = clone_s(rt_sb_finish(&sb_9620), (problems_7748)->mem, &clones_9622);
+                RtString copy_9623 = clone_s(rt_sb_finish(&sb_9620), (problems_7750)->mem, &clones_9622);
                 rt_clone_done(&clones_9622);
-                List_s_push(problems_7748, copy_9623);
+                List_s_push(problems_7750, copy_9623);
                 rt_mem_free(&tmp_9621);
                 continue;
             } else {
@@ -61129,9 +61141,9 @@ List_Plugin* plugins(RtMem* rt_dest, List_s* problems_7748) {
                 rt_sb_str(&sb_9626, shown);
                 rt_sb_add(&sb_9626, " needs [plugin] program = \"<a program of bin/>\"", 47);
                 RtCloneMap clones_9628 = rt_clone_map();
-                RtString copy_9629 = clone_s(rt_sb_finish(&sb_9626), (problems_7748)->mem, &clones_9628);
+                RtString copy_9629 = clone_s(rt_sb_finish(&sb_9626), (problems_7750)->mem, &clones_9628);
                 rt_clone_done(&clones_9628);
-                List_s_push(problems_7748, copy_9629);
+                List_s_push(problems_7750, copy_9629);
                 rt_mem_free(&tmp_9627);
                 continue;
             }
@@ -61141,24 +61153,24 @@ List_Plugin* plugins(RtMem* rt_dest, List_s* problems_7748) {
                 int32_t n_9631 = table_9630 ? table_9630->count : 0;
                 for (int32_t i_9632 = 0; i_9632 < n_9631; i_9632++) {
                     if (table_9630->count != n_9631) rt_panic("an Any table cannot gain or lose entries while it is being iterated", 307);
-                    RtString command_7759 = table_9630->keys[i_9632];
+                    RtString command_7761 = table_9630->keys[i_9632];
                     RtAny value = table_9630->values[i_9632];
                     RtMem tmp_9634 = rt_mem_growable();
                     RtSb sb_9633 = rt_sb_mem(&tmp_9634, 308);
                     rt_sb_add(&sb_9633, " ", 1);
-                    rt_sb_str(&sb_9633, command_7759);
+                    rt_sb_str(&sb_9633, command_7761);
                     rt_sb_add(&sb_9633, " ", 1);
                     if (String_contains(rt_str(" new build run check test test-main lsp lsp-worker dap c version help --version --help -h ", 90), rt_sb_finish(&sb_9633))) {
                         RtMem tmp_9636 = rt_mem_growable();
                         RtSb sb_9635 = rt_sb_mem(&tmp_9636, 309);
                         rt_sb_str(&sb_9635, shown);
                         rt_sb_add(&sb_9635, " cannot take 'larimar ", 22);
-                        rt_sb_str(&sb_9635, command_7759);
+                        rt_sb_str(&sb_9635, command_7761);
                         rt_sb_add(&sb_9635, "': it is a command of larimar", 29);
                         RtCloneMap clones_9637 = rt_clone_map();
-                        RtString copy_9638 = clone_s(rt_sb_finish(&sb_9635), (problems_7748)->mem, &clones_9637);
+                        RtString copy_9638 = clone_s(rt_sb_finish(&sb_9635), (problems_7750)->mem, &clones_9637);
                         rt_clone_done(&clones_9637);
-                        List_s_push(problems_7748, copy_9638);
+                        List_s_push(problems_7750, copy_9638);
                         rt_mem_free(&tmp_9636);
                         rt_mem_free(&tmp_9634);
                         continue;
@@ -61169,7 +61181,7 @@ List_Plugin* plugins(RtMem* rt_dest, List_s* problems_7748) {
                         List_Plugin* list_9640 = out;
                         for (int32_t i_9639 = 0; i_9639 < list_9640->length; i_9639++) {
                             Plugin* other = list_9640->items[i_9639];
-                            if (rt_str_eq((other)->command, command_7759)) {
+                            if (rt_str_eq((other)->command, command_7761)) {
                                 taken = (other)->file;
                             }
                         }
@@ -61178,15 +61190,15 @@ List_Plugin* plugins(RtMem* rt_dest, List_s* problems_7748) {
                         RtMem tmp_9642 = rt_mem_growable();
                         RtSb sb_9641 = rt_sb_mem(&tmp_9642, 317);
                         rt_sb_add(&sb_9641, "'larimar ", 9);
-                        rt_sb_str(&sb_9641, command_7759);
+                        rt_sb_str(&sb_9641, command_7761);
                         rt_sb_add(&sb_9641, "' is taken by ", 14);
                         rt_sb_str(&sb_9641, taken);
                         rt_sb_add(&sb_9641, " and by ", 8);
                         rt_sb_str(&sb_9641, shown);
                         RtCloneMap clones_9643 = rt_clone_map();
-                        RtString copy_9644 = clone_s(rt_sb_finish(&sb_9641), (problems_7748)->mem, &clones_9643);
+                        RtString copy_9644 = clone_s(rt_sb_finish(&sb_9641), (problems_7750)->mem, &clones_9643);
                         rt_clone_done(&clones_9643);
-                        List_s_push(problems_7748, copy_9644);
+                        List_s_push(problems_7750, copy_9644);
                         rt_mem_free(&tmp_9642);
                         continue;
                     }
@@ -61224,7 +61236,7 @@ List_Plugin* plugins(RtMem* rt_dest, List_s* problems_7748) {
                     rt_clone_done(&clones_9658);
                     RtString t_9660 = copy_9659;
                     RtCloneMap clones_9661 = rt_clone_map();
-                    RtString copy_9662 = clone_s(command_7759, (out)->mem, &clones_9661);
+                    RtString copy_9662 = clone_s(command_7761, (out)->mem, &clones_9661);
                     rt_clone_done(&clones_9661);
                     *obj_9654 = (Plugin){ ._h = { (const void*)&vtable_Plugin, t_9653 }, .file = t_9657, .program = t_9660, .command = copy_9662, .args = args };
                     List_Plugin_push(out, obj_9654);
@@ -61342,8 +61354,8 @@ int32_t runPlugin(Plugin* pl, Slice_s args) {
     return ret_9691;
 }
 
-RtString compileFile(RtMem* rt_dest, RtString main__7776, RtString shownFrom) {
-    bool ok = editor__session__analyzeFile(main__7776, shownFrom);
+RtString compileFile(RtMem* rt_dest, RtString main__7778, RtString shownFrom) {
+    bool ok = editor__session__analyzeFile(main__7778, shownFrom);
     {
         List_s* list_9693 = editor__session__readErrors;
         for (int32_t i_9692 = 0; i_9692 < list_9693->length; i_9692++) {
@@ -61503,7 +61515,7 @@ int32_t testMain(List_s* rest) {
     RtError err;
     err.kind = 0;
     RtMem mem_382 = rt_mem_growable();
-    RtString file_7800 = rt_str("", 0);
+    RtString file_7802 = rt_str("", 0);
     RtString output = rt_str("", 0);
     RtString root = rt_str("", 0);
     int32_t i = 0;
@@ -61516,8 +61528,8 @@ int32_t testMain(List_s* rest) {
                 root = (rest)->items[rt_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (rest)->length, 429)];
                 i = ((int32_t)((uint32_t)(i) + (uint32_t)(2)));
             } else {
-                if (rt_str_eq(file_7800, rt_str("", 0))) {
-                    file_7800 = (rest)->items[rt_index((int64_t)(i), (rest)->length, 432)];
+                if (rt_str_eq(file_7802, rt_str("", 0))) {
+                    file_7802 = (rest)->items[rt_index((int64_t)(i), (rest)->length, 432)];
                     i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
                 } else {
                     int32_t ret_9743 = fail(rt_str("usage: larimarc test-main <file.lar> -o <out.c> [--root <folder>]", 65));
@@ -61527,23 +61539,23 @@ int32_t testMain(List_s* rest) {
             }
         }
     }
-    if (rt_str_eq(file_7800, rt_str("", 0)) || rt_str_eq(output, rt_str("", 0))) {
+    if (rt_str_eq(file_7802, rt_str("", 0)) || rt_str_eq(output, rt_str("", 0))) {
         int32_t ret_9744 = fail(rt_str("usage: larimarc test-main <file.lar> -o <out.c> [--root <folder>]", 65));
         rt_mem_free(&mem_382);
         return ret_9744;
     }
-    Opt_s source = semantics__linker__readSource(NULL, file_7800);
+    Opt_s source = semantics__linker__readSource(NULL, file_7802);
     if (!(source).has) {
         RtSb sb_9745 = rt_sb_mem(&rt_default_mem, 440);
         rt_sb_add(&sb_9745, "cannot read ", 12);
-        rt_sb_str(&sb_9745, file_7800);
+        rt_sb_str(&sb_9745, file_7802);
         int32_t ret_9746 = fail(rt_sb_finish(&sb_9745));
         rt_mem_free(&mem_382);
         return ret_9746;
     }
     if (project__testing__hasMain(source.value)) {
         RtSb sb_9747 = rt_sb_mem(&rt_default_mem, 441);
-        rt_sb_str(&sb_9747, file_7800);
+        rt_sb_str(&sb_9747, file_7802);
         rt_sb_add(&sb_9747, " has test functions and a main: larimar test writes the main, so remove it", 74);
         int32_t ret_9748 = fail(rt_sb_finish(&sb_9747));
         rt_mem_free(&mem_382);
@@ -61552,7 +61564,7 @@ int32_t testMain(List_s* rest) {
     List_project__testing__TestFunction* tests = project__testing__testFunctions(&mem_382, source.value);
     RtString full = project__testing__withMain(&mem_382, source.value, tests);
     RtMem tmp_9749 = rt_mem_growable();
-    editor__docstore__setDocument(std__io__path__normalize(&tmp_9749, std__io__path__absolute(&tmp_9749, file_7800)), full);
+    editor__docstore__setDocument(std__io__path__normalize(&tmp_9749, std__io__path__absolute(&tmp_9749, file_7802)), full);
     rt_mem_free(&tmp_9749);
     semantics__linker__testsKept = rt_str("main", 4);
     if (!rt_str_eq(root, rt_str("", 0))) {
@@ -61622,7 +61634,7 @@ int32_t testMain(List_s* rest) {
         rt_panic("uncaught error", 0);
     }
     try_end_9759: ;
-    RtString c = compileFile(&mem_382, file_7800, rt_str(".", 1));
+    RtString c = compileFile(&mem_382, file_7802, rt_str(".", 1));
     if ((compileErrors)->length > 0) {
         int32_t ret_9768 = 1;
         rt_mem_free(&mem_382);
@@ -61913,8 +61925,8 @@ Project* project(RtMem* rt_dest, RtString dir, RtAny config) {
         rt_sb_add(&sb_9816, "\" in [library]: the C names start with it, so only letters, digits and '_'", 74);
         List_s_push(problems, rt_sb_finish(&sb_9816));
     }
-    RtString version_7841 = text(rt_dest, p, rt_str("version", 7), rt_str("0.1.0", 5));
-    RtString main__7842 = text(rt_dest, p, rt_str("main", 4), rt_str("src/main.lar", 12));
+    RtString version_7843 = text(rt_dest, p, rt_str("version", 7), rt_str("0.1.0", 5));
+    RtString main__7844 = text(rt_dest, p, rt_str("main", 4), rt_str("src/main.lar", 12));
     RtString buildDir = text(rt_dest, p, rt_str("build_dir", 9), rt_str("build", 5));
     RtString exeSuffix = (project__cc__windows() ? rt_str(".exe", 4) : rt_str("", 0));
     RtString value_9819;
@@ -62077,7 +62089,7 @@ Project* project(RtMem* rt_dest, RtString dir, RtAny config) {
     }
     RtMem* t_9877 = rt_dest;
     Project* obj_9878 = (Project*)rt_mem_alloc(t_9877, sizeof(Project), 620);
-    *obj_9878 = (Project){ ._h = { (const void*)&vtable_Project, t_9877 }, .dir = dir, .name = name, .version = version_7841, .kind = kind, .libraryType = libraryType, .prefix = prefix, .main_ = main__7842, .output = output, .buildDir = buildDir, .compiler = compiler, .flags = flags, .staticLibraries = staticLibraries, .staticLibraryPaths = staticLibraryPaths, .dynamicLibraries = dynamicLibraries, .dynamicLibraryPaths = dynamicLibraryPaths, .includePaths = includePaths, .sources = sources, .larimarLibraries = larimarLibs };
+    *obj_9878 = (Project){ ._h = { (const void*)&vtable_Project, t_9877 }, .dir = dir, .name = name, .version = version_7843, .kind = kind, .libraryType = libraryType, .prefix = prefix, .main_ = main__7844, .output = output, .buildDir = buildDir, .compiler = compiler, .flags = flags, .staticLibraries = staticLibraries, .staticLibraryPaths = staticLibraryPaths, .dynamicLibraries = dynamicLibraries, .dynamicLibraryPaths = dynamicLibraryPaths, .includePaths = includePaths, .sources = sources, .larimarLibraries = larimarLibs };
     Project* ret_9879 = obj_9878;
     rt_mem_free(&mem_383);
     return ret_9879;
@@ -62199,8 +62211,8 @@ List_s* list(RtMem* rt_dest, RtAny section, RtString key, List_s* def) {
                 int32_t i = i_9897;
                 (void)i;
                 RtAny item = table_9895->items[i_9897];
-                Opt_s text_7891 = rt_any_as_s(item);
-                if (!(text_7891).has) {
+                Opt_s text_7893 = rt_any_as_s(item);
+                if (!(text_7893).has) {
                     RtSb sb_9898 = rt_sb_mem((problems)->mem, 675);
                     rt_sb_add(&sb_9898, "'", 1);
                     rt_sb_str(&sb_9898, key);
@@ -62211,7 +62223,7 @@ List_s* list(RtMem* rt_dest, RtAny section, RtString key, List_s* def) {
                     return def;
                 }
                 RtCloneMap clones_9899 = rt_clone_map();
-                RtString copy_9900 = clone_s(text_7891.value, (items)->mem, &clones_9899);
+                RtString copy_9900 = clone_s(text_7893.value, (items)->mem, &clones_9899);
                 rt_clone_done(&clones_9899);
                 List_s_push(items, copy_9900);
             }
@@ -62256,8 +62268,8 @@ RtString build(RtMem* rt_dest, Project* p, bool debug) {
     err.kind = 0;
     RtMem mem_384 = rt_mem_growable();
     RtString dir = (p)->dir;
-    RtString main__7899 = resolve(&mem_384, dir, (p)->main_);
-    if (!(std__io__files__isFile(main__7899))) {
+    RtString main__7901 = resolve(&mem_384, dir, (p)->main_);
+    if (!(std__io__files__isFile(main__7901))) {
         RtSb sb_9906 = rt_sb_mem(&rt_default_mem, 706);
         rt_sb_add(&sb_9906, "the main file ", 14);
         rt_sb_str(&sb_9906, (p)->main_);
@@ -62268,7 +62280,7 @@ RtString build(RtMem* rt_dest, Project* p, bool debug) {
         return ret_9907;
     }
     codegen__gen__debugLines = debug;
-    RtString generated = compileFile(&mem_384, main__7899, dir);
+    RtString generated = compileFile(&mem_384, main__7901, dir);
     if ((compileErrors)->length > 0) {
         RtString ret_9908 = rt_str("", 0);
         rt_mem_free(&mem_384);
@@ -62691,8 +62703,8 @@ bool buildLibrary(Project* p, bool debug) {
     err.kind = 0;
     RtMem mem_386 = rt_mem_growable();
     RtString dir = (p)->dir;
-    RtString main__7943 = resolve(&mem_386, dir, (p)->main_);
-    if (!(std__io__files__isFile(main__7943))) {
+    RtString main__7945 = resolve(&mem_386, dir, (p)->main_);
+    if (!(std__io__files__isFile(main__7945))) {
         RtSb sb_10018 = rt_sb_mem(&rt_default_mem, 833);
         rt_sb_add(&sb_10018, "the main file ", 14);
         rt_sb_str(&sb_10018, (p)->main_);
@@ -62704,16 +62716,16 @@ bool buildLibrary(Project* p, bool debug) {
     }
     codegen__gen__debugLines = debug;
     semantics__types__buildingLibrary = true;
-    RtString generated = compileFile(&mem_386, main__7943, dir);
+    RtString generated = compileFile(&mem_386, main__7945, dir);
     if ((compileErrors)->length > 0) {
         bool ret_10020 = false;
         rt_mem_free(&mem_386);
         return ret_10020;
     }
-    List_s* problems_7945 = codegen__gen__library__libraryProblems(NULL);
-    if ((problems_7945)->length > 0) {
+    List_s* problems_7947 = codegen__gen__library__libraryProblems(NULL);
+    if ((problems_7947)->length > 0) {
         {
-            List_s* list_10022 = problems_7945;
+            List_s* list_10022 = problems_7947;
             for (int32_t i_10021 = 0; i_10021 < list_10022->length; i_10021++) {
                 RtString m = list_10022->items[i_10021];
                 RtSb sb_10023 = rt_sb_mem((compileErrors)->mem, 842);
@@ -63859,11 +63871,11 @@ bool runC(List_s* cmd, RtString program, RtString dir, RtString cFile) {
     return true;
 }
 
-int32_t runScript(RtString file_8063, List_s* args) {
+int32_t runScript(RtString file_8065, List_s* args) {
     RtError err;
     err.kind = 0;
     RtMem mem_400 = rt_mem_growable();
-    RtString generated = compileFile(&mem_400, file_8063, rt_str(".", 1));
+    RtString generated = compileFile(&mem_400, file_8065, rt_str(".", 1));
     if ((compileErrors)->length > 0) {
         int32_t ret_10285 = 1;
         rt_mem_free(&mem_400);
@@ -63906,7 +63918,7 @@ int32_t runScript(RtString file_8063, List_s* args) {
         temp = (project__cc__windows() ? rt_str(".", 1) : rt_str("/tmp", 4));
     }
     RtString dir = std__io__path__join(&mem_400, temp, rt_str("larimar", 7));
-    RtString name = std__io__path__fileName(NULL, file_8063);
+    RtString name = std__io__path__fileName(NULL, file_8065);
     RtSb sb_10296 = rt_sb_mem(&mem_400, 1132);
     RtString t_10297 = name;
     rt_sb_str(&sb_10296, rt_str_sub(t_10297, (int64_t)(0), (int64_t)(((int32_t)((uint32_t)((name).len) - (uint32_t)(4)))), 1132));
@@ -64346,19 +64358,19 @@ RtString std__os__Platform_name(RtMem* rt_dest) {
 
 
 /* ---- Methods --------------------------------------------------------------- */
-static void StringBuilder_add(StringBuilder* self_, RtString text_8102) {
+static void StringBuilder_add(StringBuilder* self_, RtString text_8104) {
     StringBuilder* self = (StringBuilder*)self_;
     (void)self;
     RtMem tmp_10376 = rt_mem_growable();
-    lm_text_buf_add_73000355((self)->buf, rt_str_cz(text_8102, &tmp_10376, 73000381));
+    lm_text_buf_add_73000355((self)->buf, rt_str_cz(text_8104, &tmp_10376, 73000381));
     rt_mem_free(&tmp_10376);
 }
 
-static void StringBuilder_addLine(StringBuilder* self_, RtString text_8104) {
+static void StringBuilder_addLine(StringBuilder* self_, RtString text_8106) {
     StringBuilder* self = (StringBuilder*)self_;
     (void)self;
     RtMem tmp_10377 = rt_mem_growable();
-    lm_text_buf_add_73000355((self)->buf, rt_str_cz(text_8104, &tmp_10377, 73000383));
+    lm_text_buf_add_73000355((self)->buf, rt_str_cz(text_8106, &tmp_10377, 73000383));
     rt_mem_free(&tmp_10377);
     RtMem tmp_10378 = rt_mem_growable();
     lm_text_buf_add_73000355((self)->buf, rt_str_cz(rt_str("\n", 1), &tmp_10378, 73000384));
@@ -64418,12 +64430,12 @@ static void std__os__posix__PosixSystem_programPath(std__os__posix__PosixSystem*
     #endif
 }
 
-static int32_t std__os__posix__PosixSystem_shell(std__os__posix__PosixSystem* self_, RtString command_8114) {
+static int32_t std__os__posix__PosixSystem_shell(std__os__posix__PosixSystem* self_, RtString command_8116) {
     std__os__posix__PosixSystem* self = (std__os__posix__PosixSystem*)self_;
     (void)self;
     #if !defined(_WIN32)
     RtMem tmp_10381 = rt_mem_growable();
-    int32_t ret_10382 = lm_PosixSystem_shell_2000021(rt_str_cz(command_8114, &tmp_10381, 2000021));
+    int32_t ret_10382 = lm_PosixSystem_shell_2000021(rt_str_cz(command_8116, &tmp_10381, 2000021));
     rt_mem_free(&tmp_10381);
     return ret_10382;
     #else
@@ -64487,12 +64499,12 @@ static void std__os__windows__WindowsSystem_programPath(std__os__windows__Window
     #endif
 }
 
-static int32_t std__os__windows__WindowsSystem_shell(std__os__windows__WindowsSystem* self_, RtString command_8125) {
+static int32_t std__os__windows__WindowsSystem_shell(std__os__windows__WindowsSystem* self_, RtString command_8127) {
     std__os__windows__WindowsSystem* self = (std__os__windows__WindowsSystem*)self_;
     (void)self;
     #if defined(_WIN32)
     RtMem tmp_10385 = rt_mem_growable();
-    int32_t ret_10386 = lm_WindowsSystem_shell_4000029(rt_str_cz(command_8125, &tmp_10385, 4000029));
+    int32_t ret_10386 = lm_WindowsSystem_shell_4000029(rt_str_cz(command_8127, &tmp_10385, 4000029));
     rt_mem_free(&tmp_10385);
     return ret_10386;
     #else
@@ -64588,23 +64600,23 @@ static int64_t std__io__files__posix__PosixFolders_listOpen(std__io__files__posi
     return (int64_t)0;
 }
 
-static bool std__io__files__posix__PosixFolders_listNext(std__io__files__posix__PosixFolders* self_, int64_t list_8166, Slice_u8 into) {
+static bool std__io__files__posix__PosixFolders_listNext(std__io__files__posix__PosixFolders* self_, int64_t list_8168, Slice_u8 into) {
     std__io__files__posix__PosixFolders* self = (std__io__files__posix__PosixFolders*)self_;
     (void)self;
     #if !defined(_WIN32)
     Slice_u8 t_10415 = into;
-    return lm_PosixFolders_listNext_9000023(list_8166, (void*)t_10415.items, t_10415.length);
+    return lm_PosixFolders_listNext_9000023(list_8168, (void*)t_10415.items, t_10415.length);
     #else
     rt_panic_str(rt_str("'std.io.files.posix.PosixFolders.listNext' is for unix, not for this system", 75), 9000023);
     #endif
     return (bool)0;
 }
 
-static void std__io__files__posix__PosixFolders_listClose(std__io__files__posix__PosixFolders* self_, int64_t list_8169) {
+static void std__io__files__posix__PosixFolders_listClose(std__io__files__posix__PosixFolders* self_, int64_t list_8171) {
     std__io__files__posix__PosixFolders* self = (std__io__files__posix__PosixFolders*)self_;
     (void)self;
     #if !defined(_WIN32)
-    lm_PosixFolders_listClose_9000030(list_8169);
+    lm_PosixFolders_listClose_9000030(list_8171);
     #else
     rt_panic_str(rt_str("'std.io.files.posix.PosixFolders.listClose' is for unix, not for this system", 76), 9000030);
     #endif
@@ -64676,23 +64688,23 @@ static int64_t std__io__files__windows__WindowsFolders_listOpen(std__io__files__
     return (int64_t)0;
 }
 
-static bool std__io__files__windows__WindowsFolders_listNext(std__io__files__windows__WindowsFolders* self_, int64_t list_8182, Slice_u8 into) {
+static bool std__io__files__windows__WindowsFolders_listNext(std__io__files__windows__WindowsFolders* self_, int64_t list_8184, Slice_u8 into) {
     std__io__files__windows__WindowsFolders* self = (std__io__files__windows__WindowsFolders*)self_;
     (void)self;
     #if defined(_WIN32)
     Slice_u8 t_10424 = into;
-    return lm_WindowsFolders_listNext_10000038(list_8182, (void*)t_10424.items, t_10424.length);
+    return lm_WindowsFolders_listNext_10000038(list_8184, (void*)t_10424.items, t_10424.length);
     #else
     rt_panic_str(rt_str("'std.io.files.windows.WindowsFolders.listNext' is for windows, not for this system", 82), 10000038);
     #endif
     return (bool)0;
 }
 
-static void std__io__files__windows__WindowsFolders_listClose(std__io__files__windows__WindowsFolders* self_, int64_t list_8185) {
+static void std__io__files__windows__WindowsFolders_listClose(std__io__files__windows__WindowsFolders* self_, int64_t list_8187) {
     std__io__files__windows__WindowsFolders* self = (std__io__files__windows__WindowsFolders*)self_;
     (void)self;
     #if defined(_WIN32)
-    lm_WindowsFolders_listClose_10000046(list_8185);
+    lm_WindowsFolders_listClose_10000046(list_8187);
     #else
     rt_panic_str(rt_str("'std.io.files.windows.WindowsFolders.listClose' is for windows, not for this system", 83), 10000046);
     #endif
@@ -64900,12 +64912,12 @@ static void std__io__files__File_write(std__io__files__File* self_, Slice_u8 byt
     }
 }
 
-static void std__io__files__File_writeText(std__io__files__File* self_, RtString text_8212, RtError* err_out) {
+static void std__io__files__File_writeText(std__io__files__File* self_, RtString text_8214, RtError* err_out) {
     std__io__files__File* self = (std__io__files__File*)self_;
     (void)self;
     RtError err;
     err.kind = 0;
-    RtString t_10451 = text_8212;
+    RtString t_10451 = text_8214;
     std__io__files__File_write__dispatch((std__io__files__File*)self, ((Slice_u8){ (uint8_t*)t_10451.ptr, t_10451.len }), &err);
     if (err.kind != 0) {
         *err_out = err;
@@ -65247,12 +65259,12 @@ static uint8_t syntax__lexer__Lexer_peek(syntax__lexer__Lexer* self_, int32_t k)
     return ((((int32_t)((uint32_t)((self)->pos) + (uint32_t)(k))) < ((self)->src).len) ? rt_str_byte((self)->src, (int64_t)(((int32_t)((uint32_t)((self)->pos) + (uint32_t)(k)))), 17000099) : (uint8_t)0);
 }
 
-static void syntax__lexer__Lexer_add(syntax__lexer__Lexer* self_, syntax__lexer__TT kind, RtString text_8243, int32_t length) {
+static void syntax__lexer__Lexer_add(syntax__lexer__Lexer* self_, syntax__lexer__TT kind, RtString text_8245, int32_t length) {
     syntax__lexer__Lexer* self = (syntax__lexer__Lexer*)self_;
     (void)self;
     RtMem* t_10461 = ((self)->toks)->mem;
     syntax__lexer__Token* obj_10462 = (syntax__lexer__Token*)rt_mem_alloc(t_10461, sizeof(syntax__lexer__Token), 17000103);
-    *obj_10462 = (syntax__lexer__Token){ ._h = { (const void*)&vtable_syntax__lexer__Token, t_10461 }, .kind = kind, .text = text_8243, .line = (self)->line, .num = 0LL, .big = false, .huge = false };
+    *obj_10462 = (syntax__lexer__Token){ ._h = { (const void*)&vtable_syntax__lexer__Token, t_10461 }, .kind = kind, .text = text_8245, .line = (self)->line, .num = 0LL, .big = false, .huge = false };
     List_syntax__lexer__Token_push((self)->toks, obj_10462);
     (self)->pos = ((int32_t)((uint32_t)((self)->pos) + (uint32_t)(length)));
 }
@@ -65437,19 +65449,19 @@ static void syntax__lexer__Lexer_intToken(syntax__lexer__Lexer* self_, RtString 
     }
     RtSb sb_10480 = rt_sb_mem(&mem_408, 17000225);
     rt_sb_u64(&sb_10480, (uint64_t)(v));
-    RtString text_8269 = rt_sb_finish(&sb_10480);
+    RtString text_8271 = rt_sb_finish(&sb_10480);
     if (huge) {
         RtString t = digits;
         while (((t).len > 1) && String_startsWith(t, rt_str("0", 1))) {
             t = String_substring(t, NULL, 1);
         }
-        text_8269 = t;
+        text_8271 = t;
     }
     RtMem* t_10481 = ((self)->toks)->mem;
     syntax__lexer__Token* obj_10482 = (syntax__lexer__Token*)rt_mem_alloc(t_10481, sizeof(syntax__lexer__Token), 17000231);
     syntax__lexer__TT t_10483 = ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Int });
     RtCloneMap clones_10484 = rt_clone_map();
-    RtString copy_10485 = clone_s(text_8269, ((self)->toks)->mem, &clones_10484);
+    RtString copy_10485 = clone_s(text_8271, ((self)->toks)->mem, &clones_10484);
     rt_clone_done(&clones_10484);
     *obj_10482 = (syntax__lexer__Token){ ._h = { (const void*)&vtable_syntax__lexer__Token, t_10481 }, .kind = t_10483, .text = copy_10485, .line = (self)->line, .num = ((int64_t)(v)), .big = (v > 9223372036854775807ULL), .huge = huge };
     List_syntax__lexer__Token_push((self)->toks, obj_10482);
@@ -65531,8 +65543,8 @@ static void syntax__lexer__Lexer_number(syntax__lexer__Lexer* self_) {
         return;
     }
     RtString t_10494 = (self)->src;
-    RtString text_8281 = rt_str_sub(t_10494, (int64_t)(start), (int64_t)((self)->pos), 17000273);
-    RtString clean = syntax__lexer__Lexer_cleanDigits__dispatch((syntax__lexer__Lexer*)self, &mem_410, text_8281, text_8281);
+    RtString text_8283 = rt_str_sub(t_10494, (int64_t)(start), (int64_t)((self)->pos), 17000273);
+    RtString clean = syntax__lexer__Lexer_cleanDigits__dispatch((syntax__lexer__Lexer*)self, &mem_410, text_8283, text_8283);
     if (!rt_str_eq((self)->error, rt_str("", 0))) {
         rt_mem_free(&mem_410);
         return;
@@ -65547,7 +65559,7 @@ static void syntax__lexer__Lexer_number(syntax__lexer__Lexer* self_) {
         *obj_10496 = (syntax__lexer__Token){ ._h = { (const void*)&vtable_syntax__lexer__Token, t_10495 }, .kind = t_10497, .text = copy_10499, .line = (self)->line, .num = 0LL, .big = false, .huge = false };
         List_syntax__lexer__Token_push((self)->toks, obj_10496);
     } else {
-        syntax__lexer__Lexer_intToken__dispatch((syntax__lexer__Lexer*)self, clean, 10, text_8281);
+        syntax__lexer__Lexer_intToken__dispatch((syntax__lexer__Lexer*)self, clean, 10, text_8283);
     }
     rt_mem_free(&mem_410);
 }
@@ -65673,14 +65685,14 @@ static void syntax__lexer__Lexer_textBlock(syntax__lexer__Lexer* self_) {
         }
     }
     RtString t_10504 = (self)->src;
-    RtString text_8295 = String_replace(rt_str_sub(t_10504, (int64_t)(begin), (int64_t)((self)->pos), 17000361), &mem_411, rt_str("\015", 1), rt_str("", 0));
+    RtString text_8297 = String_replace(rt_str_sub(t_10504, (int64_t)(begin), (int64_t)((self)->pos), 17000361), &mem_411, rt_str("\015", 1), rt_str("", 0));
     (self)->pos = ((int32_t)((uint32_t)((self)->pos) + (uint32_t)(3)));
     RtMem tmp_10508 = rt_mem_growable();
     RtMem* t_10505 = ((self)->toks)->mem;
     syntax__lexer__Token* obj_10506 = (syntax__lexer__Token*)rt_mem_alloc(t_10505, sizeof(syntax__lexer__Token), 17000363);
     syntax__lexer__TT t_10507 = ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Str });
     RtCloneMap clones_10509 = rt_clone_map();
-    RtString copy_10510 = clone_s(syntax__lexer__stripIndent(&tmp_10508, text_8295), ((self)->toks)->mem, &clones_10509);
+    RtString copy_10510 = clone_s(syntax__lexer__stripIndent(&tmp_10508, text_8297), ((self)->toks)->mem, &clones_10509);
     rt_clone_done(&clones_10509);
     *obj_10506 = (syntax__lexer__Token){ ._h = { (const void*)&vtable_syntax__lexer__Token, t_10505 }, .kind = t_10507, .text = copy_10510, .line = start, .num = 0LL, .big = false, .huge = false };
     List_syntax__lexer__Token_push((self)->toks, obj_10506);
@@ -65725,10 +65737,10 @@ static void syntax__lexer__Lexer_rawTextBlock(syntax__lexer__Lexer* self_) {
         (self)->pos = ((int32_t)((uint32_t)((self)->pos) + (uint32_t)(1)));
     }
     RtString t_10511 = (self)->src;
-    RtString text_8300 = syntax__lexer__stripIndent(&mem_412, String_replace(rt_str_sub(t_10511, (int64_t)(begin), (int64_t)((self)->pos), 17000396), &mem_412, rt_str("\015", 1), rt_str("", 0)));
+    RtString text_8302 = syntax__lexer__stripIndent(&mem_412, String_replace(rt_str_sub(t_10511, (int64_t)(begin), (int64_t)((self)->pos), 17000396), &mem_412, rt_str("\015", 1), rt_str("", 0)));
     (self)->pos = ((int32_t)((uint32_t)((self)->pos) + (uint32_t)(quotes)));
     RtMem tmp_10512 = rt_mem_growable();
-    RtString escaped = String_replace(String_replace(text_8300, &tmp_10512, rt_str("\\", 1), rt_str("\\\\", 2)), &mem_412, rt_str("$", 1), rt_str("\\$", 2));
+    RtString escaped = String_replace(String_replace(text_8302, &tmp_10512, rt_str("\\", 1), rt_str("\\\\", 2)), &mem_412, rt_str("$", 1), rt_str("\\$", 2));
     rt_mem_free(&tmp_10512);
     RtMem* t_10513 = ((self)->toks)->mem;
     syntax__lexer__Token* obj_10514 = (syntax__lexer__Token*)rt_mem_alloc(t_10513, sizeof(syntax__lexer__Token), 17000400);
@@ -67009,7 +67021,7 @@ static void std__os__process__Process_start(std__os__process__Process* self_, Rt
     }
 }
 
-static void std__os__process__Process_write(std__os__process__Process* self_, RtString text_8419, RtError* err_out) {
+static void std__os__process__Process_write(std__os__process__Process* self_, RtString text_8421, RtError* err_out) {
     std__os__process__Process* self = (std__os__process__Process*)self_;
     (void)self;
     RtError err;
@@ -67025,7 +67037,7 @@ static void std__os__process__Process_write(std__os__process__Process* self_, Rt
     List_u8* list_10647 = List_u8_new(&mem_414, 69000094);
     List_u8* bytes = list_10647;
     {
-        RtString text_10648 = text_8419;
+        RtString text_10648 = text_8421;
         for (int32_t i_10649 = 0; i_10649 < text_10648.len; i_10649++) {
             uint8_t b = (uint8_t)text_10648.ptr[i_10649];
             List_u8_push(bytes, b);
@@ -67102,10 +67114,10 @@ static Opt_s std__os__process__Process_read(std__os__process__Process* self_, Rt
     RtCloneMap clones_10657 = rt_clone_map();
     RtString copy_10658 = clone_s(stringOfRange(&tmp_10656, ((Slice_u8){ ((self)->pending)->items, ((self)->pending)->length }), (self)->taken, ((int32_t)((uint32_t)((self)->taken) + (uint32_t)(count)))), rt_dest, &clones_10657);
     rt_clone_done(&clones_10657);
-    RtString text_8434 = copy_10658;
+    RtString text_8436 = copy_10658;
     rt_mem_free(&tmp_10656);
     (self)->taken = ((int32_t)((uint32_t)((self)->taken) + (uint32_t)(count)));
-    return ((Opt_s){ .has = true, .value = text_8434 });
+    return ((Opt_s){ .has = true, .value = text_8436 });
 }
 
 static RtString std__os__process__Process_readAll(std__os__process__Process* self_, RtMem* rt_dest, int32_t ms) {
@@ -67118,10 +67130,10 @@ static RtString std__os__process__Process_readAll(std__os__process__Process* sel
     RtCloneMap clones_10660 = rt_clone_map();
     RtString copy_10661 = clone_s(stringOfRange(&tmp_10659, ((Slice_u8){ ((self)->pending)->items, ((self)->pending)->length }), (self)->taken, ((self)->pending)->length), rt_dest, &clones_10660);
     rt_clone_done(&clones_10660);
-    RtString text_8438 = copy_10661;
+    RtString text_8440 = copy_10661;
     rt_mem_free(&tmp_10659);
     (self)->taken = ((self)->pending)->length;
-    return text_8438;
+    return text_8440;
 }
 
 static bool std__os__process__Process_fill(std__os__process__Process* self_, int64_t until) {
@@ -67537,30 +67549,30 @@ List_i32* String_codePoints(RtString self, RtMem* rt_dest) {
 /* ---- Lambdas --------------------------------------------------------------- */
 static void lambda_0(void* env_) {
     Env_0* env = (Env_0*)env_;
-    List_syntax__ast__TypeRef_push(env->parameterTypes_2023, syntax__parser__types__type(NULL, env->p_2020));
+    List_syntax__ast__TypeRef_push(env->parameterTypes_2024, syntax__parser__types__type(NULL, env->p_2021));
 }
 
 static void lambda_1(void* env_) {
     Env_1* env = (Env_1*)env_;
-    List_syntax__ast__Expr_push((env->call_2096)->args, syntax__parser__expressions__expression(NULL, env->p_2094));
+    List_syntax__ast__Expr_push((env->call_2097)->args, syntax__parser__expressions__expression(NULL, env->p_2095));
 }
 
 static void lambda_2(void* env_) {
     Env_2* env = (Env_2*)env_;
-    syntax__lexer__Token* start = syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)env->p_2113, NULL);
-    if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->p_2113, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident })) && (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->p_2113, NULL))->kind).tag == (((syntax__lexer__TT){ .tag = syntax__lexer__TT_Colon })).tag)) {
-        syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->p_2113, NULL);
-        syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->p_2113, NULL);
+    syntax__lexer__Token* start = syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)env->p_2114, NULL);
+    if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->p_2114, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident })) && (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->p_2114, NULL))->kind).tag == (((syntax__lexer__TT){ .tag = syntax__lexer__TT_Colon })).tag)) {
+        syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->p_2114, NULL);
+        syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->p_2114, NULL);
         RtMem* t_606 = &rt_default_mem;
         syntax__ast__FieldInit* obj_607 = (syntax__ast__FieldInit*)rt_mem_alloc(t_606, sizeof(syntax__ast__FieldInit), 19000218);
         int32_t t_608 = (start)->line;
         RtString t_609 = (start)->text;
         List_semantics__types__PatternInfo* list_610 = List_semantics__types__PatternInfo_new(t_606, 13000047);
-        *obj_607 = (syntax__ast__FieldInit){ ._super = { ._h = { (const void*)&vtable_syntax__ast__FieldInit, t_606 }, .line = t_608, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_610, .computed = rt_str("", 0) }, .name = t_609, .value = syntax__parser__expressions__expression(NULL, env->p_2113), .shorthand = false };
-        List_syntax__ast__FieldInit_push((env->literal_2116)->fields, obj_607);
+        *obj_607 = (syntax__ast__FieldInit){ ._super = { ._h = { (const void*)&vtable_syntax__ast__FieldInit, t_606 }, .line = t_608, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_610, .computed = rt_str("", 0) }, .name = t_609, .value = syntax__parser__expressions__expression(NULL, env->p_2114), .shorthand = false };
+        List_syntax__ast__FieldInit_push((env->literal_2117)->fields, obj_607);
     } else {
-        if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->p_2113, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident })) && ((((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->p_2113, NULL))->kind).tag == (((syntax__lexer__TT){ .tag = syntax__lexer__TT_Comma })).tag) || (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->p_2113, NULL))->kind).tag == (((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace })).tag))) {
-            syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->p_2113, NULL);
+        if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->p_2114, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident })) && ((((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->p_2114, NULL))->kind).tag == (((syntax__lexer__TT){ .tag = syntax__lexer__TT_Comma })).tag) || (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->p_2114, NULL))->kind).tag == (((syntax__lexer__TT){ .tag = syntax__lexer__TT_RBrace })).tag))) {
+            syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->p_2114, NULL);
             RtMem* t_611 = &rt_default_mem;
             syntax__ast__FieldInit* obj_612 = (syntax__ast__FieldInit*)rt_mem_alloc(t_611, sizeof(syntax__ast__FieldInit), 19000221);
             int32_t t_613 = (start)->line;
@@ -67571,54 +67583,54 @@ static void lambda_2(void* env_) {
             List_semantics__types__PatternInfo* list_618 = List_semantics__types__PatternInfo_new(t_616, 13000047);
             *obj_617 = (syntax__ast__Ident){ ._super = { ._super = { ._h = { (const void*)&vtable_syntax__ast__Ident, t_616 }, .line = (start)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_618, .computed = rt_str("", 0) } }, .name = (start)->text };
             *obj_612 = (syntax__ast__FieldInit){ ._super = { ._h = { (const void*)&vtable_syntax__ast__FieldInit, t_611 }, .line = t_613, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_615, .computed = rt_str("", 0) }, .name = t_614, .value = ((syntax__ast__Expr*)(obj_617)), .shorthand = true };
-            List_syntax__ast__FieldInit_push((env->literal_2116)->fields, obj_612);
+            List_syntax__ast__FieldInit_push((env->literal_2117)->fields, obj_612);
         } else {
             RtMem* t_619 = &rt_default_mem;
             syntax__ast__FieldInit* obj_620 = (syntax__ast__FieldInit*)rt_mem_alloc(t_619, sizeof(syntax__ast__FieldInit), 19000223);
             int32_t t_621 = (start)->line;
             List_semantics__types__PatternInfo* list_622 = List_semantics__types__PatternInfo_new(t_619, 13000047);
-            *obj_620 = (syntax__ast__FieldInit){ ._super = { ._h = { (const void*)&vtable_syntax__ast__FieldInit, t_619 }, .line = t_621, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_622, .computed = rt_str("", 0) }, .name = rt_str("", 0), .value = syntax__parser__expressions__expression(NULL, env->p_2113), .shorthand = false };
-            List_syntax__ast__FieldInit_push((env->literal_2116)->fields, obj_620);
+            *obj_620 = (syntax__ast__FieldInit){ ._super = { ._h = { (const void*)&vtable_syntax__ast__FieldInit, t_619 }, .line = t_621, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_622, .computed = rt_str("", 0) }, .name = rt_str("", 0), .value = syntax__parser__expressions__expression(NULL, env->p_2114), .shorthand = false };
+            List_syntax__ast__FieldInit_push((env->literal_2117)->fields, obj_620);
         }
     }
 }
 
 static void lambda_3(void* env_) {
     Env_3* env = (Env_3*)env_;
-    List_syntax__ast__Param_push((env->lambda_2123)->params, syntax__parser__declarations__parameter(NULL, env->p_2122, false));
+    List_syntax__ast__Param_push((env->lambda_2124)->params, syntax__parser__declarations__parameter(NULL, env->p_2123, false));
 }
 
 static void lambda_4(void* env_) {
     Env_4* env = (Env_4*)env_;
-    RtString fieldName = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->p_2130, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident }), rt_str("Expected a field name", 21)))->text;
-    List_s_push((env->pattern_2132)->fields, fieldName);
-    List_s_push((env->pattern_2132)->bindings, (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)env->p_2130, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Colon })) ? (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->p_2130, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident }), rt_str("Expected a name after ':'", 25)))->text : fieldName));
+    RtString fieldName = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->p_2131, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident }), rt_str("Expected a field name", 21)))->text;
+    List_s_push((env->pattern_2133)->fields, fieldName);
+    List_s_push((env->pattern_2133)->bindings, (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)env->p_2131, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Colon })) ? (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->p_2131, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident }), rt_str("Expected a name after ':'", 25)))->text : fieldName));
 }
 
 static void lambda_5(void* env_) {
     Env_5* env = (Env_5*)env_;
-    List_syntax__ast__Param_push(env->list_2262, syntax__parser__declarations__parameter(NULL, env->p_2261, true));
+    List_syntax__ast__Param_push(env->list_2263, syntax__parser__declarations__parameter(NULL, env->p_2262, true));
 }
 
 static void lambda_6(void* env_) {
     Env_6* env = (Env_6*)env_;
-    syntax__lexer__Token* variantName = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->p_2308, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident }), rt_str("Expected variant name", 21));
+    syntax__lexer__Token* variantName = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->p_2309, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident }), rt_str("Expected variant name", 21));
     RtMem* t_1049 = &rt_default_mem;
     syntax__ast__EnumVariant* obj_1050 = (syntax__ast__EnumVariant*)rt_mem_alloc(t_1049, sizeof(syntax__ast__EnumVariant), 18000345);
     List_semantics__types__PatternInfo* list_1051 = List_semantics__types__PatternInfo_new(t_1049, 13000047);
     List_syntax__ast__Param* list_1052 = List_syntax__ast__Param_new(t_1049, 13000211);
     *obj_1050 = (syntax__ast__EnumVariant){ ._super = { ._h = { (const void*)&vtable_syntax__ast__EnumVariant, t_1049 }, .line = (variantName)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conv = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_1051, .computed = rt_str("", 0) }, .name = (variantName)->text, .fields = list_1052, .hasPayload = false };
     syntax__ast__EnumVariant* variant = obj_1050;
-    if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->p_2308, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_LParen }))) {
+    if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->p_2309, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_LParen }))) {
         (variant)->hasPayload = true;
-        (variant)->fields = syntax__parser__declarations__parameters(NULL, env->p_2308);
+        (variant)->fields = syntax__parser__declarations__parameters(NULL, env->p_2309);
     }
-    List_syntax__ast__EnumVariant_push((env->declaration_2310)->variants, variant);
+    List_syntax__ast__EnumVariant_push((env->declaration_2311)->variants, variant);
 }
 
 static void lambda_7(void* env_) {
     Env_7* env = (Env_7*)env_;
-    List_s_push((env->declaration_2349)->names, (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->p_2345, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident }), rt_str("Expected a name to import", 25)))->text);
+    List_s_push((env->declaration_2350)->names, (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->p_2346, NULL, ((syntax__lexer__TT){ .tag = syntax__lexer__TT_Ident }), rt_str("Expected a name to import", 25)))->text);
 }
 
 
