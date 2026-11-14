@@ -31,14 +31,7 @@ public class Type {
 
 let typeIndex: Any = {} in default;
 
-/**
- * The code of a library ([project] kind = "library", also its tests and the editor): an export function is
- * called <prefix>_<name> in C (unless it says = c_name), and it may take and return the library's classes.
- */
-public let libraryRules: bool = false;
-public let libraryPrefix: String = "";
-
-/** larimar build of a library: no main, and only the export functions are seen from outside its C. */
+/** larimar build of a library ([project] kind = "library"): it has no main (the programs that use it do). */
 public let buildingLibrary: bool = false;
 public let allTypes: Type[*] = [] in default;
 
@@ -516,17 +509,10 @@ public class FunctionInfo {
     let flows: bool[*] = [];
     /** Its result may be new data, created in the memory the caller gives. */
     let creates: bool = false;
-    /** export function: the name C calls it by ("" when not exported). */
-    let exportName: String = "";
     /** The resource type it releases (`released by` it): only release() may call it. "String": the texts of C. */
     let releases: String = "";
     /** native function f(): String = c_f released by r: the function that releases the text C gives. */
     let textReleaser: FunctionInfo? = null;
-    /** A C function that takes a callback and its Context: their parameters (declared order), and whether C keeps them. */
-    let ctxParam: int32 = -1;
-    let ctxCallback: int32 = -1;
-    let ctxKeep: bool = false;
-    let ctxSelf: bool = false;          // a method of a native type keeps the callback in its object ('in self')
 }
 
 /**
@@ -536,11 +522,7 @@ public class FunctionInfo {
 public class ExternTypeInfo {
     let name: String;
     let decl: ExternTypeDecl;
-    let sig: Type? = null;
     let releaser: FunctionInfo? = null;      // released by f: f
-    /** A pointer to a C function that gets a Context: the Larimar function it stands for (without the Context). */
-    let view: Type? = null;
-    let ctxIndex: int32 = -1;
 }
 
 public class MethodInfo {
@@ -675,7 +657,7 @@ public class Conversion {
     let iface: InterfaceInfo? = null;
 }
 
-public enum CallK { Direct, Closure, Method, InterfaceMethod, Super, EnumCtor, NativeMethod, Builtin, StaticMethod, CPointer }
+public enum CallK { Direct, Closure, Method, InterfaceMethod, Super, EnumCtor, NativeMethod, Builtin, StaticMethod }
 public enum BK { None, Print, Println, Panic, Release, Push, Pop, Clear, Map, Filter, Clone, AnyLength, AnyPush, AnyRemove, AnyRemoveAt, AnyClear, AnyRemoveIf, AnyContains, AnyContainsKey, Wait, StringMethod, Join, Contains, Sort, MemLimit, MemCompact }
 
 public class CallInfo {
@@ -693,10 +675,6 @@ public class CallInfo {
     /** Memory.limit and Memory.compact: the memory, and (compact) the variables moved with it. */
     let memory: Symbol? = null;
     let roots: Symbol[*] = [];
-    /** A Larimar function given to C with its Context: which argument, the C type it goes as, and its Larimar type. */
-    let ctxArg: int32 = -1;
-    let ctxExtern: Type? = null;
-    let ctxView: Type? = null;
 }
 
 public enum MbK { Field, EnumConst, Length, MemoryStat, AnyKey, StaticMethod, Property }
@@ -842,23 +820,6 @@ public function nativeOwner(owner: String): Type {
 public function externInfoOf(name: String): ExternTypeInfo? {
     let i: int32 = (externTypeIndex[name] as int32 ?? -1);
     return i < 0 ? null : externInfos[i];
-}
-
-/** The signature of a pointer to a C function (extern type X = (A) -> R), or null. */
-/** Context: the void* of C that a callback gets back (std.lang declares it). */
-public function isContextT(t: Type): bool { return isExternT(t) && t.name == "Context"; }
-
-/** The Larimar function a pointer to a C function with a Context stands for, or null. */
-public function contextView(t: Type): Type? {
-    if (!isExternT(t)) { return null; }
-    let e: ExternTypeInfo? = externInfoOf(t.name);
-    return e != null ? e.view : null;
-}
-
-public function externSig(t: Type): Type? {
-    if (!isExternT(t)) { return null; }
-    let e: ExternTypeInfo? = externInfoOf(t.name);
-    return e != null ? e.sig : null;
 }
 
 /** The C struct a `native struct X { ... }` describes ("" for other types). */

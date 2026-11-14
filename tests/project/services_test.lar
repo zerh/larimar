@@ -1,0 +1,169 @@
+// Services: a project whose public functions another program calls, each in its own process. A program
+// names it in [packages] and imports a module written for it: a class whose calls go to its executable.
+// Each test writes its projects in build/test/ and builds them with the compiler under test.
+import std.test { check, checkInt, skip };
+import std.os.process { Process, ProcessError };
+import std.io.files as Files;
+import std.io { IoError };
+import std.io.path as Paths;
+import std.os;
+import std.os { Platform };
+import tests.support.compiler { compiler };
+
+/** The service of the tests: what crosses (numbers, String, lists, optionals, Any) and what it prints. */
+const SERVICE: String = raw"""
+    import std.os;
+
+    /** The sum of two numbers. */
+    public function add(a: int64, b: int64): int64 { return a + b; }
+
+    public function upper(words: String[*]): String[*] {
+        let out: String[*] = [];
+        for (w in words) { out.push(w.toUpperCase()); }
+        return out;
+    }
+
+    public function find(name: String?): String? { return name == null ? null : "found ${name!}"; }
+
+    public function info(): Any { return { pid: os.processId(), name: "calc" }; }
+
+    public function half(x: float64): float64 { return x / 2.0; }
+
+    public function log(text: String): void { println("calc: ${text}"); }
+
+    public function crash(): int32 {
+        let none: int32[*] = [];
+        return none[1];
+    }
+
+    function hidden(): int32 { return 1; }
+    """;
+
+const PROGRAM: String = raw"""
+    import calc { Calc };
+    import std.os.rpc { RpcError };
+    import std.os.rpc as Calls;
+    import std.os;
+
+    function main(): int32 {
+        try {
+            let c: Calc = Calc.start();
+            println("${c.add(2, 40)} ${c.upper(["casa", "playa"]).join(",")} ${c.find("x") ?? "-"} ${c.find(null) ?? "-"} ${c.half(5.0)}");
+            let i: Any = c.info();
+            println("${i.name} ${(i.pid as int64 ?? 0) != os.processId()}");
+            c.log("hola");
+            try {
+                c.crash();
+            } catch (RpcError e) {
+                println(Calls.message(e));
+            }
+            c.close();
+        } catch (RpcError e) {
+            println("cannot reach calc: ${Calls.message(e)}");
+        }
+        return 0;
+    }
+    """;
+
+/** Runs a program: its exit code, and what it printed (errors too) into `output`. */
+function execute(program: String, args: String[*], output: String[*]): int32 {
+    let p: Process = { program, args, mergeErrors: true };
+    try {
+        p.start();
+        output.push(p.readAll(120000));
+        return p.wait(30000) ?? -1;
+    } catch (ProcessError e) {
+        output.push("cannot run ${program}");
+        return -1;
+    }
+}
+
+function larimarc(args: String[*], output: String[*]): int32 { return execute(compiler(), args, output); }
+
+function clean(dir: String): void throws IoError {
+    if (!Files.isDirectory(dir)) { return; }
+    for (f in Files.list(dir)) {
+        let path: String = Paths.join(dir, f);
+        if (Files.isDirectory(path)) { clean(path); } else { Files.delete(path); }
+    }
+    Files.delete(dir);
+}
+
+/** Writes a project in build/test/<folder>: its larimar.toml and its main file. */
+function write(folder: String, toml: String, file: String, source: String): String throws IoError {
+    let dir: String = Paths.absolute("build/test/${folder}");
+    clean(dir);
+    Files.createDirectories(Paths.join(dir, "src"));
+    Files.writeString(Paths.join(dir, "larimar.toml"), toml);
+    Files.writeString(Paths.join(dir, "src/${file}"), source);
+    return dir;
+}
+
+function service(folder: String, source: String): String throws IoError {
+    return write(folder, "[project]\nname = \"calc\"\nkind = \"service\"\nmain = \"src/calc.lar\"\n", "calc.lar", source);
+}
+
+function program(folder: String, packages: String, source: String): String throws IoError {
+    return write(folder, "[project]\nname = \"app\"\n\n[packages]\n${packages}\n", "main.lar", source);
+}
+
+function onlyLinuxOrMac(): bool {
+    if (Platform.name() == "windows") {
+        skip("the services are tested on Linux and macOS");
+        return false;
+    }
+    return true;
+}
+
+// The program calls the service's functions; each call goes to its executable, which larimar build made.
+test function aProgramCallsAService(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let calc: String = service("svc-calc", SERVICE);
+    let app: String = program("svc-app", "calc = \"${calc}\"", PROGRAM);
+    let output: String[*] = [];
+    checkInt(0, larimarc(["run", app], output));
+    let text: String = output.join("");
+    check(text.contains("42 CASA,PLAYA found x - 2.5\ncalc true\n"), "the calls and what comes back: ${text}");
+    check(text.contains("calc: hola"), "the service's own output is its own: ${text}");
+    check(text.contains("ended: the program ended (exit 101)"), "a panic in the service is an error of the call: ${text}");
+    check(Files.isFile(Paths.join(calc, "build/calc")), "larimar build of the program built the service");
+    check(Files.readString(Paths.join(calc, "build/calc-service.lar")).contains("serve((call) ->"), "and wrote its main");
+}
+
+// The service is also a program of its own: JSON-RPC on its standard input and output.
+test function aServiceAnswersAnyProgram(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let calc: String = service("svc-alone", SERVICE);
+    let output: String[*] = [];
+    checkInt(0, larimarc(["build", calc], output));
+    let p: Process = { program: Paths.join(calc, "build/calc") };
+    let json: String = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"add\",\"params\":{\"a\":1,\"b\":2}}";
+    try {
+        p.start();
+        p.write("Content-Length: ${json.length}\r\n\r\n${json}");
+        p.closeInput();
+        check(p.readAll(10000).contains("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":3}"), "the answer on its output");
+    } catch (ProcessError e) {
+        check(false, "cannot run the service");
+    }
+}
+
+// What crosses is checked: no classes, no errors that cross, and no parts of the service.
+test function whatCrossesIsChecked(): void throws IoError {
+    let bad: String = service("svc-bad", raw"""
+        public class Box { let n: int32 = 0; }
+        public enum Problem { Broken }
+        public function box(): Box { return Box {}; }
+        public function risky(): int32 throws Problem { throw Problem.Broken; }
+        """);
+    let output: String[*] = [];
+    checkInt(1, larimarc(["build", bad], output));
+    let text: String = output.join("");
+    check(text.contains("box returns Box: what comes back from a service is a number"), "a class does not cross: ${text}");
+    check(text.contains("function risky of the service throws"), "an error does not cross: ${text}");
+    let calc: String = service("svc-parts", SERVICE);
+    let app: String = program("svc-parts-app", "calc = \"${calc}\"", "import calc.inner;\nfunction main(): int32 { return 0; }\n");
+    output.clear();
+    checkInt(1, larimarc(["check", Paths.join(app, "src/main.lar")], output));
+    check(output.join("").contains("is a part of the service 'calc'"), "a part: ${output.join("")}");
+}

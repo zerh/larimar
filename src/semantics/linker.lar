@@ -20,6 +20,7 @@ import syntax.ast {
 };
 import syntax.parser { parseProgram };
 import editor.docstore { document };
+import project.services { clientSource, contract, ServiceFunction };
 
 public const FILE_LINES: int32 = 1000000;
 
@@ -104,8 +105,12 @@ public function link(mainShown: String in default, mainSource: String in default
     if (root.program != null) { visit(root); }
     // the main file is std/lang.lar itself (open in the editor): it is the language, not loaded again
     let langItself: bool = Paths.normalize(Paths.absolute(mainPath)) == Paths.normalize(Paths.absolute(moduleFile("std.lang")));
+    if (root.program != null) { writeTasks(mainPath); }
     if (root.program != null && !langItself) { loadLang(); }
     for (m in order) { tables(m); }
+    for (m in order) {
+        if (!trusted(m, mainPath)) { noC(m); }
+    }
     let prog: Program = Program { line: 1 } in default;
     if (lang != null) {
         for (d in lang!.program!.decls) {
@@ -213,6 +218,174 @@ function loadLang(): void {
     lang = m;
 }
 
+// ---- the tasks of other processes (std.os.process.tasks) --------------------------------------------
+
+/** The program has classes that implement SystemProcess: its copies run them (the C's main says so). */
+public let systemProcesses: bool = false;
+
+const TASKS_MODULE: String = "std.os.process.tasks";
+
+/** The types a field of a SystemProcess can have: they go to the other process as they are. */
+const TASK_SCALARS: String = " int8 int16 int32 int64 uint8 uint16 uint32 uint64 byte float32 float64 bool String ";
+
+/** The name of `implements` that is SystemProcess, as the class wrote it ("" when it does not implement it). */
+function taskInterface(c: ClassDecl in default): String {
+    for (i in c.interfaces) {
+        if (i == "SystemProcess" || i.endsWith(".SystemProcess")) { return i; }
+    }
+    return "";
+}
+
+function taskScalar(t: TypeRef in default): bool { return t.kind == TK.Named && TASK_SCALARS.contains(" ${t.name} "); }
+
+/** What a value of a scalar type is when it comes back from a table (`x`: the Any). */
+function fromTable(t: TypeRef in default, x: String): String {
+    if (t.name == "String") { return "(${x} as String ?? \"\").clone()"; }
+    if (t.name == "bool") { return "${x} as bool ?? false"; }
+    if (t.name == "float32" || t.name == "float64") { return "${x} as ${t.name} ?? 0.0"; }
+    return "${x} as ${t.name} ?? 0";
+}
+
+/**
+ * The module path a file is imported by: from the project's folder (tests, and the editor, also from the
+ * folder above it, as moduleFile does). "" when it is under neither.
+ */
+function modulePathOf(file: String): String {
+    let own: String = pathUnder(Paths.normalize(Paths.absolute(rootDir)), file);
+    if (own != "" || testsKept == "none") { return own; }
+    return pathUnder(Paths.parent(Paths.normalize(Paths.absolute(rootDir))), file);
+}
+
+function pathUnder(dir: String, file: String): String {
+    let base: String = "${dir}/";
+    let full: String = Paths.normalize(Paths.absolute(file));
+    if (!full.startsWith(base) || !full.endsWith(".lar")) { return ""; }
+    let path: String = full.substring(base.length, full.length - 4).replace("/", ".");
+    for (b in path) {
+        if (!isIdentifierPart(b) && b != '.') { return ""; }
+    }
+    return path.clone();
+}
+
+/**
+ * For each module with classes that implement SystemProcess, two functions of its own: one gives the
+ * class and fields of a task as a table, the other makes it again from them. std.os.process.tasks is
+ * then written to ask each of those modules.
+ */
+function writeTasks(mainPath: String): void {
+    let at: int32 = modIndex[TASKS_MODULE] as int32 ?? -1;
+    if (at < 0) { return; }
+    let owners: String[*] = [] in default;
+    for (m in mods) {
+        if (m.program == null || isStd(m.path) || m.path == TASKS_MODULE) { continue; }
+        let encode: StringBuilder = {} in default;
+        let start: StringBuilder = {} in default;
+        let iface: String = "";
+        let line: int32 = 0;
+        for (d in m.program!.decls) {
+            if (!(d is ClassDecl c)) { continue; }
+            let spelled: String = taskInterface(c);
+            if (spelled == "") { continue; }
+            if (iface == "") {
+                iface = spelled;
+                line = c.line;
+            }
+            if (c.superName != "") {
+                error(c.line, "SystemProcess '${c.name}' extends '${c.superName}': a task goes to another process with its own fields, so it extends no class.");
+                continue;
+            }
+            let key: String = m.path != "" ? "${m.path}.${c.name}" : c.name;
+            encode.add("    if (task is ${c.name} t) {\n        let f: Any = {};\n");
+            let fill: StringBuilder = {} in default;
+            let literal: String[*] = [] in default;
+            for (fd in c.fields) {
+                let n: String = fd.name;
+                let t: TypeRef = fd.type;
+                if (taskScalar(t)) {
+                    encode.add("        f[\"${n}\"] = t.${n};\n");
+                    literal.push("${n}: ${fromTable(t, "fields[\"${n}\"]")}" in default);
+                } else if (t.kind == TK.Opt && t.inner != null && taskScalar(t.inner!)) {
+                    encode.add("        if (t.${n} != null) { f[\"${n}\"] = t.${n}!; }\n");
+                    if (t.inner!.name == "String") {
+                        literal.push("${n}: null" in default);
+                        fill.add("        if (fields[\"${n}\"] != null) { t.${n} = (fields[\"${n}\"] as String ?? \"\").clone(); }\n");
+                    } else {
+                        literal.push("${n}: fields[\"${n}\"] as ${t.inner!.name}" in default);
+                    }
+                } else if (t.kind == TK.Growable && t.inner != null && taskScalar(t.inner!)) {
+                    encode.add("        let l_${n}: Any = {};\n        for (v in t.${n}) { l_${n}.push(v); }\n        f[\"${n}\"] = l_${n};\n");
+                    literal.push("${n}: []" in default);
+                    fill.add("        for (i, v in fields[\"${n}\"]) { t.${n}.push(${fromTable(t.inner!, "v")}); }\n");
+                } else {
+                    error(fd.line, "Field '${n}' of SystemProcess '${c.name}' goes to another process: it is a number, a bool, a String, an optional of one of them, or a list of them.");
+                }
+            }
+            encode.add("        let out: Any = { name: \"${key}\" };\n        out[\"fields\"] = f;\n        return out;\n    }\n");
+            start.add("    if (name == \"${key}\") {\n        let t: ${c.name} = { ${literal.join(", ")} };\n");
+            start.add(fill.toString());
+            start.add("        return t;\n    }\n");
+        }
+        if (iface == "") { continue; }
+        let source: String = """
+            public function larimarTaskEncode(task: ${iface}): Any {
+            ${encode.toString()}    return null;
+            }
+
+            public function larimarTaskStart(name: String, fields: Any): ${iface}? {
+            ${start.toString()}    return null;
+            }
+            """ in default;
+        let p: Program = parseProgram(source, m.index * FILE_LINES + line);
+        if (p.error != "") {
+            errors.push(p.error);
+            continue;
+        }
+        addWords(source);
+        for (d in p.decls) {
+            m.program!.decls.push(d);
+            m.ownValues[declName(d)] = 1;
+            m.publics[declName(d)] = 1;
+        }
+        let path: String = m == root ? modulePathOf(mainPath) : m.path;
+        if (path == "") {
+            error(line, "The SystemProcess classes of this file are found by its module, and the file is not in the project's folder: move them to a module of the project.");
+            continue;
+        }
+        owners.push(path.clone() in default);
+    }
+    if (owners.length == 0) { return; }
+    let imports: StringBuilder = {} in default;
+    let encodes: StringBuilder = {} in default;
+    let starts: StringBuilder = {} in default;
+    for (i, o in owners) {
+        imports.add("import ${o} as Tasks${i};\n");
+        encodes.add("    let e${i}: Any = Tasks${i}.larimarTaskEncode(task);\n    if (e${i} != null) { return e${i}; }\n");
+        starts.add("    let t${i}: SystemProcess? = Tasks${i}.larimarTaskStart(name, fields);\n    if (t${i} != null) { return t${i}; }\n");
+    }
+    let registry: String = """
+        import std.os.process { SystemProcess };
+        ${imports.toString()}
+        public function encode(task: SystemProcess): Any {
+        ${encodes.toString()}    return null;
+        }
+
+        public function start(name: String, fields: Any): SystemProcess? {
+        ${starts.toString()}    return null;
+        }
+        """ in default;
+    let tasks: Module = mods[at];
+    parse(tasks, registry);
+    if (tasks.program == null) { return; }
+    let kept: Module[*] = [] in default;
+    for (m in order) {
+        if (m != tasks) { kept.push(m); }
+    }
+    order.clear();
+    for (m in kept) { order.push(m); }
+    visit(tasks);                                 // its imports (the modules of the tasks), then itself, last
+    systemProcesses = true;
+}
+
 /** Adds the words of a text (not those of its comments) to `words`. */
 function addWords(text: String in default): void {
     let i: int32 = 0;
@@ -308,18 +481,52 @@ public function readSource(path: String): String? {
 public function isStd(path: String): bool { return path.startsWith("std."); }
 
 /**
- * Where a module's file is: std/, else the project's folder (the main file's), else a library of [packages]
- * (its .lar, in its folder).
+ * Whether a program may have C of its own (larimarc --unsafe-c). Only for the compiler's own sources and
+ * tests, which try what std's C does: a program built with it has none of the language's guarantees.
+ */
+public let unsafeC: bool = false;
+
+/** Whether a module may have C: the standard library's (the installed one, or the copy being edited), and the language's. */
+function trusted(m: Module in default, mainPath: String): bool {
+    if (unsafeC || isStd(m.path) || (lang != null && m == lang!)) { return true; }
+    let file: String = m == root ? mainPath : filePaths[m.index];
+    return Paths.normalize(Paths.absolute(file)).startsWith("${Paths.normalize(Paths.absolute(stdDir))}/");
+}
+
+/**
+ * C is only the standard library's: a program, and a library written in Larimar, use what std gives (and,
+ * for the rest, other programs). Whatever would bring C of its own here is an error.
+ */
+function noC(m: Module in default): void {
+    for (d in m.program!.decls) {
+        let what: String = switch (d) {
+            case CIncludeDecl c -> "cinclude";
+            case CCodeDecl c -> "ccode";
+            case ExternTypeDecl t -> "native type";
+            case ExternFunctionDecl f -> f.cBody != "" ? "a function with a body of C" : "native function";
+            case ExternValueDecl v -> v.isConst ? "native const" : "native let";
+            case NativeTypeDecl n -> "native type";
+            case StructDecl st -> st.cName != "" ? "native struct" : "";
+            case FunctionDecl f -> f.isNative || f.cBodied ? "native function" : "";
+            default -> "";
+        };
+        if (what != "") {
+            error(d.line, "${what} is only for the standard library: C is written there, and a program uses what std gives.");
+        }
+    }
+}
+
+/**
+ * Where a module's file is: std/, else a library of [packages] (its name, or <name>.<part>), else the
+ * project's folder (the main file's).
  */
 function moduleFile(path: String): String {
     if (isStd(path)) { return Paths.join(stdDir, "${path.substring(4).replace(".", "/")}.lar"); }
     let relative: String = "${path.replace(".", "/")}.lar";
+    let library: int32 = libraryOf(path);
+    if (library >= 0) { return Paths.join(libraryRoots[library], relative); }
     let own: String = Paths.join(rootDir, relative);
     if (Files.isFile(own)) { return own; }
-    for (d in libraryRoots) {
-        let candidate: String = Paths.join(d, relative);
-        if (Files.isFile(candidate)) { return candidate; }
-    }
     if (testsKept != "none") {                        // tests (and the editor): also from the project's folder (tests.support...)
         let fromProject: String = Paths.join(Paths.parent(rootDir), relative);
         if (Files.isFile(fromProject)) { return fromProject; }
@@ -327,8 +534,19 @@ function moduleFile(path: String): String {
     return own;
 }
 
-/** The folders of the libraries of the project's [packages]. */
+/** The libraries of the project's [packages]: their names, and the folders of their modules (same order). */
+public let libraryNames: String[*] = [] in default;
 public let libraryRoots: String[*] = [] in default;
+/** Per library: the executable of a service ("" for a library, whose code the program compiles). */
+public let libraryServices: String[*] = [] in default;
+
+/** The library a module belongs to (its name, or <name>.<part>): its index, or -1. */
+function libraryOf(path: String): int32 {
+    for (i, n in libraryNames) {
+        if (path == n || path.startsWith("${n}.")) { return i; }
+    }
+    return -1;
+}
 
 /** How a module's file is shown in messages. */
 function shownName(path: String): String {
@@ -347,26 +565,34 @@ function visit(m: Module in default): void {
             modIndex[imp.path] = 0;                         // the file opened alone (root), imported back by its parts
             continue;
         }
+        let service: int32 = libraryOf(imp.path);
+        if (service >= 0 && service < libraryServices.length && libraryServices[service] != "" && imp.path != libraryNames[service]) {
+            error(imp.line, "'${imp.path}' is a part of the service '${libraryNames[service]}': a program uses what the service gives (import ${libraryNames[service]}).");
+            continue;
+        }
         let source: String? = readSource(moduleFile(imp.path));
         if (source == null) {
             error(imp.line, "Module '${imp.path}' not found (looked for ${shownName(imp.path)}).");
             continue;
         }
+        let text: String = source!;
+        if (service >= 0 && service < libraryServices.length && libraryServices[service] != "") {
+            // a service: not its code, but the module that calls its executable
+            let problems: String[*] = [];
+            let functions: ServiceFunction[*] = contract(source!, 1, problems);
+            for (pr in problems) { error(imp.line, "Service '${imp.path}': ${pr}"); }
+            text = clientSource(imp.path, functions, libraryServices[service]) in texts;
+        }
         let dep: Module = newModule(imp.path, fileNames.length);
         fileNames.push(shownName(imp.path));
         filePaths.push(Paths.absolute(moduleFile(imp.path)).clone() in default);
-        fileSources.push(source!);
+        fileSources.push(text);
         mods.push(dep);
         modIndex[dep.path] = mods.length - 1;
-        parse(dep, source);
-        if (dep.program != null && !isStd(imp.path)) {          // the .lar of a package: larimar build wrote it
-            let file: String = moduleFile(imp.path);
-            for (d in libraryRoots) {
-                if (!file.startsWith(d)) { continue; }
-                for (decl in dep.program!.decls) {
-                    if (decl is ExternTypeDecl e) { e.ofPackage = true; }
-                }
-            }
+        parse(dep, text);
+        let library: int32 = libraryOf(imp.path);
+        if (library >= 0 && Files.isFile(Paths.join(rootDir, "${imp.path.replace(".", "/")}.lar"))) {
+            error(imp.line, "Module '${imp.path}' is of the library '${libraryNames[library]}' of [packages], and the project has a file with its name too: rename the project's.");
         }
         if (dep.program != null) { visit(dep); }
     }
@@ -573,7 +799,6 @@ function rewriteDecl(m: Module in default, d: Node in default): void {
         }
         case ExternTypeDecl t -> {
             t.name = own;
-            typeRef(t.func);
             if (t.fieldsStruct != "") { t.fieldsStruct = (rm.types[t.fieldsStruct] as String ?? t.fieldsStruct).clone() in default; }
             if (t.releasedBy != "") {            // the function that releases it: a name of this module (or one it sees)
                 let v: String = rm.values[t.releasedBy] as String ?? "";

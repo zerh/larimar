@@ -1,13 +1,13 @@
 # The Larimar Language Specification
 
-**Version 1.0**
+**Version 1.2**
 
 This document defines the Larimar programming language. It is normative: a program means what this
 document says, and an implementation is correct when it does what this document says. The
 [Manual](manual.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 1.7.0 (language 1.0)`. A compiler release may add to the standard library and to the tools
+`larimar 1.9.0 (language 1.2)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
@@ -30,7 +30,7 @@ without changing the language; a change to anything in this document is a new la
 16. [Errors and panics](#16-errors-and-panics)
 17. [Any](#17-any)
 18. [Threads](#18-threads)
-19. [C interoperability](#19-c-interoperability)
+19. [Libraries, services and tasks](#19-libraries-services-and-tasks)
 20. [Platforms](#20-platforms)
 21. [Modules](#21-modules)
 22. [Tests](#22-tests)
@@ -39,6 +39,7 @@ without changing the language; a change to anything in this document is a new la
 - [Appendix A. Grammar](#appendix-a-grammar)
 - [Appendix B. Implementation-defined behavior and limits](#appendix-b-implementation-defined-behavior-and-limits)
 - [Appendix C. Outside this specification](#appendix-c-outside-this-specification)
+- [Appendix D. The C of the standard library](#appendix-d-the-c-of-the-standard-library)
 
 ---
 
@@ -51,8 +52,9 @@ might not foresee:
 - **Nothing is hidden.** No garbage collector, no hidden threads, no hidden control flow, no implicit
   conversions, no constructors, no overloading. What a program does can be read in its text.
 - **No undefined behavior.** Every operation of the language either has a defined result or stops the
-  program with a message ([§16.3](#163-panics)). Only code written in C (`ccode`, native functions)
-  is outside this guarantee.
+  program with a message ([§16.3](#163-panics)). A program has no C of its own: what Larimar does not
+  have runs in another process ([§19](#19-libraries-services-and-tasks)). Only the C of the standard
+  library ([Appendix D](#appendix-d-the-c-of-the-standard-library)) is outside this guarantee.
 - **Memory without a collector and without dangling references.** Every value that needs storage lives
   in a *memory* that is freed whole at a point that can be seen in the code ([§14](#14-memory)), and the
   compiler proves that nothing refers to freed storage ([§15](#15-the-lifetime-rule)).
@@ -114,7 +116,7 @@ Each file is a module ([§21](#21-modules)).
 
 The tokens are identifiers, keywords, operators and punctuation, and literals. Spaces, tabs, line breaks
 and comments separate tokens and are otherwise ignored, except where a rule names the line or the column
-(text blocks, [§4.8](#48-text-blocks)).
+(text blocks, [§4.9](#49-text-blocks)).
 
 ### 4.3 Identifiers
 
@@ -142,7 +144,9 @@ true      try       when      while     yield     cinclude ccode
 ```
 
 Also part of the language, but not reserved: `wait until`, `thread safe`, `released by`, `test`,
-`export`, `type`, `lar` (only inside `ccode`) and `raw` (see the table below).
+`type`, `lar` (only inside `ccode`) and `raw` (see the table below). `cinclude`, `ccode`, `native`,
+`type`, `c`, `lar` and `released by` belong to the C of the standard library
+([Appendix D](#appendix-d-the-c-of-the-standard-library)).
 
 `new` and `private` are reserved but have no meaning: `new` is an error (objects are created with
 literals), and `private` is an error that says it is not needed (what is not `public` is private).
@@ -152,11 +156,10 @@ These words have a meaning only in one place, and are identifiers everywhere els
 | Word | Where |
 |---|---|
 | `test` | before `function` at the top level ([§22](#22-tests)) |
-| `export` | before `function` at the top level ([§19.9](#199-export-functions)) |
 | `type` | after `native` |
-| `c` | immediately before `"`: C text, `c"..."`, after `=` in a native declaration ([§19.3](#193-native-functions)) |
-| `raw` | immediately before `"""` ([§4.9](#49-raw-text-blocks)) |
-| `released by` | in a `native type` ([§19.7](#197-resources)), and after a `native function` that returns a text ([§19.3](#193-native-functions)) |
+| `c` | immediately before `"`: C text, `c"..."`, after `=` in a native declaration ([§D.3](#d3-native-functions)) |
+| `raw` | immediately before `"""` ([§4.10](#410-raw-text-blocks)) |
+| `released by` | in a `native type` ([§D.7](#d7-resources)), and after a `native function` that returns a text ([§D.3](#d3-native-functions)) |
 | `wait until` | at the end of a method signature ([§18.3](#183-wait-until)) |
 | `thread safe` | after a function type ([§18.4](#184-thread-safe-functions)) |
 
@@ -309,8 +312,8 @@ when it is used after `in` ([§14.5](#145-memories-of-your-own)).
 
 ### 5.9 C types
 
-`native type` declares a type that comes from C ([§19.4](#194-native-types)); `T*` is a pointer to C
-data ([§19.6](#196-pointers)). They exist only for C interoperability.
+`native type` declares a type that comes from C ([§D.4](#d4-native-types)); `T*` is a pointer to C
+data ([§D.6](#d6-pointers)). They exist only in the C of the standard library.
 
 ### 5.10 Type identity and assignability
 
@@ -344,9 +347,9 @@ program = import* ( [ public ] declaration )*
 ```
 
 A file is a list of imports followed by declarations. At the top level there are only declarations:
-`const`, `let`, `function`, `test function`, `export function`, `struct`, `class`,
-`synchronized class`, `interface`, `enum`, `cinclude`, `ccode` and the `native` declarations
-([§19](#19-c-interoperability)). Statements go only inside functions.
+`const`, `let`, `function`, `test function`, `struct`, `class`, `synchronized class`, `interface` and
+`enum`; in the standard library also `cinclude`, `ccode` and the `native` declarations
+([Appendix D](#appendix-d-the-c-of-the-standard-library)). Statements go only inside functions.
 
 Statements end with `;`. Blocks are written between `{` and `}`.
 
@@ -419,7 +422,6 @@ lives     = default | self | NAME
 - Functions are declared at the top level and inside types. Inside a body, functions are lambdas
   ([§10.13](#1013-lambdas)).
 - A function is not a value. To pass one, it is wrapped in a lambda: `(x) -> { return add(x, 1); }`.
-  The exception is a C function pointer ([§19.8](#198-c-function-pointers-and-callbacks)).
 - `in` on a parameter says where its data lives ([§15.3](#157-saying-where-a-parameter-lives-in)). `in`
   after the result type is allowed only in `native function`s and says the result is a view tied to the
   receiver (`in self`).
@@ -536,7 +538,7 @@ An enum value is one of its variants; a variant can carry fields. Enums are valu
 
 `native type NAME { ... }` (without `=`) declares the methods of a type that the compiler already knows
 (`String`, `Any`). It is used by the standard library ([§23](#23-predeclared-names)); the native types
-of C are in [§19.4](#194-native-types):
+of C are in [§D.4](#d4-native-types):
 
 - `native function f(...);` without a body declares an operation the compiler implements;
 - `native function f(...) = expression;` defines the method as that expression, usually a call to a
@@ -617,7 +619,7 @@ alone is short for `NAME: NAME`.
 - For an interface: an interface literal ([§9.4](#94-interfaces)).
 - For an enum variant: `E.V { ... }` ([§9.5](#95-enums)).
 - For `Any`: a table ([§17](#17-any)); entries without a name go by position.
-- For a C struct: [§19.5](#195-native-structs-constants-and-variables).
+- For a C struct: [§D.5](#d5-native-structs-constants-and-variables).
 
 There is no `new` and there are no constructors: a literal creates the value; when something must be
 validated, a function does it and returns the literal.
@@ -692,7 +694,7 @@ be `null` ([§12](#12-optionals-and-narrowing)), `!` is allowed and does nothing
 | a floating type | an integer | truncated toward zero; a value beyond the limits gives the nearest limit; NaN gives 0 |
 | `float64` | `float32` and back | IEEE 754 conversion |
 | `Any` | any type an `Any` holds | an optional: [§17.3](#173-reading-a-value-as) |
-| a pointer | another pointer, or an opaque `native type` | the same address ([§19.6](#196-pointers)) |
+| a pointer | another pointer, or an opaque `native type` | the same address ([§D.6](#d6-pointers)) |
 
 `as` between other types is an error. There are no implicit conversions.
 
@@ -997,7 +999,7 @@ name (not a parameter that receives a memory):
 A memory that holds threads, synchronized objects or resources when it is compacted is a panic. A memory
 other than `default` belongs to one thread ([§18.5](#185-what-a-thread-can-use)), so no other thread
 uses it while it is compacted. C code must not keep a pointer it received after the call returns
-([§19.6](#196-pointers)); compacting relies on it.
+([§D.6](#d6-pointers)); compacting relies on it.
 
 ### 14.7 Results of functions
 
@@ -1024,7 +1026,7 @@ lives as long as the value it shares, and the lifetime rule treats it as that va
 ### 14.9 What freeing a memory does
 
 Before the storage of a memory is reclaimed, every thread created in it is joined
-([§18.1](#181-thread)) and every resource stored in it is released ([§19.7](#197-resources)).
+([§18.1](#181-thread)) and every resource stored in it is released ([§D.7](#d7-resources)).
 
 ---
 
@@ -1169,7 +1171,7 @@ Fixed answers:
 - a method of a class that extends another, or that another extends: when its result flows from one
   argument or from `self`, it flows from every one; and it flows, and creates, when a method that
   overrides it in a subclass does (a call through the class may run that one);
-- a native function: when its first parameter is a memory ([§19.3](#193-native-functions)), it
+- a native function: when its first parameter is a memory ([§D.3](#d3-native-functions)), it
   creates and its result flows from nothing; otherwise it does not create, and its result may flow from
   every argument (C may return a pointer into one of them);
 - a `native function` with `in self` in its result flows from `self`.
@@ -1194,7 +1196,7 @@ What they decide:
 
 `in q` follows `q`'s own `in`: in `a: T in b, b: T in default`, `a` is static. Parameters that live in each
 other in a circle are an error. `in` applies only to parameters whose type needs memory; it is not allowed
-on a memory parameter, on native functions (except on a callback, [§19.8](#198-c-function-pointers-and-callbacks)) or on export functions (except on a function of the program, [§19.10](#1910-libraries)). A method that overrides another, or
+on a memory parameter or on native functions. A method that overrides another, or
 implements an interface, repeats the same `in`.
 
 ### 15.8 `clone()`
@@ -1206,7 +1208,7 @@ a string. Its region is the region of that place. Cycles between objects are pre
 
 `clone()` exists for every type; on values that need no memory it is a copy. It does not exist for
 interfaces, lambdas and `T[]` parameters, nor for objects that hold a resource
-([§19.7](#197-resources)).
+([§D.7](#d7-resources)).
 
 ---
 
@@ -1399,260 +1401,62 @@ between synchronized objects.
 
 ---
 
-## 19. C interoperability
+## 19. Libraries, services and tasks
 
-### 19.1 `cinclude`
+A program has no C of its own, and loads no code the compiler did not check
+([Appendix D](#appendix-d-the-c-of-the-standard-library)). Code written in Larimar is shared as source
+(libraries, §19.1); what must not share the program's memory runs in another process: a service
+(§19.2), or a task of the program itself (§19.3).
 
-`cinclude "<header.h>";` or `cinclude "file.h";` adds an `#include` to the generated C.
+### 19.1 Libraries
 
-### 19.2 `ccode`
+A project with `kind = "library"` is a library. It has no `main`. The program's project file names, in
+`[packages]`, each library it uses with the folder of its project. The library's main module is `NAME`
+(its main file, `NAME.lar`), and its other modules are `NAME.PART` (`NAME/PART.lar`, next to it);
+`import NAME` and `import NAME.PART` find them there. A module of the program with one of those names is
+an error. The `[packages]` of a library are read too, relative to its folder; two libraries with the
+same name in different folders are an error. The library's modules are compiled with the program's, as
+modules of the same program: every rule of this document applies across them.
 
-```
-ccode { C text }
-```
+### 19.2 Services
 
-The C text is copied to the generated C, after the headers and before the program. Braces inside C
-strings, characters and comments do not count toward the closing brace. Inside it, **`lar"NAME"`** (or
-`lar"module.NAME"`) is replaced by the C name of that Larimar function, type or global variable; a name
-that does not exist is a compile error. The prototypes of the functions named this way whose types are
-numbers, `bool`, `String` or `void` are written before the `ccode`. Otherwise the C must use only the
-doors of §19: `native` declarations (C seen from Larimar), `export function`s (Larimar seen from C) and
-`lar"..."`; the names the compiler generates for everything else are not part of the language. Code in
-`ccode` is outside every guarantee of this document.
+A project with `kind = "service"` is a service: its main module is `NAME` (`NAME.lar`), and its
+**public functions** (top level, not `test`) are what it gives. Their parameters and results are of the
+**types that cross**: the numbers, `bool`, `String`, their optionals and `T[*]` lists of them, and `Any`
+(results may also be `void`). A public function with another type, or with `throws`, is an error when
+the service is built. Its other declarations stay inside it.
 
-### 19.3 Native functions
+Its executable answers calls (`std.os.rpc`) with those functions: a call names the function and gives
+its arguments by the names of its parameters, as a table; the answer is its result.
 
-```
-native function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] ( [ = C ] [ released by NAME ] ; | { C TEXT } )
-C = NAME | struct NAME | c"C TEXT"
-```
+A program that names the service in `[packages]` does not compile its modules: `import NAME` is a module
+written for it, with one public class whose name is `NAME` in UpperCamelCase (`image_tools` →
+`ImageTools`), and in it:
 
-A `native` declaration names something of C. The name on the left is the Larimar one; after `=` comes
-the C one: a name, or C text, `c"..."`, when it is not a plain name (`c"(fio_start)"`, a cast). C text is
-not a Larimar `String`. Without `=`, the C name is the same.
+- `static function start(): C throws RpcError`: starts the service's executable (the one in the folder
+  of this program's, or else the one where the service was built) and connects to it through shared
+  memory; `static function startAt(program: String): C throws RpcError`, another executable;
+- for each function of the service, a method with the same name, parameters and result, which
+  `throws RpcError`;
+- `setTimeout(ms)` and `close()`.
 
-- Parameter and result types: numbers, `bool`, `String` (a `const char*`), `String?` parameters (`null`
-  is `NULL`), native types and their optionals, C structs, pointers, `T[]` of numbers or `bool`, and
-  `byte[*]` memories. `...` allows variable arguments.
-- A `T[]` of numbers or `bool` is passed as two C arguments: a pointer to the elements and their count.
-- A result of type `String` must be a zero-terminated text that keeps existing (static, or created in a
-  memory the function receives). `String?` turns `NULL` into `null`.
-- **`released by r`** after a result of type `String` or `String?`: the text belongs to the caller (C made
-  it with `malloc` or similar). It is copied into the memory where the call's result goes, and then `r` is
-  called on it; `NULL` is not released. `r` is a native function with exactly one `String` parameter
-  (written `void*` in C), and only the compiler calls it. `released by` on any other result is a compile error.
-- A `public native function` keeps its C name inside a module.
-- A memory as the **first** parameter is not written in the call: the function receives the memory of
-  the call, so its result lives where the caller says ([§14.7](#147-results-of-functions)). In C it is an
-  `RtMem*`, and `rt_mem_alloc(m, bytes, 0)` reserves zeroed bytes in it. The C may use the memory only
-  during the call. A memory in another position is passed explicitly.
-- A parameter of type `Context` is not written in the call either: it carries the function given in the
-  callback parameter ([§19.8](#198-c-function-pointers-and-callbacks)).
-- When the module has no `cinclude` and no `ccode`, neither it nor its parts (the modules in the folder
-  of its name, `net/posix.lar` for `net.lar`), the compiler writes the C prototype of each native
-  function whose C is a plain name.
-- A native function names its C function, or has a body of C (§19.11). In the standard library,
-  `std.memory` declares `limit` and `compact` as native functions that the compiler writes itself.
+The service's executable runs while that object lives. Importing a part of a service (`NAME.PART`) is an
+error.
 
-### 19.4 Native types
+### 19.3 Tasks: `SystemProcess`
 
-```
-native type NAME [ released by NAME ] ;                                   an opaque pointer (void*)
-native type NAME = CTYPE [ released by NAME ] ( ; | { member* } )         a C type
-native type NAME = ( Type , ... ) -> Type ;                               a pointer to a C function (§19.8)
-CTYPE  = [ struct ] NAME *...  |  c"C TYPE"
-member = let NAME : Type [ = NAME ] ;
-       | native function NAME parameters [ : Type ] [ in lives ] [ throws Type ] = ( C | expression ) ;
-       | native let NAME : Type = ( C | expression ) ;
-       | function ...  |  static function ...  |  static native function ... = C ;
-```
+A class that implements `std.os.process.SystemProcess` (it names it in its `implements`) is a **task**:
+an object of it can be run, by a `ProcessPool`, in another process of the same program. Such a class
+extends no class, and each of its fields is of a type that crosses (§19.2), without `Any`; otherwise it
+is a compile error. Its object arrives there with the values of its fields, `run()` runs there, and what
+it returns comes back as an `Any` (an object in it arrives as `null`).
 
-Each native type is distinct, even when two declarations are equal. The members of a C type:
-
-- **`let`** declares a field of the C struct the type points to, read and written with `x.f` (C's `x->f`);
-  after `=` comes its C name when it is another. A type with fields must be a pointer (`= c_struct*`).
-- **`native function m(...) = C;`** calls that C function with `self` as its first argument, then the
-  arguments; before `self` goes only the memory of the call, when the first parameter is one. A parameter
-  of type `Context` is not part of the method. Any other expression after `=` is Larimar, as in a class.
-- **`native let x: T = C;`** is the same with no arguments, read without parentheses.
-- After `= C` of either, `released by r` works as for a native function ([§19.3](#193-native-functions)):
-  the text C makes is copied where the value goes, then released.
-- **`function`** is a method written in Larimar; `self` is the C value.
-- **`static native function f(...) = C;`** calls that C function without `self`; `static function` is
-  written in Larimar. Both are called as `NAME.f(...)`.
-
-The methods of a type the compiler knows
-(`native type String { ... }`, without `=`) are declared only in the standard library ([§9.6](#96-native-types)).
-
-### 19.5 Native structs, constants and variables
-
-```
-native struct NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static function ... )* }
-native const NAME : Type [ = C ] ;
-native let NAME : Type [ = NAME ] ;
-```
-
-A native struct is a C struct, by value. It declares only the fields the program uses; the C definition
-(from a header or `ccode`) gives the layout. Its fields are numbers, `bool`, native types, pointers, C
-structs and `String`; after `=` comes a field's C name when it is another. A `String` field is a C text,
-read-only, and a view of the C storage. A native struct is used like a Larimar struct (literals, field
-access, copies, lists, methods written in Larimar); fields not given in a literal are zero.
-
-`native const` names a C constant, a macro or a C expression (`= c"sizeof(struct stat)"`), read-only; it
-can be a `String`. `native let` names a C variable that can be read and assigned; it cannot be a `String`.
-
-### 19.6 Pointers
-
-`T*` is a pointer to C data: a number, `bool`, a C struct, a native type or another pointer.
-
-- `p.f` reads or writes a field of the struct `p` points to; on a `null` pointer it is a panic.
-- `&x` is the address of a local variable and is allowed **only** as an argument of a native function
-  (also as `&x as U*`). So the address never outlives the call.
-- An array passed where C asks for a `T*` is passed as a pointer to its elements.
-- Pointers can be compared with `null` and converted with `as` ([§10.10](#1010-conversions-as)). They
-  cannot be indexed, and there is no pointer arithmetic.
-- Pointers refer to C storage and are outside the lifetime rule.
-
-### 19.7 Resources
-
-`native type T ... released by f` declares a **resource**: a C value that `f` releases.
-
-- A resource lives in a memory like any value; when the memory is freed, `f` is called on it.
-- `release(x)` releases it now. Releasing twice does nothing; using a released resource is a panic.
-- The functions that create it return `T?`: a `NULL` pointer, `-1` (also `INVALID_HANDLE_VALUE`) or a
-  negative descriptor arrives as `null`. A Larimar function that returns what such a function makes
-  creates it where its caller says.
-- `f` takes exactly one `T`, and only `release` and the freeing of memories can call it.
-- An object that holds a resource cannot be cloned.
-- If `f` exists only on some platforms, so does the resource.
-
-### 19.8 C function pointers and callbacks
-
-A value of a `native type F = (A) -> R` is a C function: a `native function` or an `export function`
-with exactly that signature, or a value that C returns. It can be passed, stored and called like a
-function.
-
-`Context` (declared by `std.lang`) is C's `void*` that a C function gives back to its callback. When `F`
-has one parameter of type `Context`, a native function that takes an `F` and a `Context` also takes
-**any Larimar function** of the same signature without the `Context`, lambdas included, with what they
-capture:
-
-- the C function receives a function of C made by the compiler, and the Larimar function as the Context;
-- an `export function` or a `native function` of type `F` goes as it is, with `NULL` as the Context;
-- without `in`, C may call it only during the call; with **`in default`** on the parameter, C may keep it,
-  and what it captures must live as long as the whole program;
-- in a method of a native type (`native type X = T* { native function m(f: F in self, data: Context) }`),
-  **`in self`** on the parameter says the object keeps it: what the function uses must live at least as
-  long as the object, and its copy is made in the memory where the object is;
-- the Larimar function cannot return `String`, and `F` cannot carry resources. In the `.lar` that
-  `larimar build` writes for a package it can do both: a library takes the text where it says, and the
-  objects it gives the function stay its own (the function uses them, and cannot keep them).
-
-A member of a native type that calls a C function taking such a callback takes the Larimar function.
-
-### 19.9 Export functions
-
-```
-export function NAME parameters [ : Type ] [ = NAME ] block
-```
-
-`export function` makes a Larimar function callable from C with a plain C signature. Its C name is the
-one after `=`, else its own name (also inside a module), else, in a library ([§19.10](#1910-libraries)),
-`<prefix>_NAME`.
-
-- Parameters: numbers, `bool`, `String` and `String?` (a `const char*`; `NULL` is `null`), native types and
-  C structs.
-- Results: `void`, numbers, `bool`, native types, C structs, and `String` or `String?`: a new
-  zero-terminated copy made with `malloc`, which belongs to C (`NULL` for `null`).
-- It cannot declare `throws`, use `in` (on parameters or the result), take memories, lists or `Any`, take
-  or return classes (except in a library), or be `main`.
-- Each call from C has its own temporary memory, freed when it returns.
-- If C calls it from another thread, the thread rules of [§18](#18-threads) do not apply to that call.
-
-### 19.10 Libraries
-
-A program can be built as a library (`kind = "library"` in its project file): it has no `main`, and C sees
-only its export functions, plus `<prefix>_free`, `<prefix>_<Class>_release` and `<prefix>_interface`.
-Everything else of its C has internal linkage, so libraries and programs do not clash. The prefix is
-given by the project (by default, its name; it may be empty). In a library:
-
-- An export function is called `<prefix>_NAME` in C, unless it says `= NAME`; the names above are not
-  available to it.
-- Its parameters and results may be only numbers, `bool`, `String`, `String?` and the library's classes and
-  their optionals. In a library a parameter may also be a function type whose parameters are numbers,
-  `bool`, `String` and the library's classes, and whose result is a number, a `bool`, a `String` or
-  nothing: C gives a function and a `void*`. It may say `in default` (the library keeps the function),
-  the only place `in` is allowed on a parameter of an export function.
-- A class is a **handle** in C (`<prefix>_<Class>*`). An object returned to C lives, with everything it
-  creates afterwards, in a memory of its own, freed by `<prefix>_<Class>_release`. A `NULL` handle passed
-  where a class is expected is a panic; where an optional is expected, it is `null`.
-- The fields and instance methods of such a class (and of its parents) whose types are those above go
-  to C too, except fields of a class type, operators, methods that throw, take a memory or say where
-  their result lives, and a method called `release`: a field is read with `<prefix>_<Class>_<field>(h)`,
-  a method is called with `<prefix>_<Class>_<method>(h, ...)` through dynamic dispatch.
-- A `String` result is freed by C with `<prefix>_free`.
-- The globals are initialized before the first call.
-
-The compiler also writes the library's interface for C (a header) and for Larimar (a module of `native`
-declarations of the same functions, where a class is a resource released by `<prefix>_<Class>_release`
-with its fields as `native let` and its methods as `native function`, and a text is
-`released by <prefix>_free`), and an interface hash: the first 8 hexadecimal digits of the
-SHA-256 of that module, which the library contains and returns from `<prefix>_interface`. A program that
-links the library compiles only if the module it imports, the hash and the library agree.
-
----
-
-### 19.11 Functions with a body of C
-
-```
-native function NAME parameters [ : Type ] { C text }
-```
-
-A native function, method or static function can have C text as its body: after the header of a
-`native function`, the braces hold C, not Larimar. The compiler writes a C function
-with that body: its parameters have the names of the Larimar ones and the C types of §19.3 (a slice
-`T[]` NAME is two parameters, `NAME` and `NAME_length`), and its result is the declared type, converted as
-the result of a native function. `self` is not visible; `lar"NAME"` is (§19.2). Such a method cannot say
-`wait until`.
-
-### 19.12 Classes for one system
-
-A class body can also contain `cinclude "TEXT" ;` and `ccode { C TEXT }`: they are those of §19.1 and
-§19.2. `std.os` declares the platforms as interfaces:
-
-```
-public interface Platform {}
-public interface UnixPlatform extends Platform {}
-public interface LinuxPlatform extends UnixPlatform {}
-public interface MacOSPlatform extends UnixPlatform {}
-public interface WindowsPlatform extends Platform {}
-```
-
-A class that implements one of them (itself, or a class it extends) is **for that platform** (`unix`,
-`linux`, `macos`, `windows`; `unix` is every one but Windows; the narrowest one when there are several, as `LinuxPlatform`
-under a superclass for `UnixPlatform`): its `cinclude`s, its `ccode`s and the C bodies of its methods
-are compiled only for that system (inside the matching `#if`). On another system, calling one of its
-methods with a C body panics. Platforms that do not contain one another (`UnixPlatform` and
-`WindowsPlatform`) in one class are an error. Its other methods, its fields and its type exist
-everywhere: the program is checked for every system at once.
-
-`Platform.current()`, a static function of that interface, gives the system as
-`enum OS { Linux, MacOS, Windows, Unix }`, from the C compiler's macros (`Platform.name()`, as text); a
-`switch` on it chooses the class:
-
-```
-let clock: Clock = switch (Platform.current()) {
-    case Linux, MacOS, Unix -> PosixClock {};
-    case Windows -> WindowsClock {};
-};
-```
-
-An interface type is shared by threads like a value (§18) when every class that implements it is: it
-has no fields, or it is synchronized.
+A process started this way runs the initialization of the globals ([§24](#24-program-execution)) and then
+the tasks it is sent, not `main`.
 
 ## 20. Platforms
 
-What changes between systems is a class for each platform (§19.12), chosen with a `switch` on
+What changes between systems is a class for each platform ([§D.9](#d9-classes-for-one-system)), chosen with a `switch` on
 `Platform.current()`. There are no directives: the C of each system goes inside the `#if` the compiler
 writes for that class, so the generated C is the same for every system.
 
@@ -1669,8 +1473,8 @@ still checked.
 
 Each file is a module. Its name is its path, from the folder of the main file, without `.lar`, with `.`
 between folders: `src/geo/shapes.lar` is `geo.shapes`. A module `a` and the modules in the folder `a/`
-are separate modules. Modules of the standard library start with `std.`. Nobody can import the main
-file.
+are separate modules. Modules of the standard library start with `std.`; those of a library of
+`[packages]`, with the library's name ([§19.1](#191-libraries)). Nobody can import the main file.
 
 ### 21.2 `public`
 
@@ -1733,14 +1537,13 @@ the compiler); their meaning is part of the language.
 | `print(text: String)` | writes the text to the standard output |
 | `println(text: String)` | writes the text and a line break |
 | `panic(text: String)` | stops the program ([§16.3](#163-panics)) |
-| `release(x)` | releases a resource now ([§19.7](#197-resources)) |
+| `release(x)` | releases a resource now ([§D.7](#d7-resources)) |
 | `stringOf(bytes: byte[]): String` | a new string with those bytes |
 | `stringOfRange(bytes: byte[], from: int32, to: int32): String` | a new string with the bytes `from` to `to - 1` |
 
 ### 23.2 Types
 
-`String`, `StringBuilder`, `Any`, `Thread`, `Runnable` (`interface Runnable { function run(): void; }`) and
-`Context` (C's `void*` given back to a callback, [§19.8](#198-c-function-pointers-and-callbacks)).
+`String`, `StringBuilder`, `Any`, `Thread` and `Runnable` (`interface Runnable { function run(): void; }`).
 
 ### 23.3 Methods of `String`
 
@@ -1812,7 +1615,6 @@ topLevel             = const NAME : Type = expression ;
                      | let NAME : Type = expression ;
                      | function
                      | test function
-                     | export function NAME parameters [ : Type ] [ = NAME ] block
                      | struct NAME { ( field | static staticMember | function | operator )* }
                      | [ synchronized ] class NAME [ extends qualifiedName ] [ implements qualifiedName ( , qualifiedName )* ]
                            { ( field | static staticMember | [ override ] function | [ override ] native nativeFunction | native nativeLet | operator
@@ -1824,6 +1626,8 @@ topLevel             = const NAME : Type = expression ;
                      | cinclude "TEXT" ;
                      | ccode { C TEXT }
                      | native cDeclaration
+
+(cinclude, ccode, native declarations and the native members of classes: only in the standard library, Appendix D.)
 
 function             = function [ NAME . ] NAME parameters [ : Type ] [ in lives ] [ throws Type ]
                            [ wait until ( expression ) ] ( block | ; )
@@ -1841,7 +1645,6 @@ nativeLet            = let NAME : Type [ = expression ] ;
 cDeclaration         = function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] ( [ = C ] [ released by NAME ] ; | { C TEXT } )
                      | type NAME [ released by NAME ] ;
                      | type NAME = CTYPE [ released by NAME ] ( ; | { cMember* } )
-                     | type NAME = ( [ Type ( , Type )* ] ) -> Type ;
                      | struct NAME [ = C ] { ( cField | function | static staticMember )* }
                      | const NAME : Type [ = C ] ;
                      | let NAME : Type [ = NAME ] ;
@@ -1922,9 +1725,190 @@ These belong to the tools and the library, which have their own versions and doc
 [Manual](manual.md)):
 
 - the modules of the standard library other than `std.lang` (`std.io`, `std.io.files`, `std.os`,
-  `std.os.process`, `std.time`, `std.crypto`, `std.encoding.json`, `std.net`, `std.test`, ...);
+  `std.os.process`, `std.os.rpc`, `std.os.shared`, `std.time`, `std.crypto`, `std.encoding.json`,
+  `std.net`, `std.test`, ...), except what §19.3 says of `SystemProcess`;
 - the commands `larimar build`, `run`, `check`, `test`, `lsp`, `dap`, the plugins, and the file
   `larimar.toml` (with `[packages]`);
-- the names and the shape of the generated C, other than what [§19](#19-c-interoperability) defines
-  (`RtMem*`, `rt_mem_alloc`, `lar"..."`, the names of native and export functions);
+- the names and the shape of the generated C, other than what [Appendix D](#appendix-d-the-c-of-the-standard-library) defines
+  (`RtMem*`, `rt_mem_alloc`, `lar"..."`, the names of native functions);
 - the text of compile errors.
+
+## Appendix D. The C of the standard library
+
+The standard library talks to the operating system in C, with the declarations of this appendix:
+`cinclude`, `ccode`, the `native` declarations, the functions with a body of C (also inside classes) and
+the classes for one system. They are allowed only in the modules of the standard library (and in
+`std.lang`). In any other module, of a program, a library or a service, each one is a compile error: a
+program has no C of its own ([§19](#19-libraries-services-and-tasks)). `larimarc --unsafe-c` lifts this
+rule for the compiler's own sources and tests; a program built with it has none of the guarantees of
+this document. The guide for whoever maintains the standard library is [std-c.md](std-c.md).
+
+### D.1 `cinclude`
+
+`cinclude "<header.h>";` or `cinclude "file.h";` adds an `#include` to the generated C.
+
+### D.2 `ccode`
+
+```
+ccode { C text }
+```
+
+The C text is copied to the generated C, after the headers and before the program. Braces inside C
+strings, characters and comments do not count toward the closing brace. Inside it, **`lar"NAME"`** (or
+`lar"module.NAME"`) is replaced by the C name of that Larimar function, type or global variable; a name
+that does not exist is a compile error. The prototypes of the functions named this way whose types are
+numbers, `bool`, `String` or `void` are written before the `ccode`. Otherwise the C must use only the
+doors of this appendix: `native` declarations (C seen from Larimar) and `lar"..."`; the names the
+compiler generates for everything else are not part of the language. Code in
+`ccode` is outside every guarantee of this document.
+
+### D.3 Native functions
+
+```
+native function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] ( [ = C ] [ released by NAME ] ; | { C TEXT } )
+C = NAME | struct NAME | c"C TEXT"
+```
+
+A `native` declaration names something of C. The name on the left is the Larimar one; after `=` comes
+the C one: a name, or C text, `c"..."`, when it is not a plain name (`c"(fio_start)"`, a cast). C text is
+not a Larimar `String`. Without `=`, the C name is the same.
+
+- Parameter and result types: numbers, `bool`, `String` (a `const char*`), `String?` parameters (`null`
+  is `NULL`), native types and their optionals, C structs, pointers, `T[]` of numbers or `bool`, and
+  `byte[*]` memories. `...` allows variable arguments.
+- A `T[]` of numbers or `bool` is passed as two C arguments: a pointer to the elements and their count.
+- A result of type `String` must be a zero-terminated text that keeps existing (static, or created in a
+  memory the function receives). `String?` turns `NULL` into `null`.
+- **`released by r`** after a result of type `String` or `String?`: the text belongs to the caller (C made
+  it with `malloc` or similar). It is copied into the memory where the call's result goes, and then `r` is
+  called on it; `NULL` is not released. `r` is a native function with exactly one `String` parameter
+  (written `void*` in C), and only the compiler calls it. `released by` on any other result is a compile error.
+- A `public native function` keeps its C name inside a module.
+- A memory as the **first** parameter is not written in the call: the function receives the memory of
+  the call, so its result lives where the caller says ([§14.7](#147-results-of-functions)). In C it is an
+  `RtMem*`, and `rt_mem_alloc(m, bytes, 0)` reserves zeroed bytes in it. The C may use the memory only
+  during the call. A memory in another position is passed explicitly.
+- When the module has no `cinclude` and no `ccode`, neither it nor its parts (the modules in the folder
+  of its name, `net/posix.lar` for `net.lar`), the compiler writes the C prototype of each native
+  function whose C is a plain name.
+- A native function names its C function, or has a body of C (§D.8). In the standard library,
+  `std.memory` declares `limit` and `compact` as native functions that the compiler writes itself.
+
+### D.4 Native types
+
+```
+native type NAME [ released by NAME ] ;                                   an opaque pointer (void*)
+native type NAME = CTYPE [ released by NAME ] ( ; | { member* } )         a C type
+CTYPE  = [ struct ] NAME *...  |  c"C TYPE"
+member = let NAME : Type [ = NAME ] ;
+       | native function NAME parameters [ : Type ] [ in lives ] [ throws Type ] = ( C | expression ) ;
+       | native let NAME : Type = ( C | expression ) ;
+       | function ...  |  static function ...  |  static native function ... = C ;
+```
+
+Each native type is distinct, even when two declarations are equal. The members of a C type:
+
+- **`let`** declares a field of the C struct the type points to, read and written with `x.f` (C's `x->f`);
+  after `=` comes its C name when it is another. A type with fields must be a pointer (`= c_struct*`).
+- **`native function m(...) = C;`** calls that C function with `self` as its first argument, then the
+  arguments; before `self` goes only the memory of the call, when the first parameter is one. Any other
+  expression after `=` is Larimar, as in a class.
+- **`native let x: T = C;`** is the same with no arguments, read without parentheses.
+- After `= C` of either, `released by r` works as for a native function ([§D.3](#d3-native-functions)):
+  the text C makes is copied where the value goes, then released.
+- **`function`** is a method written in Larimar; `self` is the C value.
+- **`static native function f(...) = C;`** calls that C function without `self`; `static function` is
+  written in Larimar. Both are called as `NAME.f(...)`.
+
+The methods of a type the compiler knows
+(`native type String { ... }`, without `=`) are declared only in the standard library ([§9.6](#96-native-types)).
+
+### D.5 Native structs, constants and variables
+
+```
+native struct NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static function ... )* }
+native const NAME : Type [ = C ] ;
+native let NAME : Type [ = NAME ] ;
+```
+
+A native struct is a C struct, by value. It declares only the fields the program uses; the C definition
+(from a header or `ccode`) gives the layout. Its fields are numbers, `bool`, native types, pointers, C
+structs and `String`; after `=` comes a field's C name when it is another. A `String` field is a C text,
+read-only, and a view of the C storage. A native struct is used like a Larimar struct (literals, field
+access, copies, lists, methods written in Larimar); fields not given in a literal are zero.
+
+`native const` names a C constant, a macro or a C expression (`= c"sizeof(struct stat)"`), read-only; it
+can be a `String`. `native let` names a C variable that can be read and assigned; it cannot be a `String`.
+
+### D.6 Pointers
+
+`T*` is a pointer to C data: a number, `bool`, a C struct, a native type or another pointer.
+
+- `p.f` reads or writes a field of the struct `p` points to; on a `null` pointer it is a panic.
+- `&x` is the address of a local variable and is allowed **only** as an argument of a native function
+  (also as `&x as U*`). So the address never outlives the call.
+- An array passed where C asks for a `T*` is passed as a pointer to its elements.
+- Pointers can be compared with `null` and converted with `as` ([§10.10](#1010-conversions-as)). They
+  cannot be indexed, and there is no pointer arithmetic.
+- Pointers refer to C storage and are outside the lifetime rule.
+
+### D.7 Resources
+
+`native type T ... released by f` declares a **resource**: a C value that `f` releases.
+
+- A resource lives in a memory like any value; when the memory is freed, `f` is called on it.
+- `release(x)` releases it now. Releasing twice does nothing; using a released resource is a panic.
+- The functions that create it return `T?`: a `NULL` pointer, `-1` (also `INVALID_HANDLE_VALUE`) or a
+  negative descriptor arrives as `null`. A Larimar function that returns what such a function makes
+  creates it where its caller says.
+- `f` takes exactly one `T`, and only `release` and the freeing of memories can call it.
+- An object that holds a resource cannot be cloned.
+- If `f` exists only on some platforms, so does the resource.
+
+### D.8 Functions with a body of C
+
+```
+native function NAME parameters [ : Type ] { C text }
+```
+
+A native function, method or static function can have C text as its body: after the header of a
+`native function`, the braces hold C, not Larimar. The compiler writes a C function
+with that body: its parameters have the names of the Larimar ones and the C types of §D.3 (a slice
+`T[]` NAME is two parameters, `NAME` and `NAME_length`), and its result is the declared type, converted as
+the result of a native function. `self` is not visible; `lar"NAME"` is (§D.2). Such a method cannot say
+`wait until`.
+
+### D.9 Classes for one system
+
+A class body can also contain `cinclude "TEXT" ;` and `ccode { C TEXT }`: they are those of §D.1 and
+§D.2. `std.os` declares the platforms as interfaces:
+
+```
+public interface Platform {}
+public interface UnixPlatform extends Platform {}
+public interface LinuxPlatform extends UnixPlatform {}
+public interface MacOSPlatform extends UnixPlatform {}
+public interface WindowsPlatform extends Platform {}
+```
+
+A class that implements one of them (itself, or a class it extends) is **for that platform** (`unix`,
+`linux`, `macos`, `windows`; `unix` is every one but Windows; the narrowest one when there are several, as `LinuxPlatform`
+under a superclass for `UnixPlatform`): its `cinclude`s, its `ccode`s and the C bodies of its methods
+are compiled only for that system (inside the matching `#if`). On another system, calling one of its
+methods with a C body panics. Platforms that do not contain one another (`UnixPlatform` and
+`WindowsPlatform`) in one class are an error. Its other methods, its fields and its type exist
+everywhere: the program is checked for every system at once.
+
+`Platform.current()`, a static function of that interface, gives the system as
+`enum OS { Linux, MacOS, Windows, Unix }`, from the C compiler's macros (`Platform.name()`, as text); a
+`switch` on it chooses the class:
+
+```
+let clock: Clock = switch (Platform.current()) {
+    case Linux, MacOS, Unix -> PosixClock {};
+    case Windows -> WindowsClock {};
+};
+```
+
+An interface type is shared by threads like a value (§18) when every class that implements it is: it
+has no fields, or it is synchronized.

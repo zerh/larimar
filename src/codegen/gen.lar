@@ -12,13 +12,11 @@
 //  - errors     -> a function that throws takes RtError* err_out; every call checks it.
 //  - memories   -> RtMem; heap memories are freed on every exit of their block.
 
-import codegen.gen.callbacks { callbackThunks, takesTextFunctions };
-import semantics.analyzer.declarations { libraryCallback };
 import semantics.types {
-    allFields, buildingLibrary, cCode, cCodeStd, chain, classDepth, classes, ClassInfo, enums, externInfos,
-    FieldInfo, files, findMethod, FunctionInfo, functions, funcTypes, globals, includes, includeWhens, interfaceOf,
-    interfaces, isMemory, isMemParam, isOpt, LambdaInfo, lambdaList, libraryPrefix, MemK, MethodInfo, nativeMethods,
-    optT, platformCondition, structs, Symbol, syncField, T_ANY, T_STRING, T_VOID, TyK, Type, typeOrder, usesThreads
+    cCode, cCodeStd, classDepth, classes, ClassInfo, enums, externInfos,
+    files, FunctionInfo, functions, funcTypes, globals, includes, includeWhens, interfaceOf,
+    interfaces, isMemory, LambdaInfo, lambdaList, MemK, MethodInfo, nativeMethods,
+    platformCondition, structs, Symbol, syncField, T_VOID, TyK, Type, typeOrder, usesThreads
 };
 import codegen.prune { braceDelta, prune, selectRuntime };
 import semantics.linker { FILE_LINES, filePaths };
@@ -29,11 +27,9 @@ import codegen.gen.classes {
     ifaceCallName, initGlobals, interfaceCallHelper, interfaceImplementations, interfaceTableStruct, lambdaHeader,
     mainWrapper, methodHeader, nativeMethodHeader, params, samTable, samThunk, vtableInit, vtableStruct
 };
-import codegen.gen.library { exports, plainName };
 import codegen.gen.statements { block, body, ret };
 import codegen.gen.types {
-    define, earlyExport, exportBody, exportHeader, externCType, externDefinition, externPrototype, forward, isCName,
-    isHandle, larInC, larPrototypes, memberBody
+    define, externDefinition, externPrototype, forward, isCName, larInC, larPrototypes
 };
 
 // =====================================================================================
@@ -100,9 +96,6 @@ public let lambdaDefs: String[*] = [] in default;     // by lambda id ("" until 
 public let lambdaDone: bool[*] = [] in default;
 public let resizeHelpers: String[*] = [] in default;
 public let resizeSeen: Any = {} in default;
-/** Trampolines: a C function that gets a Context calls the Larimar function it carries. */
-public let ctxTrampolines: String[*] = [] in default;
-public let ctxSeen: Any = {} in default;
 public let loopBlock: Block? = null;                  // innermost loop body (per function, saved/restored)
 
 // =====================================================================================
@@ -252,16 +245,6 @@ public function generate(): String {
         functionsOut.add(body(f.decl!.body, f.sig!.elem!, f.throwsType != null, null, f.paramSymbols, "", f.line));
         functionsOut.add("}\n\n");
     }
-    if (buildingLibrary) { functionsOut.add(callbackThunks()); }     // what makes a function C gives a function of Larimar's
-    for (f in functions) {                      // export: the C function C code calls
-        if (f.isExtern || f.exportName == "") { continue; }
-        functionsOut.add(exportBody(f));
-    }
-    if (buildingLibrary) {                      // the members of its classes: tk_Counter_add(handle, ...)
-        for (c in handleClassNames()) {
-            for (m in libraryMembers(c)) { functionsOut.add(memberBody(m)); }
-        }
-    }
     let methods: StringBuilder = {} in default;
     for (s in structs) {
         for (m in s.methods) {
@@ -321,7 +304,7 @@ public function generate(): String {
         methods.add("}\n\n");
     }
     let init: String = initGlobals();
-    let main: String = buildingLibrary ? "" : mainWrapper();
+    let main: String = mainWrapper();
     for (c in classes) {
         if (!c.sync && !c.thread) {
             for (f in c.fields) { requireClone(f.type); }
@@ -342,13 +325,6 @@ public function generate(): String {
         out.add(pw == "" ? "${text}\n" : "#if ${platformCondition(pw)}\n${text}\n#endif\n");
     }
 
-    if (cCode.length > 0) {                     // export functions the ccode can already use
-        let early: StringBuilder = {} in default;
-        for (f in functions) {
-            if (!f.isExtern && f.exportName != "" && earlyExport(f)) { early.add("${exportHeader(f, true)};\n"); }
-        }
-        sectionOf(out, "Export functions", early);
-    }
     let named: StringBuilder = {} in default;      // what ccode names with lar"...": prototypes first
     for (code in cCode) {
         if (code.contains("lar\"")) { larPrototypes(code, named); }
@@ -366,7 +342,6 @@ public function generate(): String {
     let part: StringBuilder = {} in default;
     let anyResource: bool = false;
     for (e in externInfos) {
-        if (e.sig != null) { continue; }
         part.add("typedef ${e.decl.cType != "" ? e.decl.cType : "void*"} Ext_${e.name};\n");
         if (e.decl.releasedBy != "") {
             if (!anyResource) {
@@ -374,19 +349,6 @@ public function generate(): String {
                 anyResource = true;
             }
             part.add("typedef struct { RtRes h; Ext_${e.name} value; } Res_${e.name};\n");
-        }
-    }
-    for (e in externInfos) {                    // pointers to C functions
-        let sg: Type? = e.sig;
-        if (sg == null) { continue; }
-        let ps: String[*] = [] in default;
-        for (p in sg.params) { ps.push(externCType(p)); }
-        if (ps.length == 0) { ps.push("void"); }
-        if (e.ctxIndex >= 0 && sg.elem! == T_STRING && e.decl.ofPackage) {     // a library takes its text where it says: the last argument
-            ps.push("void*");
-            part.add("typedef void (*Ext_${e.name})(${ps.join(", ")});\n");
-        } else {
-            part.add("typedef ${externCType(sg.elem!)} (*Ext_${e.name})(${ps.join(", ")});\n");
         }
     }
     for (t in typeOrder) { forward(part, t); }
@@ -438,7 +400,6 @@ public function generate(): String {
     }
     for (f in functions) {
         if (!f.isExtern && !f.decl!.isNative) { out.add("${functionHeader(f)};\n"); }
-        if (!f.isExtern && f.exportName != "") { out.add("${exportHeader(f, false)};\n"); }
     }
     for (s in structs) {
         for (m in s.methods) { out.add("${methodHeader(m, true)};\n"); }
@@ -458,7 +419,7 @@ public function generate(): String {
     if (enums.length > 0) {
         section(out, "Enum names");
         for (e in enums) {
-            out.add("${internal()}const char* const ${e.name}__names[] = { ");
+            out.add("const char* const ${e.name}__names[] = { ");
             for (i, v in e.variants) {
                 if (i > 0) { out.add(", "); }
                 out.add("\"${v.name}\"");
@@ -471,9 +432,9 @@ public function generate(): String {
         section(out, "Class information, vtables and dispatch");
         for (c in classesByDepth()) {
             let parent: String = c.superName != "" ? "&rtclass_${c.superName}" : "NULL";
-            out.add("${internal()}const RtClass rtclass_${c.name} = { \"${c.name}\", ${parent} };\n");
+            out.add("const RtClass rtclass_${c.name} = { \"${c.name}\", ${parent} };\n");
         }
-        for (c in classesByDepth()) { out.add("${internal()}const ${c.name}_VTable vtable_${c.name} = { ${vtableInit(c, c)} };\n"); }
+        for (c in classesByDepth()) { out.add("const ${c.name}_VTable vtable_${c.name} = { ${vtableInit(c, c)} };\n"); }
         for (c in classesByDepth()) {
             for (m in c.methods) {
                 if (m.introducer == c.name) { dispatchHelper(out, c, m); }
@@ -496,7 +457,6 @@ public function generate(): String {
     for (t in typeOrder) { collectionHelpers(part, t); }
     part.add(boxes);
     for (r in resizeHelpers) { part.add(r); }
-    for (t in ctxTrampolines) { part.add(t); }
     sectionOf(out, "Array and optional helpers", part);
 
     if (globals.length > 0) {
@@ -507,16 +467,15 @@ public function generate(): String {
                 let n: int64 = s.type.size;
                 if (n < 1) { n = 1; }
                 out.add("static uint8_t ${s.cName}__buf[${n}];\n");
-                out.add("${internal()}RtMem ${s.cName};\n");
+                out.add("RtMem ${s.cName};\n");
             } else if (isMemory(s)) {
-                out.add("${internal()}RtMem ${s.cName};\n");
+                out.add("RtMem ${s.cName};\n");
             } else {
-                out.add("${internal()}${cType(s.type)} ${s.cName};\n");
+                out.add("${cType(s.type)} ${s.cName};\n");
             }
         }
     }
 
-    if (exports().length > 0) { exportHelpers(out); }
     section(out, "Functions");
     out.add(functionsOut.toString());
     let anyBuilder: bool = false;
@@ -552,19 +511,9 @@ public function generate(): String {
     section(out, "Entry point");
     out.add(init);
     out.add(main);
-    if (buildingLibrary) { libraryGlue(out); }
 
     let roots: String[*] = ["main"] in default;
-    for (f in functions) {
-        if (!f.isExtern && f.exportName != "") { roots.push(f.exportName); }
-    }
-    if (buildingLibrary) {
-        for (c in handleClassNames()) {
-            for (m in libraryMembers(c)) { roots.push(m.cName); }
-        }
-        if (takesTextFunctions()) { roots.push("${libraryPrefix != "" ? "${libraryPrefix}_" : ""}give"); }
-    }
-    let program: String = prune(out.toString(), roots);     // only what main, the exports and the ccode reach
+    let program: String = prune(out.toString(), roots);     // only what main and the ccode reach
     let head: StringBuilder = {} in default;
     head.add("/* Generated by the transpiler. Runtime first, then the program. */\n");
     let ownC: bool = cCode.length > 0 || includes.length > 0;
@@ -588,200 +537,6 @@ public function generate(): String {
     return head.toString();
 }
 
-/** In a library everything but its export functions stays inside it: two libraries (and the program) do not clash. */
-public function internal(): String { return buildingLibrary ? "static " : ""; }
-
-/** What export functions use to give C its texts and the handles of a library's objects (cut when unused). */
-function exportHelpers(out: StringBuilder): void {
-    section(out, "Export helpers");
-    if (buildingLibrary) { out.add("static void lm_library_init(void);\n"); }
-    out.add("""
-        typedef struct RtHandle { void* object; RtMem mem; } RtHandle;
-
-        static RtHandle* rt_handle_new(void) {
-            RtHandle* h = (RtHandle*)calloc(1, sizeof(RtHandle));
-            if (!h) rt_panic("out of memory", 0);
-            h->mem = rt_mem_growable();
-            return h;
-        }
-
-        static void rt_handle_release(void* p) {
-            RtHandle* h = (RtHandle*)p;
-            if (!h) return;
-            rt_mem_free(&h->mem);
-            free(h);
-        }
-
-        static void* rt_handle_object(void* p, const char* fn, const char* param) {
-            if (!p) {
-                char msg[256];
-                snprintf(msg, sizeof msg, "%s: '%s' is NULL", fn, param);
-                rt_panic(msg, 0);
-            }
-            return ((RtHandle*)p)->object;
-        }
-
-        static void* rt_handle_object_or_null(void* p) { return p ? ((RtHandle*)p)->object : NULL; }
-
-        static char* rt_export_text(RtString s) {
-            char* out = (char*)malloc((size_t)s.len + 1);
-            if (!out) rt_panic("out of memory", 0);
-            if (s.len > 0) memcpy(out, s.ptr, (size_t)s.len);
-            out[s.len] = 0;
-            return out;
-        }
-        """);
-}
-
-/**
- * What a library gives C besides its export functions: <prefix>_free for its texts, <prefix>_<Class>_release
- * for its handles, <prefix>_interface, and the start: the globals are made before the first call (when the
- * library is loaded, where the C compiler allows it).
- */
-function libraryGlue(out: StringBuilder): void {
-    section(out, "Library");
-    let p: String = libraryPrefix != "" ? "${libraryPrefix}_" : "";
-    out.add("static int lm_library_ready = 0;\n");
-    out.add("static void lm_library_init(void) {\n    if (lm_library_ready) return;\n    lm_library_ready = 1;\n");
-    if (hasInit) { out.add("    init_globals();\n"); }
-    out.add("}\n");
-    out.add("#if defined(__GNUC__) || defined(__clang__) || defined(__TINYC__)\n");
-    out.add("__attribute__((constructor)) static void lm_library_load(void) { lm_library_init(); }\n#endif\n");
-    out.add("void ${p}free(void* text) { free(text); }\n");
-    if (takesTextFunctions()) {             // what a function of C's, called back, gives its text with
-        out.add("void ${p}give(void* out, const char* text) { ((RtTextOut*)out)->set((RtTextOut*)out, text ? text : \"\", text ? strlen(text) : 0); }\n");
-    }
-    for (c in handleClasses()) { out.add("void ${p}${c}_release(void* handle) { rt_handle_release(handle); }\n"); }
-    out.add("const char ${p}larimar_interface[] = \"larimar-interface:${INTERFACE_MARK}\";\n");
-    out.add("const char* ${p}interface(void) { return ${p}larimar_interface + 18; }\n");
-}
-
-/** Where the interface hash goes in a library's C: larimar build writes it once the .lar is written. */
-public const INTERFACE_MARK: String = "@INTERFACE@";
-
-/**
- * The classes C knows as handles, in order (their names in the C of the library): those that the export
- * functions take or return, and those that the members of these give C in turn.
- */
-public function handleClassNames(): String[*] {
-    let out: String[*] = [] in default;
-    for (f in functions) {
-        if (f.isExtern || f.exportName == "" || f.sig == null) { continue; }
-        addHandles(f.sig!.elem!, out);
-        for (t in f.sig!.params) {
-            addHandles(t, out);
-            if (t.kind == TyK.Func) {           // what a function of the program is given
-                for (pt in t.params) { addHandles(pt, out); }
-            }
-        }
-    }
-    let i: int32 = 0;
-    while (i < out.length && buildingLibrary) {
-        for (m in libraryMembers(out[i])) {
-            if (m.method == null) { continue; }
-            addHandles(m.method!.sig!.elem!, out);
-            for (t in m.method!.sig!.params) {
-                addHandles(t, out);
-                if (t.kind == TyK.Func) {
-                    for (pt in t.params) { addHandles(pt, out); }
-                }
-            }
-        }
-        i += 1;
-    }
-    return out;
-}
-
-function addHandles(t: Type, out: String[*] in default): void {
-    if (!isHandle(t)) { return; }
-    let n: String = (isOpt(t) ? t.elem! : t).name;
-    if (!out.contains(n)) { out.push(n.clone() in default); }
-}
-
-/** The classes C knows as handles, by the names C and Larimar see (without their module). */
-public function handleClasses(): String[*] {
-    let out: String[*] = [] in default;
-    for (n in handleClassNames()) { out.push(plainName(n)); }
-    return out;
-}
-
-/** A method or a field of a class that a library gives C: <prefix>_<Class>_<name>(handle, ...). */
-public class LibraryMember {
-    let cls: String;                 // the class, in the C of the library
-    let name: String;
-    let cName: String;
-    let method: MethodInfo? = null;
-    let field: FieldInfo? = null;
-}
-
-/** What can go to C from a member: what an export function takes (a field: not a class, which it keeps). */
-function crosses(t: Type, field: bool): bool {
-    if (t == optT(T_STRING) || t.kind == TyK.Prim && t != T_ANY) { return true; }
-    return !field && isHandle(t);
-}
-
-/** Why a member of a class does not go to C ("" when it goes). */
-function memberProblem(m: MethodInfo): String {
-    if (m.isOperator) { return "an operator"; }
-    if (m.throwsType != null) { return "it throws"; }
-    if (m.decl.returnLives != "") { return "its result lives in ${m.decl.returnLives}"; }
-    if (!crosses(m.sig!.elem!, false) && m.sig!.elem! != T_VOID) { return "it returns ${m.sig!.elem!.text}"; }
-    for (i, t in m.sig!.params) {
-        if (isMemParam(m.memParams, i)) { return "it takes a memory"; }
-        if (t.kind == TyK.Func && libraryCallback(t)) {     // a function of the program: kept in default or in the object
-            let lives: String = m.decl.params[i].lives;
-            if (lives != "" && lives != "default" && lives != "self") { return "a function it takes lives in ${lives}"; }
-            continue;
-        }
-        if (!crosses(t, false)) { return "it takes ${t.text}"; }
-        if (m.decl.params[i].lives != "") { return "a parameter says where it lives"; }
-    }
-    if (m.name == "release") { return "its C name is the one that gives the handle back"; }
-    return "";
-}
-
-/** The members of a class that go to C: its fields and methods (and its parents'), the most derived ones. */
-public function libraryMembers(cls: String in default): LibraryMember[*] {
-    let out: LibraryMember[*] = [] in default;
-    let p: String = libraryPrefix != "" ? "${libraryPrefix}_" : "";
-    let c: String = "${p}${plainName(cls)}_";
-    for (f in allFields(cls)) {
-        if (crosses(f.type, true)) { out.push(LibraryMember { cls, name: f.name, cName: "${c}${f.name}", field: f } in default); }
-    }
-    for (m in methodsOf(cls)) {
-        if (memberProblem(m) == "") { out.push(LibraryMember { cls, name: m.name, cName: "${c}${m.name}", method: m } in default); }
-    }
-    return out;
-}
-
-/** The members of a class that do not go to C, with why: the .lar says it. */
-public function memberSkips(cls: String in default): String[*] {
-    let out: String[*] = [] in default;
-    for (f in allFields(cls)) {
-        if (!crosses(f.type, true)) { out.push("${f.name} (${f.type.text})"); }
-    }
-    for (m in methodsOf(cls)) {
-        let why: String = memberProblem(m);
-        if (why != "" && !m.isOperator) { out.push("${m.name}() (${why})"); }
-    }
-    return out;
-}
-
-/** The instance methods of a class and its parents, each one by its most derived definition. */
-function methodsOf(cls: String in default): MethodInfo[*] {
-    let out: MethodInfo[*] = [] in default;
-    let names: String[*] = [] in default;
-    for (c in chain(cls)) {
-        for (m in c.methods) {
-            if (m.isOperator || names.contains(m.name)) { continue; }
-            names.push(m.name);
-            let best: MethodInfo? = findMethod(cls, m.name, false, 0);
-            out.push(best ?? m);
-        }
-    }
-    return out;
-}
-
 /**
  * Resources (extern type X released by f): a value lives in a cell of the memory it was made in, with its
  * state; the memory releases it when it is freed, unless release(x) already did.
@@ -794,10 +549,9 @@ function resources(out: StringBuilder): void {
             if (r->state == 1) { r->state = 2; r->release(r); r->state = 0; }
         }
         static inline void rt_res_release(void* p) { if (p) rt_res_final(p); }
-        static void rt_res_lent(RtRes* r) { (void)r; }      /* a resource given to a callback: its owner releases it */
         """);
     for (e in externInfos) {
-        if (e.decl.releasedBy == "" || e.sig != null) { continue; }
+        if (e.decl.releasedBy == "") { continue; }
         let n: String = e.name;
         let f: FunctionInfo? = e.releaser;
         if (f == null) { continue; }

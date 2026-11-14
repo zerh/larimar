@@ -2,6 +2,7 @@
 // one with errors, or a file in tests/cases/) and says what must happen:
 //
 //   failsWith(raw"""...""", "text")        the compiler rejects it, with an error that contains the text
+//   failsInAProgram(raw"""...""", "text")  the same, as a program (the others may use std's C: --unsafe-c)
 //   runs("tests/cases/c/x.lar", [...])     it compiles, runs without memory errors, ends with 0 and prints those lines
 //   panics("tests/cases/...", "text")      it compiles, and stops when it runs (panic) with that text
 //   memoryError("tests/cases/...")         it compiles, and the sanitizers find a memory error when it runs
@@ -31,11 +32,16 @@ public function compiler(): String {
 }
 
 /** The source must not compile: one of its errors contains `wanted` (larimar check --json gives them). */
-public function failsWith(source: String, wanted: String): void {
+public function failsWith(source: String, wanted: String): void { rejects(source, wanted, " --unsafe-c"); }
+
+/** The same, checked as a program (without --unsafe-c): for what only the standard library may have. */
+public function failsInAProgram(source: String, wanted: String): void { rejects(source, wanted, ""); }
+
+function rejects(source: String, wanted: String, unsafe: String): void {
     let file: String = place("fails.lar");
     if (!write(file, source)) { return; }
     let out: String = place("fails.json");
-    let code: int32 = os.run("${quote(compiler())} check --json ${quote(file)} > ${quote(out)} 2>&1");
+    let code: int32 = os.run("${quote(compiler())} check --json ${quote(file)}${unsafe} > ${quote(out)} 2>&1");
     let text: String = read(out);
     if (code == 0) {
         fail("expected a compile error containing: ${wanted} (${file})");
@@ -109,6 +115,20 @@ public function memoryError(file: String): void {
     check(r!.memory, "expected the sanitizers to report a memory error (exit ${r!.code})");
 }
 
+/** Compiles a program (Larimar, then C) for a test to run itself: its executable, or "" (then the test fails). */
+public function built(file: String): String {
+    let c: String = generatedC(file);
+    if (c == "") { return ""; }
+    let stem: String = Paths.stem(file);
+    let exe: String = place(windows() ? "${stem}.exe" : stem);
+    let log: String = place("${stem}.cc.txt");
+    if (os.run("${cCommand(c, place("${stem}.c"), exe)} > ${quote(log)} 2>&1") != 0) {
+        fail("the C compiler failed:\n${head(read(log), 20)}");
+        return "";
+    }
+    return exe;
+}
+
 /** The C the compiler writes for the program ("" when it does not compile: then the test fails). */
 public function generatedC(file: String): String { return generatedFor(file, ""); }
 
@@ -117,7 +137,7 @@ public function generatedFor(file: String, target: String): String {
     let c: String = place("${Paths.stem(file)}${target}.c");
     let log: String = place("${Paths.stem(file)}.compile.txt");
     let only: String = target != "" ? " --target ${target}" : "";
-    if (os.run("${quote(compiler())} ${quote(file)} -o ${quote(c)}${only} > ${quote(log)} 2>&1") != 0) {
+    if (os.run("${quote(compiler())} ${quote(file)} -o ${quote(c)}${only} --unsafe-c > ${quote(log)} 2>&1") != 0) {
         fail("did not compile:\n${head(read(log), 20)}");
         return "";
     }
@@ -185,6 +205,7 @@ function cCommand(c: String, cFile: String, exe: String): String {
     if (!windows()) { cmd.push("-lm"); }
     if (c.contains("#define RT_THREADS") && !windows()) { cmd.push("-pthread"); }
     if (c.contains("#define LM_NET_SOCKETS") && windows()) { cmd.push("-lws2_32"); }
+    if (c.contains("#define LM_OS_SHARED") && !windows() && Platform.name() != "macos") { cmd.push("-lrt"); }
     if (c.contains("#define LM_NET_TLS")) {
         if (windows()) {
             cmd.push("-lsecur32");
@@ -255,7 +276,7 @@ function identifierPart(c: byte): bool {
 /** The errors larimar check gives for a file ("" when there are none). */
 public function checked(file: String): String {
     let log: String = place("check.txt");
-    let code: int32 = os.run("${quote(compiler())} check ${quote(file)} > ${quote(log)} 2>&1");
+    let code: int32 = os.run("${quote(compiler())} check ${quote(file)} --unsafe-c > ${quote(log)} 2>&1");
     try {
         return code == 0 ? "" : Files.readString(log).clone();
     } catch (IoError e) {

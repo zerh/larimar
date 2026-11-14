@@ -1,0 +1,52 @@
+// C is written only in the standard library: a program, and a library written in Larimar, use what std
+// gives. The other tests of tests/c try std's C, with --unsafe-c; these check it as a program does.
+import tests.support.compiler { failsInAProgram, runs };
+
+test function ccodeIsForStd(): void {
+    failsInAProgram(raw"""
+        ccode { static int one(void) { return 1; } }
+        function main(): int32 { return 0; }
+        """, "ccode is only for the standard library");
+    failsInAProgram(raw"""
+        cinclude "<math.h>";
+        function main(): int32 { return 0; }
+        """, "cinclude is only for the standard library");
+}
+
+test function nativeIsForStd(): void {
+    failsInAProgram(raw"""
+        native function abs(x: int32): int32;
+        function main(): int32 { return abs(-1); }
+        """, "native function is only for the standard library");
+    failsInAProgram(raw"""
+        native type File released by fclose;
+        function main(): int32 { return 0; }
+        """, "native type is only for the standard library");
+    failsInAProgram(raw"""
+        native let errno: int32;
+        function main(): int32 { return 0; }
+        """, "native let is only for the standard library");
+    failsInAProgram(raw"""
+        native function twice(x: int32): int32 { return x * 2; }
+        function main(): int32 { return twice(2); }
+        """, "a function with a body of C is only for the standard library");
+}
+
+test function aClassForASystemHasNoCOfItsOwn(): void {
+    failsInAProgram(raw"""
+        import std.os { UnixPlatform };
+        class Clock implements UnixPlatform {
+            cinclude "<time.h>";
+            native function now(): int64 { return (int64_t)time(NULL); }
+        }
+        function main(): int32 { return 0; }
+        """, "only for the standard library");
+}
+
+// What std gives is used as always: its C stays its own.
+test function aProgramUsesStd(): void {
+    runs("tests/cases/c/uses_std_only.lar", [
+        "3 hola true"
+    ]);
+}
+

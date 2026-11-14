@@ -36,7 +36,6 @@ public class Parser {
     let failed: String = "";                    // the first error, lexical or of syntax ("" when there is none)
     let waitUntilAllowed: bool = false;         // reading the methods of a synchronized class: they may say `wait until (condition)`
     let readingCastType: bool = false;          // reading the type after `as`: there a '?' may be the ternary's (n > MAX as int64 ? a : b)
-    let parsingExport: bool = false;            // reading an export function
     let cOwner: String = "";                    // the class being read ("" outside one): what its cinclude, ccode and C bodies belong to
     let staticFunctions: FunctionDecl[*] = [];  // written inside a type: they become top-level `function Type.name` declarations
     let nativeParts: Node[*] = [];              // what a type also declares at the top level: its C functions, its cinclude and ccode
@@ -66,7 +65,7 @@ public class Parser {
     /** Is the current token of this kind? */
     function at(kind: TT): bool { return !self.atEnd() && self.current().kind == kind; }
 
-    /** Is the current token the identifier `word` (a word with a meaning only there: test, export, type...)? */
+    /** Is the current token the identifier `word` (a word with a meaning only there: test, type...)? */
     function atWord(word: String): bool { return self.at(TT.Ident) && self.current().text == word; }
 
     /** Are the next two tokens the identifiers `first` and `second` (wait until, thread safe)? */

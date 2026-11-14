@@ -46,11 +46,11 @@ The names of the language, the tool and the examples are in English, like the ex
 20. [Failures at run time](#20-failures-at-run-time)
 21. [`Any`: free-form data](#21-any-free-form-data)
 22. [Threads](#22-threads)
-23. [Calling C](#23-calling-c)
+23. [Other programs: calls, shared memory and processes](#23-other-programs-calls-shared-memory-and-processes)
 24. [Modules](#24-modules)
 25. [Standard library](#25-standard-library)
 26. [Projects: `larimar.toml` and `larimar build`](#26-projects-larimartoml-and-larimar-build)
-27. [Libraries written in Larimar](#27-libraries-written-in-larimar)
+27. [Libraries and services written in Larimar](#27-libraries-and-services-written-in-larimar)
 28. [What the transpiler generates](#28-what-the-transpiler-generates)
 29. [Larimar written in Larimar](#29-larimar-written-in-larimar)
 30. [Current limitations](#30-current-limitations)
@@ -201,7 +201,6 @@ file, there can only be declarations:
 | Class | `class Animal { ... }`, `synchronized class Counter { ... }` (see [Threads](#22-threads)) |
 | Interface | `interface Drawable { ... }` |
 | Enum | `enum Color { Red, Green }` |
-| C code | `cinclude "<math.h>";`, `native function ...`, `native type ...` |
 
 A program can be split into several files; each one is a **module** ([chapter 24](#24-modules)).
 Any declaration can have `public` in front so that other modules can use it.
@@ -856,9 +855,7 @@ function main(): int32 {
 }
 ```
 
-- They work in `struct`, `class`, `enum` and `native type`. Interfaces have no static functions.
-- In a `native type` you can also write `static native function name(...) = c_function;`, which calls that
-  C function ([C types with members](#c-types-with-members)).
+- They work in `struct`, `class` and `enum`. Interfaces have no static functions.
 - `function Type.name` can only be written in the module that declares the type.
 - They are always called as `Type.name(...)` (or `module.Type.name(...)`); not from an object.
 - They do not use `self`, do not go in the virtual table and are not redefined with `override`.
@@ -1684,7 +1681,6 @@ And when the `in` is missing, the error message suggests it: `... or declare the
 
 - `in` only makes sense in parameters that point to memory (objects, lists, texts).
 - A method that redefines another (`override`) or implements an interface must repeat the same `in`.
-- `native` functions do not use it, except `in default` on a callback that C keeps ([chapter 23](#callbacks-with-a-context-context)).
 
 ---
 
@@ -2249,8 +2245,8 @@ Output: `sum 55`
 - **The condition can use the parameters**: `function serve(ticket: int32): int32 wait until (self.now >=
   ticket)` lets each one through on its turn.
 - **Only in methods of a `synchronized` class**, because they are the only changes the object can see.
-- **It is written in two words**, like `released by`: the clauses that describe a declaration read
-  like a phrase. The keywords that start something go in a single piece (`cinclude`, `ccode`).
+- **It is written in two words**, like `thread safe`: the clauses that describe a declaration read
+  like a phrase.
 - **Several conditions at once:** a queue with a limited capacity puts `wait until (self.items.length < 4)`
   on `put` and `wait until (self.items.length > 0)` on `take`, and each side waits for its own.
 
@@ -2388,939 +2384,171 @@ API on Windows. `larimar build` adds what is needed to compile.
 
 ---
 
-## 23. Calling C
+## 23. Other programs: calls, shared memory and processes
 
-There are thousands of libraries written in C, for almost anything: graphics, sound, databases,
-compression. Larimar can use them directly. Since Larimar becomes C, calling a C function costs
-nothing: you only **declare** it with `native function` (its name, what it receives and what it gives
-back), and then use it like any other function.
+A Larimar program has no C of its own, and loads no code that the compiler did not check. What Larimar
+does not have runs **in another process**: another program, a service written in Larimar
+([chapter 27](#27-libraries-and-services-written-in-larimar)), or a part of the same program. They talk
+through pipes or shared memory, and if the other process fails (a crash, a panic, a bug of C), the
+memory of yours is not touched: it is an error you catch, and the other process can start again.
 
-```ts
-cinclude "<stdio.h>";
-cinclude "<math.h>";
-
-native function printf(format: String, ...): int32;
-native function sqrt(x: float64): float64;
-
-function main(): int32 {
-    printf("square root of 2 = %f\n", sqrt(2.0));
-    return 0;
-}
-```
-
-Output: `square root of 2 = 1.414214`
-
-`cinclude` brings in the C file that declares those functions (a **header**), and `native function`
-says to Larimar how each one is called. With `<math.h>`, on some systems the math library has to be
-**linked** (joined to the program when it is built): `dynamic_libraries = ["m"]` in the `larimar.toml` of a
-project ([chapter 26](#26-projects-larimartoml-and-larimar-build)).
-
-The other way, Larimar seen from C, is [`export function`](#c-calling-larimar-export-function), and
-on a large scale a whole library written in Larimar for C programs ([chapter 27](#27-libraries-written-in-larimar)).
-
-Everything that comes from C is declared with **`native`**, and every declaration follows the same rule:
-**the Larimar name goes on the left; after `=`, the C name**. Without `=`, the name is the same.
-
-| Declaration | What it is |
+| What | With |
 |---|---|
-| `native function f(...): T;` | a C function ([below](#23-calling-c)) |
-| `native type X;`, `native type X = FILE*;` | a C type ([C types](#c-types-native-type)) |
-| `native type X = T* { ... }` | a C type with fields and methods ([C types with members](#c-types-with-members)) |
-| `native type F = (int32) -> void;` | a pointer to a C function ([Pointers to C functions](#pointers-to-c-functions)) |
-| `native struct P { ... }` | a C struct, by value ([C structs](#c-structs-native-struct)) |
-| `native const N: int32;`, `native let errno: int32;` | a C constant, macro or variable ([Constants and variables](#c-constants-and-variables-native-const-native-let)) |
+| run any program and read what it prints | `Process` ([`std.os.process`](#stdosprocess-other-programs)) |
+| call the functions of another program | `std.os.rpc`: JSON-RPC, by its pipes or by shared memory |
+| move bytes from one program to another (files, frames, audio) | `std.os.shared`: a stream in shared memory |
+| run work of the program itself in other processes | `SystemProcess` and `ProcessPool` |
+| use a library that runs in its own process | a service, in `[packages]` ([chapter 27](#27-libraries-and-services-written-in-larimar)) |
 
-A library of your own is declared the same way. For example, for one of windows:
+### Calls to another program: `std.os.rpc`
 
-```ts
-cinclude "windows_lib.h";
-
-native type Window;                                      // an opaque C pointer
-native function create_window(title: String): Window;
-native function close_window(w: Window): void;
-```
-
-- `cinclude` adds an `#include` to the generated C (inside a class for a platform, only on that
-  system: see [C for each system](#c-for-each-system-classes-with-c-in-their-methods)).
-- The parameters of a `native function` can only be numbers, `bool`, `String` (it arrives as
-  `const char*`), `String?` (`null` arrives as `NULL`), `native` types (optional ones too, `T?`, which in C
-  are a pointer that can be `NULL`), C structs and C pointers (`T*`, see [C pointers](#c-pointers-t-and-)).
-  `...` allows variable arguments, as in `printf`.
-- A C function can return `String?`: `NULL` arrives as `null` (`getenv`).
-- **When the C name is another one**, it goes after `=`: `native function cExit(code: int32): void = exit;`.
-  When it is not a plain name (a cast, a macro in parentheses), it goes as **C text, `c"..."`**, exactly as
-  in C: `= c"(fio_start)"`, `= c"(const char*)sqlite3_column_text"`. The `c` in front says it is C, not a
-  Larimar `String`.
-- A **`T[]` of numbers or `bool`** (`byte[]`, `int32[]`, `float64[]`...) arrives in C as **two
-  arguments**: a pointer to the elements and how many there are. C can read them and write to them, so
-  it is the way for C to fill a Larimar buffer (reading from a file or a socket) without copying anything:
-
-  ```ts
-  ccode {
-      static int32_t fill(uint8_t* items, int32_t length) { /* writes to items[0..length) */ return length; }
-  }
-  native function fill(buffer: byte[]): int32;      // in C: fill(uint8_t* items, int32_t length)
-
-  let buf: byte[*] = buffer(4096);
-  let n: int32 = fill(buf);                          // a list, a T[N] or a T[] work
-  ```
-- If the module has no `cinclude` and no `ccode` (neither it nor the modules of its folder: `net/posix.lar`
-  for `net.lar`), the transpiler writes the C prototype of each
-  `native function` itself. That is what is needed for functions of your own written in a separate `.c`
-  (see `sources` in [section 26](#26-projects-larimartoml-and-larimar-build)). If the function comes from
-  a header, include the header.
-- A C function that returns `String` must return a zero-terminated text that keeps existing: a static
-  one, or one created in a memory it receives (see below).
-- A `native function` is C: either it names a C function (`= c_name;`), or its body is C
-  (`native function twice(x: int32): int32 { return 2 * x; }`), which the compiler writes as a C function.
-  To write one in Larimar, write a plain function.
-- In a module, the C name does not change: `public native function Beep(...)` in the module `win` is
-  used as `win.Beep(...)` and calls C's `Beep`.
-
-**A macro with named arguments.** Some libraries imitate named arguments with a macro that builds a
-struct (`fio_start(.threads = 1, .workers = 2)` in facil.io). The macro hides a real function with the
-same name, which takes the struct; in parentheses, C calls the function and not the macro:
+A program that answers calls uses `serve` with a function that gets each call (`RpcCall`: its `method`
+and its `params`, an `Any`) and gives back the result:
 
 ```ts
-ccode {
-    #include <stdio.h>
-    struct sum_args { int a; int b; };
-    static int sum(struct sum_args s) { return s.a + s.b; }
-    #define sum(...) sum((struct sum_args){__VA_ARGS__})     /* sum(.a = 1, .b = 2) in C */
-}
-
-native struct SumArgs = struct sum_args { let a: int32; let b: int32; }
-native function sum(args: SumArgs): int32 = c"(sum)";       // the function, not the macro
+// calc.lar
+import std.os.rpc { RpcCall, serve };
 
 function main(): int32 {
-    println("${sum({ a: 3, b: 4 })}");                      // the fields not given are zero
-    return 0;
-}
-```
-
-Output: `7`
-
-### C in the same file: `ccode`
-
-Almost everything from C is used directly, with declarations: functions, types, structs, constants,
-variables, pointers and resources (next sections). For what is still better written in C (an algorithm,
-an Apple block, code between `fork` and `exec`), you write it in C inside the file itself and declare it
-with `native function`:
-
-```ts
-ccode {
-    #include <ctype.h>
-
-    static int32_t sum_digits(int64_t v) {
-        int32_t s = 0;
-        if (v < 0) v = -v;
-        while (v > 0) { s += (int32_t)(v % 10); v /= 10; }
-        return s;
-    }
-}
-
-native function sum_digits(v: int64): int32;
-
-function main(): int32 {
-    println("${sum_digits(98765)}");
-    return 0;
-}
-```
-
-Output: `35`
-
-Inside a `ccode`, **`lar"name"`** is the C name of a Larimar function, type or global variable
-(`lar"module.name"` for one of another module). That way the C does not depend on how the compiler
-names things:
-
-```ts
-ccode {
-    static int32_t both(int32_t a) { return lar"twice"(a) + lar"area"(a, 3); }
-}
-
-function twice(x: int32): int32 { return x * 2; }
-function area(w: int32, h: int32): int32 { return w * h; }
-native function both(a: int32): int32;
-
-function main(): int32 {
-    println("${both(5)}");
-    return 0;
-}
-```
-
-Output: `25`
-
-- A name that does not exist is a compile error: *lar"nope" in ccode: 'nope' is not a function, type or
-  global of Larimar seen here*.
-- The prototypes of the functions named this way are written before the `ccode` when their types are
-  numbers, `bool`, `String` or `void`. A function that returns data also receives the memory of the call
-  (as [chapter 28](#28-what-the-transpiler-generates) shows); for C to call Larimar with a plain C
-  signature there is [`export function`](#c-calling-larimar-export-function).
-
-In the standard library, `native type` also declares the methods of the types the compiler knows, and
-mixes intrinsics, methods written in Larimar and calls to C:
-
-```ts
-public native type String {
-    native let length: int32;
-    native operator [](i: int32): byte;
-    native function substring(from: int32, to: int32): String in self;
-    function isEmpty(): bool { return self.length == 0; }
-}
-```
-
-A native function of a class delegates to a Larimar expression, which can call a C function:
-
-```ts
-public class StringBuilder {
-    let buffer: TextBuf = text_buf_new();
-    native function add(text: String): void = text_buf_add(self.buffer, text);
-    native function toString(): String in self = text_buf_view(self.buffer);
-}
-```
-
-Of the `ccode` blocks of the standard library only what is used reaches the C: each C function, type
-or variable stays if something the program uses names it. The `ccode` of the program itself, instead,
-is copied whole.
-
-That is how `String` is written: the compiler only knows its core (`length`, `[]`, `substring`, `bytes`,
-`split` and `lines`, which are views of the text), and everything else (`indexOf`, `replace`,
-`toUpperCase`, `padStart`, `toInt`, `codePoints`...) is written in Larimar in `std/lang.lar`, with a
-small `ccode` only for what needs C (`strtod`, for `toFloat`).
-
-- The content is copied as it is into the generated C, after the headers and before the program.
-- **The doors between the two languages are `native` (from C to Larimar), `export function` (from
-  Larimar to C) and `lar"..."` (inside a `ccode`)**, with their types checked. The C must not use the
-  variables and types that Larimar generates in any other way, because their names may change.
-- Inside `ccode` there are no guarantees: the C can do anything. It is better to keep it small and simple.
-
-### C for each system: classes with C in their methods
-
-What changes between systems is written as **an interface and a class for each system**, whose methods
-are **native functions with a body of C** (`native function f(): T { C }`). Each class says the platform it
-is for by implementing it (`UnixPlatform`, `WindowsPlatform`...), and which one runs is chosen with a
-`switch` on `Platform.current()`. It is how the standard library does it (`std.time`, `std.os`, `std.net`...):
-its modules are only `.lar` files, and no `#if` is written by hand.
-
-```ts
-import std.os { Platform, UnixPlatform, WindowsPlatform };
-
-interface Clock {
-    function monotonic(): int64;
-    function sleep(ms: int64): void;
-}
-
-class PosixClock implements Clock, UnixPlatform {
-    cinclude "<time.h>";
-
-    ccode {                                   // C its methods share
-        static int64_t ms_of(clockid_t which) {
-            struct timespec t;
-            clock_gettime(which, &t);
-            return (int64_t)t.tv_sec * 1000 + t.tv_nsec / 1000000;
+    serve((call) -> {
+        if (call.method == "add") {
+            return (call.params.a as int64 ?? 0) + (call.params.b as int64 ?? 0);
         }
-    }
-
-    override native function monotonic(): int64 { return ms_of(CLOCK_MONOTONIC); }
-
-    override native function sleep(ms: int64): void {
-        struct timespec t = { (time_t)(ms / 1000), (long)(ms % 1000) * 1000000L };
-        nanosleep(&t, NULL);
-    }
-}
-
-class WindowsClock implements Clock, WindowsPlatform {
-    cinclude "<windows.h>";
-
-    override native function monotonic(): int64 { return (int64_t)GetTickCount64(); }
-
-    override native function sleep(ms: int64): void { Sleep((DWORD)ms); }
-}
-
-let clock: Clock = switch (Platform.current()) {
-    case Linux, MacOS, Unix -> PosixClock {};
-    case Windows -> WindowsClock {};
-};
-```
-
-- **A body of C** sees the parameters by their names, with their C types: an `int64` is an `int64_t`, a
-  `String` a `const char*` (to read), a `byte[]` is `items` and `items_length`, a native type its C
-  type. It returns what the signature says (a `String` is copied by Larimar). What is outside the method
-  (another function, a global of Larimar) is named with `lar"name"`. `self` is not there: what the C needs
-  goes as parameters. A function outside a class can have a C body too.
-- **`cinclude` and `ccode` inside a class** are its headers and the C its methods share.
-- **The platforms** are interfaces of `std.os`, one inside the other:
-
-  ```ts
-  public interface Platform {}
-  public interface UnixPlatform extends Platform {}       // Linux, macOS and the other Unix
-  public interface LinuxPlatform extends UnixPlatform {}
-  public interface MacOSPlatform extends UnixPlatform {}
-  public interface WindowsPlatform extends Platform {}
-  ```
-
-  A class for a platform puts all its C (headers, `ccode`, bodies) into the C inside the `#if` of that
-  system, which the compiler writes. The same C file builds everywhere, and a build for Linux never sees
-  `<windows.h>`. Called on another system, a method of that class panics: *'WindowsClock.sleep' is for
-  windows, not for this system*. A subclass can be for a narrower platform: `class MacOSSystem extends
-  PosixSystem implements MacOSPlatform` overrides only what changes on macOS.
-- **`Platform.current()`** (a static function of the interface `Platform`) gives `OS.Linux`, `MacOS`,
-  `Windows` or `Unix` (another Unix); `Platform.name()`, the same as text (`"linux"`...). A `switch` on it
-  without `default` has to name every system: a system added later shows every place to port. It is a
-  constant of the C compiler, so the branch of the other systems disappears from the executable.
-- **Where they go:** the module (`time.lar`) keeps its API and the interface; each platform's class goes
-  in a module of its folder (`time/posix.lar`, `time/windows.lar`), which the module imports. The parts
-  reach the C before the module, so C that several parts share goes in a part of its own that they
-  import (`process/common.lar`).
-- Implementations kept in a global are shared by threads: an interface whose classes have no fields is
-  safe to share (it has no state to change).
-
-Which to use, from less C to more:
-
-1. **`native` declarations**, when C already has the function, type or constant: almost always.
-2. **`ccode { ... }`**, a few lines that C writes better: a cast, a macro, a loop on `EINTR`.
-3. **`native function f(...): T { C }`**, a function whose body is C: when the C is only for it.
-4. **A class for each platform with native methods**, when the systems do it differently.
-
-### The C of one platform only: `--target`
-
-By default the generated C is **one file for every system**: each platform's classes go inside the `#if`
-the compiler writes, and the C compiler of each system takes its own. It is what lets the same C be
-built anywhere (Larimar's own bootstrap is that).
-
-With **`--target linux`** (or `macos`, `windows`, `unix`) the choice is made by Larimar, when it
-generates:
-
-```sh
-larimar main.lar -o main.c --target windows      # the C of Windows, from any system
-larimar build --target linux
-```
-
-- `switch (Platform.current())` becomes its arm: the other platforms' classes are not even created.
-- The C of the target's classes is written plain, with no `#if`; that of the other platforms is not
-  written at all.
-- Everything is still checked: a class for Windows with an error is an error with `--target linux` too.
-
-The result is shorter C, of that system only: to read it, to debug it, or to take it to a machine
-where it will be compiled (a program for Windows generated on a Mac). The program does the same either
-way.
-
-### Passing a memory to C
-
-A C function can receive a Larimar memory (`m: byte[*]` in the declaration) and create things in it.
-When **the memory is its first parameter**, the call does not write it: C receives the memory of the
-call, the same one a Larimar function would receive, so what it returns lives where the caller says (its
-block, the list it is added to, or the memory written with `in`). It is the right way for C to return
-text:
-
-```ts
-ccode {
-    #include <ctype.h>
-
-    static const char* shout(RtMem* m, const char* text) {
-        size_t n = strlen(text);
-        char* out = (char*)rt_mem_alloc(m, n + 2, 0);     /* zeroed memory: the text ends by itself */
-        for (size_t i = 0; i < n; i++) out[i] = (char)toupper((unsigned char)text[i]);
-        out[n] = '!';
-        return out;
-    }
-}
-
-native function shout(m: byte[*], text: String): String;
-
-function main(): int32 {
-    println(shout("hello larimar"));                      // in the temporary memory of the statement
-    let memory: byte[*] = [] in heap;
-    let kept: String = shout("kept") in memory;           // in a memory of its own
-    println(kept);
-    return 0;
-}
-```
-
-Output:
-```
-HELLO LARIMAR!
-KEPT!
-```
-
-In C, a memory arrives as `RtMem*`, and `rt_mem_alloc(m, bytes, 0)` reserves space inside it (with the
-bytes zeroed). That is the whole interface the C needs to know. The rule is one: **the C uses the memory
-only during the call**. If it kept the pointer for later, the memory could be freed before. A memory in
-another parameter (not the first) is passed written, like any argument.
-
-This is the Windows example that used to need a separate `.c` file:
-
-```ts
-ccode {
-    #include <windows.h>
-
-    static const char* computer_name(RtMem* m) {
-        DWORD size = MAX_COMPUTERNAME_LENGTH + 1;
-        char* name = (char*)rt_mem_alloc(m, size, 0);
-        return GetComputerNameA(name, &size) ? name : "";
-    }
-}
-
-native function computer_name(m: byte[*]): String;
-```
-
-### C types: `native type`
-
-A type that comes from C is declared with `native type`. After `=` goes its type in C:
-
-| Declaration | What it is | In C |
-|---|---|---|
-| `native type Handle;` | an opaque pointer: received, kept and passed, without looking inside | `void*` |
-| `native type File = FILE*;` | a concrete C type | `FILE*` |
-| `native type Tm = struct tm*;` | a C struct known by its tag, by pointer | `struct tm*` |
-| `native type Count = c"unsigned long";` | any other C type, as C text `c"..."` | `unsigned long` |
-| `native type Op = (int32, int32) -> int32;` | a pointer to a C function | `int32_t (*)(int32_t, int32_t)` |
-
-```ts
-ccode {
-    #include <stdio.h>
-
-    typedef struct Point { float x, y; } Point;
-
-    static Point point_mid(Point a, Point b) {
-        Point m = { (a.x + b.x) / 2, (a.y + b.y) / 2 };
-        return m;
-    }
-    static FILE* log_file(void) { return stderr; }
-    static void log_line(FILE* f, const char* text) { fprintf(f, "%s\n", text); }
-}
-
-native type File = FILE*;                                    // a concrete C type
-native struct Point { let x: float32; let y: float32; }      // a C struct, by value
-
-native function point_mid(a: Point, b: Point): Point;
-native function log_file(): File;
-native function log_line(f: File, text: String): void;
-
-function main(): int32 {
-    let a: Point = { x: 0, y: 0 };
-    let b: Point = Point { x: 4, y: 2 };
-    let m: Point = point_mid(a, b);
-    println("(${m.x}, ${m.y})");
-    log_line(log_file(), "done");
-    return 0;
-}
-```
-
-Output: `(2.0, 1.0)`, and `done` on the error output.
-
-- **Each `native type` is a distinct type in Larimar**, even when they are the same in C: a `File`
-  cannot be passed where a `Handle` is expected.
-- **The exact C type** (`= FILE*`) makes the C compiler check the types too: with `void*` it would not
-  notice that a `FILE*` is passed where the library expects a `sqlite3*`.
-
-### C types with members
-
-A C library usually turns around a pointer (`sqlite3*`, `SDL_Window*`, `http_s*`) and the functions that
-take it first. A `native type` can declare all that between braces, and then it is used like an object:
-
-```ts
-ccode {
-    typedef struct Counter { int value; const char* name; } Counter;
-    static Counter* counter_new(const char* name) { Counter* c = (Counter*)calloc(1, sizeof(Counter)); c->name = name; return c; }
-    static void counter_free(Counter* c) { free(c); }
-    static void counter_add(Counter* c, int n) { c->value += n; }
-    static int counter_get(Counter* c) { return c->value; }
-}
-
-native type Counter = Counter* {
-    let value: int32;                                  // a field of the struct it points to
-    let label: String = name;                          // with another name in C
-    native function add(n: int32): void = counter_add; // counter_add(self, n)
-    native let current: int32 = counter_get;           // read without parentheses: counter_get(self)
-    function addTwice(n: int32): void {                // a method written in Larimar
-        self.add(n);
-        self.add(n);
-    }
-    static native function make(name: String): Counter = counter_new;
-}
-native function counter_free(c: Counter): void;
-
-function main(): int32 {
-    let c: Counter = Counter.make("clicks");
-    c.add(3);
-    c.addTwice(2);
-    c.value += 10;
-    println("${c.label}: ${c.value} ${c.current}");
-    counter_free(c);
-    return 0;
-}
-```
-
-Output: `clicks: 17 17`
-
-- **`let`** is a field of the C struct the type points to, read and written with `x.field` (in C,
-  `x->field`). After `=` goes its C name when it is another. A type with fields must be a pointer:
-  `= Counter*`.
-- **`native function m(...) = c_m;`** calls that C function with `self` first and then the arguments.
-  If its first parameter is a memory (`m: byte[*]`), it goes before `self` and is not written in the
-  call, as in [Passing a memory to C](#passing-a-memory-to-c).
-- **`native let x: T = c_x;`** is the same with no arguments, and it is read without parentheses.
-- After `= c_m` of either, **`released by f`** says that C makes the text it returns, which is copied and
-  freed ([Texts that C makes](#texts-that-c-makes-released-by-on-a-function)):
-  `native let name: String = item_name released by free;`.
-- With any other expression after `=`, the method is that Larimar expression, as in a class:
-  `native function ok(text: String): void = reply(self, 200, text);`.
-- **`function`** is a method written in Larimar, and **`static native function`** calls a C function
-  without `self` (`Counter.make(...)`). `static function` works too.
-
-### C structs: `native struct`
-
-A C struct passed **by value** is declared with `native struct`, with the fields that are used:
-
-```ts
-ccode {
-    typedef struct span_t { int from_; int to_; } span_t;
-    static span_t widen(span_t s) { s.from_ -= 1; s.to_ += 1; return s; }
-}
-
-native struct Span = span_t {
-    let from: int32 = from_;                  // the C name, when it is another
-    let to: int32 = to_;
-    function length(): int32 { return self.to - self.from; }
-}
-native function widen(s: Span): Span;
-
-function main(): int32 {
-    let s: Span = widen({ from: 3, to: 10 });
-    println("${s.from} ${s.to} ${s.length()}");
-    return 0;
-}
-```
-
-Output: `2 11 9`
-
-- It is used like any Larimar struct: literals (`{ x: 1, y: 2 }` or `Point { x: 1 }`), field access,
-  copies by value, lists (`Point[*]`) and methods written in Larimar.
-- C gives the definition (the `.h` or the `ccode`); Larimar does not write it. So the order and the
-  alignment of the fields are always C's.
-- It is enough to declare the fields that are used: if the C struct has ten and you care about three,
-  you declare three.
-- Its fields can only be numbers, `bool`, `native` types, pointers (`T*`), other C structs and `String`. A
-  `String` field is a C text (`char*` or `char[N]`) that **is read, not assigned**, and it is a view of
-  the C text: if C changes or frees it, so does the view. To keep it, `.clone()`.
-- The fields not given in a literal are zero, as in C: `{ ai_socktype: 1 }`.
-
-**Why declare it, if C already has it.** Larimar does not read C headers: `native struct` is what tells
-it which fields there are and of which type, the same way `native function` tells it the signature of a
-function C already has. Nothing is defined twice: the struct is C's, and the declaration only names
-what the program uses of it. The methods (`length()` above) are the part that is new: Larimar code
-over C's data.
-
-**Its name in C** goes after `=` when it is not the same:
-
-| In Larimar | For a C struct declared as |
-|---|---|
-| `native struct Span { ... }` | `Span` (the same name) |
-| `native struct Span = span_t { ... }` | `span_t`, a name of its own (a `typedef`) |
-| `native struct AddrInfo = struct addrinfo { ... }` | `struct addrinfo`, known by its tag |
-
-The way to know is how the header declares a variable of it: `span_t s;` or `struct addrinfo hints;`.
-
-**`native struct` or `native type`.** Both name something of C; what changes is whether Larimar looks
-inside:
-
-| | `native type` | `native struct` |
-|---|---|---|
-| What Larimar does with it | receives it, keeps it and passes it back to C | reads and writes its fields, builds it with a literal |
-| What it is | a handle (usually a pointer): `FILE*`, a socket | a value, copied like any struct: `struct timeval` |
-| Who frees it | C, when its memory goes (`released by`) | nobody: it is a value |
-
-If the program never needs the fields, `native type` is simpler and does not depend on how the struct
-is made.
-
-**In a body of C** a `native struct` parameter is the C struct (`s: Span` is a `span_t`, a copy; `s:
-Span*` a pointer to it), and its fields have their C names:
-
-```ts
-native function widen(s: Span): Span {
-    s.from_ -= 1;
-    s.to_ += 1;
-    return s;
-}
-
-native function grow(s: Span*, by: int32): void { s->to_ += by; }
-
-let s: Span = widen({ from: 3, to: 10 });
-grow(&s, 5);                                  // s lives in this function; C has it only during the call
-```
-
-**Where `c"..."` is needed.** A name (`span_t`, `sqrt`, `FILE*`, `INT_MAX`) and a struct by its tag
-(`struct stat`) are written as they are. `c"..."` is for the rest, what is C text and not a name: a type
-of several words (`c"unsigned long"`), an expression (`c"(int)sizeof(void*)"`), a cast or a macro with
-arguments. In functions it is rarely needed: that C is written in the body
-(`native function start(x: int32): int32 { return (fio_start)(x); }`).
-
-### C constants and variables: `native const`, `native let`
-
-The constants, macros and global variables of C are used by their name, declaring them with their type:
-
-```ts
-cinclude "<errno.h>";
-cinclude "<limits.h>";
-
-native const INT_MAX: int32;                                       // a C macro
-native const ENOENT: int32;
-native const POINTER_SIZE: int32 = c"(int)sizeof(void*)";           // a C expression
-native let errno: int32;                                           // a C variable
-
-function main(): int32 {
-    println("${INT_MAX} ${POINTER_SIZE} ${errno == ENOENT}");
-    return 0;
-}
-```
-
-- **`native const`** does not change; **`native let`** can be read and assigned (`errno = 0;`).
-- Larimar writes the name as it is in the C, so macros, `enum` constants and variables all work, and
-  also macros that expand into something more complex (`errno`, `stdout`).
-- After `=` goes its C name when it is another (`native const MAX: int32 = INT_MAX;`), or, as C text `c"..."`, a C
-  expression for what has no name: `sizeof`, a cast, a macro with arguments.
-- A `native const` can be a `String` (a text macro); a `native let` cannot.
-
-### C pointers: `T*` and `&`
-
-Many C functions ask for or return pointers: a linked list (`getaddrinfo`), a result written into a
-variable (`accept(fd, &addr, &len)`), a buffer. **`T*`** is a C pointer to a number, a `bool`, a C
-struct, a `native` type or another pointer:
-
-```ts
-ccode {
-    typedef struct Node { int value; struct Node* next; const char* name; } Node;
-    static Node nodes[3] = { { 10, &nodes[1], "one" }, { 20, &nodes[2], "two" }, { 30, NULL, "three" } };
-    static Node* first_node(void) { return &nodes[0]; }
-    static void two_results(int* a, int* b) { *a = 7; *b = 42; }
-    static int sum_bytes(const unsigned char* p, int n) { int s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }
-}
-
-native struct Node {
-    let value: int32;
-    let next: Node*;
-    let name: String;                       // a C text: it is read
-}
-native function first_node(): Node*;
-native function two_results(a: int32*, b: int32*): void;
-native function sum_bytes(p: byte*, n: int32): int32;
-
-function main(): int32 {
-    let sum: int32 = 0;
-    let p: Node* = first_node();
-    while (p != null) {                     // a pointer can be null, as in C
-        sum += p.value;                     // p.value is p->value
-        p = p.next;
-    }
-    let a: int32 = 0;
-    let b: int32 = 0;
-    two_results(&a, &b);                    // C writes into a and b
-    let bytes: byte[4] = [1, 2, 3, 4];
-    println("${sum} ${a} ${b} ${sum_bytes(bytes, bytes.length)}");
-    return 0;
-}
-```
-
-Output: `60 7 42 10`
-
-- **`p.field`** reads or writes the field of the struct it points to (`p->field` in C). If `p` is
-  `null`, the program stops with an error on that line, instead of failing in C.
-- **`&x`** gives the address of a variable so that C reads or writes it. **It is only allowed as an
-  argument of a C function** (`f(&x)`), so the pointer never lives longer than the call; `x` is a variable
-  whose type allows pointers. `&x as Other*` is also allowed there (C sometimes asks for another pointer type).
-- **An array where C asks for `T*`** arrives as the pointer to its elements: `fread(buffer, 1, buffer.length, f)`.
-- **`as`** converts between pointers (a `sockaddr_in*` as a `sockaddr*`), and between a pointer and an
-  opaque `native` type (`void*`).
-- A pointer does not point to Larimar memory (`&x` only exists during the call), so it is not part of the
-  lifetime rule: what is on the other side belongs to C, and C says how long it lasts.
-
-### Resources: `released by`
-
-Some things from C have to be released: a file (`fclose`), a socket (`close`), a window
-(`SDL_DestroyWindow`), a database (`sqlite3_close`). It is declared once, in its `native type`, with the
-function that releases it:
-
-```ts
-cinclude "<stdio.h>";
-
-native type CFile = FILE* released by fclose;
-native function fopen(path: String, mode: String): CFile?;
-native function fputs(text: String, f: CFile): int32;
-native function fclose(f: CFile): int32;
-
-function main(): int32 {
-    for (i in 0..1000) {
-        let f: CFile? = fopen("log.txt", "a");
-        if (f == null) { return 1; }
-        fputs("a line\n", f!);
-    }   // each turn: its memory is freed, and with it the file (fclose)
-    let g: CFile? = fopen("log.txt", "a");
-    release(g);                            // earlier, when needed
-    return 0;
-}
-```
-
-- **A resource lives in a memory, like any data**: where what the C function returns is stored (the
-  block of a `let`, the object of a field, `in scratch`...). **When that memory is freed, it is
-  released.** What the code shows is where it lives, just like with a `String`.
-- **`release(x)`** releases it now. Releasing it twice does nothing; using it afterwards stops the
-  program with `a released CFile was used`.
-- **The C function that creates it returns `T?`**, because it can fail: a `NULL` pointer (or `-1`, like
-  `INVALID_HANDLE_VALUE`) or a negative number (a `-1` descriptor) arrives as `null`.
-- **A Larimar function can return what such a function creates** (`function open(path: String): CFile? { return fopen(path, "r"); }`):
-  the resource is created where its caller says, like any result.
-- **The function that releases it takes exactly one `T`**, and only `release()` can call it: calling it
-  by hand would release it twice. It can be a C function or a Larimar one (to release in several steps).
-- An object that holds a resource **cannot be cloned** (it would be released twice).
-- If the function that releases it exists on one system only (`closedir` on Unix), the resource only
-  exists there.
-- A resource can also have [members](#c-types-with-members):
-  `native type Db = sqlite3* released by sqlite3_close { native function errmsg(): String = sqlite3_errmsg; ... }`.
-
-### Texts that C makes: `released by` on a function
-
-Some C functions return a text that is now the caller's, made with `malloc` (or with the library's own
-allocator): `strdup`, `realpath(path, NULL)`, `sqlite3_expanded_sql`. After the result (and its `= C`, if
-there is one) comes **`released by`** with the function that frees it:
-
-```ts
-cinclude "<string.h>";
-cinclude "<stdlib.h>";
-
-native function strdup(text: String): String released by free;
-native function free(text: String): void;
-
-function main(): int32 {
-    for (i in 0..1000) {
-        let copy: String = strdup("text ${i}");
-        if (i == 999) { println(copy); }
-    }
-    return 0;
-}
-```
-
-Output: `text 999`
-
-- The text is **copied** into the memory where the result goes, like any result (the block of a `let`,
-  an object, `in scratch`, a buffer), and C's is freed right away: Larimar does not keep C's pointer, so
-  nothing leaks and nothing is freed twice.
-- With `String?`, a `NULL` arrives as `null` (and there is nothing to free).
-- The function after `released by` is a `native function` that takes one `String`, and only the compiler
-  calls it. In C it is declared with `void*`, as `free(void*)` or `sqlite3_free(void*)` are.
-- A text that C keeps (a static one, or one that belongs to something of C, like `sqlite3_errmsg`) is not
-  freed: it is declared without `released by`.
-
-### Pointers to C functions
-
-`native type Op = (A, B) -> R;` declares the type of a pointer to a C function. A value of that type is
-passed to C, kept and **called like a function**:
-
-```ts
-ccode {
-    typedef int32_t (*op_fn)(int32_t, int32_t);
-
-    static int32_t add(int32_t a, int32_t b) { return a + b; }
-    static int32_t apply(op_fn f, int32_t a, int32_t b) { return f(a, b); }
-}
-
-native type Operation = (int32, int32) -> int32;
-
-native function add(a: int32, b: int32): int32;
-native function apply(f: Operation, a: int32, b: int32): int32;
-
-export function subtract(a: int32, b: int32): int32 {
-    return a - b;
-}
-
-function main(): int32 {
-    println("${apply(add, 10, 3)}");        // a C function
-    println("${apply(subtract, 10, 3)}");   // a Larimar function, called from C
-    let op: Operation = subtract;
-    println("${op(20, 5)}");                // a function pointer is called like a function
-    return 0;
-}
-```
-
-Output:
-```
-13
-7
-15
-```
-
-- Where an `Operation` is expected, **a function that exists in C with that exact signature** works: a
-  `native function` or an `export function`.
-- **A lambda does not work here**, because it is not a C function: it carries captures, and C would not
-  know what to do with them. When the library gives a `void*` of context, it does: see the next section.
-- A plain Larimar function does not work either: the compiler asks to mark it `export`.
-- They can also come from C: a C function that returns an `Operation`, or a field of a C struct.
-- The allowed types are the ones of `native function`. A `String` arrives in C as `const char*`, and one
-  that C returns is read just like in a `native function`.
-
-### Callbacks with a context: `Context`
-
-Almost every C library that takes a callback also takes a **`void*` of context**, which it gives back in
-every call (`user_data`, `arg`, `udata`). Larimar calls it **`Context`**. When the callback type and the
-function that takes it declare that `Context`, **any Larimar function works, a lambda with what it
-captures too**:
-
-```ts
-ccode {
-    typedef void (*item_fn)(int32_t index, const char* name, void* data);
-    static void for_each_name(item_fn f, void* data) {
-        const char* names[] = { "one", "two", "three" };
-        for (int32_t i = 0; i < 3; i++) f(i, names[i], data);
-    }
-}
-
-native type ItemFn = (int32, String, Context) -> void;
-native function for_each_name(f: ItemFn, data: Context): void;
-
-class Totals { let count: int32 = 0; }
-
-function main(): int32 {
-    let prefix: String = "->";
-    let totals: Totals = {};
-    for_each_name((i, name) -> {             // an (int32, String) -> void: the Context is not written
-        totals.count += 1;
-        println("${prefix} ${i} ${name.toUpperCase()}");
+        call.fail(-32601, "no method ${call.method}");      // the answer is an error
+        return null;
     });
-    println("count ${totals.count}");
+    return 0;                                                // when the caller closes
+}
+```
+
+The program that calls starts it and calls:
+
+```ts
+import std.os.rpc { Rpc, RpcError };
+import std.os.rpc as Calls;
+
+function main(): int32 {
+    try {
+        let calc: Rpc = Rpc.startShared("./calc", []);
+        let sum: Any = calc.call("add", { a: 2, b: 3 });
+        println("${sum}");                                   // 5
+        calc.close();
+    } catch (RpcError e) {
+        println(Calls.message(e));
+    }
     return 0;
 }
 ```
 
-Output:
-```
--> 0 ONE
--> 1 TWO
--> 2 THREE
-count 3
-```
+- **`Rpc.startShared`** starts a Larimar program that answers with `serve`: the calls go through two
+  streams of shared memory (below), and the other program's output stays this console's. It is the
+  fastest way: a call and its answer take a few microseconds.
+- **`Rpc.start`** starts **any** program that speaks JSON-RPC on its standard input and output (a tool
+  written in Python, Go, C...). That program writes nothing else on its output. `serve` answers on the
+  standard input and output too when it was not started by `startShared`, so a Larimar program that
+  serves can be used from any language.
+- **`Rpc.over(input, output)`** and **`serveOver(input, output, f)`** do the same on any pair of streams:
+  a socket, for example.
+- Each message is JSON with a `Content-Length` header before it, as in LSP. The parameters and the
+  result are `Any`: numbers, `bool`, `String`, `null` and tables.
 
-- **The `Context` is not written**, neither in the lambda nor in the call: C receives a C function the
-  compiler makes, and as the context, the Larimar function with its captures.
-- **An `export function` or a `native function` of the exact type work too**, and go as they are (with
-  `NULL` as the context).
-- **If C keeps the callback for later** (a handler, a timer), the parameter says so with
-  **`in default`**, and then what it captures must live as long as the whole program:
+**Errors.** A call throws `RpcError`:
 
-  ```ts
-  native type BusyFn = (Context, int32) -> int32;
-  native function set_busy(f: BusyFn in default, data: Context): void;
+| Variant | When |
+|---|---|
+| `Failed(code, message)` | the other program answered with an error (`call.fail`) |
+| `Ended(why)` | the other program ended (`"the program ended (exit 101)"`), closed, or sent what is not JSON |
+| `TimedOut` | the answer did not come within `timeout` ms (0, the default, waits as long as it takes) |
 
-  let limit: Limit = Limit { count: 5 } in default;
-  set_busy((tries) -> { return tries < limit.count ? 1 : 0; });
-  ```
+A call never waits for a program that ended: the process is watched while the call waits.
 
-  If `limit` lived in the block, the error says so: *C keeps the function given to 'set_busy' (in
-  default), so what it uses must live as long as the whole program*.
-- **A member of a C type takes it too**: `native function onBusy(handler: BusyFn in default, data: Context): int32 = sqlite3_busy_handler;`
-  is called as `db.onBusy((n) -> { return n < 5 ? 1 : 0; })`.
-- The Larimar function cannot return a `String` to C (C would not know when to free it), and the callback
-  cannot receive resources.
-- If the library calls the callback from another thread, Larimar's thread rules do not protect it, just
-  like with an `export function`.
-- If the library gives no context (facil.io, for example, keeps its `udata` elsewhere), the callback is
-  an `export function`, and what it needs it looks up in a global variable.
+- `calc.notify("log", {...})` sends a call that has no answer, and does not wait.
+- `calc.begin(method, params)` sends a call and gives its id; `calc.finish(id)` waits for its answer. With
+  them, calls to several programs run at the same time.
+- `calc.close()` closes: the other program's `serve` returns, and this one waits for it to end.
+  `calc.stop()` ends it at once. When the `Rpc`'s memory is freed, the program it started ends too.
 
-### C calling Larimar: `export function`
+### Bytes between two programs: `std.os.shared`
 
-`export function` is the opposite of `native function`: **it brings a Larimar function to C**. The
-compiler generates it in C with that same name and with C types, so C can call it, keep it in a pointer
-or receive it as a callback:
+A **shared stream** goes from one program to another through memory that both see: the bytes do not go
+through the system, and while there is something to read (or room to write) no system call is made. One
+program creates it by name, the other opens it:
 
 ```ts
-ccode {
-    typedef void (*item_fn)(int32_t index, const char* name, void* data);
+import std.os.shared { SharedOutputStream, SharedInputStream };
 
-    static void for_each_name(item_fn f, void* data) {
-        const char* names[] = { "one", "two", "three" };
-        for (int32_t i = 0; i < 3; i++) f(i, names[i], data);
+// one program writes...
+let out: SharedOutputStream = SharedOutputStream.create("frames", 1 << 20);   // a ring of 1 MB
+out.write(frame);                         // waits while the ring is full
+out.close();                              // the reader sees the end after what was written
+
+// ...and another one reads
+let input: SharedInputStream = SharedInputStream.open("frames", 5000);        // waits up to 5 s for it
+let n: int32 = input.read(buffer);        // what arrived; 0 when the writer closed and all was read
+```
+
+- Either side can create it: `SharedInputStream.create` and `SharedOutputStream.open` are the other way
+  around. Each stream has one writer and one reader.
+- They are **streams** like a file or a socket (`InputStream`, `OutputStream`, `Closeable`): a `Reader`,
+  `copy()` and everything that takes a stream works with them.
+- **Waits.** A read waits until something arrives, and a write while the ring is full: first a short spin
+  (the other side is usually right there), then short naps, so a side that waits long uses no processor.
+  `timeout` (ms) limits each read or write: then `IoError.TimedOut`. `available()` says how many bytes can
+  be read now, without waiting.
+- **If the other program ends without closing** (a crash, a panic), the side that waits gets
+  `IoError.Closed`, not a wait without end. If the reader closes, the next write gets `IoError.Closed`.
+- **Names.** 1 to 26 letters, digits, `.`, `_` or `-`; `uniqueName("frames")` gives one that no other
+  program uses. A name in use by a running program cannot be created again (`IoError.Failed`); one left
+  by a program that ended is taken back. The name is freed as soon as the other side opens the stream,
+  so nothing is left in the system when a program ends.
+- A stream closes itself when its memory is freed.
+
+`Rpc.startShared` uses two of them, one each way. For something the size of video frames, the
+streams carry the bytes and `std.os.rpc` the orders.
+
+### Work in other processes: `SystemProcess` and `ProcessPool`
+
+A class that **implements `SystemProcess`** is a task that runs in another process: a copy of this same
+program. Its object goes there with its fields, its `run()` runs there, and what it gives comes back.
+A `ProcessPool` has those copies:
+
+```ts
+import std.os.process { ProcessPool, SystemProcess, ProcessError };
+
+class Resize implements SystemProcess {
+    let file: String;
+    let width: int32;
+    override function run(): Any {
+        return Images.resize(self.file, self.width);     // in another process
     }
 }
 
-native type ItemHandler = (int32, String, Context) -> void;
-
-native function for_each_name(f: ItemHandler, data: Context): void;
-
-export function show_item(index: int32, name: String, data: Context): void {
-    println("${index}: ${name.toUpperCase()}");
-}
-
 function main(): int32 {
-    for_each_name(show_item);
-    return 0;
-}
-```
-
-Output:
-```
-0: ONE
-1: TWO
-2: THREE
-```
-
-What `export function` guarantees:
-
-- **Its name in C is its own**, inside a module too: `public export function lm_double(...)` in the
-  module `gfx.shapes` is still called `lm_double` in C. **`= c_name`** after the signature gives it
-  another one: `export function double(x: int32): int32 = lm_double { ... }`. In a library it is
-  `<prefix>_<name>` unless it says `= c_name` (see [Libraries written in Larimar](#27-libraries-written-in-larimar)).
-- **A clean C signature**: no hidden parameters. Numbers and `bool` as they are, `String` arrives as
-  `const char*` (it becomes Larimar text when it enters), a `String?` too (`NULL` is `null`), `native`
-  types as their C type and C structs by value.
-- **A text it returns belongs to C.** A `String` result goes to C as a `char*` made with `malloc`, a copy
-  that C frees with `free` when it is done with it; a `String?` is that, or `NULL` for `null`. Larimar
-  keeps nothing of it.
-- **Each call from C has its own memory**, born when it enters and dying when it returns, like any
-  function. What the function creates is not left hanging in C.
-- **A `ccode` can use it directly**. If its signature only has numbers, `bool`, `String`, `String?` and
-  opaque `native` types, the compiler writes its prototype before the `ccode` blocks. If it uses C
-  structs or concrete C types, which the `ccode` itself may define, the prototype goes after, and the
-  `ccode` that calls it must declare it itself.
-
-```ts
-export function greet(name: String?): String = lar_greet {
-    return "hi ${name ?? "nobody"}";
-}
-
-ccode {
-    #include <stdio.h>
-    #include <stdlib.h>
-
-    static void say_hi(void) {
-        char* a = lar_greet("Ana");
-        char* b = lar_greet(NULL);
-        printf("%s, %s\n", a, b);
-        free(a);
-        free(b);
+    let pool: ProcessPool = { processes: 4 };
+    try {
+        let one: Any = pool.run(Resize { file: "casa.jpg", width: 800 });
+        let tasks: SystemProcess[*] = [Resize { file: "1.jpg", width: 800 }, Resize { file: "2.jpg", width: 800 }];
+        let all: Any = pool.runAll(tasks);              // at the same time, the results in order
+    } catch (ProcessError e) {
+        println("a task failed");
     }
-}
-
-native function say_hi(): void;
-
-function main(): int32 {
-    say_hi();
     return 0;
 }
 ```
 
-Output: `hi Ana, hi nobody`
-
-And what it does not allow, because C could not handle it:
-
-- `throws`: an error cannot cross C code, so it is caught inside;
-- `in` on the parameters or the result, memories (`byte[*]`), lists or `Any`;
-- classes, except in a library, where C keeps its objects as handles
-  ([Libraries written in Larimar](#27-libraries-written-in-larimar));
-- `main`.
-
-If the library calls the function from another thread, the compiler cannot know it: Larimar's thread
-rules do not protect it, just as inside a `ccode`.
-
----
+- **`run(task)`** runs one task and waits for it; **`runAll(tasks)`** gives them to the processes at the
+  same time (up to `processes`) and gives the results in the order of the tasks, as a table.
+- **What goes with the task** are its fields: numbers, `bool`, `String`, their optionals and lists of
+  them. A field of another type is a compile error (*Field 'box' of SystemProcess 'Bad' goes to another
+  process...*), and so is a class that extends another. What `run()` gives comes back the way `Any` crosses
+  to JSON: numbers, `bool`, `String` and tables (an object arrives as `null`).
+- **A panic in a task is a `ProcessError` here** (`Failed: "ended: the program ended (exit 101)"`), and the
+  pool starts new processes for what comes next. The panic's message is on the console: the copies use
+  this program's.
+- The copies start when there is work for them (the first call waits for them) and end with the pool's
+  memory. A copy does not run `main`: it starts its globals and runs tasks.
+- `run` and `runAll` wait. To go on while a task runs, call them from a [thread](#22-threads): the
+  thread waits, the program does not.
 
 ## 24. Modules
 
@@ -3337,8 +2565,7 @@ src/
 ### `public`
 
 What a module declares is **private** unless it has `public` in front. Any declaration with a name can
-be marked: functions, constants, global variables, structs, classes, interfaces, enums and `native`
-declarations.
+be marked: functions, constants, global variables, structs, classes, interfaces and enums.
 
 ```ts
 // src/geo/shapes.lar
@@ -3656,6 +2883,25 @@ function main(): int32 {
 its memory is freed is killed. The tests that talk to `larimar lsp`, `larimar dap` and the debuggers are
 written with `std.os.process`.
 
+`std.os.process` also has the tasks that run in copies of the program (`SystemProcess`, `ProcessPool`):
+[chapter 23](#work-in-other-processes-systemprocess-and-processpool). A task that fails is
+`ProcessError.Failed(why)`.
+
+### `std.os.rpc`: calls to another program
+
+JSON-RPC 2.0: `Rpc.startShared(program, args)` (a Larimar program that answers with `serve`, through
+shared memory), `Rpc.start(program, args)` (any program, through its standard input and output) and
+`Rpc.over(input, output)`; `call(method, params): Any`, `notify`, `begin` and `finish`, `timeout`,
+`close()` and `stop()`. The other side: `serve((call) -> ...)` and `serveOver(input, output, f)`. Errors:
+`RpcError` (`Failed`, `Ended`, `TimedOut`). See [chapter 23](#calls-to-another-program-stdosrpc).
+
+### `std.os.shared`: streams between two programs
+
+`SharedOutputStream` and `SharedInputStream`: `create(name, capacity)` on one side, `open(name, ms)` on
+the other; `read`, `write`, `available()`, `close()` and `timeout`, as streams (`InputStream`,
+`OutputStream`). `uniqueName(prefix)` gives a name that no other program uses. See
+[chapter 23](#bytes-between-two-programs-stdosshared).
+
 ### `std.text`: reading text byte by byte
 
 For lexers and parsers: `text.isDigit(b)`, `isHexDigit`, `isLetter`, `isLetterOrDigit`,
@@ -3749,12 +2995,11 @@ function main(): int32 {
 - `Connection` is the interface of a connection in both directions (`read`, `write`, `flush`, `close`):
   `TcpSocket` implements it, and so does what a `TlsProvider` gives (see `std.net.tls`). Whoever
   speaks a protocol over a `Connection` does not know whether it is encrypted.
-- `handle()` gives the system's socket (a `Socket`, the type of `std.net`), for a C library that works
-  on a connection that is already open, like a TLS one: a C function that receives a `Socket` receives
-  the descriptor (a `SOCKET` on Windows). The socket still belongs to the `TcpSocket`, and closes with it.
-- `std.net` is written in Larimar over the system's socket functions: it is a good example of
-  [a class for each platform](#c-for-each-system-classes-with-c-in-their-methods), [pointers](#c-pointers-t-and-) and
-  [resources](#resources-released-by).
+- `handle()` gives the system's socket (a `Socket`, the type of `std.net`), for the standard library's
+  own TLS, which works on a connection that is already open. The socket still belongs to the
+  `TcpSocket`, and closes with it.
+- `std.net` is written in Larimar over the system's socket functions: it is a good example of a class
+  for each platform, with pointers and resources ([the C of the standard library](std-c.md)).
 - `NetError.Tls(reason)` is a failure of the encryption (a rejected certificate, a failed TLS handshake)
   and `NetError.TlsUnavailable(what)` that there is no TLS to use.
 
@@ -4042,220 +3287,12 @@ another. It uses what the system already has:
   the message says what is missing.
 - On Windows, SChannel negotiates TLS 1.2 (TLS 1.3 with SChannel needs another API, not used here yet).
 
-#### A TLS of your own: mbedTLS
+#### Another TLS
 
-To use another library (to carry the TLS inside the executable, for example), `TlsProvider` is
-implemented and given to the client: `Client { tls: MbedTls {} }`. A complete example with
-[mbedTLS](https://github.com/Mbed-TLS/mbedtls) 3.6, which is plain C and builds with `make`:
-
-```
-secure/
-├── larimar.toml
-├── mbedtls/          # the mbedTLS code (from its releases page), built with: make lib
-└── src/
-    ├── main.lar
-    └── mbed.lar      # the TlsProvider
-```
-
-```toml
-[project]
-name = "secure"
-
-[c]
-include_paths = ["mbedtls/include"]
-static_library_paths = ["mbedtls/library"]
-static_libraries = ["mbedtls", "mbedx509", "mbedcrypto"]     # in this order
-```
-
-`src/mbed.lar` has two parts: the C that calls mbedTLS (in a `ccode`) and the two classes that
-implement the interfaces. The mbedTLS session is a **resource**: C creates it with `malloc`, and Larimar
-lets it go with `mbed_free` when the memory of the connection is freed (`released by`), so the C needs
-to know nothing about Larimar's memories:
-
-```ts
-import std.net { Connection, TcpSocket, NetError, Socket };
-import std.net.tls { TlsProvider };
-import std.io { IoError, InputStream, OutputStream };
-
-ccode {
-    #include <stdlib.h>
-    #include <mbedtls/ssl.h>
-    #include <mbedtls/net_sockets.h>
-    #include <mbedtls/entropy.h>
-    #include <mbedtls/ctr_drbg.h>
-    #include <mbedtls/error.h>
-    #include <psa/crypto.h>
-
-    typedef struct {
-        int error;                      /* 0: fine */
-        char text[200];
-        int open;
-        mbedtls_net_context net;        /* only its fd: the socket belongs to the TcpSocket */
-        mbedtls_ssl_context ssl;
-        mbedtls_ssl_config conf;
-        mbedtls_x509_crt ca;
-        mbedtls_entropy_context entropy;
-        mbedtls_ctr_drbg_context drbg;
-    } MbedConn;
-
-    static void mbed_fail(MbedConn* c, const char* what, int code) {
-        char why[150];
-        mbedtls_strerror(code, why, sizeof why);
-        snprintf(c->text, sizeof c->text, "%s: %s", what, why);
-        c->error = 1;
-    }
-
-    /* Larimar releases it (released by mbed_free) when the memory of the connection is freed */
-    static void mbed_free(MbedConn* c) {
-        if (c->open) mbedtls_ssl_close_notify(&c->ssl);
-        mbedtls_ssl_free(&c->ssl);
-        mbedtls_ssl_config_free(&c->conf);
-        mbedtls_x509_crt_free(&c->ca);
-        mbedtls_ctr_drbg_free(&c->drbg);
-        mbedtls_entropy_free(&c->entropy);
-        free(c);
-    }
-
-    static MbedConn* mbed_open(int fd, const char* host, const char* caFile, bool verify) {
-        MbedConn* c = (MbedConn*)calloc(1, sizeof(MbedConn));
-        if (!c) return NULL;
-        mbedtls_ssl_init(&c->ssl);
-        mbedtls_ssl_config_init(&c->conf);
-        mbedtls_x509_crt_init(&c->ca);
-        mbedtls_entropy_init(&c->entropy);
-        mbedtls_ctr_drbg_init(&c->drbg);
-        psa_crypto_init();
-        int r = mbedtls_ctr_drbg_seed(&c->drbg, mbedtls_entropy_func, &c->entropy, NULL, 0);
-        if (r != 0) { mbed_fail(c, "random", r); return c; }
-        if (verify && (r = mbedtls_x509_crt_parse_file(&c->ca, caFile)) < 0) { mbed_fail(c, caFile, r); return c; }
-        r = mbedtls_ssl_config_defaults(&c->conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
-        if (r != 0) { mbed_fail(c, "config", r); return c; }
-        mbedtls_ssl_conf_authmode(&c->conf, verify ? MBEDTLS_SSL_VERIFY_REQUIRED : MBEDTLS_SSL_VERIFY_NONE);
-        mbedtls_ssl_conf_ca_chain(&c->conf, &c->ca, NULL);
-        mbedtls_ssl_conf_rng(&c->conf, mbedtls_ctr_drbg_random, &c->drbg);
-        if ((r = mbedtls_ssl_setup(&c->ssl, &c->conf)) != 0) { mbed_fail(c, "setup", r); return c; }
-        if ((r = mbedtls_ssl_set_hostname(&c->ssl, host)) != 0) { mbed_fail(c, "host", r); return c; }
-        c->net.fd = fd;
-        mbedtls_ssl_set_bio(&c->ssl, &c->net, mbedtls_net_send, mbedtls_net_recv, NULL);
-        while ((r = mbedtls_ssl_handshake(&c->ssl)) != 0) {
-            if (r != MBEDTLS_ERR_SSL_WANT_READ && r != MBEDTLS_ERR_SSL_WANT_WRITE) { mbed_fail(c, "handshake", r); return c; }
-        }
-        c->open = 1;
-        return c;
-    }
-
-    static int32_t mbed_read(MbedConn* c, uint8_t* items, int32_t len) {
-        while (c->open) {
-            int r = mbedtls_ssl_read(&c->ssl, items, (size_t)len);
-            if (r > 0) return r;
-            if (r == 0 || r == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) break;           /* the end */
-    #ifdef MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET
-            if (r == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET) continue;          /* TLS 1.3: not data */
-    #endif
-            mbed_fail(c, "read", r);
-            return -1;
-        }
-        c->open = 0;
-        return 0;
-    }
-
-    static int32_t mbed_write(MbedConn* c, const uint8_t* items, int32_t len) {
-        int32_t done = 0;
-        while (done < len) {
-            int r = mbedtls_ssl_write(&c->ssl, items + done, (size_t)(len - done));
-            if (r <= 0) { mbed_fail(c, "write", r); return -1; }
-            done += r;
-        }
-        return 0;
-    }
-
-    static int32_t mbed_error(MbedConn* c) { return c->error; }
-    static const char* mbed_error_text(MbedConn* c) { return c->text; }
-}
-
-native type MbedHandle released by mbed_free;
-native function mbed_open(s: Socket, host: String, caFile: String, verify: bool): MbedHandle?;
-native function mbed_free(c: MbedHandle): void;
-native function mbed_read(c: MbedHandle, buffer: byte[]): int32;
-native function mbed_write(c: MbedHandle, bytes: byte[]): int32;
-native function mbed_error(c: MbedHandle): int32;
-native function mbed_error_text(c: MbedHandle): String;
-
-/** https:// with mbedTLS. caFile: the trusted certificates, in PEM. */
-public class MbedTls implements TlsProvider {
-    let caFile: String = "/etc/ssl/certs/ca-certificates.crt";     // Debian/Ubuntu; macOS: /etc/ssl/cert.pem
-    let verify: bool = true;
-
-    override function connect(host: String, port: int32, timeout: int32): Connection throws NetError {
-        let c: MbedConnection = {};                   // what is returned: created where the caller says
-        c.tcp = TcpSocket.connect(host, port);        // ...and these, in c's memory
-        c.tcp!.setTimeout(timeout);
-        c.tls = mbed_open(c.tcp!.handle()!, host, self.caFile, self.verify);
-        if (c.tls == null) { throw NetError.Tls("out of memory"); }
-        if (mbed_error(c.tls!) != 0) { throw NetError.Tls(mbed_error_text(c.tls!).clone()); }
-        return c;
-    }
-}
-
-/** The TLS session over its TcpSocket. */
-class MbedConnection implements Connection, InputStream, OutputStream {
-    let tcp: TcpSocket? = null;
-    let tls: MbedHandle? = null;
-
-    override function read(buffer: byte[]): int32 throws IoError {
-        let n: int32 = mbed_read(self.tls!, buffer);
-        if (n < 0) { throw IoError.Failed("mbedtls: ${mbed_error_text(self.tls!)}"); }
-        return n;
-    }
-
-    override function write(bytes: byte[]): void throws IoError {
-        if (mbed_write(self.tls!, bytes) < 0) { throw IoError.Failed("mbedtls: ${mbed_error_text(self.tls!)}"); }
-    }
-
-    override function writeText(text: String): void throws IoError { self.write(text.bytes()); }
-    override function input(): InputStream { return self; }
-    override function output(): OutputStream { return self; }
-    override function flush(): void throws IoError {}
-
-    override function close(): void throws IoError {
-        release(self.tls);                            // the session first, then its socket
-        self.tcp!.close();
-    }
-}
-```
-
-And `src/main.lar` uses it like any other:
-
-```ts
-import std.net.http { Client, Response, HttpError, message };
-import mbed { MbedTls };
-
-function main(args: String[]): int32 {
-    let client: Client = { tls: MbedTls {} };
-    try {
-        let r: Response = client.get(args.length > 0 ? args[0] : "https://github.com/");
-        println("${r.status} ${r.header("Content-Type") ?? ""}");
-    } catch (HttpError e) {
-        println(message(e));
-        return 1;
-    }
-    return 0;
-}
-```
-
-```
-$ larimar run
-200 text/html; charset=utf-8
-```
-
-- The pieces are the same as in any `TlsProvider`: open the `TcpSocket`, do the TLS handshake over its
-  socket (`handle()`: C receives the descriptor) and return an object that implements `Connection`. What
-  `connect` returns is created where the caller says (the HTTP response), and with it the session,
-  which is let go on its own (`released by mbed_free`).
-- With `MbedTls { caFile: "my-ca.pem" }` a certificate of your own is trusted (a test server, an
-  internal network) without turning off the verification.
-- mbedTLS goes inside the executable (static libraries): the program does not depend on what the
-  system has. In exchange, updating mbedTLS when a security flaw comes out is the job of whoever uses it.
+`TlsProvider` is an interface: a class that implements it, given to the client (`Client { tls: ... }`),
+replaces the system's TLS. A provider that needs a C library (mbedTLS, to carry the TLS inside the
+executable, say) would be part of the standard library, or a service that runs apart, since a program
+has no C of its own ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)).
 
 ### `std.encoding.json`: JSON
 
@@ -4421,76 +3458,65 @@ main = "src/main.lar"
 
 [c]
 flags = ["-O2"]
-dynamic_libraries = []
 ```
 
-`[project]` says what the program is called and where it starts; `[c]` says how the C is built. All the keys:
+`[project]` says what the program is called and where it starts; `[c]` which C compiler builds it, and
+with what flags. All the keys:
 
 ```toml
 [project]
 name = "melody"              # required: name of the executable
 version = "0.1.0"
-kind = "program"             # the default; "library" builds a library (see Libraries written in Larimar)
+kind = "program"             # the default; "library" or "service" (see chapter 27)
 main = "src/main.lar"        # the default; its folder is the root of the modules
-output = "dist/melody"       # by default build/<name> (build/<name>.exe on Windows; a library: the folder build/<name>)
-
-[library]                    # only with kind = "library"
-type = "package"             # the default; or "static", "dynamic"
-prefix = "mel"               # what its C names start with: mel_play (by default, the name)
+output = "dist/melody"       # by default build/<name> (build/<name>.exe on Windows)
 
 [c]
 compiler = "gcc"             # by default the system's (cc, gcc, clang) or the bundled tcc
 flags = ["-O2", "-Wall"]     # by default ["-O2"]
-sources = ["csrc/helpers.c"] # your own C files, compiled together with the program
-include_paths = ["include"]  # header folders (-I)
-static_libraries = ["tone"]          # lib<name>.a: inside the executable
-static_library_paths = ["vendor/lib"]    # where they are
-dynamic_libraries = ["user32", "m"]  # -l<name>: user32.dll, libm.so; loaded when it starts
-dynamic_library_paths = ["libs"]     # where they are (-L), and where the executable looks for them
+
+[packages]                   # the libraries and services written in Larimar that it uses
+textkit = "../textkit"
 ```
 
 Paths are relative to the project folder. An unknown key or section is an error, so that a typo does
 not go unnoticed.
 
-**Packages.** `[packages]` names the libraries written in Larimar that the project uses, each with the
-folder that has it:
+`[c]` has no C files, folders of headers or libraries to link: a program has no C of its own, and what is
+not in Larimar runs in another process ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)).
+What the C of the standard library needs (the math library, threads, OpenSSL) the compiler finds in the
+C it generates, and links.
 
-```toml
-[packages]
-textkit = "libs/textkit.lpk"
-```
-
-A package is what `larimar build` makes of a library ([chapter 27](#27-libraries-written-in-larimar)): its
-C, the C it brings, and the `.lar` that `import textkit` reads, in one file (`textkit.lpk`) or as the folder
-with the same things (`textkit = "libs/textkit"`). The compiler does not download it: the file is copied
-there, and unpacked in `build/packages/` when the project is built or checked. A file that is not a
-package, or a folder without its `textkit.interface`, is an error that says so.
+**Packages.** `[packages]` names the libraries and services written in Larimar that the project uses,
+each with its folder: the folder of its project, with its `larimar.toml`. `import textkit` finds there
+its main module: the program compiles a library's source with its own, and for a service it compiles a
+module whose calls go to the service's executable. A library names its own libraries in its
+`[packages]`, so a program names only the ones it imports. The compiler does not download them: how the
+folder gets there (a copy, a git submodule) is up to the project. See
+[chapter 27](#27-libraries-and-services-written-in-larimar).
 
 **Per platform.** `[c.linux]`, `[c.macos]`, `[c.windows]` and `[c.unix]` (Linux and macOS) take the same
-keys as `[c]` and count only on that platform: their lists are added to `[c]`'s, and a `compiler` there
-replaces `[c]`'s. The names are those of the platforms: `windows`, `macos`, `linux`, `unix`.
+keys as `[c]` and count only on that platform: their `flags` are added to `[c]`'s, and a `compiler` there
+replaces `[c]`'s.
 
 ```toml
 [c]
-sources = ["c/common.c"]
-
-[c.linux]
-dynamic_libraries = ["SDL3", "m"]
+flags = ["-O2"]
 
 [c.windows]
-dynamic_libraries = ["SDL3", "ws2_32"]
+compiler = "x86_64-w64-mingw32-gcc"
 ```
 
 | Command | What it does |
 |---|---|
 | `larimar new <name>` | creates the folder with `larimar.toml`, `src/main.lar` and `.gitignore` |
-| `larimar new <name> --library` | the same for a library: `src/<name>.lar` with an export function, and its test |
-| `larimar build [folder]` | writes `build/<name>.c` and compiles it to the executable (a library: `build/<name>/`) |
-| `larimar build --static`, `--dynamic` | a library of that kind, instead of the one in `[library]` |
+| `larimar new <name> --library` | the same for a library: `src/<name>.lar` with a function, and its test |
+| `larimar new <name> --service` | the same for a service: `src/<name>.lar` with a function, and its test |
+| `larimar build [folder]` | writes `build/<name>.c` and compiles it to the executable (a library: checks it; a service: its executable, and first the services of `[packages]`) |
 | `larimar build --debug` | the same, for a debugger (see [Debugging](#debugging-larimar-build---debug-and-larimar-dap)) |
 | `larimar run [folder] [-- args]` | compiles and runs, passing it the arguments |
 | `larimar build --cc <program>` | builds with that C compiler instead of the project's (`tcc`: the bundled one) |
-| `larimar build --target <platform>` | generates the C of one platform only (`linux`, `macos`, `windows`, `unix`): see [`--target`](#the-c-of-one-platform-only---target) |
+| `larimar build --target <platform>` | generates the C of one platform only (`linux`, `macos`, `windows`, `unix`): see [`--target`](#compiling-for-another-system---target) |
 | `larimar test [file or folder]` | runs the tests (see [Tests](#tests-test-function-and-larimar-test)) |
 | `larimar <command of a plugin>` | runs the program of a plugin (see [Plugins](#plugins-commands-of-other-programs)) |
 | `larimar check [file or folder] [--json]` | looks for the errors without generating C (see [The editor](#the-editor-larimar-check-and-larimar-lsp)) |
@@ -4500,108 +3526,20 @@ dynamic_libraries = ["SDL3", "ws2_32"]
 | `larimar <file.lar> -o <out.c>` | writes the generated C of a file |
 | `larimar c <file.lar>` | shows the generated C of a file (with its modules) |
 
-### C libraries: static, dynamic and source code
+### Compiling for another system: `--target`
 
-A Larimar program can use any C library. Its functions are declared with `native function` (and its
-types with `native type`) and the `larimar.toml` tells the C compiler where it is. There are five ways
-to bring in a library, depending on how it comes:
+By default the generated C is **one file for every system**: what changes between systems goes inside
+the `#if` the compiler writes, and the C compiler of each system takes its own. With **`--target linux`**
+(or `macos`, `windows`, `unix`) Larimar makes that choice when it generates:
 
-| How it comes | In `[c]` | Result |
-|---|---|---|
-| **Source code** (`.c`), like SQLite or raygui | `sources = ["vendor/sqlite3.c"]` | it is compiled together with the program: it ends up inside the executable |
-| **Static library** (`.a`) | `static_libraries = ["sqlite3"]` and `static_library_paths = ["vendor/lib"]` | it ends up inside the executable, even if a dynamic one is next to it |
-| **Dynamic library of your own** (`.so`, `.dylib`, `.dll`) | `dynamic_libraries = ["tone"]` and `dynamic_library_paths = ["vendor/lib"]` | the executable loads it when it starts, from that folder |
-| **System library** (`m`, `pthread`, `user32`, one installed with the package manager) | `dynamic_libraries = ["m"]` and, if needed, `include_paths` | the executable loads it from the system |
-| **Library written in Larimar** (a package) | `[packages]`: `textkit = "libs/textkit"` | see [Libraries written in Larimar](#27-libraries-written-in-larimar) |
-
-An example with four at once:
-
-```toml
-[c]
-include_paths = ["vendor/include"]           # the .h files (-I)
-sources = ["vendor/src/embedded.c"]          # source code: it goes inside the executable
-static_libraries = ["mylib"]                 # vendor/lib/libmylib.a: inside the executable
-static_library_paths = ["vendor/lib"]
-dynamic_libraries = ["tone", "m"]            # vendor/lib/libtone.so, and libm of the system
-dynamic_library_paths = ["vendor/lib"]
+```sh
+larimar main.lar -o main.c --target windows      # the C of Windows, from any system
+larimar build --target linux
 ```
 
-```ts
-cinclude "vendor.h";
-cinclude "<math.h>";
-
-native function mylib_triple(x: int32): int32;     // from libmylib.a
-native function tone_play(hz: int32): void;        // from libtone.so
-native function embedded_add(a: int32, b: int32): int32;   // from embedded.c
-native function sqrt(x: float64): float64;         // from libm
-```
-
-**The key says static or dynamic.** A name in `static_libraries` is the file `lib<name>.a` of one of the
-`static_library_paths`: the compiler gives the linker that file, so it goes inside the executable even if
-a dynamic one is in the same folder. If it is in none of them, on Linux it is looked for among the
-system's (`-Wl,-Bstatic -l<name>`); elsewhere it is an error that says so. A name in `dynamic_libraries`
-is `-l<name>`, looked for in `dynamic_library_paths` (`-L`) and in the system folders. A name cannot be
-in both.
-
-Before 1.3 there was a single `libraries` (and `library_paths`), and the linker chose: it preferred the
-dynamic one when it found both, so what ended up in the executable depended on what each machine had.
-Now each library is one or the other, and `libraries` or `library_paths` is an error that says which key to use.
-
-Static libraries and source code are the most portable: the executable is a single file, with nothing
-to copy or install.
-
-**When each one is looked for.** A dynamic library is looked for twice, at different moments:
-
-1. **When compiling.** The C compiler looks for it in its own folders (MinGW brings the Windows ones,
-   like `user32`) and in `dynamic_library_paths` (`-L`).
-2. **When running.** The operating system loads the file (`.dll`, `.so`, `.dylib`). If it does not find
-   it, the program does not start.
-
-That is why `larimar build` **copies no dynamic library**. They stay where they are:
-
-- **System libraries** are looked for by the executable in the usual system paths, and the machine
-  where it runs must have them installed.
-- **The ones in `dynamic_library_paths`**: on Linux and macOS, the executable is compiled with the
-  instruction to look for them in those same folders (`-Wl,-rpath,...`), so `larimar run` works without
-  copying anything. On Windows, a `.dll` is looked for next to the `.exe` or in the `PATH`.
-
-Taking the dynamic libraries to another machine (an installer, a system package, a documented
-dependency) is up to whoever distributes the program, and to their licenses. If the executable must be
-a single file, the library is linked statically or compiled as source code.
-
-A project can also be built into a library for C and for Larimar: see
-[chapter 28](#28-libraries-written-in-larimar).
-
-### An example with Windows
-
-```ts
-// src/win.lar: the module that talks to Windows
-cinclude "<windows.h>";
-
-public native type HWND;
-public native function GetConsoleWindow(): HWND;
-public native function MessageBoxA(owner: HWND, text: String, caption: String, kind: uint32): int32;
-
-public const MB_YESNO: uint32 = 0x04;
-public const IDYES: int32 = 6;
-```
-
-```ts
-// src/main.lar
-import win;
-
-function main(): int32 {
-    let window: win.HWND = win.GetConsoleWindow();
-    if (win.MessageBoxA(window, "Continue?", "Larimar", win.MB_YESNO) == win.IDYES) {
-        println("yes");
-    }
-    return 0;
-}
-```
-
-with `dynamic_libraries = ["user32"]` in `[c]`. Declaring everything about Windows in a `win` module avoids
-repeating the `native` declarations: each `native type` is a different type in each module that
-declares it, so the `HWND` must come from a single place.
+The result is shorter C, of that system only: to read it, to debug it, or to take it to a machine where
+it will be compiled (a program for Windows generated on a Mac). Everything is still checked, and the
+program does the same either way. `Platform.current()` (`std.os`) is then that system.
 
 ### The editor: `larimar check` and `larimar lsp`
 
@@ -4894,44 +3832,41 @@ The rules:
 
 ---
 
-## 27. Libraries written in Larimar
+## 27. Libraries and services written in Larimar
 
-[Chapter 23](#23-calling-c) is C seen from Larimar. This chapter is the other way around, on a large
-scale: code written in Larimar delivered as a **C library**, which a C program uses with its `.h`
-without knowing Larimar, and which a Larimar program imports like a module. Whoever writes it has the
-memory rules of Larimar; whoever uses it gets a plain C library.
+Code written in Larimar is shared in two ways, and a program names both in its `[packages]`:
 
-A project with `kind = "library"` is built into a **library**: a C program uses it like any C library,
-and a Larimar program imports it like a module. By default it is built into a **package**: a folder with
-the library translated to C, which the program that uses it compiles with its own, on any platform.
-`larimar build --static` or `--dynamic` (or `type` in `[library]`) compile it here instead, into a library
-file for a C program.
+- **A library** (`kind = "library"`): the program compiles its source with its own. One C, one runtime,
+  and the whole language on both sides (classes, interfaces the program implements, lists, enums,
+  `throws`). There is nothing to build first.
+- **A service** (`kind = "service"`): it runs in a process of its own, and the program calls its
+  functions. A failure there (a panic, a bug) is an error of the call here, and the service can start
+  again. It is how a library that should not share the program's memory is used.
 
 ```toml
 [project]
 name = "textkit"
 version = "1.0.0"
-kind = "library"             # "program" (the default) or "library"
-main = "src/textkit.lar"
+kind = "library"             # "program" (the default), "library" or "service"
+main = "src/textkit.lar"     # its parts: src/textkit/<part>.lar
 
-[library]
-type = "package"             # "package" (the default), "static" or "dynamic"
-prefix = "tk"                # its C names start with it: tk_wordCount (by default, the name)
+[packages]                   # the libraries it uses itself
+tiny = "../tiny"
 ```
+
+The [manual of libraries](libraries.es.md) (in Spanish) goes through every case with programs that were
+built and run, the errors included.
 
 ### Creating a library
 
-`larimar new textkit --library` creates one like that, with an export function and a test of it. The
-name of a library is also its module and its files, so it has only letters, digits and `_`.
-
-What C (and Larimar) sees of a library are its **export functions** ([C calling Larimar](#c-calling-larimar-export-function))
-and the classes they give or take, with their fields and methods:
+`larimar new textkit --library` creates one like that, with a function and a test of it. The name of a
+library is also its module, so it has only letters, digits and `_`.
 
 ```ts
 // src/textkit.lar
 
 /** Counts the words of a text. */
-public export function wordCount(text: String): int32 {
+public function wordCount(text: String): int32 {
     let n: int32 = 0;
     for (w in text.split(" ")) {
         if (w != "") { n += 1; }
@@ -4939,136 +3874,21 @@ public export function wordCount(text: String): int32 {
     return n;
 }
 
-/** The text with its first letter in upper case. */
-public export function title(text: String): String {
-    if (text == "") { return ""; }
-    return "${text.substring(0, 1).toUpperCase()}${text.substring(1)}";
-}
-
 /** Counts words as they come. */
 public class Counter {
     /** The words counted so far. */
     let words: int32 = 0;
-    let texts: String[*] = [];
 
-    /** Counts the words of a text, and keeps it. */
-    function add(text: String): void {
-        self.words += wordCount(text);
-        self.texts.push(text.clone());
-    }
-
-    /** The last text it counted (null when there is none). */
-    function last(): String? {
-        if (self.texts.length == 0) { return null; }
-        return self.texts[self.texts.length - 1].clone();
-    }
-}
-
-/** A new counter, at zero. */
-public export function newCounter(): Counter { return Counter {}; }
-```
-
-`larimar build` leaves the package in `build/textkit/`, a folder whose files go together:
-
-| File | For | What it has |
-|---|---|---|
-| `textkit.c` | both | the library, in C (with `--static`: `libtextkit.a`; with `--dynamic`: `libtextkit.so`, `libtextkit.dylib` or `textkit.dll`) |
-| `c/` | both | the C the library brings: the `sources` and `include_paths` of its `[c]`, those of every platform |
-| `textkit.h` | C | the prototypes, with their doc comments, and how to free what they give |
-| `textkit.lar` | Larimar | the same functions as `native` declarations |
-| `textkit.interface` | the compiler | its name, version, type, the C it brings, what it needs linked and the **interface hash** |
-
-The same folder serves Linux, macOS and Windows: its C is the one that builds on every system, and it is
-compiled where it is used. `larimar build` compiles it once all the same, to find its errors now.
-
-Next to the folder it leaves **`build/textkit.lpk`**: the same files in one, to publish and to copy. It is a
-zip without compression, so any zip tool opens it.
-
-### Using it from C
-
-The `.h` says everything (here without its first comment):
-
-```c
-typedef struct tk_Counter tk_Counter;
-
-/* Counter: its fields (to read) and its methods; self is the handle. */
-
-/** The words counted so far. */
-int32_t tk_Counter_words(tk_Counter* self);
-
-/** Counts the words of a text, and keeps it. */
-void tk_Counter_add(tk_Counter* self, const char* text);
-
-/**
- * The last text it counted (null when there is none).
- *
- * NULL, or a text that is yours: free it with tk_free.
- */
-char* tk_Counter_last(tk_Counter* self);
-
-/** Counts the words of a text. */
-int32_t tk_wordCount(const char* text);
-
-/**
- * The text with its first letter in upper case.
- *
- * The text is yours: free it with tk_free.
- */
-char* tk_title(const char* text);
-
-/**
- * A new counter, at zero.
- *
- * A new Counter that is yours: give it back with tk_Counter_release.
- */
-tk_Counter* tk_newCounter(void);
-
-/** Gives back a Counter (NULL does nothing). */
-void tk_Counter_release(tk_Counter* handle);
-
-/** Frees a text the library returned (NULL does nothing). */
-void tk_free(void* text);
-
-/** The interface hash of the library (as in textkit.interface): compare it with TEXTKIT_INTERFACE. */
-const char* tk_interface(void);
-```
-
-```c
-#include <stdio.h>
-#include "textkit.h"
-
-int main(void) {
-    char* t = tk_title("larimar");
-    tk_Counter* c = tk_newCounter();
-    tk_Counter_add(c, "one two");
-    tk_Counter_add(c, "three");
-    char* last = tk_Counter_last(c);
-    printf("%s %d %d %s\n", t, tk_wordCount("a b c"), tk_Counter_words(c), last);
-    tk_free(t);
-    tk_free(last);
-    tk_Counter_release(c);
-    return 0;
+    function add(text: String): void { self.words += wordCount(text); }
 }
 ```
 
-```sh
-larimar build --static                   # build/textkit/libtextkit.a
-cc -std=c99 -Ibuild/textkit main.c build/textkit/libtextkit.a -lm
-./a.out                                  # Larimar 3 3 three
-```
-
-What a static library needs linked besides is in `links` of its `.interface` (`-lm`, `-pthread` if it
-uses threads, the TLS ones...). A C program can also compile the package itself: `textkit.c` and the
-sources its `.interface` names.
-
-### Using it from Larimar
-
-The `.lpk` is copied into the program's folder and named in `[packages]` (the folder can be named
-instead, to use a library as it is being written):
+### Using it
 
 ```toml
+# the program's larimar.toml
 [packages]
-textkit = "libs/textkit.lpk"
+textkit = "../textkit"
 ```
 
 ```ts
@@ -5076,164 +3896,101 @@ import textkit;
 import textkit { Counter };
 
 function main(): int32 {
-    let c: Counter = textkit.newCounter();
+    let c: Counter = {};
     c.add("one two");
-    c.add("three");
-    println("${textkit.title("larimar")} ${c.words} ${c.last() ?? "-"}");
+    println("${textkit.wordCount("a b c")} ${c.words}");
     return 0;
 }
 ```
 
-Output: `Larimar 3 three`
+- **Its modules start with its name**: `textkit` (`src/textkit.lar`) and `textkit.<part>`
+  (`src/textkit/<part>.lar`), so they never meet the program's. A program file with the same name as a
+  module of a library is an error.
+- **Its own libraries come with it.** The folders of a library's `[packages]` are relative to its folder,
+  and the program can import them too. There is one copy of each in the program; two libraries with the
+  same name in different folders are an error.
+- **The rules are the program's.** What the library returns lives where the caller says; an object of the
+  library lives where the program creates it; a thread can share it only if it is `synchronized`. It is the
+  same analysis as inside a program, because it is one program.
+- **What [packages] names is checked**: a folder with a `larimar.toml` of a library (or a service) with
+  that name.
+- `larimar build` in the library's folder checks it (its errors), and `larimar test` runs its `tests/`,
+  which import it like a program does.
 
-`import textkit` finds `textkit.lar` there (`larimar check` and the editor too), its `.h` is included, and
-`larimar build` compiles its C with the program's and links what it needs. A library compiled with
-`--static` or `--dynamic` is for C programs: a Larimar program uses the package. The `.lar` it reads is plain `native` declarations:
+### Services
 
-```ts
-cinclude "textkit.h";
+A service is a project whose **public functions** another program calls, each call in the service's
+process:
 
-/** Counts words as they come. */
-public native type Counter = tk_Counter* released by tk_Counter_release {
-    // not given to C (they do not cross): texts (String[*])
-    /** The words counted so far. */
-    native let words: int32 = tk_Counter_words;
-    /** Counts the words of a text, and keeps it. */
-    native function add(text: String): void = tk_Counter_add;
-    /** The last text it counted (null when there is none). */
-    native function last(): String? = tk_Counter_last released by tk_free;
-}
-
-/** Counts the words of a text. */
-public native function wordCount(text: String): int32 = tk_wordCount;
-
-/** The text with its first letter in upper case. */
-public native function title(text: String): String = tk_title released by tk_free;
-
-/** A new counter, at zero. */
-public function newCounter(): Counter { return newCounter_c()!; }
-native function newCounter_c(): Counter? = tk_newCounter;
-
-// what gives back the texts and objects of the library (only the compiler calls them)
-native function tk_free(text: String): void = tk_free;
-native function tk_Counter_release(handle: Counter): void = tk_Counter_release;
+```toml
+[project]
+name = "calc"
+kind = "service"
+main = "src/calc.lar"
 ```
 
-A text of the library is copied into the program's memory and freed at once
-([`released by` on a function](#texts-that-c-makes-released-by-on-a-function)); a `Counter` is a
-[resource](#resources-released-by): when the memory it lives in is freed, `tk_Counter_release` gives it
-back. Nothing is freed by hand, and the class is used as in the library: its methods are called on it
-(`c.add("x")`), its fields are read (`c.words`), and the functions have the same names and types.
+```ts
+// src/calc.lar: what it gives is its public functions
+public function add(a: int64, b: int64): int64 { return a + b; }
 
-### The interface hash
+public function upper(words: String[*]): String[*] {
+    let out: String[*] = [];
+    for (w in words) { out.push(w.toUpperCase()); }
+    return out;
+}
+```
 
-The `.interface` has eight hexadecimal digits, the start of the SHA-256 of the
-`.lar`; the library has the same ones inside (`tk_interface()` returns them, and the `.h` has them in
-`TEXTKIT_INTERFACE`). Before building a program that links it, `larimar build` checks that the three
-agree, and stops with what is wrong:
+`larimar build` in its folder makes its executable (`build/calc`), whose main answers the calls with
+those functions; that main is written next to its C (`build/calc-service.lar`). A program names it in
+`[packages]` like a library, and **imports a class with the same functions**, each one a call:
 
-- a `.lar` edited by hand: `textkit.lar does not match the library (its hash is ..., textkit.interface says ...)`;
-- a library of another build next to an old `.lar`: `textkit.c is from another build than textkit.lar and textkit.interface`.
+```ts
+// the program: [packages] calc = "../calc"
+import calc { Calc };
+import std.os.rpc { RpcError };
 
-So a program never calls a library with declarations that are not its own. The hash covers the whole
-`.lar`: the functions, their types and docs, the version and the kind. A new version is a new folder
-that go together. A C program can check the same when it starts:
-`strcmp(tk_interface(), TEXTKIT_INTERFACE) == 0`.
+function main(): int32 {
+    try {
+        let c: Calc = Calc.start();                  // starts the service: shared memory between the two
+        println("${c.add(2, 40)}");                  // 42, computed in the other process
+        println(c.upper(["casa", "playa"]).join(","));
+        c.close();
+    } catch (RpcError e) {
+        println("the service cannot answer");
+    }
+    return 0;
+}
+```
 
-### The export functions and classes of a library
-
-What goes to C, and how:
-
-- **Their C names** are `<prefix>_<name>` (`tk_wordCount`). `= c_name` after the signature gives one of
-  its own (`export function answer(): int32 = tk_the_answer { ... }`), and `prefix = ""` leaves the names
-  as they are. The library itself gives `<prefix>_free`, `<prefix>_<Class>_release` and
-  `<prefix>_interface`: an export function cannot take those names (nor a method called `release`).
-- **Their types**: numbers, `bool`, `String` and `String?` (`const char*`; `NULL` is `null`), the
-  **classes** of the library and their optionals, and **callbacks** (below). Other native types and C
-  structs do not go: they belong to C headers that the program would need too.
-- **A function of the program** that the library calls is a parameter of a function type, as anywhere
-  in Larimar: `export function serve(path: String, handler: (Request) -> String): String`, called inside
-  like any function (`handler(req)`). Its parameters are numbers, `bool`, `String` and classes of the
-  library; it gives a number, a `bool`, a `String` or nothing. A Larimar program gives it a lambda, with
-  what it captures (`webkit.serve("/hi", (req: Request) -> { return "hola ${req.path}"; })`); a C program
-  gives a function and a `void*`, which the function gets back on each call.
-  - An object the function gets is the library's: the function uses it, and cannot keep it.
-  - A text the function gives lives in the block of the library that called it. A C function gives it with
-    `<prefix>_give(out, text)`.
-  - A function that can fail handles it inside (`try`/`catch`): a lambda cannot throw.
-  - A library that **keeps** the function to call it later says so on the parameter, as any Larimar code
-    does: `in default` (kept for the whole program) or, in a method of one of its classes, `in self` (kept
-    in the object). What the program's function uses must then live as long as the program, or at least
-    as long as the object, and the compiler checks it.
-  - A **method** of a class of the library takes functions the same way
-    (`function get(path: String, handler: (Request) -> String in self): void`).
-
-- **A text it returns** is a copy (`char*`) for the caller: C frees it with `<prefix>_free`.
-- **An object it returns** is a **handle**: C keeps it (`tk_Counter*`), passes it to its methods and
-  to other export functions, and gives it back with `<prefix>_<Class>_release`. The handle has its own memory: what the
-  object creates later (a list that grows, its texts) lives there and is freed with it. A `NULL` where a
-  class is expected stops the program with a panic that names the function and the parameter
-  (`tk_Counter_add: 'self' is NULL`); where `Counter?` is expected, it is `null`.
-- **The members of its classes go too.** For each class that C receives: each field is read with
-  `<prefix>_<Class>_<field>(handle)` (a text: a copy to free) and each method is called with
-  `<prefix>_<Class>_<method>(handle, ...)`, through its vtable, so the method of a subclass runs. Its
-  parents' members go as well. In the `.lar` they are a `native let` and a `native function` of the
-  class, so a program writes `c.words` and `c.add("x")`. A field is only read: it is changed through
-  a method. What does not cross (a list field, a method that throws or that takes a list, an operator)
-  stays inside, and the `.lar` says so in a comment. A field of a class type does not go either: its
-  object belongs to the other one; a method that returns a new one does.
-- **Each call has its own memory**, freed when it returns. The globals of the library are created when
-  it is loaded (or at its first call) and live as long as the program.
-- **`export` does not make a function `public`**: with both, the tests of the library (and its other
-  modules) can call it from Larimar.
-- **No main**: the program that uses it has its own. A library with a `main` is an error.
-
-### Inside, everything is private
-
-Everything of the C but the export functions and those three is
-`static`: the runtime of the library, its classes, its other functions. So two libraries written in
-Larimar, and the Larimar program that links them, do not clash: each one has its own runtime (a few KB)
-and its own memories, and nothing crosses from one to another but texts (copied) and handles.
-
-### Its tests
-
-`larimar test` in the folder of the library runs its tests like in any project: they
-import its modules (the Larimar code, not the `.a`). `larimar check` and the editor apply the rules of a
-library to its code too.
+- **The class** is named after the service (`calc` → `Calc`, `image_tools` → `ImageTools`).
+  `Calc.start()` runs the service's executable: the one next to this program's, or else the one where it
+  was built; `Calc.startAt(path)` runs another. The service ends with `close()` or when the object's
+  memory is freed.
+- **`larimar build` of the program builds its services first**, each with its own `larimar build`. To
+  give the program to someone, put the service's executable next to it.
+- **What crosses** is what JSON carries: numbers, `bool`, `String`, their optionals and lists of them,
+  and `Any`. A parameter or result of another type is an error when the service is built (*box returns
+  Box: what comes back from a service is a number...*), and so is a public function that `throws`: an
+  error cannot cross. Its functions that are not `public` stay inside.
+- **Each call can throw `RpcError`**: `Ended` when the service ended (a panic there: *the program ended
+  (exit 101)*), `TimedOut` after `setTimeout(ms)`. The calls go through shared memory
+  ([`std.os.rpc`](#calls-to-another-program-stdosrpc)), and the service's own output is the console's.
+- **A program only imports the service** (`import calc`), not its parts: they are inside the service.
+  A service's own `[packages]` are its own: they go into its executable.
+- **The service is a program too.** Its executable answers JSON-RPC on its standard input and output
+  when nobody started it with shared memory, so a program in any language can use it.
+- `larimar test` in the service's folder runs its `tests/`, which call its functions directly, in the
+  same process.
 
 ### Clarifications
 
-- **Why a package by default.** One folder serves every platform, with nothing to compile for each, and
-  the executable that uses it is a single file. A static or a dynamic library is for one platform; a
-  dynamic one is shared by several programs and can be replaced without building them again.
-- **What a package needs of the system.** A library of the system that its C uses (`dynamic_libraries` of
-  its `[c]`, per platform too) is in `links` of its `.interface`, and the program links it: it must be
-  installed where the program is built and where it runs.
-- **Where a dynamic one is looked for.** Like any dynamic library: on Linux and macOS, in its folder, the
-  one `[packages]` names (rpath; on macOS the library is `@rpath/libtextkit.dylib`); on
-  Windows, next to the `.exe` or in the `PATH` (the linker uses `libtextkit.dll.a`, which is made with it).
-- **What a static one needs.** The libraries its C needs, and those it links itself, are in `links`:
-  a Larimar program adds them on its own; a C program adds them to its command. The static libraries
-  that a static library links are not put inside it: the program needs them too.
-- **Panics.** A panic inside the library (a bug: an index out of range, a `NULL` handle) prints it and
-  ends the program, as in a Larimar program.
-- **Threads.** The library can create threads inside. Calls from several threads of C at the same time
-  are for whoever calls, as with any C library (Larimar cannot see them): one handle, or the globals, in
-  one thread at a time, unless it is a `synchronized class`.
-- **The hash is not a signature.** It finds out mistakes (files of different builds), not someone who
-  changes a library on purpose.
-- **The package is generated**: its files are not edited, they are not kept in the library's repository
-  (they are in `build/`), and they are published together.
-- **A package that uses another.** A package does not carry the packages its library uses: its
-  `.interface` names them, and the program names them too in its `[packages]` (`package 'webkit' uses the
-  package 'jsonkit': name it in [packages] too`).
-- **C that is already compiled.** A `lib<name>.a` of the library's `static_libraries` that is in its
-  `static_library_paths` goes in the package and is linked into the program. It is for one platform: in
-  `[c.linux]`, `[c.macos]` or `[c.windows]` each system gets its own; in `[c]`, the package serves only the
-  platform that file was compiled for.
-- **Not yet**: lists and errors (`throws`) do not cross a library; they go as texts, handles
-  and numbers (an error code), or stay inside. A program does not create objects of the library with
-  `Counter {}`, nor extend its classes: they are made by its functions and methods.
+- **No C of its own.** A library or a service, like a program, has no C: what Larimar does not have runs
+  in another process ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)). A library
+  written by someone else cannot bring C that the compiler does not check.
+- **No package manager.** `[packages]` names folders; how they get there is up to the project.
+- **A library or a service.** A library is faster (a call is a call) and shares everything with the
+  program; a service is apart (a call goes to another process and back, a few microseconds) and its
+  failures stay there.
 
 ---
 
@@ -5254,8 +4011,7 @@ gcc -std=c99 -O2 program.c -o program
 The generated C compiles without warnings with `gcc -std=c99 -Wall -Wextra -pedantic`, and **only
 carries what the program uses**. It is decided in two steps, following the names:
 
-1. **The program.** It starts from `main`, the `export function`s and the C the program wrote itself
-   (`cinclude`, `ccode`), and keeps each function, method, type, global variable or helper function
+1. **The program.** It starts from `main` and keeps each function, method, type, global variable or helper function
    that any of that names, and so on. A `String` method the program does not call, the `Opt_i64` that
    only appeared in its signature or the `std` function nobody uses do not reach the C.
 2. **The runtime.** The pieces of the runtime that define some name of what was kept (and the ones
@@ -5303,12 +4059,6 @@ And it is readable:
 | what a function returns | a first parameter `RtMem* rt_dest`: the memory of the call (`NULL` if the function does not create its result) |
 | `geo.shapes.area` | `geo__shapes__area` (the main file keeps its names) |
 | `main` | `user_main`, called from C's `main` |
-| `native type X;` / `= T;` | `typedef void* Ext_X;` / `typedef T Ext_X;` |
-| `native type X = (A) -> R;` | `typedef R (*Ext_X)(A);` |
-| `native struct X { ... }` | the C struct, with its name; Larimar does not define it |
-| `native type X = T* { native function m() = c_m; }` | `x.m()` is `c_m(x)`: a `static` function that calls it |
-| a callback with `Context` | a C function (`lm_ctx_...`) that calls the Larimar one the context carries |
-| `export function f` | the Larimar function (`larimar_f`) and a function `f` with C types that calls it |
 | `Any` | `RtAny`: `{ kind; union of values }`; a table is an `RtTable*` with a hash index; a struct goes in a copy |
 | `Thread`, `synchronized` | system threads (`pthread` or Windows); a recursive lock per object |
 
@@ -5331,18 +4081,8 @@ like this:
 - in the memories that grow, there is a poisoned gap between one piece and the next.
 
 That way, reading or writing a single byte too many stops at that line, with the error and the call
-stack. It happens above all with C code (`ccode`) that writes into a memory:
-
-```ts
-ccode {
-    static const char* bad(RtMem* m) {
-        char* out = (char*)rt_mem_alloc(m, 4, 0);
-        for (int i = 0; i <= 4; i++) out[i] = 'A';      /* one byte too many */
-        out[3] = 0;
-        return out;
-    }
-}
-```
+stack. Larimar's own code cannot do it (it checks every index), but the C of the standard library
+could, and that is what the checks are for:
 
 ```
 ==441==ERROR: AddressSanitizer: use-after-poison on address 0x531000000815
@@ -5444,22 +4184,24 @@ in `std/`.
 
 `tests/run-tests.sh` runs `larimarc test` on `tests/` and what needs more than one program (below). All
 of them are `test function`s ([section 26](#tests-test-function-and-larimar-test)), grouped in one file
-per topic (`tests/c/callbacks_test.lar`, `tests/language/when_test.lar`...). The ones that test the
+per topic (`tests/std/rpc_test.lar`, `tests/language/threads_test.lar`...). The ones that test the
 compiler itself use `tests/support/compiler.lar`, which compiles a program with the compiler under test
 and says what must happen:
 
 ```ts
 import tests.support.compiler { failsWith, runs };
 
-test function aBodyOfCIsNative(): void {
+test function aFieldOfATaskCrosses(): void {
     failsWith(raw"""
-        function hack(): int32 ccode { return 1; }
+        import std.os.process { SystemProcess };
+        class Box { let n: int32 = 0; }
+        class Bad implements SystemProcess { let box: Box; override function run(): Any { return null; } }
         function main(): int32 { return 0; }
-        """, "A body of C belongs to a native function");
+        """, "Field 'box' of SystemProcess 'Bad' goes to another process");
 }
 
-test function callbacksWithAContext(): void {
-    runs("tests/cases/c/native_callbacks_with_context.lar", ["-> 0 UNO", "-> 1 DOS", "-> 2 TRES", "count 3"]);
+test function castInATernary(): void {
+    runs("tests/cases/language/cast_ternary.lar", ["big small", "7 0 yes", "3 small"]);
 }
 ```
 
@@ -5488,7 +4230,7 @@ LARIMARC=build/larimarc_stage2 tests/run-tests.sh
 `tests/memory/` covers the memory model: what a function returns (created, a view of an argument, one
 of its arguments), nested calls, default values of fields, interpolation, loops, `map` and `filter`,
 kept lambdas, `in default`, memories of your own, `clone()`, exceptions with live temporaries, a
-`switch` that creates, objects, `Any`, threads, `export function` called from C, and what must be
+`switch` that creates, objects, `Any`, threads, and what must be
 rejected. **Each failure that is found first goes in as a test**, and then it is fixed.
 
 Three test files start other programs with `std.os.process` and talk to them as an editor would, without
@@ -5522,6 +4264,7 @@ What Larimar does not have, and will not have, with what is used instead:
 - **No surprise `null`.** Only what carries `?` can be `null` ([section 14](#14-optionals-and-null)).
 - **No implicit conversions.** Numeric types are converted with `as`, in plain sight: `int32 + int64` does not compile.
 - **No undefined behavior.** Integers wrap around, indexes are checked, and a failure stops with its file and line ([section 20](#20-failures-at-run-time)).
+- **No C of its own.** A program, its libraries and its services use the C of the standard library, never their own: what std does not have runs in another process ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)).
 
 ### Not yet
 
@@ -5535,15 +4278,9 @@ What Larimar does not have, and will not have, with what is used instead:
   while it waits. The TLS server is not available on Windows yet. The client TLS of macOS and Windows is
   written and compiles, but its tests have only run on Linux.
 - Some operations of `String` and `Any` are still intrinsics of the compiler; lists are not declared in `std.lang` yet.
-- A lambda with captures goes to C only when the library gives a `void*` of context as a parameter
-  (`Context`); if it keeps it elsewhere, the callback is an `export function`. A C struct cannot have array fields (except a text,
-  `char name[32]`, which is read as a `String`) or unions; they are read with a function in `ccode`.
-- A C pointer (`T*`) is not indexed (`p[i]`) or added to; for a C array, a function in `ccode`.
-  `&x` only works as an argument of a C function.
-- The function that lets a resource go (`released by`) receives only the resource: if it needs more
-  context (a table of functions loaded with `dlopen`, like OpenSSL in `std.net`), it goes in `ccode`.
-- A library written in Larimar gives C (and the programs that link it) numbers, `bool`, texts and handles
-  of its classes: lists, callbacks and errors do not cross it yet.
+- What crosses to another process (a service, a `SystemProcess`, a call of `std.os.rpc`) is what JSON
+  carries: numbers, `bool`, `String`, lists and tables. Objects of a service do not cross yet (a service
+  gives values), and a call goes through JSON even over shared memory.
 - A memory cannot be emptied by hand (`clear()`); it is freed at the end of its block.
 - The compiler decides without running whether a function creates its result. If it sometimes returns
   something new and sometimes something that already existed, it is treated as if it always created:
@@ -5611,32 +4348,11 @@ if (q != null) { let z: int32 = q + 1; }
 if (q == null) { return; }              // from here on, q is not null
 let k: String = q > 0 ? "pos" : "neg";
 
-// C
-cinclude "<stdio.h>";
-native function puts(text: String): int32;
-native function cExit(code: int32): void = exit;           // another name in C
-native const EOF: int32;
-native const SIZE: int32 = c"(int)sizeof(long)";
-native let errno: int32;
-native type CFile = FILE* released by fclose;               // a resource: let go with its memory
-native function fopen(path: String, mode: String): CFile?;
-native function fclose(f: CFile): int32;
-native function strdup(text: String): String released by free;   // a text of C: copied, then freed
-native struct Node = struct node { let next: Node*; let name: String; }
-native type Doc = Doc* released by doc_close {                  // a C type with members
-    let id: int32;                                              // a field: d.id is d->id
-    native function title(): String = doc_title;                // d.title() is doc_title(d)
-}
-native type ItemFn = (int32, Context) -> void;                  // a callback with a context:
-native function each(f: ItemFn, data: Context): void;           // each((i) -> { ... }) takes lambdas
-ccode { static int twice_all(int x) { return lar"twice"(x); } }   // lar"..." names Larimar from C
-two_results(&a, &b);                                            // & only as an argument of C
-release(file);                                                  // let it go earlier
-let sep: String = switch (Platform.current()) {                      // the system: OS.Linux, MacOS, Windows, Unix
+// The system
+let sep: String = switch (Platform.current()) {                 // std.os: OS.Linux, MacOS, Windows, Unix
     case Windows -> "\\";
     case Linux, MacOS, Unix -> "/";
 };
-native function twice(x: int32): int32 { return 2 * x; }        // a native function with a body of C
 
 // Literals
 let c: byte = 'a';
@@ -5675,18 +4391,18 @@ th.join();
 // Failures of the program
 panic("should not happen: ${x}");                    // it stops with the message (code 101)
 
-// C
-cinclude "<math.h>";
-native function sqrt(x: float64): float64;
-native type Handle;                                   // void*
-native type File = FILE*;                             // a concrete C type
-native struct Point { let x: float32; let y: float32; }    // a C struct
-native type Op = (int32, int32) -> int32;             // a pointer to a C function
-export function subtract(a: int32, b: int32): int32 { return a - b; }   // C can call it
-export function name(id: int32): String = lm_name { return "n${id}"; }  // C's name; C frees the text
+// Other programs (chapter 23)
+let calc: Rpc = Rpc.startShared("./calc", []);       // std.os.rpc: a Larimar program that serves
+let sum: Any = calc.call("add", { a: 2, b: 3 });      // throws RpcError
+serve((call) -> { return call.params.a; });           // the other side
+let out: SharedOutputStream = SharedOutputStream.create("frames", 1 << 20);   // std.os.shared
+let input: SharedInputStream = SharedInputStream.open("frames", 5000);
+class Job implements SystemProcess { let n: int64; override function run(): Any { return self.n * 2; } }
+let pool: ProcessPool = { processes: 4 };
+let r: Any = pool.run(Job { n: 21 });                 // in another process: 42
 
-// larimar.toml of a library: build/<name>/, a package: <name>.c, <name>.h, <name>.lar, <name>.interface
-// [project] kind = "library"      [library] type = "package" (or "static", "dynamic"), prefix = "tk"
-// whoever uses it: [packages] textkit = "libs/textkit"
-// [c] static_libraries / static_library_paths, dynamic_libraries / dynamic_library_paths
+// Libraries and services: [packages] textkit = "../textkit" (chapter 27)
+// [project] kind = "library": compiled with the program; kind = "service": its own process
+import calc { Calc };                                 // a service: a class with its functions
+let c: Calc = Calc.start();
 ```

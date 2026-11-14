@@ -14,7 +14,7 @@ import syntax.parser.statements { block, variable };
 import syntax.parser.types { type };
 
 /**
- * ccode { C } | ccode "FILE" ; | cinclude "HEADER" ; | native ... | test function ... | export function ... | const ... |
+ * ccode { C } | ccode "FILE" ; | cinclude "HEADER" ; | native ... | test function ... | const ... |
  * let ... | function ... | struct ... | [synchronized] class ... | interface ... | enum ... | native type ...
  */
 public function topLevelDeclaration(p: Parser in default): Node {
@@ -27,15 +27,6 @@ public function topLevelDeclaration(p: Parser in default): Node {
     if (p.atWord("test") && p.next().kind == TT.Function) {
         p.advance();
         return testFunction(p);
-    }
-    if (p.atWord("export") && p.next().kind == TT.Function) {
-        p.advance();
-        p.parsingExport = true;
-        let exported: FunctionDecl = functionDeclaration(p, false, true);
-        p.parsingExport = false;
-        if (exported.typeName != "") { p.error(exported.line, "Only plain functions can be exported, not '${exported.typeName}.${exported.name}'"); }
-        exported.exportName = exported.name;
-        return exported;
     }
     if (p.optional(TT.Const)) { return constant(p); }
     if (p.at(TT.Let)) { return variable(p); }
@@ -131,9 +122,6 @@ public function functionDeclaration(p: Parser in default, isOverride: bool, with
     if (p.optional(TT.Colon)) { declaration.ret = type(p); }
     if (p.optional(TT.In)) { declaration.returnLives = lives(p); }
     if (p.optional(TT.Throws)) { declaration.throwsType = type(p); }
-    if (p.parsingExport && p.optional(TT.Assign)) {     // export function f(...) = c_name { ... }
-        declaration.exportC = p.expect(TT.Ident, "Expected the C name after '=' in export function '${name.text}'").text;
-    }
     let waitToken: Token = p.current();
     if (p.atWord("wait_until")) {
         p.error(waitToken.line, "Write 'wait until' (two words): wait until (condition)");

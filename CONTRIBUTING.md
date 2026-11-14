@@ -3,7 +3,8 @@
 How the code is organized, so that it stays easy to read and to change.
 
 - Every function of the compiler, with its signature: [docs/compiler-reference.md](docs/compiler-reference.md).
-- How libraries are made inside the compiler: [docs/compiler-libraries.es.md](docs/compiler-libraries.es.md).
+- How libraries, services and tasks are made inside the compiler: [docs/compiler-libraries.es.md](docs/compiler-libraries.es.md).
+- The C of the standard library (`cinclude`, `ccode`, `native`), for whoever writes std: [docs/std-c.md](docs/std-c.md).
 
 ## The compiler, from a file to a program
 
@@ -13,7 +14,7 @@ arrows is on them.
 ```mermaid
 flowchart TB
     cmd["main.lar<br/>the commands: build, run, test, check, new"]
-    proj["project of larimar.toml<br/>main.lar, project/libraries.lar, project/lpk.lar"]
+    proj["project of larimar.toml<br/>main.lar, project/libraries.lar, project/services.lar"]
     session["editor/session.lar<br/>analyzeFile"]
     subgraph syntax["syntax/: one file at a time"]
         lexer["lexer.lar<br/>class Lexer"] -- tokens --> parser["parser.lar and parser/<br/>class Parser"]
@@ -31,7 +32,7 @@ flowchart TB
     end
     runtime["std/runtime/*.lar<br/>the runtime, written in C"]
     cc["project/cc.lar<br/>chooses and runs the C compiler"]
-    exe(["the program, or the library"])
+    exe(["the program, or the service"])
 
     cmd --> proj --> session
     session --> linker
@@ -53,7 +54,7 @@ The same analysis serves the editor: `editor/lsp.lar` calls `analyzeFile` for th
 | `src/syntax` | The lexer, the parser, the tree (`ast.lar`) |
 | `src/semantics` | The linker, the types, the analyzer |
 | `src/codegen` | The generator of C, the pruning, the debug map |
-| `src/project` | `larimar.toml`, packages, the C compiler, `larimar test` |
+| `src/project` | `larimar.toml`, the libraries of `[packages]`, the C compiler, `larimar test` |
 | `src/editor` | The language server and the debug adapter |
 | `std` | The standard library; `std/runtime` is the runtime, in C |
 | `tests` | The tests, by subject; `tests/run-tests.sh` runs them |
@@ -118,6 +119,14 @@ Without `--target`, the C of every platform is written, each under its `#if`; wi
 - Files of a few hundred lines: past ~800, split the module in parts.
 - No mutable globals in the compiler: each phase is a class. Today `Lexer` and `Parser` are; the linker,
   the analyzer and the generator still keep their state in variables of their modules (to do).
+- C is only the standard library's: a program, a library and a service written in Larimar cannot have
+  any (`semantics/linker.lar`, `noC`); what Larimar does not have runs in another process (`std.os.rpc`,
+  `std.os.shared`, services). The compiler itself still has some (`editor/lsp.lar`, `editor/dap.lar`,
+  `editor/docstore.lar`, `gen_double_text`), so it is built with `--unsafe-c`, and so are the tests that
+  try std's C. Moving that C into std is to do.
+- What the compiler writes for the program is Larimar, parsed like any module: the module of a service
+  (`project/services.lar`, `clientSource`), the main of its executable (`serverSource`) and how the tasks
+  of `SystemProcess` go to another process (`semantics/linker.lar`, `writeTasks`).
 
 ## Changes
 
@@ -127,9 +136,9 @@ Without `--target`, the C of every platform is written, each under its `#if`; wi
 ```mermaid
 flowchart TB
     boot["bootstrap/larimarc.c"] -- cc --> c0["compiler 0"]
-    c0 -- "compiles src/" --> s1["stage1.c"] -- cc --> c1["compiler 1"]
-    c1 -- "compiles src/" --> s2["stage2.c"] -- cc --> c2["compiler 2"]
-    c2 -- "compiles src/" --> s3["stage3.c"]
+    c0 -- "compiles src/ (--unsafe-c)" --> s1["stage1.c"] -- cc --> c1["compiler 1"]
+    c1 -- "compiles src/ (--unsafe-c)" --> s2["stage2.c"] -- cc --> c2["compiler 2"]
+    c2 -- "compiles src/ (--unsafe-c)" --> s3["stage3.c"]
     s2 --> same{"stage2.c == stage3.c ?"}
     s3 --> same
     same -- yes --> ok["cp build/stage2.c bootstrap/larimarc.c<br/>then the tests"]

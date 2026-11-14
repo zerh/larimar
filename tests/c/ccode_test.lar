@@ -27,15 +27,6 @@ test function cBodyNeedsNative(): void {
         """, "A body of C belongs to a native function");
 }
 
-// Una export function se queda aunque nadie la llame desde el programa: es para C de fuera.
-test function exportKeptWithoutCallers(): void {
-    runs("tests/cases/c/export_kept_without_callers.lar", [
-        "listo"
-    ]);
-    let c: String = generatedC("tests/cases/c/export_kept_without_callers.lar");
-    check(hasWord(c, "lm_api_version"), "the generated C should contain lm_api_version");
-}
-
 // lar"name" in ccode: the C name of a Larimar function (a module's: lar"module.name").
 test function larNamesInCCode(): void {
     runs("tests/cases/c/lar_names_in_ccode.lar", [

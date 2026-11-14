@@ -99,15 +99,13 @@ public class CCodeDecl extends Node {
     let owner: String = "";             // the class it is in ("" at the top level)
     let fromStd: bool = false;          // the standard library's: only what is used reaches the C
 }
-/** native type X;  = T*;  = c"C TYPE";  = (A, B) -> R  (a C function pointer);  ... released by f; */
+/** native type X;  = T*;  = c"C TYPE";  ... released by f; */
 public class ExternTypeDecl extends Node {
     let name: String;
     let cType: String = "";             // the C type ("" is void*)
-    let func: TypeRef? = null;          // a pointer to a C function
     let releasedBy: String = "";        // a resource: the function that releases it when its memory is freed
     let platform: String = "";
     let fieldsStruct: String = "";      // native type X = T* { let f: ...; }: the struct (made by the parser) X points to
-    let ofPackage: bool = false;        // of the .lar of a package: a function of this type follows the rules of a library
 }
 
 /** cName: the C function called (it stays when a module renames the declaration); prototype: no cinclude. A
@@ -162,12 +160,9 @@ public class FunctionDecl extends Node {
     let isStatic: bool = false;         // static methods don't receive 'self'
     let cBodied: bool = false;          // a method whose body is C: it calls its C function (in its class's system)
     let typeName: String = "";          // for "function Type.method()" external syntax
-    let exportName: String = "";        // export function: its Larimar name (the linker does not rename it)
-    let exportC: String = "";           // export function f(...) = c_name { ... }: the C name written for it
     let isTest: bool = false;           // test function: only in `larimar test` (and the editor)
     let isProperty: bool = false;       // native let: read without parentheses, never assigned
     let isNative: bool = false;         // native function of a module: the compiler writes every call to it
-    let forwardsToC: bool = false;      // a member of a native type that calls its C function (= c_name): a callback goes as a Larimar function
     /** wait until (cond): a method of a synchronized class that runs only when cond holds (the caller waits). */
     let waitUntil: Expr? = null;
 }

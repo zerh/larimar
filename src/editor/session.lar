@@ -9,9 +9,9 @@ import std.io.files as Files;
 import std.encoding.json as Json;
 import std.io.console as Console;
 import syntax.ast { Program };
-import semantics.linker { link, linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES, libraryRoots };
+import semantics.linker { link, linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES, libraryNames, libraryRoots, libraryServices };
 import project.libraries { larimarLibraries };
-import semantics.types { files, libraryRules, libraryPrefix };
+import semantics.types { files };
 import semantics.analyzer { analysisErrors, analyze };
 import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
@@ -45,12 +45,13 @@ public function analyzeFile(main: String, shownFrom: String): bool {
 }
 
 /**
- * The folders of the libraries the project of a file uses ([packages] of its larimar.toml): `import textkit`
- * finds textkit.lar there. larimar build checks them.
+ * The libraries the project of a file uses ([packages] of its larimar.toml, and theirs): `import textkit`
+ * finds textkit.lar in the folder of its modules. A problem with them is larimar build's to say.
  */
 function findLibraryRoots(main: String): void {
+    libraryNames.clear();
     libraryRoots.clear();
-    libraryRules = false;
+    libraryServices.clear();
     let dir: String = Paths.parent(main);
     while (dir != "") {
         let toml: String = Paths.join(dir, "larimar.toml");
@@ -59,11 +60,12 @@ function findLibraryRoots(main: String): void {
             if (source == null) { return; }
             try {
                 let config: Any = Toml.parse(source!);
-                // a library's code (its tests too): export functions named <prefix>_<name>, with its classes
-                libraryRules = (config.project.kind as String ?? "program") == "library";
-                libraryPrefix = (config.library.prefix as String ?? config.project.name as String ?? "").clone() in default;
                 let ignored: String[*] = [];
-                for (l in larimarLibraries(dir, config, false, ignored)) { libraryRoots.push(l.dir.clone() in default); }
+                for (l in larimarLibraries(dir, config, ignored)) {
+                    libraryNames.push(l.name.clone() in default);
+                    libraryRoots.push(l.dir.clone() in default);
+                    libraryServices.push((l.service ? l.exe : "").clone() in default);
+                }
             } catch (TomlError e) {}
             return;
         }

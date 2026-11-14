@@ -1,0 +1,173 @@
+// std.os.shared: streams of bytes from one program to another, through memory that both see.
+//
+//   import std.os.shared { SharedOutputStream, SharedInputStream };
+//
+//   // one program
+//   let out: SharedOutputStream = SharedOutputStream.create("frames", 1 << 20);   // 1 MB of shared memory
+//   out.write(frame);                       // waits while it is full: the other one reads at its pace
+//   out.close();                            // the reader sees the end after what was written
+//
+//   // another program
+//   let input: SharedInputStream = SharedInputStream.open("frames", 5000);        // waits up to 5 s for it
+//   let n: int32 = input.read(buffer);      // 0: the writer closed it and everything was read
+//
+// A name is the meeting point: one program creates it (as writer or as reader), the other opens it; each
+// stream has one writer and one reader. The bytes go through a ring in shared memory, with no copy through
+// the system and no system call while there is something to read or room to write; a side that has to
+// wait spins for a moment and then sleeps in short steps. If the other program ends without closing, the
+// waiting side gets IoError.Closed instead of waiting forever. The name is freed as soon as the other side
+// opens it (or when the creator closes it). A stream closes itself when its memory is freed.
+//
+// They are streams like a file or a socket: a Reader, copy(), and anything that takes an InputStream or an
+// OutputStream works with them. Names: letters, digits, '.', '_' and '-', at most 26 of them;
+// uniqueName("rpc") gives one that no other program uses.
+
+import std.io { IoError, InputStream, OutputStream, Closeable };
+import std.os;
+import std.os.shared.ring;
+import std.os.shared.posix { PosixShared };
+import std.os.shared.windows { WindowsShared };
+
+native type SharedHandle = LmShared* released by lm_shm_free;
+native function lm_shm_free(h: SharedHandle): void;
+native function lm_shm_create(name: String, capacity: int64, reader: int32): SharedHandle?;
+native function lm_shm_open(name: String, reader: int32, ms: int32): SharedHandle?;
+native function lm_shm_error(h: SharedHandle): int32;
+native function lm_shm_error_text(h: SharedHandle): String;
+native function lm_shm_write(h: SharedHandle, bytes: byte*, count: int64, ms: int32): int32;
+native function lm_shm_read(h: SharedHandle, into: byte*, size: int32, ms: int32): int32;
+native function lm_shm_available(h: SharedHandle): int64;
+native function lm_shm_capacity(h: SharedHandle): int64;
+native function lm_shm_close(h: SharedHandle): void;
+
+/** The most bytes a name may have (the shortest limit of the systems, macOS's). */
+const NAME_LIMIT: int32 = 26;
+
+/** What a result of the C means: the error of IoError. */
+function fail(code: int32, name: String, why: String): void throws IoError {
+    if (code == -1 || code == -3) { throw IoError.Closed; }         // closed by the other side, or it ended
+    if (code == -2) { throw IoError.TimedOut; }
+    if (code == -4) { throw IoError.NotFound("shared memory ${name}".clone()); }
+    throw IoError.Failed("shared memory ${name}: ${why}".clone());
+}
+
+/** Whether a name can be the name of a stream. */
+function goodName(name: String): bool {
+    if (name.length == 0 || name.length > NAME_LIMIT) { return false; }
+    for (b in name) {
+        let ok: bool = (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '.' || b == '_' || b == '-';
+        if (!ok) { return false; }
+    }
+    return true;
+}
+
+function checkName(name: String): void throws IoError {
+    if (!goodName(name)) {
+        throw IoError.Failed("shared memory '${name}': a name has 1 to ${NAME_LIMIT} letters, digits, '.', '_' or '-'".clone());
+    }
+}
+
+/** Starts one: the handle, or the error. */
+function made(h: SharedHandle?, name: String): SharedHandle throws IoError {
+    if (h == null) { throw IoError.Failed("shared memory ${name}: out of memory".clone()); }
+    let code: int32 = lm_shm_error(h!);
+    if (code != 0) { fail(code, name, lm_shm_error_text(h!)); }
+    return h!;
+}
+
+let counter: Counter = {};
+
+synchronized class Counter {
+    let n: int32 = 0;
+    function next(): int32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+/** A name for a new stream that no other program uses: the prefix (at most 8 bytes), this program's id, a count. */
+public function uniqueName(prefix: String): String {
+    let p: String = prefix.length > 8 ? prefix.substring(0, 8) : prefix;
+    return "${p}-${os.processId()}-${counter.next()}";
+}
+
+/** The writing side of a stream between two programs. */
+public class SharedOutputStream implements OutputStream, Closeable {
+    let name: String;
+    let handle: SharedHandle? = null;
+    /** How long a write may wait for room, in ms (0: as long as it takes). */
+    let timeout: int32 = 0;
+
+    /** Creates the stream `name` with room for `capacity` bytes (at least 4096); the other program opens it as a reader. */
+    static function create(name: String, capacity: int32): SharedOutputStream throws IoError {
+        checkName(name);
+        let size: int64 = capacity < 4096 ? 4096 : capacity as int64;
+        return SharedOutputStream { name: name.clone(), handle: made(lm_shm_create(name, size, 0), name) };
+    }
+
+    /** Opens the stream `name` that a reader created, waiting up to `ms` for it to exist (0: only now). */
+    static function open(name: String, ms: int32): SharedOutputStream throws IoError {
+        checkName(name);
+        return SharedOutputStream { name: name.clone(), handle: made(lm_shm_open(name, 0, ms), name) };
+    }
+
+    /** Writes all the bytes, waiting while the ring is full. IoError.Closed: the reader closed it, or ended. */
+    override function write(bytes: byte[]): void throws IoError {
+        if (self.handle == null) { throw IoError.Closed; }
+        if (bytes.length == 0) { return; }
+        let r: int32 = lm_shm_write(self.handle!, bytes, bytes.length as int64, self.timeout);
+        if (r < 0) { fail(r, self.name, "cannot write"); }
+    }
+
+    /** Nothing to do: what is written is already there for the reader. */
+    override function flush(): void throws IoError {}
+
+    /** The end: the reader reads what was written, then 0. */
+    override function close(): void throws IoError {
+        if (self.handle != null) { lm_shm_close(self.handle!); }
+    }
+
+    /** How many bytes the ring holds. */
+    function capacity(): int64 { return self.handle != null ? lm_shm_capacity(self.handle!) : 0; }
+}
+
+/** The reading side of a stream between two programs. */
+public class SharedInputStream implements InputStream, Closeable {
+    let name: String;
+    let handle: SharedHandle? = null;
+    /** How long a read may wait for bytes, in ms (0: as long as it takes); then IoError.TimedOut. */
+    let timeout: int32 = 0;
+
+    /** Creates the stream `name` with room for `capacity` bytes (at least 4096); the other program opens it as a writer. */
+    static function create(name: String, capacity: int32): SharedInputStream throws IoError {
+        checkName(name);
+        let size: int64 = capacity < 4096 ? 4096 : capacity as int64;
+        return SharedInputStream { name: name.clone(), handle: made(lm_shm_create(name, size, 1), name) };
+    }
+
+    /** Opens the stream `name` that a writer created, waiting up to `ms` for it to exist (0: only now). */
+    static function open(name: String, ms: int32): SharedInputStream throws IoError {
+        checkName(name);
+        return SharedInputStream { name: name.clone(), handle: made(lm_shm_open(name, 1, ms), name) };
+    }
+
+    /**
+     * Fills buffer with what has arrived (waiting until something does): how many bytes; 0 when the writer
+     * closed the stream and everything was read. IoError.Closed: the writer ended without closing it.
+     */
+    override function read(buffer: byte[]): int32 throws IoError {
+        if (self.handle == null) { return 0; }
+        if (buffer.length == 0) { return 0; }
+        let r: int32 = lm_shm_read(self.handle!, buffer, buffer.length, self.timeout);
+        if (r < 0) { fail(r, self.name, "cannot read"); }
+        return r;
+    }
+
+    /** How many bytes can be read now, without waiting. */
+    function available(): int64 { return self.handle != null ? lm_shm_available(self.handle!) : 0; }
+
+    /** Stops reading: the writer's next write gets IoError.Closed. */
+    override function close(): void throws IoError {
+        if (self.handle != null) { lm_shm_close(self.handle!); }
+    }
+}

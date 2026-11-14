@@ -7,11 +7,11 @@ import syntax.ast {
     Node, Param, PL_MEMORY, Placed, Program, Stmt, StringLit, StructDecl, TK, TypeRef
 };
 import semantics.types {
-    ArrK, cCode, cCodeStd, classes, classIndex, ClassInfo, classOf, ConstK, contextView, enumIndex, EnumInfo,
+    ArrK, cCode, cCodeStd, classes, classIndex, ClassInfo, classOf, ConstK, enumIndex, EnumInfo,
     enumOf, enums, escapeName, externInfoOf, externInfos, externTypeIndex, ExternTypeInfo, externTypes, FieldInfo,
     findMethod, funcT, functionIndex, FunctionInfo, functionOf, functions, includes, includeWhens, interfaceIndex,
-    InterfaceInfo, interfaceMethod, interfaceOf, interfaces, isArray, isClass, isContextT, isCValue, isEnumT,
-    isError, isExternTypeName, isFloat, isInteger, isOpt, isPrimName, isResource, libraryPrefix, libraryRules,
+    InterfaceInfo, interfaceMethod, interfaceOf, interfaces, isArray, isClass, isCValue, isEnumT,
+    isError, isExternTypeName, isFloat, isInteger, isOpt, isPrimName, isResource,
     maxText, MethodInfo, minOf, named, NamedK, nativeMethods, newOwner, optT, platformCondition, primByName,
     structIndex, StructInfo, structMethod, structOf, structs, Symbol, SymK, T_ANY, T_BOOL, T_BYTE, T_ERROR,
     T_STRING, T_VOID, TyK, Type, usesThreads, VariantInfo, variantOf
@@ -252,8 +252,7 @@ public function collect(program: Program in default): void {
             case FunctionDecl f -> {
                 if (f.typeName == "" && !functionNameTaken(f.name, f.line)) {
                     let c: String = (f.name == "main" ? "user_main" : escapeName(f.name)) in default;
-                    if (f.exportName != "") { c = "larimar_${c}" in default; }     // the C name is the export's
-                    functions.push(FunctionInfo { name: f.name, params: f.params, isExtern: false, decl: f, line: f.line, cName: c, owner: newOwner(), exportName: exportCName(f) } in default);
+                    functions.push(FunctionInfo { name: f.name, params: f.params, isExtern: false, decl: f, line: f.line, cName: c, owner: newOwner() } in default);
                     functionIndex[f.name] = functions.length - 1;
                 }
             }
@@ -301,111 +300,6 @@ function collectStatic(f: FunctionDecl in default): void {
     let c: String = "${escapeName(t)}_${escapeName(f.name)}" in default;
     functions.push(FunctionInfo { name: full, params: f.params, isExtern: false, decl: f, line: f.line, cName: c, owner: newOwner() } in default);
     functionIndex[full] = functions.length - 1;
-}
-
-/** extern type X = (A, B) -> R: the signature C functions of that type have. */
-function externSignature(e: ExternTypeInfo in default): void {
-    let fr: TypeRef? = e.decl.func;
-    if (fr == null) { return; }
-    let ps: Type[*] = [] in default;
-    for (i, p in fr.params) {
-        let pt: Type = resolveValue(p, "Parameter ${i + 1} of '${e.name}'");
-        if (!isError(pt) && !isCValue(pt)) {
-            error(p.line, "Parameter ${i + 1} of C function type '${e.name}': only numbers, bool, String, native types and C structs can be passed to C.");
-        }
-        ps.push(pt);
-    }
-    let ret: Type = resolveType(fr.inner!);
-    if (!isError(ret) && ret != T_VOID && !isCValue(ret)) {
-        error(fr.line, "C function type '${e.name}' can only return numbers, bool, String, void, native types or C structs.");
-    }
-    e.sig = funcT(ps, ret, false);
-    // (A, Context) -> R: C gives the Context back to the function, so a Larimar function (with what it captures) can go
-    let others: Type[*] = [] in default;
-    for (i, pt in ps) {
-        if (!isContextT(pt)) {
-            others.push(pt);
-            // a library lends its objects to the function, and takes its text where it says; C in general does neither
-            if (isOpt(pt) && isResource(pt.elem!) || isResource(pt) && !e.decl.ofPackage) { e.view = T_ERROR; }
-        } else if (e.ctxIndex >= 0) {
-            error(fr.line, "C function type '${e.name}' has two Contexts: a callback gets back one.");
-        } else {
-            e.ctxIndex = i;
-        }
-    }
-    if (e.ctxIndex < 0) { return; }
-    if (e.view != null) {
-        error(fr.line, "C function type '${e.name}' gets a Context and a resource: give the callback the C value instead (a native type without 'released by').");
-        e.view = null;
-        return;
-    }
-    if (isOpt(ret) && ret.elem! == T_STRING || ret == T_STRING && !e.decl.ofPackage) {
-        error(fr.line, "C function type '${e.name}' gets a Context: the Larimar function it stands for cannot return a String to C (C would not know when to free it).");
-    }
-    e.view = funcT(others, ret, fr.threadSafe);       // thread safe: C may call it from several threads
-}
-
-let exportNames: Any = {} in default;
-
-/** The C name of an export function: = c_name, else its name (in a library, <prefix>_<name>). */
-function exportCName(f: FunctionDecl in default): String {
-    if (f.exportName == "") { return ""; }
-    if (f.exportC != "") { return f.exportC; }
-    return libraryRules && libraryPrefix != "" ? "${libraryPrefix}_${f.exportName}" : f.exportName;
-}
-
-/** What an export function can take: what C can pass, a String? (NULL is null), and in a library its classes. */
-function exportable(t: Type): bool {
-    if (t == optT(T_STRING)) { return true; }
-    if (!libraryRules) { return isCValue(t); }
-    // a library describes its functions to C (.h) and to Larimar (.lar) by itself: no types of other headers
-    return t.kind == TyK.Prim && t != T_ANY || isClass(t) || (isOpt(t) && isClass(t.elem!)) || libraryCallback(t);
-}
-
-/**
- * A function of the program that a library takes: a function type of numbers, bool, String and the library's
- * classes, that gives a number, a bool, a String or nothing. C gives it as a function and a void* (the
- * program's own data, given back to the function on each call).
- */
-public function libraryCallback(t: Type): bool {
-    if (t.kind != TyK.Func) { return false; }
-    for (p in t.params) {
-        if (!(p.kind == TyK.Prim && p != T_ANY && p != T_VOID) && !isClass(p)) { return false; }
-    }
-    return t.elem!.kind == TyK.Prim && t.elem! != T_ANY;
-}
-
-/** export function: C calls it by its name, with C types. */
-function checkExport(f: FunctionInfo in default, fd: FunctionDecl in default): void {
-    let n: String = f.exportName;
-    if (fd.name == "main") { error(f.line, "'main' cannot be exported; export another function."); }
-    if (exportNames.contains(n)) { error(f.line, "Another function is already exported as '${n}'."); }
-    exportNames[n] = true;
-    if (libraryRules && (n == "${libraryPrefix}_free" || n == "${libraryPrefix}_interface" || n.endsWith("_release"))) {
-        error(f.line, "'${n}' is a name the library gives C itself (${libraryPrefix}_free, ${libraryPrefix}_interface, <Class>_release): export it with another name (= c_name).");
-    }
-    for (g in functions) {
-        if (g.isExtern && g.cName == n) { error(f.line, "'${n}' is already the name of a native function: C would have two functions with that name."); }
-    }
-    let what: String = libraryRules ? "numbers, bool, String, String? and the library's classes" : "numbers, bool, String, String?, native types and C structs";
-    let functions: String = libraryRules ? ", and functions of the program (of numbers, bool, String and the library's classes)" : "";
-    for (i, p in fd.params) {
-        let pt: Type = f.sig!.params[i];
-        // a function of the program that the library keeps: 'in default' says so, and what it uses then lives as long as the program
-        let kept: bool = p.lives == "default" && libraryRules && libraryCallback(pt);
-        if (p.lives != "" && !kept) { error(p.line, "'in ${p.lives}' is not allowed on the parameters of an export function: C gives plain values."); }
-        if (!isError(pt) && !exportable(pt)) {
-            error(p.line, isClass(pt) ? "Parameter '${p.name}' of export function '${n}': a class goes to C only from a library ([project] kind = \"library\"), where C keeps it as a handle."
-                                      : "Parameter '${p.name}' of export function '${n}': C can only pass ${what}${functions}.");
-        }
-    }
-    let ret: Type = f.sig!.elem!;
-    if (!isError(ret) && ret != T_VOID && (!exportable(ret) || ret.kind == TyK.Func)) {
-        error(f.line, isClass(ret) ? "Export function '${n}' returns a class: only a library ([project] kind = \"library\") gives C its objects, as handles."
-                                   : "Export function '${n}' can only return void or ${what}.");
-    }
-    if (fd.returnLives != "") { error(f.line, "Export function '${n}' cannot say where its result lives: C receives its own copy (a text) or a handle."); }
-    if (f.throwsType != null) { error(f.line, "Export function '${n}' cannot throw: an error cannot cross into C. Catch it inside."); }
 }
 
 /** An instance method `name` of the type `t` (to reject a static function with the same name). */
@@ -474,7 +368,6 @@ public function constIntText(v: ConstVal): String {
 // ---- signatures -------------------------------------------------------------------------
 
 public function signatures(program: Program in default): void {
-    for (e in externInfos) { externSignature(e); }
     for (d in program.decls) {
         switch (d) {
             case StructDecl sd -> {
@@ -599,22 +492,7 @@ public function signatures(program: Program in default): void {
             let ps: Type[*] = [] in default;
             for (i, p in e.params) {
                 let pt: Type = resolveTop(p.type!, TC_PARAM, "Parameter '${p.name}'");
-                if (isContextT(pt)) {
-                    if (f.ctxParam >= 0) { error(p.line, "'${f.name}' takes two Contexts: a C function gives one to its callback."); }
-                    f.ctxParam = i;
-                }
-                if (contextView(pt) != null) {
-                    if (f.ctxCallback >= 0) { error(p.line, "'${f.name}' takes two callbacks with a Context: only one can get it."); }
-                    f.ctxCallback = i;
-                    f.ctxKeep = p.lives == "default";
-                    // of a method (native type X { native function m(f: F in self, ...) }): the object keeps it
-                    f.ctxSelf = p.lives == "self" && e.params.length > 0 && e.params[0].name == "receiver";
-                }
-                if (p.lives != "" && !(p.lives == "default" && contextView(pt) != null) && !f.ctxSelf) {
-                    error(p.line, p.lives == "default"
-                        ? "'in default' on a parameter of a native function goes on a callback that gets a Context (C keeps it, so what it uses must live as long as the program)."
-                        : "'in ${p.lives}' is not allowed on the parameters of a native function (only 'in default', on a callback that C keeps).");
-                }
+                if (p.lives != "") { error(p.line, "'in ${p.lives}' is not allowed on the parameters of a native function: C gets plain values."); }
                 if (isArray(pt, ArrK.Growable) && pt.elem! == T_BYTE) {
                     f.memParams.push(true);       // a memory: C receives RtMem* and can create things in it
                 } else if (isArray(pt, ArrK.Slice)) {
@@ -634,16 +512,12 @@ public function signatures(program: Program in default): void {
             if (!isError(ret) && ret != T_VOID && !isCValue(ret) && ret != optT(T_STRING)) {
                 error(e.line, "Native function '${f.name}' can only return numbers, bool, String, void, native types or C structs.");
             }
-            if (f.ctxParam >= 0 && f.ctxCallback < 0) {
-                error(e.line, "'${f.name}' takes a Context: it is for a callback, so declare that callback's type with a Context too (native type F = (int32, Context) -> void;).");
-            }
             f.sig = funcT(ps, ret, false);
         } else {
             let fd: FunctionDecl = f.decl!;
             f.sig = resolveSig(f.params, fd.ret);
             f.throwsType = resolveThrows(fd.throwsType);
             f.memParams = memoryParams(f.params, fd.body);
-            if (f.exportName != "") { checkExport(f, fd); }
         }
         let s: Symbol = declare(f.name, SymK.Function, f.sig!, f.line);
         s.func = f;
@@ -686,10 +560,6 @@ public function externValue(v: ExternValueDecl in default): void {
 function externResource(e: ExternTypeInfo in default): void {
     let d: ExternTypeDecl = e.decl;
     if (d.releasedBy == "") { return; }
-    if (d.func != null) {
-        error(d.line, "A pointer to a C function cannot be a resource.");
-        return;
-    }
     let fi: FunctionInfo? = functionOf(d.releasedBy);
     if (fi == null || fi.sig == null) {
         error(d.line, "'${d.releasedBy}' (that releases '${e.name}') is not a function: declare it, e.g. native function ${d.releasedBy}(x: ${e.name}): void;");
@@ -742,14 +612,6 @@ function externResourceRules(f: FunctionInfo in default): void {
 
 function resolveMethodSig(mi: MethodInfo in default, m: FunctionDecl in default): void {
     mi.sig = resolveSig(m.params, m.ret);
-    if (m.forwardsToC) {             // its C function takes a callback with a Context: the method takes the Larimar function
-        let ps: Type[*] = [] in default;
-        for (t in mi.sig!.params) {
-            let view: Type? = contextView(t);
-            ps.push(view != null ? view! : t);
-        }
-        mi.sig = funcT(ps, mi.sig!.elem!, false);
-    }
     mi.throwsType = resolveThrows(m.throwsType);
     mi.memParams = memoryParams(m.params, m.body);       // an interface method too: byte[*] is a memory
     if (m.isOperator) {

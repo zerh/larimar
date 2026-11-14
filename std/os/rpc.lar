@@ -1,0 +1,460 @@
+// std.os.rpc: calls to another program, and a program that answers them (JSON-RPC 2.0).
+//
+//   import std.os.rpc { Rpc, RpcCall, RpcError, serve };
+//
+//   // the program that calls
+//   let calc: Rpc = Rpc.startShared("./calc", []);       // a Larimar program that serves: shared memory
+//   let sum: Any = calc.call("add", { a: 2, b: 3 });     // 5
+//   calc.close();                                        // it ends when it sees the end
+//
+//   // the program that answers (./calc)
+//   function main(): int32 {
+//       serve((call) -> {
+//           if (call.method == "add") { return (call.params.a as int64 ?? 0) + (call.params.b as int64 ?? 0); }
+//           call.fail(-32601, "no method ${call.method}");
+//           return null;
+//       });
+//       return 0;
+//   }
+//
+// Each message is JSON with a Content-Length header before it, as in LSP. Rpc.start talks to any program
+// through its standard input and output (the program writes nothing else there); Rpc.startShared talks to
+// a Larimar program through two streams of shared memory (std.os.shared), so its own output stays its own
+// and the bytes do not go through the system. serve() answers on the shared streams it was started with,
+// or else on its standard input and output; it returns when the caller closes. Rpc.over and serveOver do
+// the same on any pair of streams (a socket, for example).
+//
+// A call waits for its answer (timeout: how long, 0 for as long as it takes). If the other program ends,
+// the call throws RpcError.Ended with its exit code instead of waiting.
+
+import std.io { IoError, InputStream, OutputStream };
+import std.io.console as Console;
+import std.encoding.json as Json;
+import std.encoding.json { JsonError };
+import std.os;
+import std.time as Time;
+import std.os.process { Process, ProcessError };
+import std.os.process as Processes;
+import std.os.shared { SharedInputStream, SharedOutputStream, uniqueName };
+
+/** What went wrong with a call. */
+public enum RpcError {
+    /** The other program answered with an error: its code and message. */
+    Failed(code: int64, message: String),
+    /** The other program cannot be reached any more: it ended, closed, or sent what is not a message. */
+    Ended(why: String),
+    /** The answer did not come in time. */
+    TimedOut
+}
+
+/** A message for the error, in English. */
+public function message(e: RpcError): String {
+    return switch (e) {
+        case Failed { code, message } -> "error ${code}: ${message}";
+        case Ended { why } -> "ended: ${why}";
+        case TimedOut -> "timed out";
+    };
+}
+
+/** The ring of each shared stream of a call. */
+const SHARED_SIZE: int32 = 1048576;
+
+/** The environment variable that tells a program the names of its shared streams. */
+const SHARED_ENV: String = "LARIMAR_RPC";
+
+/** One call that came: what it asks for. The handler answers with what it returns, or with fail(). */
+public class RpcCall {
+    let method: String;
+    let params: Any;
+    let code: int64 = 0;
+    let text: String = "";
+
+    /** Answers with an error instead of a result (JSON-RPC: -32601 no such method, -32602 bad params...). */
+    function fail(code: int64, message: String): void {
+        self.code = code;
+        self.text = message.clone();
+    }
+
+    function failed(): bool { return self.code != 0; }
+}
+
+// ---- messages: Content-Length, then the JSON --------------------------------------------------------
+
+/** Where messages come from and go to. */
+interface Wire {
+    /** The next message, waiting up to `ms` (0: as long as it takes); null when the other side closed. */
+    function receive(ms: int32): String? throws RpcError;
+    function send(text: String): void throws RpcError;
+    function close(): void;
+}
+
+/** The text of a message: its header and its JSON. */
+function framed(json: String): String { return "Content-Length: ${json.length}\r\n\r\n${json}"; }
+
+/** The length a header says (-1 when it is not Content-Length). */
+function lengthOf(line: String): int32 {
+    let i: int32? = line.indexOf(":");
+    if (i == null || line.substring(0, i!).trim().toLowerCase() != "content-length") { return -1; }
+    return (line.substring(i! + 1).trim().toInt() ?? -1) as int32;
+}
+
+/**
+ * The messages of a stream: what was read and not given yet stays here, so a read that runs out of time
+ * goes on where it was.
+ */
+class Frames {
+    let pending: byte[*] = [];
+    let taken: int32 = 0;
+    let chunk: byte[*] = [];
+
+    /** The next message if it is all here, else null. */
+    function next(): String? {
+        let i: int32 = self.taken;
+        let length: int32 = -1;
+        let lineStart: int32 = i;
+        while (i < self.pending.length) {
+            if (self.pending[i] == '\n') {
+                let end: int32 = i > lineStart && self.pending[i - 1] == '\r' ? i - 1 : i;
+                if (end == lineStart) {                    // the empty line: the JSON follows
+                    if (length < 0 || self.pending.length - (i + 1) < length) { return null; }
+                    let body: String = stringOfRange(self.pending, i + 1, i + 1 + length);
+                    self.taken = i + 1 + length;
+                    return body;
+                }
+                let n: int32 = lengthOf(stringOfRange(self.pending, lineStart, end));
+                if (n >= 0) { length = n; }
+                lineStart = i + 1;
+            }
+            i += 1;
+        }
+        return null;
+    }
+
+    /** Reads more from `input`: false at its end. */
+    function fill(input: InputStream): bool throws IoError {
+        if (self.chunk.length == 0) {
+            for (k in 0..65536) { self.chunk.push(0); }
+        }
+        if (self.taken > 0 && self.taken == self.pending.length) {
+            self.pending.clear();
+            self.taken = 0;
+        } else if (self.taken > 65536 && self.taken * 2 > self.pending.length) {
+            let kept: byte[*] = [];
+            for (k in self.taken..self.pending.length) { kept.push(self.pending[k]); }
+            self.pending.clear();
+            for (b in kept) { self.pending.push(b); }
+            self.taken = 0;
+        }
+        let n: int32 = input.read(self.chunk);
+        if (n == 0) { return false; }
+        for (k in 0..n) { self.pending.push(self.chunk[k]); }
+        return true;
+    }
+}
+
+/** Messages over two streams (a socket, a pipe...): reads wait as long as the stream does. */
+class StreamWire implements Wire {
+    let input: InputStream;
+    let output: OutputStream;
+    let frames: Frames = {};
+
+    override function receive(ms: int32): String? throws RpcError {
+        while (true) {
+            let m: String? = self.frames.next();
+            if (m != null) { return m; }
+            try {
+                if (!self.frames.fill(self.input)) { return null; }
+            } catch (IoError e) {
+                throw RpcError.Ended("cannot read: the other side closed".clone());
+            }
+        }
+        return null;
+    }
+
+    override function send(text: String): void throws RpcError {
+        try {
+            self.output.write(framed(text).bytes());
+            self.output.flush();
+        } catch (IoError e) {
+            throw RpcError.Ended("cannot write: the other side closed".clone());
+        }
+    }
+
+    override function close(): void {}
+}
+
+/** Messages through two shared streams, to a program this one started (or from the one that started it). */
+class SharedWire implements Wire {
+    let input: SharedInputStream;
+    let output: SharedOutputStream;
+    let process: Process? = null;
+    let frames: Frames = {};
+
+    override function receive(ms: int32): String? throws RpcError {
+        let until: int64 = Time.monotonic() + (ms as int64);
+        while (true) {
+            let m: String? = self.frames.next();
+            if (m != null) { return m; }
+            self.input.timeout = 200;
+            try {
+                if (!self.frames.fill(self.input)) { return null; }
+            } catch (IoError e) {
+                let timedOut: bool = switch (e) {
+                    case TimedOut -> true;
+                    default -> false;
+                };
+                if (!timedOut) { throw RpcError.Ended(ended(self.process).clone()); }
+                if (self.process != null && self.process!.wait(0) != null) { throw RpcError.Ended(ended(self.process).clone()); }
+                if (ms > 0 && Time.monotonic() >= until) { throw RpcError.TimedOut; }
+            }
+        }
+        return null;
+    }
+
+    override function send(text: String): void throws RpcError {
+        try {
+            self.output.write(framed(text).bytes());
+        } catch (IoError e) {
+            throw RpcError.Ended(ended(self.process).clone());
+        }
+    }
+
+    override function close(): void {
+        try {
+            self.output.close();
+            self.input.close();
+        } catch (IoError e) {}
+    }
+}
+
+/** Messages through the pipes of a program this one started. */
+class PipeWire implements Wire {
+    let process: Process;
+
+    override function receive(ms: int32): String? throws RpcError {
+        let until: int64 = Time.monotonic() + (ms as int64);
+        let length: int32 = -1;
+        while (true) {
+            let line: String? = self.process.readLine(200);
+            if (line == null) {
+                if (self.process.wait(0) != null) { throw RpcError.Ended(ended(self.process).clone()); }
+                if (ms > 0 && Time.monotonic() >= until) { throw RpcError.TimedOut; }
+                continue;
+            }
+            if (line!.trim() == "") {
+                if (length < 0) { continue; }
+                let body: String? = self.process.read(length, ms > 0 ? ms : 600000);
+                if (body == null) { throw RpcError.Ended(ended(self.process).clone()); }
+                return body;
+            }
+            let n: int32 = lengthOf(line!);
+            if (n >= 0) { length = n; }
+        }
+        return null;
+    }
+
+    override function send(text: String): void throws RpcError {
+        try {
+            self.process.write(framed(text));
+        } catch (ProcessError e) {
+            throw RpcError.Ended(ended(self.process).clone());
+        }
+    }
+
+    override function close(): void { self.process.closeInput(); }
+}
+
+/** Why the other program cannot be reached: it ended (and how), or it closed. */
+function ended(p: Process?): String {
+    if (p != null) {
+        let code: int32? = p!.wait(1000);
+        if (code != null) { return "the program ended (exit ${code!})"; }
+    }
+    return "the other program closed the connection";
+}
+
+// ---- the program that calls -------------------------------------------------------------------------
+
+/** A connection to a program that answers calls. It closes when its memory is freed. */
+public class Rpc {
+    let wire: Wire;
+    let process: Process? = null;
+    let nextId: int64 = 1;
+    /** How long a call may wait for its answer, in ms (0: as long as it takes). */
+    let timeout: int32 = 0;
+
+    /** Starts a program that answers JSON-RPC on its standard input and output (any program). */
+    static function start(program: String, args: String[*]): Rpc throws RpcError {
+        let p: Process = { program, args };
+        try {
+            p.start();
+        } catch (ProcessError e) {
+            throw RpcError.Ended(Processes.message(e).clone());
+        }
+        return Rpc { wire: PipeWire { process: p }, process: p };
+    }
+
+    /**
+     * Starts a Larimar program that answers with serve(): the calls go through shared memory, and its
+     * standard output stays this console's.
+     */
+    static function startShared(program: String, args: String[*]): Rpc throws RpcError {
+        return startSharedWith(program, args, []);
+    }
+
+    /** Calls over two streams that already exist (a socket, for example). */
+    static function over(input: InputStream, output: OutputStream): Rpc {
+        return Rpc { wire: StreamWire { input, output } };
+    }
+
+    /** Calls `method` and waits for its answer: the result, or RpcError. */
+    function call(method: String, params: Any): Any throws RpcError {
+        return self.finish(self.begin(method, params));
+    }
+
+    /** Sends a call and does not wait: its id, for finish (calls to several programs at once). */
+    function begin(method: String, params: Any): int64 throws RpcError {
+        let id: int64 = self.nextId;
+        self.nextId += 1;
+        let request: Any = { jsonrpc: "2.0", id: id, method: method, params: params };
+        self.wire.send(Json.stringify(request));
+        return id;
+    }
+
+    /** Waits for the answer of the call `id` (what begin gave): the result, or RpcError. */
+    function finish(id: int64): Any throws RpcError {
+        while (true) {
+            let body: String? = self.wire.receive(self.timeout);
+            if (body == null) { throw RpcError.Ended(ended(self.process).clone()); }
+            let answer: Any = null;
+            try {
+                answer = Json.parse(body!);
+            } catch (JsonError e) {
+                throw RpcError.Ended("the answer is not JSON".clone());
+            }
+            if ((answer.id as int64 ?? -1) != id) { continue; }      // a notice, or the answer of an older call
+            if (answer.error != null) {
+                throw RpcError.Failed(answer.error.code as int64 ?? 0, (answer.error.message as String ?? "").clone());
+            }
+            return answer.result.clone();
+        }
+        return null;
+    }
+
+    /** Sends `method` without waiting for an answer (a notification: the other program answers nothing). */
+    function notify(method: String, params: Any): void throws RpcError {
+        let request: Any = { jsonrpc: "2.0", method: method, params: params };
+        self.wire.send(Json.stringify(request));
+    }
+
+    /** Closes the connection: the other program sees the end (serve returns), and this one waits for it. */
+    function close(): void {
+        self.wire.close();
+        if (self.process != null) {
+            if (self.process!.wait(5000) == null) { self.process!.kill(); }
+        }
+    }
+
+    /** Ends the other program now, if this one started it. */
+    function stop(): void {
+        self.wire.close();
+        if (self.process != null) { self.process!.kill(); }
+    }
+}
+
+/** Rpc.startShared with variables for the program's environment ("NAME=value"). */
+public function startSharedWith(program: String, args: String[*], env: String[*]): Rpc throws RpcError {
+    let requests: String = uniqueName("rq");
+    let answers: String = uniqueName("rs");
+    let out: SharedOutputStream? = null;
+    let input: SharedInputStream? = null;
+    try {
+        out = SharedOutputStream.create(requests, SHARED_SIZE);
+        input = SharedInputStream.create(answers, SHARED_SIZE);
+    } catch (IoError e) {
+        throw RpcError.Ended("cannot make the shared streams".clone());
+    }
+    let all: String[*] = ["${SHARED_ENV}=${requests},${answers}"];
+    for (e in env) { all.push(e); }
+    let p: Process = { program, args, env: all, shareConsole: true };
+    try {
+        p.start();
+    } catch (ProcessError e) {
+        throw RpcError.Ended(Processes.message(e).clone());
+    }
+    return Rpc { wire: SharedWire { input: input!, output: out!, process: p }, process: p };
+}
+
+// ---- the program that answers -----------------------------------------------------------------------
+
+/**
+ * Answers the calls that come, one after another, with `handler`, until the caller closes: on the shared
+ * streams this program was started with (Rpc.startShared), or else on its standard input and output.
+ */
+public function serve(handler: (RpcCall) -> Any): void {
+    let names: String = os.env(SHARED_ENV) ?? "";
+    if (names == "") {
+        Console.binaryMode();
+        answer(StreamWire { input: Console.input, output: Console.output }, handler);
+        return;
+    }
+    let parts: String[*] = names.split(",");
+    if (parts.length != 2) {
+        Console.printError("${SHARED_ENV}=${names}: two names were expected");
+        return;
+    }
+    try {
+        let input: SharedInputStream = SharedInputStream.open(parts[0], 10000);
+        let output: SharedOutputStream = SharedOutputStream.open(parts[1], 10000);
+        answer(SharedWire { input, output }, handler);
+    } catch (IoError e) {
+        Console.printError("cannot open the shared streams ${names}");
+    }
+}
+
+/** Answers the calls that come on two streams that already exist, until the input ends. */
+public function serveOver(input: InputStream, output: OutputStream, handler: (RpcCall) -> Any): void {
+    answer(StreamWire { input, output }, handler);
+}
+
+function answer(wire: Wire, handler: (RpcCall) -> Any): void {
+    while (true) {
+        let body: String? = null;
+        try {
+            body = wire.receive(0);
+        } catch (RpcError e) {
+            return;
+        }
+        if (body == null) { return; }
+        let request: Any = null;
+        let parsed: bool = true;
+        try {
+            request = Json.parse(body!);
+        } catch (JsonError e) {
+            parsed = false;
+        }
+        if (!parsed) {
+            reply(wire, { jsonrpc: "2.0", id: null, error: { code: -32700, message: "the request is not JSON" } });
+            continue;
+        }
+        let method: String? = request.method as String;
+        if (method == null) {
+            if (request.id != null) { reply(wire, { jsonrpc: "2.0", id: request.id, error: { code: -32600, message: "a request has a method" } }); }
+            continue;
+        }
+        let call: RpcCall = { method: method!, params: request.params };
+        let result: Any = handler(call);
+        if (request.id == null) { continue; }          // a notification: no answer
+        if (call.failed()) {
+            reply(wire, { jsonrpc: "2.0", id: request.id, error: { code: call.code, message: call.text } });
+        } else {
+            reply(wire, { jsonrpc: "2.0", id: request.id, result: result });
+        }
+    }
+}
+
+function reply(wire: Wire, answer: Any): void {
+    try {
+        wire.send(Json.stringify(answer));
+    } catch (RpcError e) {}
+}

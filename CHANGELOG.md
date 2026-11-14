@@ -2,6 +2,79 @@
 
 Each version of the compiler (`larimar --version`) and the version of the language it implements.
 
+## 1.9.0 — 2026-11-14 (language 1.2)
+
+No contact with C for the programmer: what Larimar does not have runs in another process, and Larimar
+makes those processes and talks to them.
+
+- **Libraries for C programs are gone**: `export function`, `larimar build` of a library into
+  `lib<name>.a` or a dynamic one with its `.h`, `[library]` (`type`, `prefix`), `--static` and
+  `--dynamic`, and what went with them (handles, `<prefix>_give`, `<prefix>_interface`, the functions of
+  a C program). `larimar build` of a library now checks it; a program uses it from `[packages]`.
+- **`std.os.shared`**: `SharedOutputStream` and `SharedInputStream`, a stream of bytes from one program to
+  another through a ring in shared memory (POSIX `shm_open`, a file mapping on Windows). No system call
+  while there is something to read or room to write; a side that waits spins, then naps. If the other
+  program ends without closing, the waiting side gets `IoError.Closed`; the name is freed as soon as both
+  sides have it, and one left by a program that ended is taken back. `uniqueName(prefix)`.
+- **`std.os.rpc`**: JSON-RPC 2.0 with `Content-Length` frames. `Rpc.startShared` (a Larimar program, through
+  two shared streams), `Rpc.start` (any program, through its pipes), `Rpc.over` (any streams); `call`,
+  `notify`, `begin`/`finish`, `timeout`, `close`, `stop`; `RpcError` (`Failed`, `Ended` with the exit code,
+  `TimedOut`). `serve((call) -> ...)` answers on the shared streams it was started with, or on its standard
+  input and output; `serveOver` on any streams.
+- **`SystemProcess` and `ProcessPool`** (`std.os.process`): a class that implements `SystemProcess` is a
+  task; `pool.run(task)` and `pool.runAll(tasks)` run it in copies of the program, which get its fields
+  and give back what `run()` returns. The compiler writes, for each module with such classes, how their
+  objects go to the other process (`std.os.process.tasks`), and checks their fields (numbers, `bool`,
+  `String`, optionals and lists of them) and that they extend no class. A copy runs its globals and then
+  tasks, not `main`. A panic in a task is `ProcessError.Failed`, and the pool starts new processes.
+- **Services** (`[project] kind = "service"`, `larimar new <name> --service`): the public functions of its
+  main module run in its own process. `larimar build` makes its executable, whose main
+  (`build/<name>-service.lar`) answers with those functions. A program that names it in `[packages]`
+  imports a module written for it: a class (`calc` → `Calc`) with `start()`, `startAt(path)`, the same
+  functions as calls (`throws RpcError`), `setTimeout` and `close`. `larimar build` of the program builds
+  its services first. What crosses: numbers, `bool`, `String`, optionals and lists of them, `Any`; a
+  public function that throws is an error.
+- `larimar build --target` is in chapter 26 of the manual. The manual's chapter 23 is now "Other programs:
+  calls, shared memory and processes", and chapter 27 "Libraries and services written in Larimar". The C of
+  the standard library is described in [docs/std-c.md](docs/std-c.md) for whoever maintains std, and in
+  Appendix D of the specification (language 1.2, chapter 19 "Libraries, services and tasks").
+- The compiler is 21,423 lines (about 440 fewer, with the services and tasks added), and the suite has
+  248 tests (`tests/std/shared_test.lar`, `rpc_test.lar`, `pool_test.lar`, `tests/project/services_test.lar`
+  are new). `docs/compiler-reference.md` is written by `tools/reference.py`.
+
+## 1.8.0 — 2026-11-13 (language 1.1)
+
+Larimar has no C of its own outside the standard library, and a library written in Larimar is shared as
+source.
+
+- **C is only the standard library's.** `cinclude`, `ccode`, the `native` declarations and the functions
+  with a body of C (in classes too) are an error in a program and in a library: *ccode is only for the
+  standard library: C is written there, and a program uses what std gives.* All the C a program runs is
+  part of Larimar, and a library written by someone else cannot bring C the compiler does not check. For
+  what std does not have, a program talks to another program (`std.os.process`). `larimarc --unsafe-c`
+  lifts the rule for the compiler's own sources (its editor tools still have C) and its tests of std's C.
+- **C function pointer types and `Context` are gone** (`native type F = (A) -> R`, callbacks with a
+  context), with what made them work: trampolines, the `ctx` information of native functions,
+  `rt_res_lent`.
+- **A library written in Larimar is used as source.** `[packages]` names the folder of the library's
+  project (`textkit = "../textkit"`), and the program compiles its modules with its own: one C, one
+  runtime, and the whole language on both sides (interfaces the program implements, lists, enums,
+  `throws`), checked as one program. Its modules are `<name>` and `<name>.<part>`; a program module with
+  one of those names is an error. A library's own `[packages]` come with it; two libraries with the same
+  name in different folders are an error. `export` has no effect there.
+- **Packages are gone**: no `.lpk`, no `.interface`, no generated `.lar` binding, no interface hash
+  between a program and a library (`project/lpk.lar` is deleted).
+- **For C programs**, `larimar build` of a library makes `lib<name>.a` (the default; `type = "static"`) or
+  a dynamic one (`--dynamic`), and `<name>.h`, which ends with what to link it with. `<prefix>_interface()`
+  gives the hash of that `.h`. Everything else of the library for C stays: handles, texts to free,
+  functions of the C program with their `void*`, `in default` and `in self`, `<prefix>_give`, `thread safe`.
+- **`export function` is only for a library.** In a program it is an error.
+- **`[c]` has only `compiler` and `flags`** (and its platform sections): `sources`, `include_paths`,
+  `static_libraries`, `static_library_paths`, `dynamic_libraries` and `dynamic_library_paths` are gone.
+- The compiler is 21,861 lines, about a thousand fewer. The manual of libraries (`docs/libraries.es.md`)
+  is rewritten, with every case built and run (54 runs, with the sanitizers), and
+  `docs/compiler-libraries.es.md` describes how it is made inside.
+
 ## 1.7.0 — 2026-11-11
 
 The standard library, organized: each module keeps its API, and the class of each platform goes in a

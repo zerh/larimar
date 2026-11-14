@@ -16,7 +16,10 @@ public class PosixSystem implements System, UnixPlatform {
 
     override native function cwd(into: byte[]): bool { return getcwd((char*)into, (size_t)into_length - 1) != NULL; }
 
-    override native function programPath(into: byte[]): void { readlink("/proc/self/exe", (char*)into, (size_t)into_length - 1); }
+    override native function programPath(into: byte[]): void {
+        ssize_t n = readlink("/proc/self/exe", (char*)into, (size_t)into_length - 1);
+        into[n > 0 ? n : 0] = 0;                                  /* readlink does not end the text */
+    }
 
     override native function shell(command: String): int32 {
         int r = system(command);

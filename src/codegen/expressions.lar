@@ -200,7 +200,7 @@ function callParts(c: Call in default): Expr[*] {
     let parts: Expr[*] = [];
     let ci: CallInfo = c.call!;
     if (ci.kind == CallK.Builtin) { return parts; }
-    if (ci.kind == CallK.Closure || ci.kind == CallK.CPointer) {
+    if (ci.kind == CallK.Closure) {
         parts.push(c.callee);
     } else if (ci.kind == CallK.NativeMethod || ci.kind == CallK.InterfaceMethod || ci.kind == CallK.Method && ci.isClass) {
         parts.push(receiver(c));
@@ -523,7 +523,7 @@ function identExpr(id: Ident in default): String {
     if (s.externValue != null) { return s.type == T_STRING ? "rt_str_c(${s.cName})" : s.cName; }   // a C name, as it is
     if (s.kind == SymK.Function) {               // given as a pointer to a C function
         let f: FunctionInfo = s.func!;
-        return f.exportName != "" ? f.exportName : f.cName;
+        return f.cName;
     }
     let l: LambdaInfo? = fn.lambda;
     let base: String = l != null && hasCapture(l, s) ? "env->${envField(s)}" : s.cName;

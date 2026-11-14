@@ -14,23 +14,10 @@ test function cOverflowDetected(): void {
     memoryError("tests/cases/memory/c_overflow_detected.lar");
 }
 
-// Structs de C por valor en listas y punteros a función.
+// Structs de C por valor en listas.
 test function cStructsAndPointers(): void {
     runs("tests/cases/memory/c_structs_and_pointers.lar", [
-        "42.0 7 15"
+        "42.0"
     ]);
 }
 
-test function exportReturnsAList(): void {
-    failsWith(raw"""
-        export function names(n: int32): String[*] { return ["x"]; }
-        function main(): int32 { return 0; }
-        """, "Export function 'names' can only return void or numbers, bool, String, String?, native types and C structs.");
-}
-
-// Una export function llamada miles de veces desde C: cada llamada libera lo que crea.
-test function exportCalledFromC(): void {
-    runs("tests/cases/memory/export_called_from_c.lar", [
-        "3000"
-    ]);
-}

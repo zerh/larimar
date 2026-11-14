@@ -1,0 +1,193 @@
+// std.os.shared: streams between two programs through shared memory. Each test builds the other program
+// (tests.support.compiler.built) and talks to it.
+import std.os.shared { SharedInputStream, SharedOutputStream, uniqueName };
+import std.os.process { Process, ProcessError };
+import std.io { IoError, Reader, copy, MemoryOutputStream };
+import std.test { check, checkText, checkInt, fail };
+import tests.support.compiler { built, caseFile };
+
+/** A program that writes `count` bytes (0, 1, 2, ... 250, 0, ...) to the stream named in its first argument. */
+const WRITER: String = raw"""
+    import std.os.shared { SharedOutputStream };
+    import std.io { IoError };
+    function main(args: String[]): int32 {
+        let count: int32 = (args[1].toInt() ?? 0) as int32;
+        try {
+            let out: SharedOutputStream = SharedOutputStream.open(args[0], 10000);
+            let chunk: byte[*] = [];
+            for (i in 0..1000) { chunk.push(0); }
+            let sent: int32 = 0;
+            while (sent < count) {
+                let n: int32 = count - sent < 1000 ? count - sent : 1000;
+                let part: byte[*] = [];
+                for (i in 0..n) { part.push(((sent + i) % 251) as byte); }
+                out.write(part);
+                sent += n;
+            }
+            if (args.length > 2) {            // it ends without closing: a panic
+                let none: int32[*] = [];
+                return none[1];
+            }
+            out.close();
+        } catch (IoError e) {
+            println("writer: ${e}");
+            return 1;
+        }
+        return 0;
+    }
+    """;
+
+/** Reads all of a stream: how many bytes, and whether each was the one expected. */
+function readAll(input: SharedInputStream): String throws IoError {
+    let buffer: byte[*] = [];
+    for (i in 0..777) { buffer.push(0); }
+    let total: int32 = 0;
+    let right: bool = true;
+    while (true) {
+        let n: int32 = input.read(buffer);
+        if (n == 0) { break; }
+        for (i in 0..n) {
+            if (buffer[i] != ((total + i) % 251) as byte) { right = false; }
+        }
+        total += n;
+    }
+    return "${total} ${right}";
+}
+
+function writer(): String { return built(caseFile("shared_writer.lar", WRITER)); }
+
+/** Starts the other program (a test that cannot start it fails). */
+function launch(p: Process): void {
+    try {
+        p.start();
+    } catch (ProcessError e) {
+        fail("cannot start ${p.program}");
+    }
+}
+
+// Many times the size of the ring goes from one program to the other, in order.
+test function bytesGoFromOneProgramToAnother(): void throws IoError {
+    let exe: String = writer();
+    if (exe == "") { return; }
+    let name: String = uniqueName("t");
+    let input: SharedInputStream = SharedInputStream.create(name, 4096);
+    let p: Process = { program: exe, args: [name, "300000"], shareConsole: true };
+    launch(p);
+    checkText("300000 true", readAll(input));
+    checkInt(0, p.wait(10000) ?? -1);
+}
+
+// A Reader and copy() work on them as on any stream.
+test function theyAreStreams(): void throws IoError {
+    let exe: String = writer();
+    if (exe == "") { return; }
+    let name: String = uniqueName("t");
+    let input: SharedInputStream = SharedInputStream.create(name, 8192);
+    let p: Process = { program: exe, args: [name, "20000"], shareConsole: true };
+    launch(p);
+    let all: MemoryOutputStream = {};
+    copy(input, all);
+    checkInt(20000, all.toByteArray().length);
+    checkInt(0, p.wait(10000) ?? -1);
+}
+
+// The writer ends without closing (a panic): the reader gets IoError.Closed, not a wait without end.
+test function aWriterThatEndsIsSeen(): void throws IoError {
+    let exe: String = writer();
+    if (exe == "") { return; }
+    let name: String = uniqueName("t");
+    let input: SharedInputStream = SharedInputStream.create(name, 65536);
+    let p: Process = { program: exe, args: [name, "1000", "panic"], quiet: true };
+    launch(p);
+    let closed: bool = false;
+    try {
+        readAll(input);
+    } catch (IoError e) {
+        closed = switch (e) {
+            case Closed -> true;
+            default -> false;
+        };
+    }
+    check(closed, "IoError.Closed when the writer ends without closing");
+    checkInt(101, p.wait(10000) ?? -1);
+}
+
+// The reader closes: the writer's next write gets IoError.Closed.
+test function aReaderThatClosesIsSeen(): void throws IoError {
+    let exe: String = writer();
+    if (exe == "") { return; }
+    let name: String = uniqueName("t");
+    let input: SharedInputStream = SharedInputStream.create(name, 4096);
+    let p: Process = { program: exe, args: [name, "1000000"] };
+    launch(p);
+    let buffer: byte[*] = [];
+    for (i in 0..100) { buffer.push(0); }
+    input.read(buffer);
+    input.close();
+    checkText("writer: Closed", p.readLine(10000) ?? "(nothing)");
+    checkInt(1, p.wait(10000) ?? -1);
+}
+
+// open waits as long as it is told for the name; a read waits as long as its timeout.
+test function waitsAreBounded(): void throws IoError {
+    let missing: bool = false;
+    try {
+        SharedInputStream.open(uniqueName("none"), 100);
+    } catch (IoError e) {
+        missing = switch (e) {
+            case NotFound { path } -> path.contains("shared memory");
+            default -> false;
+        };
+    }
+    check(missing, "a name nobody created: IoError.NotFound");
+    let name: String = uniqueName("t");
+    let out: SharedOutputStream = SharedOutputStream.create(name, 4096);
+    let input: SharedInputStream = SharedInputStream.open(name, 0);
+    input.timeout = 100;
+    let timedOut: bool = false;
+    let buffer: byte[*] = [];
+    for (i in 0..10) { buffer.push(0); }
+    try {
+        input.read(buffer);
+    } catch (IoError e) {
+        timedOut = switch (e) {
+            case TimedOut -> true;
+            default -> false;
+        };
+    }
+    check(timedOut, "nothing written: IoError.TimedOut after 100 ms");
+    let bytes: byte[*] = [7, 8, 9];
+    out.write(bytes);
+    checkInt(3, input.available() as int32);
+    checkInt(3, input.read(buffer));
+    checkInt(9, buffer[2] as int32);
+    out.close();
+    checkInt(0, input.read(buffer));
+}
+
+// A name is short and plain; one that is in use cannot be created again.
+test function namesAreChecked(): void throws IoError {
+    let bad: String[] = ["", "a/b", "with space", "a-name-that-is-much-too-long-for-it"];
+    for (n in bad) {
+        let failed: bool = false;
+        try {
+            SharedOutputStream.create(n, 4096);
+        } catch (IoError e) {
+            failed = true;
+        }
+        check(failed, "'${n}' is not a name");
+    }
+    let name: String = uniqueName("t");
+    let first: SharedOutputStream = SharedOutputStream.create(name, 4096);
+    let again: bool = false;
+    try {
+        SharedOutputStream.create(name, 4096);
+    } catch (IoError e) {
+        again = switch (e) {
+            case Failed { what } -> what.contains("in use");
+            default -> false;
+        };
+    }
+    check(again, "a name in use cannot be created again");
+    check(uniqueName("abcdefghijklmnop").length <= 26, "uniqueName fits the limit");
+}

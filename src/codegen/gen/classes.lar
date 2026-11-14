@@ -6,9 +6,10 @@ import semantics.types {
     optIsPointer, parentOf, StructInfo, structOf, Symbol, T_VOID, TyK, Type, usesThreads
 };
 import semantics.expressions.conversions { hasRefs };
+import semantics.linker { systemProcesses };
 import codegen.expressions { classFieldPath, cType, expr, structName, tname, value };
 import codegen.expressions.clone { cloneHeader, cloneOf, cloneTypeList, needsDeepClone };
-import codegen.gen { Block, classesByDepth, fn, hasInit, internal, line, newFn, pushBlock };
+import codegen.gen { Block, classesByDepth, fn, hasInit, line, newFn, pushBlock };
 import codegen.gen.statements { body, ret };
 
 function errParam(throwsOut: bool): String {
@@ -33,7 +34,7 @@ public function functionHeader(f: FunctionInfo): String {
     if (f.throwsType != null) { err = ps.isEmpty() ? "RtError* err_out" : ", RtError* err_out"; }
     let all: String = "${ps}${err}";
     if (all.isEmpty()) { all = "void"; }
-    let st: String = f.cName == "user_main" ? "static " : internal();
+    let st: String = f.cName == "user_main" ? "static " : "";
     return "${st}${cType(f.sig!.elem!)} ${f.cName}(${all})";
 }
 
@@ -56,7 +57,7 @@ public function methodHeader(m: MethodInfo, isStructMethod: bool): String {
         let so: StructInfo? = structOf(m.owner);
         recv = so != null && so!.decl.cName != "" ? "${so!.decl.cName}* self" : "${tname(m.owner)}* self";   // a native struct: C's own
     }
-    let st: String = isStructMethod ? internal() : "static ";
+    let st: String = isStructMethod ? "" : "static ";
     let rest: String = !ps.isEmpty() ? ", ${ps}" : "";
     return "${st}${cType(m.sig!.elem!)} ${methodName(m)}(${recv}${rest}${errParam(m.throwsType != null)})";
 }
@@ -65,7 +66,7 @@ public function nativeMethodHeader(m: MethodInfo): String {
     let ps: String = params(m.paramSymbols, m.memParams);
     if (returnsData(m.sig!.elem!)) { ps = ps.isEmpty() ? "RtMem* rt_dest" : "RtMem* rt_dest, ${ps}"; }
     let rest: String = !ps.isEmpty() ? ", ${ps}" : "";
-    return "${internal()}${cType(m.sig!.elem!)} ${methodName(m)}(${cType(nativeOwner(m.owner))} self${rest}${errParam(m.throwsType != null)})";
+    return "${cType(m.sig!.elem!)} ${methodName(m)}(${cType(nativeOwner(m.owner))} self${rest}${errParam(m.throwsType != null)})";
 }
 
 public function lambdaHeader(l: LambdaInfo): String {
@@ -182,7 +183,7 @@ public function interfaceImplementations(out: StringBuilder): void {
                 out.add("static ${cType(im.sig!.elem!)} ${c.name}__${iname}__${im.name}(void* self${argsDecl(pt, th)}) { ");
                 out.add("${retWord(im.sig!.elem!)}${dispatchName(m.introducer, m)}((${m.introducer}*)self${argsPass(pt.length, th)}); }\n");
             }
-            out.add("${internal()}const ${iname}_Table ${c.name}__${iname}_table = { &rtclass_${c.name}");
+            out.add("const ${iname}_Table ${c.name}__${iname}_table = { &rtclass_${c.name}");
             for (im in i.methods) { out.add(", ${c.name}__${iname}__${im.name}"); }
             out.add(" };\n");
         }
@@ -194,7 +195,7 @@ public function samTable(out: StringBuilder, i: InterfaceInfo in default): void 
     out.add("static ${cType(m.sig!.elem!)} ${i.name}__sam_${m.name}(void* self");
     for (k, p in paramCTypes(m)) { out.add(", ${p} a${k}"); }
     out.add(");\n");
-    out.add("${internal()}const ${i.name}_Table ${i.name}__sam_table = { NULL, ${i.name}__sam_${m.name} };\n");
+    out.add("const ${i.name}_Table ${i.name}__sam_table = { NULL, ${i.name}__sam_${m.name} };\n");
 }
 
 public function samThunk(out: StringBuilder, i: InterfaceInfo in default): void {
@@ -287,6 +288,11 @@ public function mainWrapper(): String {
     let sb: StringBuilder = {} in default;
     if (withArgs) { sb.add("int main(int argc, char** argv) {\n"); } else { sb.add("int main(void) {\n"); }
     if (hasInit) { sb.add("    init_globals();\n"); }
+    if (systemProcesses) {      // a copy started by a ProcessPool runs tasks, not main
+        for (f in functions) {
+            if (f.name == "std__os__process__serveTasks") { sb.add("    if (getenv(\"LARIMAR_PROCESS\")) return (int)${f.cName}();\n"); }
+        }
+    }
     if (withArgs) {     // the program's arguments, without its own name, as a String[]
         sb.add("    RtString* args = (RtString*)rt_mem_alloc(&rt_default_mem, sizeof(RtString) * (size_t)(argc > 1 ? argc - 1 : 1), 0);\n");
         sb.add("    for (int i = 1; i < argc; i++) args[i - 1] = rt_str_c(argv[i]);\n");

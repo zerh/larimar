@@ -588,7 +588,7 @@ function detail(t: Target): String {
             let f: FunctionInfo = t.func!;
             let fd: FunctionDecl? = f.decl;
             if (f.isExtern) { return "native function ${funcLabel(f)}"; }
-            let lead: String = fd != null && fd!.exportName != "" ? "export function" : fd != null && fd!.typeName != "" ? "static function" : "function";
+            let lead: String = fd != null && fd!.typeName != "" ? "static function" : "function";
             return "${lead} ${funcLabel(f)}";
         }
         case K_METHOD -> {
@@ -662,7 +662,6 @@ function typeDetail(linked: String): String {
     }
     let xo: ExternTypeInfo? = externInfoOf(linked);
     if (xo != null) {
-        if (xo.sig != null) { return "native type ${n} = ${typeText(xo.sig)}"; }
         let d: ExternTypeDecl = xo.decl;
         let c: String = d.cType != "" ? " = ${cText(d.cType)}" : "";
         let r: String = d.releasedBy != "" ? " released by ${shortName(d.releasedBy)}" : "";

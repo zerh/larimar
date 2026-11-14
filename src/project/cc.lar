@@ -39,6 +39,7 @@ public function systemLibraries(c: String): String[*] {
         }
     }
     if (c.contains("#define LM_NET_TLS_SERVER") && !windows() && !mac()) { out.push("-ldl"); }    // std.net: OpenSSL, when first used
+    if (c.contains("#define LM_OS_SHARED") && !windows() && !mac()) { out.push("-lrt"); }      // std.os.shared: shm_open
     return out;
 }
 

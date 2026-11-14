@@ -1,23 +1,35 @@
-# Bibliotecas: cómo están hechas en el compilador
+# Bibliotecas, servicios y tareas: cómo están hechos en el compilador
 
-Para quien tenga que **tocar el compilador**. Dice dónde vive cada pieza de las bibliotecas escritas en
-Larimar y qué recorre una llamada, con los nombres reales de las funciones.
+Para quien tenga que **tocar el compilador**. Dice dónde vive cada pieza de las bibliotecas, los servicios
+y las tareas (`SystemProcess`), y qué recorre cada caso, con los nombres reales de las funciones.
 
-- Para escribir o usar una biblioteca: [libraries.es.md](libraries.es.md). No hace falta nada de esto.
+- Para escribir o usar una biblioteca o un servicio: [libraries.es.md](libraries.es.md) y el capítulo 27 del
+  [manual](manual.es.md). No hace falta nada de esto.
 - Cómo se organiza el código en general: [CONTRIBUTING.md](../CONTRIBUTING.md).
 - Cada función del compilador, con su firma: [compiler-reference.md](compiler-reference.md).
+- El C de la biblioteca estándar: [std-c.md](std-c.md).
 
-Los diagramas se comprobaron contra el C que el compilador genera para los ejemplos del manual
-(`textkit`, `bank`, `webkit`).
+Los tres casos comparten una idea: **lo que el compilador escribe para el programa es Larimar**, que se
+analiza como cualquier módulo. No hay C a mano para ellos en el compilador; el C que hace falta (la
+memoria compartida, los procesos) está en std.
+
+- **Una biblioteca** es código fuente que el linker carga como módulos del programa. Lo hacen
+  `project/libraries.lar`, `editor/session.lar` y `semantics/linker.lar`.
+- **Un servicio** es un proyecto aparte. Para el programa, el linker escribe un módulo con una clase cuyas
+  llamadas van al ejecutable del servicio (`project/services.lar`, `clientSource`); para el servicio,
+  `main.lar` escribe el main de su ejecutable (`serverSource`).
+- **Una tarea** es un objeto de una clase que implementa `SystemProcess`. El linker escribe, en cada módulo
+  que tiene esas clases, cómo sus objetos van a otro proceso, y reescribe `std.os.process.tasks` para que
+  pregunte a esos módulos (`writeTasks`).
 
 ## Contenido
 
 1. [El mapa](#1-el-mapa)
-2. [Una llamada del programa a la biblioteca](#2-una-llamada-del-programa-a-la-biblioteca)
-3. [Un objeto](#3-un-objeto)
-4. [Una función del programa](#4-una-función-del-programa)
-5. [Las reglas especiales del binding de un paquete](#5-las-reglas-especiales-del-binding-de-un-paquete)
-6. [Construir y usar un paquete](#6-construir-y-usar-un-paquete)
+2. [Una biblioteca en un programa](#2-una-biblioteca-en-un-programa)
+3. [C solo en la biblioteca estándar](#3-c-solo-en-la-biblioteca-estándar)
+4. [Un servicio](#4-un-servicio)
+5. [Las tareas](#5-las-tareas)
+6. [Lo que hay debajo: std.os.rpc y std.os.shared](#6-lo-que-hay-debajo-stdosrpc-y-stdosshared)
 7. [Si quieres cambiar…](#7-si-quieres-cambiar)
 8. [Lo que cuesta mantener](#8-lo-que-cuesta-mantener)
 
@@ -25,266 +37,194 @@ Los diagramas se comprobaron contra el C que el compilador genera para los ejemp
 
 ## 1. El mapa
 
-Una biblioteca toca doce archivos. El diagrama los agrupa por el momento en que trabajan; las flechas
-son «pasa su resultado a».
-
 ```mermaid
 flowchart TB
-    subgraph proyecto["El proyecto: qué se construye y con qué"]
-        main["main.lar<br/>buildLibrary, buildPackage<br/>packageArgs, linkArgs"]
-        libs["project/libraries.lar<br/>larimarLibraries, read<br/>interfaceText, interfaceHash"]
-        lpk["project/lpk.lar<br/>pack, unpack"]
-        session["editor/session.lar<br/>findLibraryRoots"]
-    end
-    subgraph semantica["Semántica: qué está permitido"]
-        linker["semantics/linker.lar<br/>libraryRoots, ofPackage"]
-        decl["semantics/analyzer/declarations.lar<br/>checkExport, exportable<br/>libraryCallback, externSignature"]
-        scalls["semantics/expressions/calls.lar<br/>cuánto vive lo que usa una lambda"]
-    end
-    subgraph generador["Generador: el C y los archivos del paquete"]
-        gen["codegen/gen.lar<br/>handleClassNames, libraryMembers<br/>memberProblem, libraryGlue"]
-        types["codegen/gen/types.lar<br/>exportHeader, exportBody, memberBody<br/>fromC, toC, callToC"]
-        cb["codegen/gen/callbacks.lar<br/>callbackC, callbackValue<br/>callbackThunk"]
-        library["codegen/gen/library.lar<br/>libraryHeader: el .h<br/>libraryModule: el .lar"]
-        ccalls["codegen/expressions/calls.lar<br/>contextArgs, trampoline"]
-    end
-    runtime["std/runtime/memory.lar, string.lar<br/>RtCCallback, RtTextOut, rt_text_out_set"]
-
-    main --> libs --> lpk
+    toml["main.lar: project<br/>lee [packages]"]
+    libs["project/libraries.lar<br/>larimarLibraries: carpetas, nombres,<br/>service y exe de cada una"]
+    session["editor/session.lar<br/>findLibraryRoots"]
+    linker["semantics/linker.lar<br/>libraryNames, libraryRoots, libraryServices<br/>moduleFile, visit"]
+    services["project/services.lar<br/>contract, clientSource, serverSource"]
+    tasks["semantics/linker.lar<br/>writeTasks"]
+    main["main.lar<br/>buildService, buildServices"]
+    wrapper["codegen/gen/classes.lar<br/>mainWrapper: LARIMAR_PROCESS"]
+    toml --> libs
     session --> libs
-    session --> linker --> decl --> scalls
-    scalls --> gen
-    gen --> types --> cb
-    gen --> library
-    gen --> ccalls
-    cb -.usa.-> runtime
-    ccalls -.usa.-> runtime
+    session --> linker
+    linker -- "un servicio de [packages]" --> services
+    main -- "kind = service" --> services
+    linker --> tasks
+    tasks -. systemProcesses .-> wrapper
+    rule["semantics/linker.lar<br/>trusted, noC: C solo en std"]
+    linker --> rule
 ```
 
-| Archivo | Qué hace para las bibliotecas |
+| Archivo | Qué hace |
 |---|---|
-| `src/main.lar` | `buildLibrary`: construir una biblioteca. `buildPackage`: llenar la carpeta, copiar el C, escribir el manifiesto, hacer el `.lpk`. `packageArgs` y `linkArgs`: lo que un paquete añade al compilar un programa |
-| `src/project/libraries.lar` | `larimarLibraries` y `read`: leer `[packages]`, desempaquetar, comprobar el hash. `interfaceText`: el texto del manifiesto. `interfaceHash` |
-| `src/project/lpk.lar` | `pack` y `unpack`: el zip sin comprimir |
-| `src/editor/session.lar` | `findLibraryRoots`: lee el `larimar.toml` del archivo que se compila y llena `libraryRoots`; decide `libraryRules` (el proyecto es una biblioteca) |
-| `src/semantics/linker.lar` | `libraryRoots`: dónde está el `.lar` de cada paquete. Marca `ofPackage` en los tipos de ese `.lar` |
-| `src/semantics/analyzer/declarations.lar` | `checkExport` y `exportable`: qué puede cruzar. `libraryCallback`: qué tipos de función cruzan. `externSignature`: las reglas de un tipo de función de C |
-| `src/semantics/expressions/calls.lar` | Lo que usa una lambda vive tanto como quien la guarda (`in default`, `in self`) |
-| `src/codegen/gen.lar` | `handleClassNames`, `libraryMembers`, `memberProblem`: qué clases y qué miembros cruzan. `libraryGlue`: `_free`, `_release`, `_give`, `_interface` |
-| `src/codegen/gen/types.lar` | `exportHeader`, `exportBody`, `memberBody`: la función C de cada función y método exportado. `fromC`, `toC`, `callToC`: convertir valores al entrar y al salir |
-| `src/codegen/gen/callbacks.lar` | Una función del programa, del lado de la biblioteca. Su cabecera explica el mecanismo entero |
-| `src/codegen/gen/library.lar` | `libraryHeader`: el `.h`. `libraryModule` y `bindingClass`: el `.lar` |
-| `src/codegen/expressions/calls.lar` | `contextArgs` y `trampoline`: del lado del programa, la función C que llama a su lambda |
-| `std/runtime/memory.lar`, `string.lar` | `RtCCallback`, `RtTextOut`, `rt_text_out_set` |
+| `src/project/libraries.lar` | `larimarLibraries`: las bibliotecas y servicios de `[packages]`, comprobados (`libraryConfig`). De un servicio guarda `service` y `exe` (donde se construye su ejecutable) y no lee sus `[packages]` |
+| `src/editor/session.lar` | `findLibraryRoots`: lee el `larimar.toml` del archivo que se compila y llena `libraryNames`, `libraryRoots` y `libraryServices` |
+| `src/semantics/linker.lar` | `libraryOf` y `moduleFile`: un módulo `nombre` o `nombre.parte` se busca en la carpeta de su biblioteca. `visit`: el choque con un archivo del programa, y para un servicio el módulo escrito por `clientSource` en vez de su archivo. `writeTasks`: las tareas. `trusted` y `noC`: la regla de C |
+| `src/project/services.lar` | `contract`: las funciones públicas del servicio y sus tipos. `clientSource`: el módulo que importa el programa. `serverSource`: el main del ejecutable |
+| `src/main.lar` | `project`: `kind` (`program`, `library`, `service`) y `[packages]`. `checkLibrary`, `buildService`, `buildServices`, `createService`. `--unsafe-c` |
+| `src/codegen/gen/classes.lar` | `mainWrapper`: con `systemProcesses`, una copia arrancada por un `ProcessPool` corre `serveTasks` en vez de `main` |
+| `std/os/process.lar`, `std/os/process/tasks.lar` | `SystemProcess`, `ProcessPool`, `serveTasks`; `tasks.lar` es lo que tiene un programa sin tareas |
+| `std/os/rpc.lar`, `std/os/shared.lar` | JSON-RPC y los streams de memoria compartida, sobre los que va todo lo demás |
 
 ---
 
-## 2. Una llamada del programa a la biblioteca
+## 2. Una biblioteca en un programa
 
-`textkit.title("larimar")`. La biblioteca trabaja en una memoria que dura lo que la llamada; el texto
-sale como una copia hecha con `malloc`, y el programa la copia a su destino y la devuelve.
+No hay frontera: la biblioteca son módulos más del programa. Lo único especial es dónde se buscan sus
+archivos.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant P as Programa (Larimar)
-    participant PC as C del programa
-    participant BC as C de la biblioteca<br/>tk_title
-    participant B as Biblioteca (Larimar)<br/>larimar_title
+    participant S as session: analyzeFile
+    participant L as libraries: larimarLibraries
+    participant K as linker: link, visit
+    participant A as analizador y generador
 
-    P->>PC: textkit.title("larimar")
-    PC->>BC: tk_title(char* terminado en 0)
-    Note over BC: lm_library_init()<br/>mem = rt_mem_growable()
-    BC->>B: larimar_title(&mem, rt_str_c(text))
-    B-->>BC: RtString, dentro de mem
-    Note over BC: out = rt_export_text(r), una copia con malloc<br/>rt_mem_free(&mem)
-    BC-->>PC: char* out
-    Note over PC: copia out a la memoria destino<br/>tk_free(out)
-    PC-->>P: String, en la región que eligió el programa
+    S->>L: el larimar.toml del archivo
+    Note over L: por cada nombre de [packages]:<br/>su carpeta, su larimar.toml (kind = library<br/>o service, el mismo nombre), su main nombre.lar<br/>y, si es biblioteca, sus [packages]
+    L-->>S: nombre, carpeta de sus módulos, carpeta del proyecto, servicio
+    S->>K: libraryNames, libraryRoots, libraryServices
+    K->>K: import textkit.words
+    Note over K: libraryOf: empieza por "textkit"<br/>moduleFile: carpeta de textkit + textkit/words.lar
+    Note over K: si el programa tiene su textkit/words.lar: error
+    K-->>A: un solo Program, con todos los módulos
+    Note over A: el mismo análisis y el mismo C<br/>que para cualquier módulo
 ```
 
-- Los pasos 2 a 5, que son la función `tk_title`, los escribe `exportBody` con `callToC`
-  (`codegen/gen/types.lar`).
-- Lo que hace el programa entre los pasos 5 y 6 sale del binding: `released by tk_free` hace que el
-  compilador copie el texto a donde va el resultado y libere el original.
-- Por eso cada lado libera solo lo que reservó.
-
-El C real, de `textkit`:
-
-```c
-char* tk_title(const char* text_c) {
-    lm_library_init();
-    RtMem mem = rt_mem_growable();
-    RtString r = larimar_title(&mem, rt_str_c(text_c));
-    char* out = rt_export_text(r);
-    rt_mem_free(&mem);
-    return out;
-}
-```
+- Los nombres de C de un módulo de biblioteca salen de su ruta (`textkit__words__of`), como los de
+  cualquier módulo: no chocan con los del programa.
+- `larimar check` y el editor usan el mismo camino, así que ven las bibliotecas igual que `larimar build`.
+- Los problemas de `[packages]` (sin carpeta, un programa, otro nombre, dos con el mismo nombre) los dice
+  `project` en `main.lar`, antes de compilar; `findLibraryRoots` los ignora.
+- `larimar build` de una biblioteca la revisa (`checkLibrary`: `analyzeFile` sin generar C).
 
 ---
 
-## 3. Un objeto
-
-Del lado de la biblioteca, un handle es un `RtHandle`: el objeto y **su propia memoria**. Del lado del
-programa va dentro de una caja `Res_Account` que sabe en qué memoria del programa está.
+## 3. C solo en la biblioteca estándar
 
 ```mermaid
-sequenceDiagram
-    participant P as Programa
-    participant R as Res_Account<br/>la caja, en una memoria del programa
-    participant BC as C de la biblioteca
-    participant H as RtHandle<br/>objeto y memoria propia
-
-    P->>BC: bank.open("Ana")
-    BC->>H: rt_handle_new()
-    Note over H: el objeto se crea en la memoria del handle
-    BC-->>P: el handle
-    P->>R: Account__new(mem, handle)
-    Note over R: se apunta en mem con rt_mem_on_free
-
-    P->>BC: account.deposit(50, "nómina")
-    BC->>H: rt_handle_object(h, "bank_Account_deposit", "self")
-    Note over BC,H: un handle NULL es un pánico con ese nombre
-
-    Note over P,R: se cierra la memoria del programa
-    R->>BC: bank_Account_release(h)
-    BC->>H: rt_handle_release(h)
-    Note over H: se libera su memoria, con todo lo suyo
+flowchart LR
+    m["un módulo cargado"] --> t{"trusted:<br/>--unsafe-c, std.*, std.lang<br/>o un archivo dentro de stdDir"}
+    t -- sí --> ok["sigue"]
+    t -- no --> n["noC: cada CIncludeDecl, CCodeDecl,<br/>ExternTypeDecl, ExternFunctionDecl,<br/>ExternValueDecl, NativeTypeDecl,<br/>native struct o función native es un error"]
 ```
 
-Los estados de la caja, que es lo que impide usar o liberar dos veces:
-
-```mermaid
-stateDiagram-v2
-    [*] --> Vivo: Account__new
-    Vivo --> Liberandose: se cierra su memoria, o release(a)
-    Liberandose --> Liberado: bank_Account_release terminó
-    Liberado --> [*]
-    Vivo --> Vivo: se usa
-    Liberado --> Panico: se usa
-    Panico: pánico «a released Account was used»
-```
-
-Un objeto que la biblioteca **presta** a una función del programa (sección 4) lleva otra función de
-liberar, `rt_res_lent`, que no hace nada: el programa no puede quitárselo.
+- La comprobación está en `link`, después de cargar todos los módulos, así que vale igual para un
+  programa, una biblioteca, un servicio y el editor.
+- `--unsafe-c` se pasa en `bootstrap/build.sh` y `build.ps1` (el compilador tiene C propio en
+  `editor/lsp.lar`, `editor/dap.lar`, `editor/docstore.lar` y `gen_double_text`), en `tests/run-tests.sh`
+  y en los ayudantes de `tests/support/compiler.lar`. `larimar test --unsafe-c` lo pasa a cada
+  `test-main` (`project/testing.lar`).
 
 ---
 
-## 4. Una función del programa
-
-Para `webkit.serve("/hi", "ana", (req) -> { return "hola"; })`.
-
-El recorrido entero está también en la cabecera de `src/codegen/gen/callbacks.lar`.
+## 4. Un servicio
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant P as Programa (Larimar)<br/>la lambda
-    participant T as C del programa<br/>cb_tramp_N
-    participant BC as C de la biblioteca<br/>wk_serve, lm_callback_1
-    participant B as Biblioteca (Larimar)<br/>serve
+    participant B as main.lar: build del programa
+    participant SB as larimar build del servicio
+    participant K as linker: visit
+    participant SV as services.lar
 
-    Note over P,T: contextArgs: una copia de lo que la lambda captura
-    T->>BC: wk_serve(path, name, cb_tramp_N, &copia)
-    Note over BC: callbackValue: un cierre con la función y su dato
-    BC->>B: larimar_serve(&mem, path, name, cierre)
-    B->>BC: handler(req), una llamada normal a un cierre
-    Note over BC: lm_callback_1(env, rt_dest, req)<br/>RtHandle h = el objeto, prestado<br/>RtTextOut out = set, rt_dest
-    BC->>T: fn(&h, data, &out)
-    Note over T: Res_Request b = lent, &h
-    T->>P: lambda(&b), en una memoria del trampolín
-    P-->>T: "hola"
-    T->>BC: out.set(out, "hola")
-    Note over BC: rt_text_out_set: copia a rt_dest,<br/>la memoria que eligió la biblioteca
-    Note over T: libera su memoria
-    T-->>BC: vuelve
-    BC-->>B: out.text
+    B->>SB: buildServices: otro larimar build, por cada servicio de [packages]
+    Note over SB: buildService: contract del módulo,<br/>serverSource a build/nombre-service.lar,<br/>sourceRoot = carpeta del módulo, buildFrom
+    SB-->>B: build/nombre (el ejecutable)
+    B->>K: compilar el programa: import calc
+    K->>SV: contract(el código de calc.lar)
+    SV-->>K: las funciones públicas y sus tipos
+    K->>SV: clientSource(calc, funciones, exe)
+    SV-->>K: el módulo: class Calc { start, startAt, una función por cada una }
+    Note over K: se analiza como cualquier módulo:<br/>sus errores serían errores del generador
 ```
 
-Tres detalles que no son evidentes:
-
-- **El texto no se devuelve; se entrega (paso 7).** `out` lleva un puntero a la función que copia
-  (`set`). El programa llama a esa función, que es de la biblioteca, así que la copia se hace con el
-  asignador de la biblioteca y en la memoria que ella eligió. Es lo único de `RtTextOut` que los dos
-  lados tienen que entender igual.
-- **El objeto se presta con `rt_res_lent` (pasos 4 y 5).** La caja que recibe la lambda tiene una función de
-  liberar que no hace nada: `release(req)` dentro de la lambda no le quita el objeto a la biblioteca.
-- **Dónde va la copia de lo que la lambda captura** lo decide `contextArgs`:
-
-```mermaid
-flowchart LR
-    q{"¿Qué dice el parámetro<br/>en la biblioteca?"}
-    q -- "nada: no la guarda" --> pila["En la pila de quien llama.<br/>Muere al volver la llamada"]
-    q -- "in self" --> objeto["En la memoria del objeto<br/>object->h.mem.<br/>Muere con el objeto"]
-    q -- "in default" --> def["En rt_default_mem.<br/>Vive todo el programa"]
-```
-
-El analizador exige lo mismo de lo que la lambda usa (`semantics/expressions/calls.lar`): `ctxKeep`
-llama a `mustLiveForever`, y `ctxSelf` compara la región de la lambda con la del objeto.
-
-El C real del lado de la biblioteca, de `webkit`:
-
-```c
-static RtString lm_callback_1(void* env, RtMem* rt_dest, Request* a0) {
-    RtCCallback* c = (RtCCallback*)env;
-    RtHandle h0 = { .object = a0 };
-    RtTextOut out = { rt_text_out_set, rt_dest, rt_str_c("") };
-    ((void (*)(void*, void*, void*))c->fn)(&h0, c->data, &out);
-    return out.text;
-}
-```
+- **El contrato** son las funciones públicas de primer nivel del módulo principal del servicio
+  (`contract`, sobre el AST de `parseProgram`). Un tipo que no cruza, o un `throws`, es un problema que
+  dicen `buildService` (`Service Error [...]`) y el linker del programa.
+- **El módulo del programa** (`clientSource`) tiene una clase con `rpc: Rpc`. Cada función arma una tabla
+  con sus parámetros por nombre (`toAny`), llama `self.rpc.call` y convierte el resultado (`declareFrom`).
+  `start()` busca el ejecutable junto al del programa y si no en `exe`, y lo arranca con `Rpc.startShared`.
+- **El main del servicio** (`serverSource`) es un `serve((call) -> ...)` con un `if` por función: lee cada
+  parámetro de `call.params`, llama a la función del módulo y devuelve el resultado como `Any`. Se escribe
+  en la carpeta de build, donde se puede leer.
+- **Un servicio no lee sus `[packages]` en el programa**: van dentro de su ejecutable, que se construye con
+  su propio `larimar build`, en otro proceso del compilador (el compilador guarda estado global: dos
+  programas en un mismo proceso se mezclarían).
+- Importar una parte del servicio (`calc.inner`) es un error de `visit`.
 
 ---
 
-## 5. Las reglas especiales del binding de un paquete
-
-Un tipo de función de C con `Context` normalmente no puede dar un `String` ni recibir un recurso. En el
-`.lar` de un paquete sí, porque la biblioteca sigue la convención de la sección 4.
+## 5. Las tareas
 
 ```mermaid
-flowchart TB
-    toml["[packages] del larimar.toml"] --> roots["findLibraryRoots<br/>llena libraryRoots"]
-    roots --> link["linker: el módulo está<br/>en una de esas carpetas"]
-    link --> flag["ExternTypeDecl.ofPackage = true"]
-    flag --> sig["externSignature admite<br/>recursos y String en un tipo con Context"]
+sequenceDiagram
+    autonumber
+    participant K as linker: link
+    participant W as writeTasks
+    participant G as generador
+    participant P as ProcessPool (en el programa)
+    participant C as la copia del programa
+
+    K->>W: después de visit(root), antes de loadLang
+    Note over W: por cada módulo que no es de std: sus clases<br/>con implements ...SystemProcess.<br/>Comprueba los campos y que no extienda otra clase
+    W->>W: añade al módulo larimarTaskEncode y larimarTaskStart<br/>(Larimar, parseado con la línea de la clase)
+    W->>W: reescribe std.os.process.tasks: import de cada módulo,<br/>encode y start le preguntan a cada uno
+    W-->>K: systemProcesses = true
+    K->>G: mainWrapper: if (getenv("LARIMAR_PROCESS")) serveTasks
+    P->>C: Calls.startSharedWith(programPath, [], LARIMAR_PROCESS=1)
+    P->>C: begin("run", Tasks.encode(tarea))
+    Note over C: init_globals, serveTasks:<br/>Tasks.start(nombre, campos).run()
+    C-->>P: finish(id): lo que dio run()
 ```
 
-No hay sintaxis para ello: depende de dónde está el archivo.
+- **`larimarTaskEncode(task)`** prueba `task is Clase t` por cada clase del módulo y da
+  `{ name: "módulo.Clase", fields: {...} }`. **`larimarTaskStart(name, fields)`** hace el objeto con un
+  literal de todos sus campos; las listas se llenan después con `push`, porque una lista creada antes en
+  la función viviría menos que el objeto.
+- Los campos se escriben con corchetes (`f["nombre"]`): `fields`, `length` y `push` son palabras de `Any`.
+- El módulo principal se importa por su ruta desde la carpeta del proyecto (`modulePathOf`; en las pruebas,
+  también desde la carpeta de encima, como hace `moduleFile`). Ese import lo resuelve `visit` como el del
+  archivo abierto solo que importan sus partes.
+- `tasks` se mueve al final de `order` (`visit` lo vuelve a añadir), así que se analiza después de los
+  módulos que importa.
+- La copia corre `init_globals` y después `serveTasks`: los globales del programa existen, `main` no corre.
+- Un `ProcessPool` es un `Rpc[*]`: `runAll` reparte con `begin` y recoge con `finish`; ante un `RpcError`
+  para todos (`stop`), vacía la lista y lanza `ProcessError.Failed`.
 
 ---
 
-## 6. Construir y usar un paquete
+## 6. Lo que hay debajo: std.os.rpc y std.os.shared
 
 ```mermaid
 flowchart LR
-    subgraph bib["larimar build, en la biblioteca"]
-        direction TB
-        b1["buildLibrary"] --> b2["generate: el C, con todo privado"]
-        b2 --> b3["libraryHeader: el .h<br/>libraryModule: el .lar"]
-        b3 --> b4["interfaceHash, del .lar"]
-        b4 --> b5["buildPackage"]
-        b5 --> b6["copia el C de terceros a c/"]
-        b6 --> b7["interfaceText: el manifiesto"]
-        b7 --> b8["compila una vez,<br/>para ver los errores ya"]
-        b8 --> b9["pack: el .lpk"]
+    subgraph p["el programa"]
+        rpc["Rpc: SharedWire<br/>Frames: Content-Length + JSON"]
     end
-    subgraph prog["larimar build, en el programa"]
-        direction TB
-        p1["project: lee [packages]"] --> p2["larimarLibraries"]
-        p2 --> p3["unpack: .lpk a build/packages/nombre/<br/>solo si el archivo cambió"]
-        p3 --> p4["read: manifiesto, hash,<br/>archivos, needs"]
-        p4 --> p5["link: import nombre lo encuentra<br/>en libraryRoots"]
-        p5 --> p6["analyze y generate"]
-        p6 --> p7["packageArgs: -I y los .c del paquete<br/>linkArgs: objects, links, -lm"]
-        p7 --> p8["el compilador de C"]
+    subgraph s["el otro proceso"]
+        serve["serve: SharedWire<br/>o StreamWire (stdin/stdout)"]
     end
-    bib -- "el .lpk,<br/>copiado a mano" --> prog
+    rpc -- "SharedOutputStream rq-…" --> serve
+    serve -- "SharedOutputStream rs-…" --> rpc
+    rpc -. "Process: shareConsole,<br/>LARIMAR_RPC=rq,rs" .-> serve
 ```
 
-El hash une las dos mitades: es el SHA-256 (8 dígitos) del `.lar`, está en el manifiesto y también
-dentro del C. `read` los compara, y un binding editado a mano o archivos de dos builds mezclados no
-pasan.
+- **El anillo** (`std/os/shared/ring.lar`) es un productor y un consumidor: `head` lo mueve solo quien
+  escribe y `tail` solo quien lee, con stores de liberación y loads de adquisición (`__atomic_*`; en tcc,
+  `mfence`). Un lado que espera gira 100 µs y después duerme en pasos que crecen (`lm_shm_wait`).
+- **El otro lado vivo** se mira cada 50 ms (`lm_shm_peer`): en Unix con `waitid(WNOWAIT)` para un hijo que
+  terminó y no se esperó todavía (si no, `kill(pid, 0)` lo vería vivo), y si no con `kill`; en Windows con
+  `OpenProcess` y `WaitForSingleObject`.
+- **El nombre** (`/lar.<nombre>` en Unix, `Local\lar.<nombre>` en Windows) lo borra quien abre en cuanto
+  está dentro (`lm_shm_open`), así que no queda nada si un programa muere. Uno que quedó de un programa
+  que ya no corre se recupera al crearlo (`lm_shm_create`).
+- **Rpc** espera las respuestas en pasos de 200 ms para ver si el proceso terminó (`SharedWire.receive`,
+  `PipeWire.receive`): una llamada nunca espera a un programa muerto.
+- En Linux, `#define LM_OS_SHARED` hace que se enlace `-lrt` (`project/cc.lar`, `systemLibraries`).
 
 ---
 
@@ -292,36 +232,37 @@ pasan.
 
 | Quieres | Toca |
 |---|---|
-| Que cruce un tipo nuevo | `exportable` (analizador); `fromC`, `toC`, `abiType` (`gen/types.lar`); `headerType`, `bindingType` (`gen/library.lar`) |
-| Que una función del programa lleve un tipo nuevo | `libraryCallback`; `callbackC`, `callbackThunk` (`gen/callbacks.lar`); `trampoline` (`codegen/expressions/calls.lar`) |
-| Un campo nuevo en el manifiesto | `interfaceText` y `read` (`project/libraries.lar`); `buildPackage` (`main.lar`) |
-| Lo que un paquete añade al compilar | `packageArgs`, `linkArgs` (`main.lar`) |
-| El formato del `.lpk` | `project/lpk.lar` |
-| Los comentarios del `.h` | `callbackTypedef`, `typeNote`, `resultNote` (`gen/library.lar`) |
-| Qué miembros de una clase cruzan | `memberProblem`, `crosses` (`gen.lar`) |
+| Cómo se busca o se comprueba una biblioteca o un servicio de `[packages]` | `collect`, `libraryConfig` (`project/libraries.lar`) |
+| Qué módulos son de una biblioteca | `libraryOf`, `moduleFile`, `visit` (`semantics/linker.lar`) |
+| Dónde se permite C | `trusted`, `noC` (`semantics/linker.lar`) |
+| Qué tipos cruzan a un servicio | `crosses`, `fromAny`, `toAny`, `declareFrom` (`project/services.lar`) |
+| El módulo que importa el programa de un servicio | `clientSource` (`project/services.lar`) |
+| El main del ejecutable de un servicio | `serverSource`; `buildService` (`main.lar`) |
+| Qué campos lleva una tarea | `TASK_SCALARS`, `taskScalar`, `fromTable`, `writeTasks` (`semantics/linker.lar`) |
+| Cómo arranca una copia | `mainWrapper` (`codegen/gen/classes.lar`), `serveTasks` y `TASKS_ENV` (`std/os/process.lar`) |
+| El protocolo | `Frames`, `framed`, `lengthOf` y los `Wire` (`std/os/rpc.lar`) |
+| Cómo esperan los streams | `lm_shm_wait`, `lm_shm_sys_nap` (`std/os/shared/ring.lar`, `posix.lar`, `windows.lar`) |
 
-Después de cualquier cambio:
+Después de cualquier cambio en `src/`:
 
 ```mermaid
 flowchart TB
-    a["Cambio en src/"] --> b["Punto fijo:<br/>dos C seguidos idénticos"]
+    a["Cambio en src/"] --> b["Punto fijo, con --unsafe-c:<br/>dos C seguidos idénticos"]
     b --> c["cp a bootstrap/larimarc.c"]
     c --> d["./bootstrap/build.sh --verify --test"]
-    d --> e["tests/project/libraries_test.lar<br/>bajo el detector de memoria"]
-    e --> f["El banco del manual:<br/>la salida no cambió"]
+    d --> e["tests/project/libraries_test.lar, services_test.lar<br/>tests/std/shared_test.lar, rpc_test.lar, pool_test.lar"]
 ```
 
 ---
 
 ## 8. Lo que cuesta mantener
 
-- **El mecanismo está repartido.** Aunque `gen/callbacks.lar` reúne el lado de la biblioteca, una función
-  del programa toca analizador, dos generadores, el runtime y el linker. Un cambio en la convención hay
-  que hacerlo en los dos lados a la vez, o se rompe en silencio.
-- **La regla de la sección 5 no se ve en el código fuente** de un binding: depende de la carpeta.
-- **El nombre de la variable `c`** se usa para cosas distintas en estos archivos (una clase, una llamada,
-  un texto de C).
-- **Una biblioteca compilada (`--static`, `--dynamic`) sigue escribiendo su `.lar`**, que hoy ningún
-  programa Larimar puede usar: `[packages]` solo admite paquetes. O se deja de escribir, o se vuelven a
-  admitir las compiladas; mientras, es salida sin uso.
-- **Solo se ha ejecutado en Linux.** Para Windows y macOS el C se compila, pero nada de esto se ha corrido.
+- **El código que escribe el compilador está en textos.** `clientSource`, `serverSource` y `writeTasks`
+  arman Larimar con `StringBuilder`; un error en ellos sale como un error de análisis del módulo generado.
+  El de un servicio se puede leer en `build/<nombre>-service.lar`.
+- **Todo cruza por JSON**, también sobre memoria compartida: es simple y se puede leer, pero cada llamada
+  serializa. Para datos grandes están los streams.
+- **El compilador necesita `--unsafe-c`** por su propio C (servidor de lenguaje, depurador, `docstore`,
+  `gen_double_text`). Mientras no pase a `std`, la regla tiene una excepción en casa.
+- **Solo se ha ejecutado en Linux.** Para Windows el C se compila (mingw), y para macOS no se ha compilado
+  en este equipo: `waitid` y `shm_open` existen allí, pero nada de esto se ha corrido.

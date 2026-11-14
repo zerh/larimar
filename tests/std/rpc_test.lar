@@ -1,0 +1,125 @@
+// std.os.rpc: calls to another program (JSON-RPC), through shared memory or through its pipes.
+import std.os.rpc { Rpc, RpcCall, RpcError, message, serveOver };
+import std.io { MemoryInputStream, MemoryOutputStream };
+import std.test { check, checkText, checkInt, fail };
+import tests.support.compiler { built, caseFile };
+
+/** A program that answers: add, echo, upper, slow (it waits), die (a panic); the rest is an error. */
+const SERVER: String = raw"""
+    import std.os.rpc { RpcCall, serve };
+    import std.time as Time;
+    function main(): int32 {
+        println("the server's own output");
+        serve((call) -> {
+            if (call.method == "add") { return (call.params.a as int64 ?? 0) + (call.params.b as int64 ?? 0); }
+            if (call.method == "echo") { return call.params; }
+            if (call.method == "upper") { return (call.params[0] as String ?? "").toUpperCase(); }
+            if (call.method == "slow") {
+                Time.sleep(1000);
+                return "late";
+            }
+            if (call.method == "die") {
+                let none: int32[*] = [];
+                return none[1];
+            }
+            call.fail(-32601, "no method ${call.method}");
+            return null;
+        });
+        return 0;
+    }
+    """;
+
+function server(): String { return built(caseFile("rpc_server.lar", SERVER)); }
+
+/** The calls every transport answers the same. */
+function talk(calc: Rpc): void throws RpcError {
+    checkInt(5, (calc.call("add", { a: 2, b: 3 }) as int64 ?? 0) as int32);
+    checkText("{name: \"ana\", list: {1, 2, 3}}", "${calc.call("echo", { name: "ana", list: { 1, 2, 3 } })}");
+    checkText("HOLA", calc.call("upper", { "hola" }) as String ?? "");
+    let refused: String = "";
+    try {
+        calc.call("nope", null);
+    } catch (RpcError e) {
+        refused = message(e).clone();
+    }
+    checkText("error -32601: no method nope", refused);
+    let sum: int64 = 0;
+    for (i in 0..200) { sum += calc.call("add", { a: i, b: 1 }) as int64 ?? 0; }
+    checkInt(20100, sum as int32);
+    calc.notify("add", { a: 1, b: 1 });                 // no answer comes, and none is waited for
+    checkInt(2, (calc.call("add", { a: 1, b: 1 }) as int64 ?? 0) as int32);
+}
+
+// A Larimar program that serves: the calls go through shared memory, and its output stays its own.
+test function callsThroughSharedMemory(): void throws RpcError {
+    let exe: String = server();
+    if (exe == "") { return; }
+    let calc: Rpc = Rpc.startShared(exe, []);
+    talk(calc);
+    calc.close();
+}
+
+// Any program that answers JSON-RPC on its standard input and output (here, the same one).
+test function callsThroughPipes(): void throws RpcError {
+    let exe: String = server();
+    if (exe == "") { return; }
+    let calc: Rpc = Rpc.start(exe, []);
+    talk(calc);
+    calc.close();
+}
+
+// The program ends in the middle of a call: the call says so, with its exit code.
+test function aProgramThatEndsIsAnError(): void throws RpcError {
+    let exe: String = server();
+    if (exe == "") { return; }
+    let shared: Rpc = Rpc.startShared(exe, []);
+    let why: String = "";
+    try {
+        shared.call("die", null);
+    } catch (RpcError e) {
+        why = message(e).clone();
+    }
+    checkText("ended: the program ended (exit 101)", why);
+    let pipes: Rpc = Rpc.start(exe, []);
+    why = "";
+    try {
+        pipes.call("die", null);
+    } catch (RpcError e) {
+        why = message(e).clone();
+    }
+    checkText("ended: the program ended (exit 101)", why);
+}
+
+// A call waits only as long as its timeout.
+test function aCallWaitsOnlyItsTimeout(): void throws RpcError {
+    let exe: String = server();
+    if (exe == "") { return; }
+    let calc: Rpc = Rpc.startShared(exe, []);
+    calc.timeout = 100;
+    let late: bool = false;
+    try {
+        calc.call("slow", null);
+    } catch (RpcError e) {
+        late = switch (e) {
+            case TimedOut -> true;
+            default -> false;
+        };
+    }
+    check(late, "RpcError.TimedOut after 100 ms");
+    calc.timeout = 0;
+    checkText("late", calc.call("slow", null) as String ?? "");    // the old answer is skipped
+    calc.close();
+}
+
+// serveOver answers on any pair of streams; a request that is not JSON gets the error of JSON-RPC.
+test function servesOnAnyStreams(): void {
+    let requests: String = "Content-Length: 46\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"twice\",\"params\":21}"
+        .replace("46", "${"{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"twice\",\"params\":21}".length}");
+    let all: String = "${requests}Content-Length: 3\r\n\r\n{x}";
+    let input: MemoryInputStream = { data: all };
+    let out: MemoryOutputStream = {};
+    serveOver(input, out, (call) -> { return (call.params as int64 ?? 0) * 2; });
+    let text: String = out.toString();
+    check(text.contains("{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":42}"), "the answer: ${text}");
+    check(text.contains("\"code\":-32700"), "and the error of what is not JSON: ${text}");
+}

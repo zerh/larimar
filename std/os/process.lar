@@ -13,11 +13,28 @@
 // Its error output goes where this program's goes, nowhere with `quiet: true`, or into its output (read
 // with the rest) with `mergeErrors: true`. A Process that is still running when its memory is freed is
 // killed.
+//
+// Work of the program itself can run in other processes too: a class that implements SystemProcess is a
+// task, and a ProcessPool runs its objects in copies of this program. Their fields go there with them,
+// and what run() gives comes back; a panic there is a ProcessError here, and the pool starts another.
+//
+//   class Resize implements SystemProcess {
+//       let file: String;
+//       let width: int32;
+//       override function run(): Any { return Images.resize(self.file, self.width); }
+//   }
+//
+//   let pool: ProcessPool = { processes: 4 };
+//   let one: Any = pool.run(Resize { file: "casa.jpg", width: 800 });
+//   let all: Any = pool.runAll([Resize { file: "1.jpg", width: 800 }, Resize { file: "2.jpg", width: 800 }]);
 
 import std.os;
 import std.os { Platform, OS };
 import std.os.process.posix { PosixProcesses, PosixExecutables };
 import std.os.process.windows { WindowsProcesses, WindowsExecutables };
+import std.os.process.tasks as Tasks;
+import std.os.rpc { Rpc, RpcCall, RpcError, serve };
+import std.os.rpc as Calls;
 
 cinclude "<time.h>";
 cinclude "<errno.h>";
@@ -42,7 +59,9 @@ public enum ProcessError {
     /** It could not start: not found, not allowed to run... */
     CannotStart(program: String, why: String),
     /** It is not running: never started, or it ended (or closed its input). */
-    NotRunning
+    NotRunning,
+    /** A task (SystemProcess) did not finish: its process ended, or it could not be sent there. */
+    Failed(why: String)
 }
 
 /** A message for the error, in English. */
@@ -50,6 +69,7 @@ public function message(e: ProcessError): String {
     return switch (e) {
         case CannotStart { program, why } -> "cannot start ${program}: ${why}";
         case NotRunning -> "the process is not running";
+        case Failed { why } -> "the task failed: ${why}";
     };
 }
 
@@ -221,3 +241,94 @@ let executables: Executables = switch (Platform.current()) {
 };
 
 function isRunnable(path: String): bool { return executables.check(path); }
+
+// ---- tasks in other processes -------------------------------------------------------------------------
+
+/**
+ * Work that runs in another process: a copy of this program, so that a panic or a crash there is only an
+ * error here. The object goes there with its fields (numbers, bool, String, optionals and lists of them);
+ * what run() gives comes back the same way (a table, a number, a String...). A class that implements it
+ * says so itself (implements SystemProcess) and extends no other class.
+ */
+public interface SystemProcess {
+    function run(): Any;
+}
+
+/** The variable that makes a copy of this program run tasks instead of its main. */
+const TASKS_ENV: String = "LARIMAR_PROCESS=1";
+
+/** Copies of this program that run SystemProcess tasks: each one a task at a time, several at once. */
+public class ProcessPool {
+    /** How many processes at most (they start when there is work for them). */
+    let processes: int32 = 4;
+    let workers: Rpc[*] = [];
+
+    /** Runs the task in one of the processes and waits for it: what its run() gave. */
+    function run(task: SystemProcess): Any throws ProcessError {
+        let one: SystemProcess[*] = [task];
+        let results: Any = self.runAll(one);
+        return results[0].clone();
+    }
+
+    /** Runs the tasks in the processes, at the same time, and waits for all: what each run() gave, in order. */
+    function runAll(tasks: SystemProcess[*]): Any throws ProcessError {
+        let results: Any = {};
+        for (t in tasks) { results.push(null); }
+        if (tasks.length == 0) { return results; }
+        let wanted: int32 = self.processes < tasks.length ? self.processes : tasks.length;
+        if (wanted < 1) { wanted = 1; }
+        let busy: int32[*] = [];
+        let ids: int64[*] = [];
+        let next: int32 = 0;
+        let done: int32 = 0;
+        try {
+            while (self.workers.length < wanted) {
+                self.workers.push(Calls.startSharedWith(os.programPath(), [], [TASKS_ENV]));
+            }
+            for (w in self.workers) {
+                busy.push(-1);
+                ids.push(0);
+            }
+            while (done < tasks.length) {
+                for (k in 0..busy.length) {
+                    if (busy[k] < 0 && next < tasks.length) {
+                        let params: Any = Tasks.encode(tasks[next]);
+                        if (params == null) { throw RpcError.Failed(-32602, "the task is not of a class of this program that implements SystemProcess".clone()); }
+                        ids[k] = self.workers[k].begin("run", params);
+                        busy[k] = next;
+                        next += 1;
+                    }
+                }
+                for (k in 0..busy.length) {
+                    if (busy[k] >= 0) {
+                        results[busy[k]] = self.workers[k].finish(ids[k]);
+                        busy[k] = -1;
+                        done += 1;
+                        break;
+                    }
+                }
+            }
+        } catch (RpcError e) {
+            for (w in self.workers) { w.stop(); }        // the others too: a new start for whatever comes next
+            self.workers.clear();
+            throw ProcessError.Failed(Calls.message(e).clone());
+        }
+        return results;
+    }
+}
+
+/**
+ * What a copy of this program started by a ProcessPool does instead of its main (the compiler calls it
+ * when LARIMAR_PROCESS is set): it runs the tasks it is sent until the pool closes.
+ */
+public function serveTasks(): int32 {
+    serve((call) -> {
+        let task: SystemProcess? = Tasks.start(call.params.name as String ?? "", call.params["fields"]);
+        if (task == null) {
+            call.fail(-32602, "this program has no SystemProcess class ${call.params.name}");
+            return null;
+        }
+        return task!.run();
+    });
+    return 0;
+}
