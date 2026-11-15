@@ -1,4 +1,4 @@
-// Libraries written in Larimar. A program names the library's folder in [packages] and compiles its source
+// Libraries written in Larimar. A program names the library's folder in [dependencies] and compiles its source
 // with its own: one C, one runtime, the whole language on both sides. larimar build of a library checks it.
 // Each test writes its projects in build/test/ and builds them with the compiler under test.
 import std.test { check, checkInt, skip };
@@ -7,7 +7,7 @@ import std.io.files as Files;
 import std.io { IoError };
 import std.io.path as Paths;
 import std.os;
-import std.os { Platform };
+import std.platform { Platform };
 import tests.support.compiler { compiler, failsWith, runs, caseFile };
 
 /** The library of the tests: texts, a class, a text that may be null. */
@@ -148,11 +148,11 @@ function onlyLinuxOrMac(): bool {
 
 // ---- for Larimar programs: the library's source, compiled with the program -----------------------------
 
-// [packages] names the library's folder, and the program compiles its source with its own: one C, one runtime.
+// [dependencies] names the library's folder, and the program compiles its source with its own: one C, one runtime.
 test function aLibraryIsUsedAsSource(): void throws IoError {
     if (!onlyLinuxOrMac()) { return; }
     let lib: String = writeLibrary("lib-source", "");
-    let app: String = writeProgram("lib-source-app", "[packages]\ntextkit = \"${lib}\"\n", LARIMAR_PROGRAM);
+    let app: String = writeProgram("lib-source-app", "[dependencies]\ntextkit = \"${lib}\"\n", LARIMAR_PROGRAM);
     let output: String[*] = [];
     checkInt(0, larimarc(["run", app], output));
     check(output.join("").endsWith(LARIMAR_OUTPUT), "the program uses the library: ${output.join("")}");
@@ -197,7 +197,7 @@ test function theWholeLanguageCrosses(): void throws IoError {
             override function name(): String { return "square ${self.side}"; }
         }
         """, "");
-    let app: String = writeProgram("lib-language-app", "[packages]\nshapes = \"${lib}\"\n", raw"""
+    let app: String = writeProgram("lib-language-app", "[dependencies]\nshapes = \"${lib}\"\n", raw"""
         import shapes;
         import shapes { Shape, Square, ShapeError };
 
@@ -244,7 +244,7 @@ test function aLibraryHasItsParts(): void throws IoError {
             return n;
         }
         """);
-    let app: String = writeProgram("lib-parts-app", "[packages]\nwords = \"${lib}\"\n", raw"""
+    let app: String = writeProgram("lib-parts-app", "[dependencies]\nwords = \"${lib}\"\n", raw"""
         import words;
         import words.count as Count;
         function main(): int32 {
@@ -259,10 +259,10 @@ test function aLibraryHasItsParts(): void throws IoError {
     Files.writeString(Paths.join(app, "src/words.lar"), "public function describe(text: String): String { return text; }\n");
     output.clear();
     checkInt(1, larimarc(["build", app], output));
-    check(output.join("").contains("Module 'words' is of the library 'words' of [packages], and the project has a file with its name too"), "a name of both: ${output.join("")}");
+    check(output.join("").contains("Module 'words' is of the library 'words' of [dependencies], and the project has a file with its name too"), "a name of both: ${output.join("")}");
 }
 
-// A library names its own libraries in its [packages]; a program names only the ones it imports.
+// A library names its own libraries in its [dependencies]; a program names only the ones it imports.
 test function aLibraryUsesItsOwnPackages(): void throws IoError {
     if (!onlyLinuxOrMac()) { return; }
     let tiny: String = writeNamedLibrary("lib-deep-tiny", "tiny", raw"""
@@ -276,8 +276,8 @@ test function aLibraryUsesItsOwnPackages(): void throws IoError {
     let four: String = writeNamedLibrary("lib-deep-four", "four", raw"""
         import tiny;
         public function times(n: int32): int32 { return tiny.twice(tiny.twice(n)); }
-        """, "[packages]\ntiny = \"../lib-deep-tiny\"\n");
-    let app: String = writeProgram("lib-deep-app", "[packages]\nfour = \"${four}\"\n", raw"""
+        """, "[dependencies]\ntiny = \"../lib-deep-tiny\"\n");
+    let app: String = writeProgram("lib-deep-app", "[dependencies]\nfour = \"${four}\"\n", raw"""
         import four;
         import tiny;
         function main(): int32 {
@@ -290,26 +290,26 @@ test function aLibraryUsesItsOwnPackages(): void throws IoError {
     check(output.join("").endsWith("12 2 3\n"), "one tiny for both: ${output.join("")}");
     // two libraries called the same, in two folders
     let other: String = writeNamedLibrary("lib-deep-tiny2", "tiny", "public function twice(n: int32): int32 { return n; }\n", "");
-    let clash: String = writeProgram("lib-deep-clash", "[packages]\nfour = \"${four}\"\ntiny = \"${other}\"\n", "function main(): int32 { return 0; }\n");
+    let clash: String = writeProgram("lib-deep-clash", "[dependencies]\nfour = \"${four}\"\ntiny = \"${other}\"\n", "function main(): int32 { return 0; }\n");
     output.clear();
     checkInt(1, larimarc(["build", clash], output));
     check(output.join("").contains("two libraries are called 'tiny'"), "two tiny: ${output.join("")}");
     check(Files.isDirectory(tiny), "the first tiny is there");
 }
 
-// What [packages] names is checked: a library's folder, with that name.
-test function packagesAreChecked(): void throws IoError {
+// What [dependencies] names is checked: a library's folder, with that name.
+test function dependenciesAreChecked(): void throws IoError {
     let program: String = writeProgram("lib-not-a-library", "", "function main(): int32 { return 0; }\n");
     let named: String = writeNamedLibrary("lib-other-name", "other", "public function one(): int32 { return 1; }\n", "");
     let cases: String[] = [
         "textkit = \"libs/none\"|libs/none has no larimar.toml",
         "textkit = \"${program}\"|is a program, not a library",
         "textkit = \"${named}\"|the library in ${named} is called 'other'",
-        "textkit = 3|textkit in [packages] is the folder of the library"
+        "textkit = 3|textkit in [dependencies] is the folder of the library"
     ];
     for (c in cases) {
         let parts: String[*] = c.split("|");
-        let dir: String = writeProgram("lib-checked", "[packages]\n${parts[0]}\n", "function main(): int32 { return 0; }\n");
+        let dir: String = writeProgram("lib-checked", "[dependencies]\n${parts[0]}\n", "function main(): int32 { return 0; }\n");
         let output: String[*] = [];
         checkInt(1, larimarc(["build", dir], output));
         check(output.join("").contains(parts[1]), "${parts[0]}: ${output.join("")}");
@@ -322,10 +322,48 @@ test function aLibraryHasNoCOfItsOwn(): void throws IoError {
         native function abs(x: int32): int32;
         public function size(x: int32): int32 { return abs(x); }
         """, "");
-    let app: String = writeProgram("lib-with-c-app", "[packages]\nfast = \"${lib}\"\n", "import fast;\nfunction main(): int32 { return fast.size(-1); }\n");
+    let app: String = writeProgram("lib-with-c-app", "[dependencies]\nfast = \"${lib}\"\n", "import fast;\nfunction main(): int32 { return fast.size(-1); }\n");
     let output: String[*] = [];
     checkInt(1, larimarc(["build", app], output));
     check(output.join("").contains("native function is only for the standard library"), "C in a library: ${output.join("")}");
+}
+
+// [project] unsafe_c = true opens native interface to a project or a library (and nothing else of C): the
+// program that uses it is built with that C, and every build says where it comes from.
+test function unsafeCIsSaidEveryTime(): void throws IoError {
+    if (!onlyLinuxOrMac()) { return; }
+    let lib: String = writeNamedLibrary("lib-unsafe", "cubes", raw"""
+        native interface LibM "<math.h>" {
+            type Cell = c"int*";
+            function cbrt(x: float64): float64;
+        }
+        public function side(volume: float64): float64 { return LibM.cbrt(volume); }
+        """, "");
+    Files.writeString(Paths.join(lib, "larimar.toml"), "[project]\nname = \"cubes\"\nkind = \"library\"\nmain = \"src/cubes.lar\"\nunsafe_c = true\n");
+    let app: String = writeProgram("lib-unsafe-app", "[dependencies]\ncubes = \"${lib}\"\n", raw"""
+        import cubes;
+        function main(): int32 {
+            println("${cubes.side(27.0)}");
+            return 0;
+        }
+        """);
+    let output: String[*] = [];
+    checkInt(0, larimarc(["run", app], output));
+    let all: String = output.join("");
+    check(all.contains("note: unsafe C (native interface) from: cubes"), "it says where the C is from: ${all}");
+    check(all.contains("type Cell (int*) has no 'released by'"), "and what nothing frees: ${all}");
+    check(all.endsWith("3.0\n"), "it runs: ${all}");
+    // without unsafe_c, a native interface is std's
+    let own: String = writeProgram("lib-unsafe-own", "", "native interface LibM \"<math.h>\" { function cbrt(x: float64): float64; }\nfunction main(): int32 { return LibM.cbrt(8.0) as int32; }\n");
+    output.clear();
+    checkInt(1, larimarc(["build", own], output));
+    check(output.join("").contains("or for a project with [project] unsafe_c = true"), "the program has none: ${output.join("")}");
+    // and unsafe_c opens native interface only: ccode is still std's
+    Files.writeString(Paths.join(own, "larimar.toml"), "[project]\nname = \"app\"\nunsafe_c = true\n");
+    Files.writeString(Paths.join(own, "src/main.lar"), "ccode { static int one(void) { return 1; } }\nfunction main(): int32 { return 0; }\n");
+    output.clear();
+    checkInt(1, larimarc(["build", own], output));
+    check(output.join("").contains("ccode is only for the standard library"), "ccode stays std's: ${output.join("")}");
 }
 
 // The library and the program share one runtime, and their names do not meet: each module has its own.
@@ -349,7 +387,7 @@ test function aLibraryAndItsProgramShareOneRuntime(): void throws IoError {
             return total.get();
         }
         """, "");
-    let app: String = writeProgram("lib-runtime-app", "[packages]\nbgkit = \"${lib}\"\n", raw"""
+    let app: String = writeProgram("lib-runtime-app", "[dependencies]\nbgkit = \"${lib}\"\n", raw"""
         import bgkit;
         let seen: String[*] = [] in default;
         function main(): int32 {

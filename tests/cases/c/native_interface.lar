@@ -1,0 +1,32 @@
+// native interface: Name.f calls the C function f of the header; types keep their names.
+native interface Stdio "<stdio.h>" {
+    type FILE released by fclose;
+    function fopen(path: String, mode: String): FILE?;
+    function fclose(file: FILE): int32;
+    function fputs(text: String, file: FILE): int32;
+    const EOF: int32;
+}
+
+native interface Ctype "<ctype.h>" {
+    function toupper(c: int32): int32;
+}
+
+native interface MathC "<math.h>" {
+    function cbrt(x: float64): float64;
+}
+
+native interface Both extends Stdio, Ctype {}
+
+class Shout {
+    native interface Upper "<ctype.h>" {
+        function toupper(c: int32): int32;
+    }
+    function up(c: int32): int32 { return Upper.toupper(c); }
+}
+
+function main(): int32 {
+    let f: FILE? = Stdio.fopen("build/test/native_interface.txt", "w");    // closed (fclose) when main's memory goes
+    if (f != null) { Stdio.fputs("hola\n", f!); }
+    println("${Both.toupper(97)} ${Shout {}.up(98)} ${Stdio.EOF}");
+    return 0;
+}

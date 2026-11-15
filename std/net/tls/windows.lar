@@ -1,7 +1,7 @@
 // std.net.tls.windows: the TLS client on Windows (SChannel).
 
 import std.net.tls.common;
-import std.os { WindowsPlatform };
+import std.platform { WindowsPlatform };
 
 /** Windows: SChannel. */
 public class WindowsTls implements WindowsPlatform {

@@ -2,6 +2,48 @@
 
 Each version of the compiler (`larimar --version`) and the version of the language it implements.
 
+## 1.10.0 — 2026-11-15 (language 1.3)
+
+Processes are used like threads, `native` always means C, and the C of std goes through native
+interfaces.
+
+- **Processes like threads** (`std.os.process`): `SystemProcess` is now **`Task`**, and a `Process` runs
+  one as a `Thread` runs a `Runnable`: `let p: Process = { run: Resize { ... } }; p.start(); let r: Any =
+  p.join();`. A `Process` is `{ program, args }` (another program) or `{ run: task }` (a copy of this
+  one), not both; `join()` of a program gives its exit code. `ProcessPool` has the verbs of `ThreadPool`:
+  `submit(task)` gives it to a free process, `wait()` gives every result in the order submitted
+  (`run` and `runAll` are gone). Only the `Task` of `std.os.process` is a task: an interface of a program
+  called `Task` is its own.
+- **`native interface`**: `native interface LibM "<math.h>" { function cbrt(x: float64): float64; }`, then
+  `LibM.cbrt(x)`. What one or more headers give under one name: functions and values (`Name.f`,
+  `Name.N`), types (`type FILE released by fclose;` is a `FILE*`) and structs, which keep their names; an
+  interface can `extend` others and be declared in a class (then its C is only for the class's system).
+  A header reaches the C only when something it declares is used. `std.math`, `std.os`, `std.io.console`
+  and `std.io.files` reach libc this way.
+- **`[project] unsafe_c = true`**: a program, a library or a service may declare native interfaces (and
+  nothing else of C). A program that uses such a library is built with that C, and every build says it:
+  `note: unsafe C (native interface) from: NAME`, and names the pointer types that nothing releases.
+- **`native` always means C.** The types of the language are `type String { ... }` and `type Any { ... }`
+  in `std.lang`, and what the compiler writes has no body and no `native` (`let length: int32;`,
+  `function substring(...)...;`, `Thread.start`, `std.memory.limit`). Only `std.lang` (and `std.memory`)
+  has functions without a body; anywhere else it is an error (*Function 'f' needs its body*).
+- **`std.platform`**: `Platform`, `OS`, `UnixPlatform`, `LinuxPlatform`, `MacOSPlatform` and
+  `WindowsPlatform` moved from `std.os`: `import std.platform { Platform, OS };`. It imports nothing.
+- **No interfaces to reach a platform**: `Clock`, `System`, `RandomSource`, `NetSystem`, `FolderSystem`
+  and `Executables` are gone; each platform's class has static functions (`PosixClock.now()`), and the
+  module chooses with a `switch` on `Platform.current()`. A static function with a body of C of a class
+  for one system panics on another, as its methods do.
+- **No cycles in std**: a part never imports the module that uses it (`tests/std/cycles_test.lar`).
+  `Socket` is in `std.net.internal`; the program's tasks reach `std.os.process` through
+  `std.os.process.tasks`, which the compiler writes and std does not import.
+- **The parts of std are its own**: a module whose path has `posix`, `windows`, `macos`, `common` or
+  `internal` is imported only from std (`std.os.process.internal`: what `Process` and `std.os.rpc` start
+  programs with).
+- **`[dependencies]`** instead of `[packages]` in `larimar.toml`.
+- **The runtime is in `runtime/`**, beside `std/` (it was `std/runtime/`); the install copies both.
+- A program whose C includes `<math.h>` is linked with `-lm` on Linux.
+- `larimar --version` says `1.10.0 (language 1.3)` (1.9.0 still said 1.8.0).
+
 ## 1.9.0 — 2026-11-14 (language 1.2)
 
 No contact with C for the programmer: what Larimar does not have runs in another process, and Larimar

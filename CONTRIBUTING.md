@@ -2,9 +2,11 @@
 
 How the code is organized, so that it stays easy to read and to change.
 
-- Every function of the compiler, with its signature: [docs/compiler-reference.md](docs/compiler-reference.md).
+- Every function of the compiler, with its signature: [docs/compiler-reference.md](docs/compiler-reference.md)
+  (`tools/reference.py`); every public name of std: [docs/std-reference.md](docs/std-reference.md)
+  (`tools/std_reference.py`). Both are generated: run them after a change.
 - How libraries, services and tasks are made inside the compiler: [docs/compiler-libraries.es.md](docs/compiler-libraries.es.md).
-- The C of the standard library (`cinclude`, `ccode`, `native`), for whoever writes std: [docs/std-c.md](docs/std-c.md).
+- The C of the standard library (`native interface`, `cinclude`, `ccode`, `native`), for whoever writes std: [docs/std-c.md](docs/std-c.md).
 
 ## The compiler, from a file to a program
 
@@ -30,7 +32,7 @@ flowchart TB
     subgraph codegen["codegen/: the C"]
         gen["gen.lar, gen/, expressions/<br/>generate"] -- "the whole C" --> prune["prune.lar<br/>only what the program reaches,<br/>of it and of the runtime"]
     end
-    runtime["std/runtime/*.lar<br/>the runtime, written in C"]
+    runtime["runtime/*.lar<br/>the runtime, written in C"]
     cc["project/cc.lar<br/>chooses and runs the C compiler"]
     exe(["the program, or the service"])
 
@@ -54,9 +56,10 @@ The same analysis serves the editor: `editor/lsp.lar` calls `analyzeFile` for th
 | `src/syntax` | The lexer, the parser, the tree (`ast.lar`) |
 | `src/semantics` | The linker, the types, the analyzer |
 | `src/codegen` | The generator of C, the pruning, the debug map |
-| `src/project` | `larimar.toml`, the libraries of `[packages]`, the C compiler, `larimar test` |
+| `src/project` | `larimar.toml`, the libraries of `[dependencies]`, the C compiler, `larimar test` |
 | `src/editor` | The language server and the debug adapter |
-| `std` | The standard library; `std/runtime` is the runtime, in C |
+| `std` | The standard library |
+| `runtime` | The runtime, in C (beside std/) |
 | `tests` | The tests, by subject; `tests/run-tests.sh` runs them |
 | `bootstrap` | `larimarc.c`: the compiler in C, to build it without a compiler |
 | `docs` | The manuals, the specification and the page |
@@ -126,7 +129,7 @@ Without `--target`, the C of every platform is written, each under its `#if`; wi
   try std's C. Moving that C into std is to do.
 - What the compiler writes for the program is Larimar, parsed like any module: the module of a service
   (`project/services.lar`, `clientSource`), the main of its executable (`serverSource`) and how the tasks
-  of `SystemProcess` go to another process (`semantics/linker.lar`, `writeTasks`).
+  of `Task` go to another process (`semantics/linker.lar`, `writeTasks`).
 
 ## Changes
 
@@ -146,6 +149,9 @@ flowchart TB
 ```
 
   When a change needs the new compiler to compile itself (new syntax used in `src/`), do it in two steps:
-  first teach the compiler the new form and update the bootstrap, then use it in `src/`.
+  first teach the compiler the new form and update the bootstrap, then use it in `src/`. The same holds
+  for std, which the compiler is built with: a form of std the previous compiler rejects needs it first
+  taught, then used (1.10 did so for `type String { }` and for static functions with C in platform
+  classes).
 - The language is described in `docs/spec.md` and taught in `docs/manual.md` and `docs/manual.es.md` (the page, `docs/manual.html`, shows them): a
   change to the language changes the three.

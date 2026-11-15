@@ -17,64 +17,100 @@
 
 import std.io { IoError, raise, InputStream, OutputStream };
 import std.io as Io;
-import std.os { Platform, OS };
+import std.platform { Platform, OS };
 import std.io.files.posix { PosixFolders };
 import std.io.files.windows { WindowsFolders };
 
-cinclude "<errno.h>";
-cinclude "<sys/stat.h>";
-
-/** A C FILE*, closed when its memory is freed. */
-native type FileHandle = FILE* released by fclose;
-native function fclose(f: FileHandle): int32;
-native function fopen(path: String, mode: String): FileHandle?;
-native function fread(into: byte*, size: uint64, count: uint64, f: FileHandle): uint64;
-native function fwrite(from: byte*, size: uint64, count: uint64, f: FileHandle): uint64;
-native function fflush(f: FileHandle): int32;
-native function ferror(f: FileHandle): int32;
-native function fgetc(f: FileHandle): int32;
-native type Untyped;
-native function fgets(into: byte*, size: int32, f: FileHandle): Untyped?;
-native function strlen(text: byte*): uint64;
-native const EOF: int32;
-
-native struct Stat = struct stat { let st_mode: uint32; let st_size: int64; let st_mtime: int64; };
-native function stat(path: String, into: Stat*): int32;
-native function remove(path: String): int32;
-
-/** What std.io.files needs of the system for folders: a class for each platform (std/io/files/posix.lar, windows.lar). */
-public interface FolderSystem {
-    function makeDirectory(path: String): int32;         // 0, or -1 (errno says why)
-    function removeDirectory(path: String): int32;
-    function makeWritable(path: String): void;            // before replacing a read-only file
-    function copyPermissions(from: String, to: String): void;
-    function listOpen(path: String): int64;               // 0: it could not be opened
-    function listNext(list: int64, into: byte[]): bool;   // the next name, ending in a zero byte
-    function listClose(list: int64): void;
+/** What C gives std.io.files: stdio.h for files, sys/stat.h and errno.h for what they are and what failed. */
+native interface LibC "<stdio.h>", "<string.h>", "<errno.h>", "<sys/stat.h>" {
+    /** A C FILE*, closed when its memory is freed. */
+    type FileHandle = FILE* released by fclose;
+    type Untyped = c"void*";
+    struct Stat = struct stat { let st_mode: uint32; let st_size: int64; let st_mtime: int64; };
+    function fclose(f: FileHandle): int32;
+    function fopen(path: String, mode: String): FileHandle?;
+    function fread(into: byte*, size: uint64, count: uint64, f: FileHandle): uint64;
+    function fwrite(from: byte*, size: uint64, count: uint64, f: FileHandle): uint64;
+    function fflush(f: FileHandle): int32;
+    function ferror(f: FileHandle): int32;
+    function fgetc(f: FileHandle): int32;
+    function fgets(into: byte*, size: int32, f: FileHandle): Untyped?;
+    function strlen(text: byte*): uint64;
+    function stat(path: String, into: Stat*): int32;
+    function remove(path: String): int32;
+    const EOF: int32;
+    let errno: int32;
+    const ENOENT: int32;
+    const ENOTDIR: int32;
+    const EACCES: int32;
+    const EPERM: int32;
+    const EEXIST: int32;
+    const S_IFMT: uint32;
+    const S_IFDIR: uint32;
 }
 
-let folders: FolderSystem = switch (Platform.current()) {
-    case Linux, MacOS, Unix -> PosixFolders {};
-    case Windows -> WindowsFolders {};
-};
+// What std.io.files needs of the system for folders: the static functions of PosixFolders and
+// WindowsFolders (std/io/files/posix.lar, windows.lar), chosen by the system. The codes: 0, or -1 (errno
+// says why); listNext gives the next name, ending in a zero byte; listOpen gives 0 when it cannot open.
 
-native let errno: int32;
-native const ENOENT: int32;
-native const ENOTDIR: int32;
-native const EACCES: int32;
-native const EPERM: int32;
-native const EEXIST: int32;
-native const S_IFMT: uint32;
-native const S_IFDIR: uint32;
+function folderMakeDirectory(path: String): int32 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixFolders.makeDirectory(path);
+        case Windows -> WindowsFolders.makeDirectory(path);
+    };
+}
+
+function folderRemoveDirectory(path: String): int32 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixFolders.removeDirectory(path);
+        case Windows -> WindowsFolders.removeDirectory(path);
+    };
+}
+
+function folderMakeWritable(path: String): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixFolders.makeWritable(path);
+        case Windows -> WindowsFolders.makeWritable(path);
+    }
+}
+
+function folderCopyPermissions(from: String, to: String): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixFolders.copyPermissions(from, to);
+        case Windows -> WindowsFolders.copyPermissions(from, to);
+    }
+}
+
+function folderListOpen(path: String): int64 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixFolders.listOpen(path);
+        case Windows -> WindowsFolders.listOpen(path);
+    };
+}
+
+function folderListNext(list: int64, into: byte[]): bool {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixFolders.listNext(list, into);
+        case Windows -> WindowsFolders.listNext(list, into);
+    };
+}
+
+function folderListClose(list: int64): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixFolders.listClose(list);
+        case Windows -> WindowsFolders.listClose(list);
+    }
+}
+
 
 /** A message for the error (the same as std.io's): "not found: notes.txt"... */
 public function message(e: IoError): String { return Io.message(e); }
 
 /** What went wrong with the last call, as a code of raise. */
 function code(): int32 {
-    let e: int32 = errno;
-    if (e == ENOENT || e == ENOTDIR) { return 1; }
-    if (e == EACCES || e == EPERM) { return 2; }
+    let e: int32 = LibC.errno;
+    if (e == LibC.ENOENT || e == LibC.ENOTDIR) { return 1; }
+    if (e == LibC.EACCES || e == LibC.EPERM) { return 2; }
     return 3;
 }
 
@@ -87,27 +123,27 @@ function bytes(n: int32): byte[*] {
 
 /** The whole file as text. */
 public function readString(path: String): String throws IoError {
-    let f: FileHandle? = fopen(path, "rb");
+    let f: FileHandle? = LibC.fopen(path, "rb");
     if (f == null) { raise(code(), path); }
     let all: byte[*] = [];
     let chunk: byte[*] = bytes(65536);
     while (true) {
-        let n: uint64 = fread(chunk, 1, chunk.length as uint64, f!);
+        let n: uint64 = LibC.fread(chunk, 1, chunk.length as uint64, f!);
         if (n == 0) { break; }
         for (i in 0..n as int32) { all.push(chunk[i]); }
     }
-    let failed: bool = ferror(f!) != 0;
+    let failed: bool = LibC.ferror(f!) != 0;
     release(f);
     if (failed) { raise(3, path); }
     return stringOfRange(all, 0, all.length);
 }
 
 function writeFile(path: String, text: String, mode: String): void throws IoError {
-    let f: FileHandle? = fopen(path, mode);
+    let f: FileHandle? = LibC.fopen(path, mode);
     if (f == null) { raise(code(), path); }
     let n: uint64 = text.length as uint64;
-    let ok: bool = n == 0 || fwrite(text.bytes(), 1, n, f!) == n;
-    ok = fflush(f!) == 0 && ok;
+    let ok: bool = n == 0 || LibC.fwrite(text.bytes(), 1, n, f!) == n;
+    ok = LibC.fflush(f!) == 0 && ok;
     release(f);
     if (!ok) { raise(3, path); }
 }
@@ -121,8 +157,8 @@ public function appendString(path: String, text: String): void throws IoError { 
 /** 0: nothing there; 1: a file; 2: a folder. */
 function kind(path: String): int32 {
     let st: Stat = {};
-    if (stat(path, &st) != 0) { return 0; }
-    return (st.st_mode & S_IFMT) == S_IFDIR ? 2 : 1;
+    if (LibC.stat(path, &st) != 0) { return 0; }
+    return (st.st_mode & LibC.S_IFMT) == LibC.S_IFDIR ? 2 : 1;
 }
 
 /** Is there a file or a folder with that path? */
@@ -135,33 +171,33 @@ public function isDirectory(path: String): bool { return kind(path) == 2; }
 /** When the file was last changed: seconds since 1970 (UTC), or 0 when there is nothing at that path. */
 public function modifiedTime(path: String): int64 {
     let st: Stat = {};
-    return stat(path, &st) == 0 ? st.st_mtime : 0;
+    return LibC.stat(path, &st) == 0 ? st.st_mtime : 0;
 }
 
 /** The size of a file in bytes, or -1 when there is nothing at that path. */
 public function size(path: String): int64 {
     let st: Stat = {};
-    return stat(path, &st) == 0 ? st.st_size : -1;
+    return LibC.stat(path, &st) == 0 ? st.st_size : -1;
 }
 
 /** The names of what a folder holds (files and folders, in no particular order). */
 public function list(path: String): String[*] throws IoError {
     let names: String[*] = [];
-    let found: int64 = folders.listOpen(path);
+    let found: int64 = folderListOpen(path);
     if (found == 0) { raise(isDirectory(path) ? 2 : 1, path); }
     let name: byte[*] = bytes(1024);
-    while (folders.listNext(found, name)) {
-        let n: String = stringOfRange(name, 0, strlen(name) as int32);
+    while (folderListNext(found, name)) {
+        let n: String = stringOfRange(name, 0, LibC.strlen(name) as int32);
         if (n != "." && n != "..") { names.push(n.clone()); }
     }
-    folders.listClose(found);
+    folderListClose(found);
     return names;
 }
 
 /** Creates one folder; fine if it is already there. */
 function makeDirectory(path: String): int32 {
-    if (folders.makeDirectory(path) == 0) { return 0; }
-    return errno == EEXIST && kind(path) == 2 ? 0 : code();
+    if (folderMakeDirectory(path) == 0) { return 0; }
+    return LibC.errno == LibC.EEXIST && kind(path) == 2 ? 0 : code();
 }
 
 /** Creates the folder, and the folders above it that are missing. */
@@ -179,35 +215,35 @@ public function createDirectories(path: String): void throws IoError {
  * stays executable.
  */
 public function copy(from: String, to: String): void throws IoError {
-    let input: FileHandle? = fopen(from, "rb");
+    let input: FileHandle? = LibC.fopen(from, "rb");
     if (input == null) { raise(code(), from); }
     if (kind(to) == 1) {                       // a copy kept read-only (Homebrew's libraries): a new file instead
-        folders.makeWritable(to);
-        remove(to);
+        folderMakeWritable(to);
+        LibC.remove(to);
     }
-    let output: FileHandle? = fopen(to, "wb");
+    let output: FileHandle? = LibC.fopen(to, "wb");
     if (output == null) { raise(code(), to); }
     let chunk: byte[*] = bytes(65536);
     let ok: bool = true;
     while (ok) {
-        let n: uint64 = fread(chunk, 1, chunk.length as uint64, input!);
+        let n: uint64 = LibC.fread(chunk, 1, chunk.length as uint64, input!);
         if (n == 0) { break; }
-        ok = fwrite(chunk, 1, n, output!) == n;
+        ok = LibC.fwrite(chunk, 1, n, output!) == n;
     }
-    ok = fflush(output!) == 0 && ok;
+    ok = LibC.fflush(output!) == 0 && ok;
     release(input);
     release(output);
     if (!ok) { raise(3, from); }
-    folders.copyPermissions(from, to);                     // on Unix an executable stays executable
+    folderCopyPermissions(from, to);                     // on Unix an executable stays executable
 }
 
 /** Deletes a file, or an empty folder. */
 public function delete(path: String): void throws IoError {
     let r: int32 = 0;
     if (kind(path) == 2) {
-        r = folders.removeDirectory(path);
+        r = folderRemoveDirectory(path);
     } else {
-        r = remove(path);
+        r = LibC.remove(path);
     }
     if (r != 0) { raise(code(), path); }
 }
@@ -232,8 +268,8 @@ public class File implements InputStream, OutputStream {
     override function read(buffer: byte[]): int32 throws IoError {
         let f: FileHandle = self.live();
         if (buffer.length == 0) { return 0; }
-        let n: uint64 = fread(buffer, 1, buffer.length as uint64, f);
-        if (n == 0 && ferror(f) != 0) { raise(3, self.path); }
+        let n: uint64 = LibC.fread(buffer, 1, buffer.length as uint64, f);
+        if (n == 0 && LibC.ferror(f) != 0) { raise(3, self.path); }
         return n as int32;
     }
 
@@ -244,19 +280,19 @@ public class File implements InputStream, OutputStream {
         if (b.length == 0) {
             for (i in 0..4096) { b.push(0); }
         }
-        if (fgets(b, b.length, f) == null) {             // nothing left
-            if (ferror(f) != 0) { raise(3, self.path); }
+        if (LibC.fgets(b, b.length, f) == null) {             // nothing left
+            if (LibC.ferror(f) != 0) { raise(3, self.path); }
             return null;
         }
-        let n: int32 = strlen(b) as int32;
+        let n: int32 = LibC.strlen(b) as int32;
         if (n > 0 && b[n - 1] == '\n') {                 // the whole line: one copy, at its size
             let stop: int32 = n > 1 && b[n - 2] == '\r' ? n - 2 : n - 1;
             return stringOfRange(b, 0, stop);
         }
         let line: byte[*] = [];                          // longer than the buffer: gathered
         for (i in 0..n) { line.push(b[i]); }
-        while (fgets(b, b.length, f) != null) {
-            let k: int32 = strlen(b) as int32;
+        while (LibC.fgets(b, b.length, f) != null) {
+            let k: int32 = LibC.strlen(b) as int32;
             for (i in 0..k) { line.push(b[i]); }
             if (k > 0 && b[k - 1] == '\n') { break; }
         }
@@ -272,31 +308,31 @@ public class File implements InputStream, OutputStream {
         let chunk: byte[*] = [];
         for (i in 0..65536) { chunk.push(0); }
         while (true) {
-            let n: uint64 = fread(chunk, 1, chunk.length as uint64, f);
+            let n: uint64 = LibC.fread(chunk, 1, chunk.length as uint64, f);
             if (n == 0) { break; }
             for (i in 0..n as int32) { all.push(chunk[i]); }
         }
-        if (ferror(f) != 0) { raise(3, self.path); }
+        if (LibC.ferror(f) != 0) { raise(3, self.path); }
         return stringOfRange(all, 0, all.length);
     }
 
     override function write(bytes: byte[]): void throws IoError {
         let f: FileHandle = self.live();
         if (bytes.length == 0) { return; }
-        if (fwrite(bytes, 1, bytes.length as uint64, f) != bytes.length as uint64) { raise(3, self.path); }
+        if (LibC.fwrite(bytes, 1, bytes.length as uint64, f) != bytes.length as uint64) { raise(3, self.path); }
     }
 
     function writeText(text: String): void throws IoError { self.write(text.bytes()); }
 
     /** Writes what is waiting in C's buffer: an error here is an error writing the file. */
     override function flush(): void throws IoError {
-        if (fflush(self.live()) != 0) { raise(3, self.path); }
+        if (LibC.fflush(self.live()) != 0) { raise(3, self.path); }
     }
 
     /** Closes the file now (what is in the buffer is written first); otherwise it is closed when its memory is freed. */
     function close(): void throws IoError {
         if (self.file == null) { return; }
-        let ok: bool = fflush(self.file!) == 0;
+        let ok: bool = LibC.fflush(self.file!) == 0;
         release(self.file);
         self.file = null;
         if (!ok) { raise(3, self.path); }
@@ -314,7 +350,7 @@ public function append(path: String): File throws IoError { return openWith(path
 
 function openWith(path: String, mode: String): File throws IoError {
     let f: File = { path: path.clone() };
-    f.file = fopen(path, mode);
+    f.file = LibC.fopen(path, mode);
     if (f.file == null) { raise(code(), path); }
     return f;
 }

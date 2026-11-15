@@ -1,4 +1,4 @@
-// std.runtime.threads: threads and locks of the system (pthreads, Win32).
+// runtime.threads: threads and locks of the system (pthreads, Win32).
 // Part of the runtime: the compiler takes from here what a program uses (it is not imported).
 ccode {
 #ifdef RT_THREADS

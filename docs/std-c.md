@@ -5,7 +5,8 @@ threads, TLS, the clock. That C is written in std, with the declarations of this
 
 **A program, a library and a service written in Larimar have no C of their own.** `cinclude`, `ccode`, the
 `native` declarations and the functions with a body of C are only for the standard library; anywhere else
-they are an error:
+they are an error (a project with `[project] unsafe_c = true` may declare
+[native interfaces](#what-a-header-gives-native-interface), and nothing else, and every build says so):
 
 ```
 Module Error [src/main.lar:1]: ccode is only for the standard library: C is written there, and a program uses what std gives.
@@ -23,8 +24,48 @@ outside std use these declarations: the compiler is built with it (its editor to
 own) and so are its tests of std's C. A program built with it has none of the language's guarantees.
 The rules, exactly, are in [Appendix D of the specification](spec.md#appendix-d-the-c-of-the-standard-library).
 
-Since Larimar becomes C, calling a C function costs nothing: it is **declared** with `native function`
-(its name, what it receives and what it gives back), and then used like any other function.
+**`native` always means C.** What the compiler writes itself (the core of `String` and `Any`,
+`Thread.start`) has no body in `std.lang` and no `native`: `type String { let length: int32; ... }`.
+
+## What a header gives: `native interface`
+
+Since Larimar becomes C, calling a C function costs nothing. **std talks to C's library (libc) and to the
+system through native interfaces**: what a header gives, under one name.
+
+```ts
+native interface Stdio "<stdio.h>" {
+    type FILE released by fclose;                 // C's FILE*: the memory it is in calls fclose
+    const stdout: FILE;
+    function fputs(text: String, f: FILE): int32;
+    function fclose(f: FILE): int32;
+}
+
+native interface LibM "<math.h>" {
+    function sqrt(x: float64): float64;
+    function fabs(x: float64): float64;
+}
+
+function main(): int32 {
+    Stdio.fputs("square root of 2 = ${LibM.sqrt(2.0)}\n", Stdio.stdout);
+    return 0;
+}
+```
+
+- **`Name.f(...)` calls the C function `f`**, and `Name.N` reads a constant or a variable. The members
+  are declared as below (`function`, `type`, `const`, `let`, `struct`), without `native` in front: the
+  interface already is.
+- **A `type` keeps its name** in the module (`FILE`); without `=` it is a pointer to the C type of its
+  name (`FILE*`). `released by` names a function of the same interface.
+- **Several headers** go in one interface: `native interface LibC "<stdio.h>", "<errno.h>" { ... }`; one
+  can extend others: `native interface Posix "<unistd.h>" extends LibC { ... }` has their members too.
+- **The header reaches the C only when something of it is used**: an interface of fifty functions costs
+  nothing for the ones a program does not call.
+- **Inside a class for one system** ([below](#c-for-each-system-classes-with-c-in-their-methods)) the
+  interface is the class's: its C is only for that system.
+- This is how `std.math`, `std.os`, `std.io.console` and `std.io.files` reach libc. Outside std, a project
+  with `[project] unsafe_c = true` may declare them too ([chapter 27 of the manual](manual.md#c-of-its-own-unsafe_c--true)).
+
+The rest of this document is the older, finer tool: one declaration at a time, with `cinclude`.
 
 ```ts
 cinclude "<stdio.h>";
@@ -180,14 +221,14 @@ Output: `25`
   numbers, `bool`, `String` or `void`. A function that returns data also receives the memory of the call
   (as [chapter 28 of the manual](manual.md#28-what-the-transpiler-generates) shows).
 
-In the standard library, `native type` also declares the methods of the types the compiler knows, and
-mixes intrinsics, methods written in Larimar and calls to C:
+In `std.lang`, `type` declares the methods of the types the compiler knows: what has no body the
+compiler writes, and the rest is Larimar (which may call C):
 
 ```ts
-public native type String {
-    native let length: int32;
-    native operator [](i: int32): byte;
-    native function substring(from: int32, to: int32): String in self;
+public type String {
+    let length: int32;
+    operator [](i: int32): byte;
+    function substring(from: int32, to: int32): String in self;
     function isEmpty(): bool { return self.length == 0; }
 }
 ```
@@ -219,24 +260,20 @@ small `ccode` only for what needs C (`strtod`, for `toFloat`).
 
 ## C for each system: classes with C in their methods
 
-What changes between systems is written as **an interface and a class for each system**, whose methods
-are **native functions with a body of C** (`native function f(): T { C }`). Each class says the platform it
-is for by implementing it (`UnixPlatform`, `WindowsPlatform`...), and which one runs is chosen with a
-`switch` on `Platform.current()`. It is how the standard library does it (`std.time`, `std.os`, `std.net`...):
-its modules are only `.lar` files, and no `#if` is written by hand.
+What changes between systems is written as **a class for each system**, whose static functions are
+**native functions with a body of C** (`static native function f(): T { C }`). Each class says the
+platform it is for by implementing it (`UnixPlatform`, `WindowsPlatform`...), and which one runs is
+chosen with a `switch` on `Platform.current()`. It is how the standard library does it (`std.time`,
+`std.os`, `std.net`...): its modules are only `.lar` files, and no `#if` is written by hand.
 
 ```ts
-import std.os { Platform, UnixPlatform, WindowsPlatform };
+// std/time/posix.lar
+import std.platform { UnixPlatform };
 
-interface Clock {
-    function monotonic(): int64;
-    function sleep(ms: int64): void;
-}
-
-class PosixClock implements Clock, UnixPlatform {
+public class PosixClock implements UnixPlatform {
     cinclude "<time.h>";
 
-    ccode {                                   // C its methods share
+    ccode {                                   // C its functions share
         static int64_t ms_of(clockid_t which) {
             struct timespec t;
             clock_gettime(which, &t);
@@ -244,26 +281,27 @@ class PosixClock implements Clock, UnixPlatform {
         }
     }
 
-    override native function monotonic(): int64 { return ms_of(CLOCK_MONOTONIC); }
+    static native function monotonic(): int64 { return ms_of(CLOCK_MONOTONIC); }
 
-    override native function sleep(ms: int64): void {
+    static native function sleep(ms: int64): void {
         struct timespec t = { (time_t)(ms / 1000), (long)(ms % 1000) * 1000000L };
         nanosleep(&t, NULL);
     }
 }
 
-class WindowsClock implements Clock, WindowsPlatform {
-    cinclude "<windows.h>";
+// std/time/windows.lar: the same, with GetTickCount64 and Sleep, implements WindowsPlatform
 
-    override native function monotonic(): int64 { return (int64_t)GetTickCount64(); }
+// std/time.lar
+import std.platform { Platform, OS };
+import std.time.posix { PosixClock };
+import std.time.windows { WindowsClock };
 
-    override native function sleep(ms: int64): void { Sleep((DWORD)ms); }
+public function monotonic(): int64 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixClock.monotonic();
+        case Windows -> WindowsClock.monotonic();
+    };
 }
-
-let clock: Clock = switch (Platform.current()) {
-    case Linux, MacOS, Unix -> PosixClock {};
-    case Windows -> WindowsClock {};
-};
 ```
 
 - **A body of C** sees the parameters by their names, with their C types: an `int64` is an `int64_t`, a
@@ -272,7 +310,7 @@ let clock: Clock = switch (Platform.current()) {
   (another function, a global of Larimar) is named with `lar"name"`. `self` is not there: what the C needs
   goes as parameters. A function outside a class can have a C body too.
 - **`cinclude` and `ccode` inside a class** are its headers and the C its methods share.
-- **The platforms** are interfaces of `std.os`, one inside the other:
+- **The platforms** are interfaces of `std.platform` (a module that imports nothing), one inside the other:
 
   ```ts
   public interface Platform {}
@@ -284,26 +322,29 @@ let clock: Clock = switch (Platform.current()) {
 
   A class for a platform puts all its C (headers, `ccode`, bodies) into the C inside the `#if` of that
   system, which the compiler writes. The same C file builds everywhere, and a build for Linux never sees
-  `<windows.h>`. Called on another system, a method of that class panics: *'WindowsClock.sleep' is for
-  windows, not for this system*. A subclass can be for a narrower platform: `class MacOSSystem extends
-  PosixSystem implements MacOSPlatform` overrides only what changes on macOS.
+  `<windows.h>`. Called on another system, a function of that class with a C body panics:
+  *'WindowsClock.sleep' is for windows, not for this system*. A class can be for a narrower platform:
+  `class MacOSSystem implements MacOSPlatform` has only what changes on macOS, and `std.os` calls it there.
 - **`Platform.current()`** (a static function of the interface `Platform`) gives `OS.Linux`, `MacOS`,
   `Windows` or `Unix` (another Unix); `Platform.name()`, the same as text (`"linux"`...). A `switch` on it
   without `default` has to name every system: a system added later shows every place to port. It is a
   constant of the C compiler, so the branch of the other systems disappears from the executable.
-- **Where they go:** the module (`time.lar`) keeps its API and the interface; each platform's class goes
-  in a module of its folder (`time/posix.lar`, `time/windows.lar`), which the module imports. The parts
-  reach the C before the module, so C that several parts share goes in a part of its own that they
-  import (`process/common.lar`).
-- Implementations kept in a global are shared by threads: an interface whose classes have no fields is
-  safe to share (it has no state to change).
+- **Where they go:** the module (`time.lar`) keeps its API and chooses; each platform's class goes in a
+  module of its folder (`time/posix.lar`, `time/windows.lar`), which the module imports. **A part never
+  imports the module that uses it**: std has no cycles of imports (`tests/std/cycles_test.lar` checks
+  it). What several parts share goes in a part of its own that they import (`process/common.lar`,
+  `net/internal.lar`: the `Socket` type).
+- **The parts are std's own**: a module whose path has `posix`, `windows`, `macos`, `common` or
+  `internal` is imported only from std; a program gets an error that names what to use instead.
+- An interface is for a real choice (`TlsProvider`: the system's TLS or OpenSSL), not to reach a
+  platform: the static functions of each class are enough for that.
 
 Which to use, from less C to more:
 
-1. **`native` declarations**, when C already has the function, type or constant: almost always.
+1. **A native interface**, when a header already has the function, type or constant: almost always.
 2. **`ccode { ... }`**, a few lines that C writes better: a cast, a macro, a loop on `EINTR`.
 3. **`native function f(...): T { C }`**, a function whose body is C: when the C is only for it.
-4. **A class for each platform with native methods**, when the systems do it differently.
+4. **A class for each platform with static native functions**, when the systems do it differently.
 
 ## The C of one platform only: `--target`
 

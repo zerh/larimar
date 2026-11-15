@@ -6,27 +6,42 @@
 //   let dice: Random = { seed: 42 };
 //   let roll: int32 = dice.below(6) + 1;                // 1..6, the same sequence for the same seed
 //
-// The functions are C's (<math.h>), by their names. Random is for games and simulations: for secrets,
-// std.crypto.randomBytes.
+// The functions are C's (<math.h>, through its native interface LibM), by their names. Random is for
+// games and simulations: for secrets, std.crypto.randomBytes.
 
-cinclude "<math.h>";
+/** What C's math.h gives (fabs is abs). */
+native interface LibM "<math.h>" {
+    function sqrt(x: float64): float64;
+    function pow(base: float64, exponent: float64): float64;
+    function exp(x: float64): float64;
+    function log(x: float64): float64;
+    function log10(x: float64): float64;
+    function floor(x: float64): float64;
+    function ceil(x: float64): float64;
+    function round(x: float64): float64;
+    function fabs(x: float64): float64;
+    function sin(x: float64): float64;
+    function cos(x: float64): float64;
+    function tan(x: float64): float64;
+    function atan2(y: float64, x: float64): float64;
+}
 
 public const PI: float64 = 3.141592653589793;
 public const E: float64 = 2.718281828459045;
 
-public native function sqrt(x: float64): float64;
-public native function pow(base: float64, exponent: float64): float64;
-public native function exp(x: float64): float64;
-public native function log(x: float64): float64;             // natural
-public native function log10(x: float64): float64;
-public native function floor(x: float64): float64;
-public native function ceil(x: float64): float64;
-public native function round(x: float64): float64;           // halves away from zero
-public native function abs(x: float64): float64 = fabs;
-public native function sin(x: float64): float64;
-public native function cos(x: float64): float64;
-public native function tan(x: float64): float64;
-public native function atan2(y: float64, x: float64): float64;
+public function sqrt(x: float64): float64 { return LibM.sqrt(x); }
+public function pow(base: float64, exponent: float64): float64 { return LibM.pow(base, exponent); }
+public function exp(x: float64): float64 { return LibM.exp(x); }
+public function log(x: float64): float64 { return LibM.log(x); }             // natural
+public function log10(x: float64): float64 { return LibM.log10(x); }
+public function floor(x: float64): float64 { return LibM.floor(x); }
+public function ceil(x: float64): float64 { return LibM.ceil(x); }
+public function round(x: float64): float64 { return LibM.round(x); }       // halves away from zero
+public function abs(x: float64): float64 { return LibM.fabs(x); }
+public function sin(x: float64): float64 { return LibM.sin(x); }
+public function cos(x: float64): float64 { return LibM.cos(x); }
+public function tan(x: float64): float64 { return LibM.tan(x); }
+public function atan2(y: float64, x: float64): float64 { return LibM.atan2(y, x); }
 
 public function min(a: float64, b: float64): float64 { return a < b ? a : b; }
 public function max(a: float64, b: float64): float64 { return a > b ? a : b; }

@@ -1,0 +1,6 @@
+// std.net.internal: what a socket of the system is, for std.net and its parts (the C of LmSocket and
+// lm_socket_close is in std/net/posix.lar and windows.lar, one for each system).
+
+/** A socket of the system: an int on Unix, a SOCKET on Windows (LmSocket). Closed when its memory is freed. */
+public native type Socket = c"LmSocket" released by lm_socket_close;
+native function lm_socket_close(s: Socket): int32;

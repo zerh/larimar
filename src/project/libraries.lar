@@ -1,48 +1,49 @@
 // project.libraries: the libraries written in Larimar that a project uses, as source.
 //
-// [packages] of larimar.toml names each one with its folder: the folder of a library project
+// [dependencies] of larimar.toml names each one with its folder: the folder of a library project
 // ([project] kind = "library"), whose main file (src/<name>.lar) is `import <name>`. Its other modules are
 // <name>.<part> (src/<name>/<part>.lar): a library's modules all start with its name, so they never meet the
 // program's. It is compiled with the program, in the same C and with the same runtime, and the language
 // is the same on both sides: classes, interfaces, lists, throws.
 //
-// A library's own [packages] are read too (their folders are relative to the library's): a program names
+// A library's own [dependencies] are read too (their folders are relative to the library's): a program names
 // only the libraries it imports. Two libraries with the same name in different folders are an error.
 //
-// [packages] can also name a service ([project] kind = "service", project.services): the program does not
+// [dependencies] can also name a service ([project] kind = "service", project.services): the program does not
 // compile its code, but a module written for it, whose calls go to the service's executable. A service's
-// own [packages] are its own: they go into its executable, not into the program.
+// own [dependencies] are its own: they go into its executable, not into the program.
 
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
 import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
-import std.os { Platform, OS };
+import std.platform { Platform, OS };
 
-/** A library of [packages]: its name (its module) and the folder of its modules. */
+/** A library of [dependencies]: its name (its module) and the folder of its modules. */
 public class LarimarLibrary {
     let name: String;
     let dir: String;                // the folder of its main file: <name>.lar is here, and <name>/ with its parts
     let project: String;            // the library's folder (its larimar.toml)
     let service: bool = false;      // a service: its calls go to its executable
     let exe: String = "";           // a service: where its executable is built
+    let unsafeC: bool = false;      // [project] unsafe_c = true: it has native interfaces (C of its own)
 }
 
-/** The libraries of a project's [packages], and theirs. Problems go to `problems`. */
+/** The libraries of a project's [dependencies], and theirs. Problems go to `problems`. */
 public function larimarLibraries(dir: String, config: Any, problems: String[*]): LarimarLibrary[*] {
     let out: LarimarLibrary[*] = [];
     collect(dir, config, "", out, problems);
     return out;
 }
 
-/** The [packages] of one larimar.toml (of the program, or of a library: `of` is its name). */
+/** The [dependencies] of one larimar.toml (of the program, or of a library: `of` is its name). */
 function collect(dir: String, config: Any, of: String, out: LarimarLibrary[*], problems: String[*]): void {
-    let from: String = of == "" ? "" : " (in the [packages] of '${of}')";
-    for (name, where in config.packages.fields) {
+    let from: String = of == "" ? "" : " (in the [dependencies] of '${of}')";
+    for (name, where in config.dependencies.fields) {
         let path: String? = where as String;
         if (path == null) {
-            problems.push("${name} in [packages] is the folder of the library${from}: ${name} = \"libs/${name}\"".clone());
+            problems.push("${name} in [dependencies] is the folder of the library${from}: ${name} = \"libs/${name}\"".clone());
             continue;
         }
         let folder: String = Paths.normalize(Paths.join(dir, path!));
@@ -63,7 +64,8 @@ function collect(dir: String, config: Any, of: String, out: LarimarLibrary[*], p
         let service: bool = (found.project.kind as String ?? "") == "service";
         let suffix: String = Platform.current() == OS.Windows ? ".exe" : "";
         let exe: String = Paths.join(Paths.join(folder, found.project.build_dir as String ?? "build"), "${name}${suffix}");
-        out.push({ name: name.clone(), dir: Paths.parent(main).clone(), project: folder.clone(), service, exe: exe.clone() });
+        let unsafeC: bool = found.project.unsafe_c as bool ?? false;
+        out.push({ name: name.clone(), dir: Paths.parent(main).clone(), project: folder.clone(), service, exe: exe.clone(), unsafeC });
         if (!service) { collect(folder, found, name, out, problems); }
     }
 }

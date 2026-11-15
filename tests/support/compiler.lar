@@ -15,7 +15,7 @@
 // What each one writes goes to build/test/cases/, and stays there when a test fails.
 
 import std.os;
-import std.os { Platform };
+import std.platform { Platform };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };

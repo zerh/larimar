@@ -1,7 +1,7 @@
 // std.os.shared.windows: the shared memory of Windows (a named file mapping), and its clock.
 
-import std.os.shared.ring;
-import std.os { WindowsPlatform };
+import std.os.shared.common;
+import std.platform { WindowsPlatform };
 
 /** Shared memory on Windows: a mapping of the paging file, by name; it goes when no program has it open. */
 public class WindowsShared implements WindowsPlatform {

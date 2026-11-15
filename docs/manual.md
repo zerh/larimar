@@ -2397,8 +2397,8 @@ memory of yours is not touched: it is an error you catch, and the other process 
 | run any program and read what it prints | `Process` ([`std.os.process`](#stdosprocess-other-programs)) |
 | call the functions of another program | `std.os.rpc`: JSON-RPC, by its pipes or by shared memory |
 | move bytes from one program to another (files, frames, audio) | `std.os.shared`: a stream in shared memory |
-| run work of the program itself in other processes | `SystemProcess` and `ProcessPool` |
-| use a library that runs in its own process | a service, in `[packages]` ([chapter 27](#27-libraries-and-services-written-in-larimar)) |
+| run work of the program itself in other processes | `Process { run: task }` and `ProcessPool` |
+| use a library that runs in its own process | a service, in `[dependencies]` ([chapter 27](#27-libraries-and-services-written-in-larimar)) |
 
 ### Calls to another program: `std.os.rpc`
 
@@ -2506,16 +2506,16 @@ let n: int32 = input.read(buffer);        // what arrived; 0 when the writer clo
 `Rpc.startShared` uses two of them, one each way. For something the size of video frames, the
 streams carry the bytes and `std.os.rpc` the orders.
 
-### Work in other processes: `SystemProcess` and `ProcessPool`
+### Work in other processes: `Process { run: task }` and `ProcessPool`
 
-A class that **implements `SystemProcess`** is a task that runs in another process: a copy of this same
-program. Its object goes there with its fields, its `run()` runs there, and what it gives comes back.
-A `ProcessPool` has those copies:
+Processes are used as [threads](#22-threads) are. A thread runs a `Runnable` with `start()` and `join()`;
+a process runs a **`Task`** the same way, in a copy of this same program. The object goes there with its
+fields, its `run()` runs there, and what it gives comes back from `join()`:
 
 ```ts
-import std.os.process { ProcessPool, SystemProcess, ProcessError };
+import std.os.process { Process, ProcessPool, Task, ProcessError };
 
-class Resize implements SystemProcess {
+class Resize implements Task {
     let file: String;
     let width: int32;
     override function run(): Any {
@@ -2524,11 +2524,16 @@ class Resize implements SystemProcess {
 }
 
 function main(): int32 {
-    let pool: ProcessPool = { processes: 4 };
     try {
-        let one: Any = pool.run(Resize { file: "casa.jpg", width: 800 });
-        let tasks: SystemProcess[*] = [Resize { file: "1.jpg", width: 800 }, Resize { file: "2.jpg", width: 800 }];
-        let all: Any = pool.runAll(tasks);              // at the same time, the results in order
+        let p: Process = { run: Resize { file: "casa.jpg", width: 800 } };
+        p.start();
+        drawLoading();                                  // this program goes on meanwhile
+        let one: Any = p.join();                        // what run() gave there
+
+        let pool: ProcessPool = { processes: 4 };
+        pool.submit(Resize { file: "1.jpg", width: 800 });
+        pool.submit(Resize { file: "2.jpg", width: 800 });
+        let all: Any = pool.wait();                     // what each run() gave, in the order submitted
     } catch (ProcessError e) {
         println("a task failed");
     }
@@ -2536,19 +2541,30 @@ function main(): int32 {
 }
 ```
 
-- **`run(task)`** runs one task and waits for it; **`runAll(tasks)`** gives them to the processes at the
-  same time (up to `processes`) and gives the results in the order of the tasks, as a table.
+| | Thread | Process |
+|---|---|---|
+| what it runs | a `Runnable` (a lambda) | a `Task` (an object: its fields travel) |
+| one | `Thread { run: () -> { ... } }` | `Process { run: Resize { ... } }` |
+| start, wait | `start()`, `join()` | `start()`, `join()`: it gives what `run()` gave |
+| many | `ThreadPool { threads: 8 }` | `ProcessPool { processes: 8 }` |
+| give work, wait for it | `submit(lambda)`, `wait()` | `submit(task)`, `wait()`: the results in order |
+
+- **A `Process` runs a program or a task, not both**: `{ program, args }` is another program (as in
+  [`std.os.process`](#stdosprocess-other-programs)), `{ run: task }` a copy of this one. `join()` of a
+  program waits for it to end and gives its exit code.
 - **What goes with the task** are its fields: numbers, `bool`, `String`, their optionals and lists of
-  them. A field of another type is a compile error (*Field 'box' of SystemProcess 'Bad' goes to another
+  them. A field of another type is a compile error (*Field 'box' of Task 'Bad' goes to another
   process...*), and so is a class that extends another. What `run()` gives comes back the way `Any` crosses
-  to JSON: numbers, `bool`, `String` and tables (an object arrives as `null`).
-- **A panic in a task is a `ProcessError` here** (`Failed: "ended: the program ended (exit 101)"`), and the
-  pool starts new processes for what comes next. The panic's message is on the console: the copies use
+  to JSON: numbers, `bool`, `String` and tables (an object arrives as `null`). Only the `Task` of
+  `std.os.process` is this: an interface of your own called `Task` is just yours.
+- **The one difference with a thread**: a `Runnable` can be a lambda that captures variables, because a
+  thread shares this program's memory; a `Task` is an object whose fields are copied, because the other
+  process does not see it.
+- **A panic in a task is a `ProcessError` here** (`Failed: "ended: the program ended (exit 101)"`), and
+  the pool starts new processes for what comes next. The panic's message is on the console: the copies use
   this program's.
-- The copies start when there is work for them (the first call waits for them) and end with the pool's
-  memory. A copy does not run `main`: it starts its globals and runs tasks.
-- `run` and `runAll` wait. To go on while a task runs, call them from a [thread](#22-threads): the
-  thread waits, the program does not.
+- The pool's copies start when there is work for them and stay for the next tasks until the pool's memory
+  goes. A copy does not run `main`: it starts its globals and runs tasks.
 
 ## 24. Modules
 
@@ -2644,8 +2660,9 @@ And so do the failures at run time: `panic [src/geo/shapes.lar:9]: index 5 out o
 ## 25. Standard library
 
 The standard library is a set of modules that come with Larimar and are imported like any other:
-`import std.os;`. They are written in Larimar, with a little C (`ccode`) to talk to the operating
-system, and they live in the `std/` folder next to the tool (or in `$LARIMAR_HOME/std`). Only what is
+`import std.os;`. They are written in Larimar, with a little C to talk to the operating system
+(native interfaces of C's headers, and some functions with a body of C: [std-c.md](std-c.md)), and they
+live in the `std/` folder next to the tool (or in `$LARIMAR_HOME/std`). Only what is
 imported goes into the program, and the executable does not need the `std` folder to work.
 
 | Module | What for |
@@ -2655,8 +2672,9 @@ imported goes into the program, and the executable does not need the `std` folde
 | `std.io.files` | files and folders: whole files in one call, like Java's `Files`, and an open `File` to read or write in parts |
 | `std.io.path` | paths: folder, name, extension, join, normalize |
 | `std.io.console` | the input, the output and the error output |
+| `std.platform` | the system the program is built for: `Platform.current()`, `OS` |
 | `std.os` | the environment: variables, current folder, running commands, ending on Ctrl+C or SIGTERM |
-| `std.os.process` | other programs: `Process`, talking to them through their input and output |
+| `std.os.process` | processes: `Process` (another program, or a `Task` of this one), `ProcessPool` |
 | `std.time` | the clock (`now`, `monotonic`), `sleep`, dates as text (HTTP, ISO 8601) |
 | `std.thread` | `ThreadPool`: a batch of tasks on a few threads |
 | `std.math` | C's math by its names (`sqrt`, `pow`, `floor`, `sin`...), `PI`, `E`, and `Random` with a seed |
@@ -2669,6 +2687,9 @@ imported goes into the program, and the executable does not need the `std` folde
 | `std.net` | TCP and UDP: `TcpSocket`, `TcpListener`, `TcpServer` (plain or https), `UdpSocket`, `UdpServer`, `EventLoop`, `Connection`, `OpenSslProvider`, `StopSignal` |
 | `std.net.http` | HTTP/1.1 and `https://` client: `Client`, `Request`; the body as text, JSON or a stream |
 | `std.net.tls` | `TlsProvider` (the interface for encrypted client connections) and `SystemTls` (the system's TLS) |
+
+Every public name of every module, with its comment, is in the [reference of the standard library](std-reference.md)
+(generated from `std/` with `tools/std_reference.py`).
 
 **`std.lang`** is special: every program sees its names without writing `import`, and only what the
 program names (and what that needs) reaches the C. A name of the main file itself hides the one of `std.lang`.
@@ -2829,11 +2850,17 @@ any function returns; they accept `/` and `\`.
 | `os.run(command): int32` | runs a command with the system's shell and gives its exit code |
 | `os.programDir(): String` | the folder of the executable (`""` if it cannot be known) |
 | `os.programPath(): String` | the full path of the executable (`""` if it cannot be known) |
-| `Platform.current(): OS` | `OS.Linux`, `MacOS`, `Windows` or `Unix` (another Unix): for a `switch` |
-| `Platform.name(): String` | `"linux"`, `"macos"`, `"windows"` or `"unix"` |
 | `os.exit(code)` | ends the program right away (without freeing memories or waiting for threads) |
 | `os.catchTermination()` | from now on, Ctrl+C and SIGTERM do not end the program: they make `os.terminating()` true |
 | `os.terminating(): bool` | whether Ctrl+C or SIGTERM arrived after `catchTermination()`; the servers of `std.net` stop on it |
+
+`Platform.current(): OS` (`OS.Linux`, `MacOS`, `Windows` or `Unix`, another Unix: for a `switch`) and
+`Platform.name(): String` (`"linux"`, `"macos"`, `"windows"`, `"unix"`) are in **`std.platform`**:
+`import std.platform { Platform, OS };`.
+
+The parts of std for one system (`std.net.posix`, `std.time.windows`) and what its modules share
+(`std.x.common`, `std.x.internal`) are std's own: a program imports what they serve (`std.net`), never
+them.
 
 ### `std.os.process`: other programs
 
@@ -2877,14 +2904,15 @@ function main(): int32 {
 | `read(count, ms): String?` | exactly `count` bytes of its output (`null` if they did not all come in `ms`) |
 | `readAll(ms): String` | all of its output until it ends (what came, if it did not end in `ms`) |
 | `wait(ms): int32?` | waits up to `ms` (`-1`: as long as it takes) for it to end: its exit code, or `null` |
+| `join(): Any` | waits for it to end: its exit code (of a task, what its `run()` gave) |
 | `kill()` | ends it now |
 
 `findProgram(name): String?` says where a program is in the PATH. A `Process` that is still running when
 its memory is freed is killed. The tests that talk to `larimar lsp`, `larimar dap` and the debuggers are
 written with `std.os.process`.
 
-`std.os.process` also has the tasks that run in copies of the program (`SystemProcess`, `ProcessPool`):
-[chapter 23](#work-in-other-processes-systemprocess-and-processpool). A task that fails is
+`std.os.process` also has the tasks that run in copies of the program (`Task`, `Process { run: task }`, `ProcessPool`):
+[chapter 23](#work-in-other-processes-process--run-task--and-processpool). A task that fails is
 `ProcessError.Failed(why)`.
 
 ### `std.os.rpc`: calls to another program
@@ -3470,12 +3498,13 @@ version = "0.1.0"
 kind = "program"             # the default; "library" or "service" (see chapter 27)
 main = "src/main.lar"        # the default; its folder is the root of the modules
 output = "dist/melody"       # by default build/<name> (build/<name>.exe on Windows)
+unsafe_c = true              # native interfaces of its own: C (chapter 27); by default false
 
 [c]
 compiler = "gcc"             # by default the system's (cc, gcc, clang) or the bundled tcc
 flags = ["-O2", "-Wall"]     # by default ["-O2"]
 
-[packages]                   # the libraries and services written in Larimar that it uses
+[dependencies]                   # the libraries and services written in Larimar that it uses
 textkit = "../textkit"
 ```
 
@@ -3487,11 +3516,11 @@ not in Larimar runs in another process ([chapter 23](#23-other-programs-calls-sh
 What the C of the standard library needs (the math library, threads, OpenSSL) the compiler finds in the
 C it generates, and links.
 
-**Packages.** `[packages]` names the libraries and services written in Larimar that the project uses,
+**Packages.** `[dependencies]` names the libraries and services written in Larimar that the project uses,
 each with its folder: the folder of its project, with its `larimar.toml`. `import textkit` finds there
 its main module: the program compiles a library's source with its own, and for a service it compiles a
 module whose calls go to the service's executable. A library names its own libraries in its
-`[packages]`, so a program names only the ones it imports. The compiler does not download them: how the
+`[dependencies]`, so a program names only the ones it imports. The compiler does not download them: how the
 folder gets there (a copy, a git submodule) is up to the project. See
 [chapter 27](#27-libraries-and-services-written-in-larimar).
 
@@ -3512,7 +3541,7 @@ compiler = "x86_64-w64-mingw32-gcc"
 | `larimar new <name>` | creates the folder with `larimar.toml`, `src/main.lar` and `.gitignore` |
 | `larimar new <name> --library` | the same for a library: `src/<name>.lar` with a function, and its test |
 | `larimar new <name> --service` | the same for a service: `src/<name>.lar` with a function, and its test |
-| `larimar build [folder]` | writes `build/<name>.c` and compiles it to the executable (a library: checks it; a service: its executable, and first the services of `[packages]`) |
+| `larimar build [folder]` | writes `build/<name>.c` and compiles it to the executable (a library: checks it; a service: its executable, and first the services of `[dependencies]`) |
 | `larimar build --debug` | the same, for a debugger (see [Debugging](#debugging-larimar-build---debug-and-larimar-dap)) |
 | `larimar run [folder] [-- args]` | compiles and runs, passing it the arguments |
 | `larimar build --cc <program>` | builds with that C compiler instead of the project's (`tcc`: the bundled one) |
@@ -3539,7 +3568,7 @@ larimar build --target linux
 
 The result is shorter C, of that system only: to read it, to debug it, or to take it to a machine where
 it will be compiled (a program for Windows generated on a Mac). Everything is still checked, and the
-program does the same either way. `Platform.current()` (`std.os`) is then that system.
+program does the same either way. `Platform.current()` (`std.platform`) is then that system.
 
 ### The editor: `larimar check` and `larimar lsp`
 
@@ -3834,7 +3863,7 @@ The rules:
 
 ## 27. Libraries and services written in Larimar
 
-Code written in Larimar is shared in two ways, and a program names both in its `[packages]`:
+Code written in Larimar is shared in two ways, and a program names both in its `[dependencies]`:
 
 - **A library** (`kind = "library"`): the program compiles its source with its own. One C, one runtime,
   and the whole language on both sides (classes, interfaces the program implements, lists, enums,
@@ -3850,7 +3879,7 @@ version = "1.0.0"
 kind = "library"             # "program" (the default), "library" or "service"
 main = "src/textkit.lar"     # its parts: src/textkit/<part>.lar
 
-[packages]                   # the libraries it uses itself
+[dependencies]                   # the libraries it uses itself
 tiny = "../tiny"
 ```
 
@@ -3887,7 +3916,7 @@ public class Counter {
 
 ```toml
 # the program's larimar.toml
-[packages]
+[dependencies]
 textkit = "../textkit"
 ```
 
@@ -3906,13 +3935,13 @@ function main(): int32 {
 - **Its modules start with its name**: `textkit` (`src/textkit.lar`) and `textkit.<part>`
   (`src/textkit/<part>.lar`), so they never meet the program's. A program file with the same name as a
   module of a library is an error.
-- **Its own libraries come with it.** The folders of a library's `[packages]` are relative to its folder,
+- **Its own libraries come with it.** The folders of a library's `[dependencies]` are relative to its folder,
   and the program can import them too. There is one copy of each in the program; two libraries with the
   same name in different folders are an error.
 - **The rules are the program's.** What the library returns lives where the caller says; an object of the
   library lives where the program creates it; a thread can share it only if it is `synchronized`. It is the
   same analysis as inside a program, because it is one program.
-- **What [packages] names is checked**: a folder with a `larimar.toml` of a library (or a service) with
+- **What [dependencies] names is checked**: a folder with a `larimar.toml` of a library (or a service) with
   that name.
 - `larimar build` in the library's folder checks it (its errors), and `larimar test` runs its `tests/`,
   which import it like a program does.
@@ -3942,10 +3971,10 @@ public function upper(words: String[*]): String[*] {
 
 `larimar build` in its folder makes its executable (`build/calc`), whose main answers the calls with
 those functions; that main is written next to its C (`build/calc-service.lar`). A program names it in
-`[packages]` like a library, and **imports a class with the same functions**, each one a call:
+`[dependencies]` like a library, and **imports a class with the same functions**, each one a call:
 
 ```ts
-// the program: [packages] calc = "../calc"
+// the program: [dependencies] calc = "../calc"
 import calc { Calc };
 import std.os.rpc { RpcError };
 
@@ -3976,18 +4005,53 @@ function main(): int32 {
   (exit 101)*), `TimedOut` after `setTimeout(ms)`. The calls go through shared memory
   ([`std.os.rpc`](#calls-to-another-program-stdosrpc)), and the service's own output is the console's.
 - **A program only imports the service** (`import calc`), not its parts: they are inside the service.
-  A service's own `[packages]` are its own: they go into its executable.
+  A service's own `[dependencies]` are its own: they go into its executable.
 - **The service is a program too.** Its executable answers JSON-RPC on its standard input and output
   when nobody started it with shared memory, so a program in any language can use it.
 - `larimar test` in the service's folder runs its `tests/`, which call its functions directly, in the
   same process.
 
+### C of its own: `unsafe_c = true`
+
+A program, a library or a service has no C, unless its `[project]` says **`unsafe_c = true`**. Then its
+modules may have **native interfaces**, and nothing else of C: what a C header gives, under one name.
+
+```toml
+[project]
+name = "cubes"
+kind = "library"
+main = "src/cubes.lar"
+unsafe_c = true
+```
+
+```ts
+// src/cubes.lar
+native interface LibM "<math.h>" {
+    function cbrt(x: float64): float64;              // LibM.cbrt calls C's cbrt
+}
+
+public function side(volume: float64): float64 { return LibM.cbrt(volume); }
+```
+
+- **A type of C** is a `type` in the interface: `type FILE released by fclose;` is C's `FILE*`, and the
+  memory it is in calls `fclose` when it is freed. A function that takes a pointer says `T*`, and the
+  call gives `&x`. The header reaches the C only when something of it is used.
+- **It is said every time.** A program that uses such a library is built with that C, and every build
+  says it: `note: unsafe C (native interface) from: cubes`. It also names the pointer types of those
+  interfaces that nothing releases (`type Cell (int*) has no 'released by'`).
+- **The language's guarantees stop there.** The compiler checks the Larimar around the call, not what the
+  C does: a native interface is for one header, for something specific. For a whole C library, a
+  [service](#services) keeps its failures in another process.
+- `ccode`, `cinclude` and functions with a body of C stay the standard library's, with or without
+  `unsafe_c`.
+
 ### Clarifications
 
-- **No C of its own.** A library or a service, like a program, has no C: what Larimar does not have runs
-  in another process ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)). A library
-  written by someone else cannot bring C that the compiler does not check.
-- **No package manager.** `[packages]` names folders; how they get there is up to the project.
+- **No C of its own, by default.** A library or a service, like a program, has no C: what Larimar does
+  not have runs in another process ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)).
+  A library written by someone else brings C only if its `[project]` says `unsafe_c = true`, and then
+  every build of the program says so.
+- **No package manager.** `[dependencies]` names folders; how they get there is up to the project.
 - **A library or a service.** A library is faster (a call is a call) and shares everything with the
   program; a service is apart (a call goes to another process and back, a few microseconds) and its
   failures stay there.
@@ -4015,7 +4079,7 @@ carries what the program uses**. It is decided in two steps, following the names
    that any of that names, and so on. A `String` method the program does not call, the `Opt_i64` that
    only appeared in its signature or the `std` function nobody uses do not reach the C.
 2. **The runtime.** The pieces of the runtime that define some name of what was kept (and the ones
-   those use) are added, with their `#include`s. The runtime is the C of `std/runtime/` (`memory.lar`,
+   those use) are added, with their `#include`s. The runtime is the C of `runtime/` (`memory.lar`,
    `string.lar`, `any.lar`..., one `ccode` each), read from the installed `std/` like the rest of the library. A program that uses no memories does not carry the
    memory code; one that does not divide does not carry the division checks; a `println` of numbers
    and texts is written with `printf`.
@@ -4129,7 +4193,8 @@ larimar/
     codegen/               from tree to C: gen, expressions (gen/, expressions/: their parts), prune, debug map
     editor/                larimar check, lsp and dap
     project/               the C compiler, larimar test (larimar.toml is read with std.encoding.toml)
-  std/                   the standard library (std/runtime: the runtime, the C under every program)
+  std/                   the standard library
+  runtime/               the runtime: the C under every program
   tests/                 the tests (tests/lsp: check and the language server)
   docs/                  the page, this manual (manual.md; manual.es.md in Spanish) and the specification (spec.md)
   bootstrap/
@@ -4155,7 +4220,7 @@ cd larimar
    by itself, produces itself. If `bootstrap/larimarc.c` is older than `src/`, it says so and installs
    the compiler made from `src/`.
 3. It installs the result in `../out/larimar` (or in `LARIMAR_PREFIX`): `bin/larimarc`, `bin/larimar`,
-   a copy of `std/`, of `doc/` and of the formatters (`debug/`). That folder can be deleted and regenerated whenever
+   a copy of `std/` and `runtime/`, of `doc/` and of the formatters (`debug/`). That folder can be deleted and regenerated whenever
    you want; everything is edited in the repository.
 
 After changing the compiler, `./bootstrap/build.sh --verify` checks and installs it, and the bootstrap C
@@ -4166,10 +4231,10 @@ cp build/stage2.c bootstrap/larimarc.c
 ```
 
 `bin/larimar` sets `LARIMAR_HOME` to the folder of the installation, and the compiler looks for the
-standard library in `$LARIMAR_HOME/std`, and for the runtime in `$LARIMAR_HOME/std/runtime`.
+standard library in `$LARIMAR_HOME/std`, and for the runtime beside it, in `$LARIMAR_HOME/runtime`.
 
 **The runtime is C, not Larimar.** Memories, strings, `Any`, classes and threads are the ground the
-generated C stands on, so they are written in C: the `ccode` of `std/runtime/*.lar` (one file per part, in the order
+generated C stands on, so they are written in C: the `ccode` of `runtime/*.lar` (one file per part, in the order
 `codegen/prune.lar` lists them). The compiler reads them when it generates a program and keeps
 only the paragraphs it uses. Changing the runtime does not change the compiler: `bootstrap/larimarc.c`
 does not need to be regenerated, only the tests run again.
@@ -4193,11 +4258,11 @@ import tests.support.compiler { failsWith, runs };
 
 test function aFieldOfATaskCrosses(): void {
     failsWith(raw"""
-        import std.os.process { SystemProcess };
+        import std.os.process { Task };
         class Box { let n: int32 = 0; }
-        class Bad implements SystemProcess { let box: Box; override function run(): Any { return null; } }
+        class Bad implements Task { let box: Box; override function run(): Any { return null; } }
         function main(): int32 { return 0; }
-        """, "Field 'box' of SystemProcess 'Bad' goes to another process");
+        """, "Field 'box' of Task 'Bad' goes to another process");
 }
 
 test function castInATernary(): void {
@@ -4264,7 +4329,7 @@ What Larimar does not have, and will not have, with what is used instead:
 - **No surprise `null`.** Only what carries `?` can be `null` ([section 14](#14-optionals-and-null)).
 - **No implicit conversions.** Numeric types are converted with `as`, in plain sight: `int32 + int64` does not compile.
 - **No undefined behavior.** Integers wrap around, indexes are checked, and a failure stops with its file and line ([section 20](#20-failures-at-run-time)).
-- **No C of its own.** A program, its libraries and its services use the C of the standard library, never their own: what std does not have runs in another process ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)).
+- **No C of its own, by default.** A program, its libraries and its services use the C of the standard library: what std does not have runs in another process ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)). With `[project] unsafe_c = true` a project may declare native interfaces of C headers, and every build says so ([chapter 27](#c-of-its-own-unsafe_c--true)).
 
 ### Not yet
 
@@ -4278,7 +4343,7 @@ What Larimar does not have, and will not have, with what is used instead:
   while it waits. The TLS server is not available on Windows yet. The client TLS of macOS and Windows is
   written and compiles, but its tests have only run on Linux.
 - Some operations of `String` and `Any` are still intrinsics of the compiler; lists are not declared in `std.lang` yet.
-- What crosses to another process (a service, a `SystemProcess`, a call of `std.os.rpc`) is what JSON
+- What crosses to another process (a service, a `Task`, a call of `std.os.rpc`) is what JSON
   carries: numbers, `bool`, `String`, lists and tables. Objects of a service do not cross yet (a service
   gives values), and a call goes through JSON even over shared memory.
 - A memory cannot be emptied by hand (`clear()`); it is freed at the end of its block.
@@ -4349,7 +4414,7 @@ if (q == null) { return; }              // from here on, q is not null
 let k: String = q > 0 ? "pos" : "neg";
 
 // The system
-let sep: String = switch (Platform.current()) {                 // std.os: OS.Linux, MacOS, Windows, Unix
+let sep: String = switch (Platform.current()) {                 // std.platform: OS.Linux, MacOS, Windows, Unix
     case Windows -> "\\";
     case Linux, MacOS, Unix -> "/";
 };
@@ -4397,11 +4462,15 @@ let sum: Any = calc.call("add", { a: 2, b: 3 });      // throws RpcError
 serve((call) -> { return call.params.a; });           // the other side
 let out: SharedOutputStream = SharedOutputStream.create("frames", 1 << 20);   // std.os.shared
 let input: SharedInputStream = SharedInputStream.open("frames", 5000);
-class Job implements SystemProcess { let n: int64; override function run(): Any { return self.n * 2; } }
+class Job implements Task { let n: int64; override function run(): Any { return self.n * 2; } }
+let job: Process = { run: Job { n: 21 } };
+job.start();
+let r: Any = job.join();                              // in another process: 42
 let pool: ProcessPool = { processes: 4 };
-let r: Any = pool.run(Job { n: 21 });                 // in another process: 42
+pool.submit(Job { n: 1 });
+let all: Any = pool.wait();                           // the results, in the order submitted
 
-// Libraries and services: [packages] textkit = "../textkit" (chapter 27)
+// Libraries and services: [dependencies] textkit = "../textkit" (chapter 27)
 // [project] kind = "library": compiled with the program; kind = "service": its own process
 import calc { Calc };                                 // a service: a class with its functions
 let c: Calc = Calc.start();

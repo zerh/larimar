@@ -1,13 +1,13 @@
 # The Larimar Language Specification
 
-**Version 1.2**
+**Version 1.3**
 
 This document defines the Larimar programming language. It is normative: a program means what this
 document says, and an implementation is correct when it does what this document says. The
 [Manual](manual.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 1.9.0 (language 1.2)`. A compiler release may add to the standard library and to the tools
+`larimar 1.10.0 (language 1.3)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
@@ -534,21 +534,23 @@ An enum value is one of its variants; a variant can carry fields. Enums are valu
   with patterns ([§13](#13-patterns)).
 - An enum cannot contain a value of its own type, directly or through other values.
 
-### 9.6 Native types
+### 9.6 Types of the language
 
-`native type NAME { ... }` (without `=`) declares the methods of a type that the compiler already knows
-(`String`, `Any`). It is used by the standard library ([§23](#23-predeclared-names)); the native types
-of C are in [§D.4](#d4-native-types):
+`type NAME { ... }` declares the methods of a type that the compiler already knows (`String`, `Any`).
+It is only in `std.lang` ([§23](#23-predeclared-names)); in any other module it is an error. The types of
+C are in [§D.4](#d4-native-types). In it:
 
-- `native function f(...);` without a body declares an operation the compiler implements;
-- `native function f(...) = expression;` defines the method as that expression, usually a call to a
-  native function;
-- `native let name: T;` declares a value read without parentheses, which the compiler implements
-  (`length`);
-- `native operator [](i: int32): T;` declares indexing;
-- ordinary `function`s and `static` functions can also appear.
+- `function f(...);` without a body declares an operation the compiler implements;
+- `let name: T;` declares a value read without parentheses, which the compiler implements (`length`);
+- `operator [](i: int32): T;` declares indexing;
+- ordinary `function`s with a body and `static` functions can also appear.
 
-`native function ... = expression;` can also be written in a class, and so can
+What has no body is the compiler's, never C: `native` always means C ([Appendix D](#appendix-d-the-c-of-the-standard-library)).
+In `std.lang`, a method of a class may also have no body (`Thread.start`, `Thread.join`), and so may the
+functions of `std.memory` the compiler writes (`limit`, `compact`). Anywhere else a function or a method
+without a body is an error.
+
+In a class of the standard library, `native function ... = expression;` can also be written, and so can
 `native let name: T = expression;`: a value read without parentheses (`sb.length`), computed by that
 expression, of a number type, `bool`, `String` or `String?` (a text is made where the value goes, like the
 result of a call). A `native let` is never assigned, and calling it with parentheses is an error.
@@ -1411,10 +1413,10 @@ A program has no C of its own, and loads no code the compiler did not check
 ### 19.1 Libraries
 
 A project with `kind = "library"` is a library. It has no `main`. The program's project file names, in
-`[packages]`, each library it uses with the folder of its project. The library's main module is `NAME`
+`[dependencies]`, each library it uses with the folder of its project. The library's main module is `NAME`
 (its main file, `NAME.lar`), and its other modules are `NAME.PART` (`NAME/PART.lar`, next to it);
 `import NAME` and `import NAME.PART` find them there. A module of the program with one of those names is
-an error. The `[packages]` of a library are read too, relative to its folder; two libraries with the
+an error. The `[dependencies]` of a library are read too, relative to its folder; two libraries with the
 same name in different folders are an error. The library's modules are compiled with the program's, as
 modules of the same program: every rule of this document applies across them.
 
@@ -1429,7 +1431,7 @@ the service is built. Its other declarations stay inside it.
 Its executable answers calls (`std.os.rpc`) with those functions: a call names the function and gives
 its arguments by the names of its parameters, as a table; the answer is its result.
 
-A program that names the service in `[packages]` does not compile its modules: `import NAME` is a module
+A program that names the service in `[dependencies]` does not compile its modules: `import NAME` is a module
 written for it, with one public class whose name is `NAME` in UpperCamelCase (`image_tools` →
 `ImageTools`), and in it:
 
@@ -1443,22 +1445,25 @@ written for it, with one public class whose name is `NAME` in UpperCamelCase (`i
 The service's executable runs while that object lives. Importing a part of a service (`NAME.PART`) is an
 error.
 
-### 19.3 Tasks: `SystemProcess`
+### 19.3 Tasks: `Task`
 
-A class that implements `std.os.process.SystemProcess` (it names it in its `implements`) is a **task**:
-an object of it can be run, by a `ProcessPool`, in another process of the same program. Such a class
-extends no class, and each of its fields is of a type that crosses (§19.2), without `Any`; otherwise it
-is a compile error. Its object arrives there with the values of its fields, `run()` runs there, and what
-it returns comes back as an `Any` (an object in it arrives as `null`).
+A class that implements `std.os.process.Task` (it names it in its `implements`, imported from
+`std.os.process` by name or through an alias of that module) is a **task**: an object of it can be run in
+another process of the same program, by a `Process` (`Process { run: task }`, then `start()` and
+`join()`) or a `ProcessPool` (`submit(task)`, then `wait()`). Such a class extends no class, and each of
+its fields is of a type that crosses (§19.2), without `Any`; otherwise it is a compile error. Its object
+arrives there with the values of its fields, `run()` runs there, and what it returns comes back as an
+`Any` (an object in it arrives as `null`). An interface called `Task` of another module is not this one.
 
 A process started this way runs the initialization of the globals ([§24](#24-program-execution)) and then
 the tasks it is sent, not `main`.
 
 ## 20. Platforms
 
-What changes between systems is a class for each platform ([§D.9](#d9-classes-for-one-system)), chosen with a `switch` on
-`Platform.current()`. There are no directives: the C of each system goes inside the `#if` the compiler
-writes for that class, so the generated C is the same for every system.
+What changes between systems is a class for each platform ([§D.9](#d9-classes-for-one-system)), chosen
+with a `switch` on `Platform.current()` (of `std.platform`, a module that imports nothing). There are no
+directives: the C of each system goes inside the `#if` the compiler writes for that class, so the
+generated C is the same for every system.
 
 A compiler may also generate the C of one platform only (`larimar --target linux`). The program means
 the same: `Platform.current()` is then that platform, a `switch` on it is its arm, the C of the classes
@@ -1474,7 +1479,7 @@ still checked.
 Each file is a module. Its name is its path, from the folder of the main file, without `.lar`, with `.`
 between folders: `src/geo/shapes.lar` is `geo.shapes`. A module `a` and the modules in the folder `a/`
 are separate modules. Modules of the standard library start with `std.`; those of a library of
-`[packages]`, with the library's name ([§19.1](#191-libraries)). Nobody can import the main file.
+`[dependencies]`, with the library's name ([§19.1](#191-libraries)). Nobody can import the main file.
 
 ### 21.2 `public`
 
@@ -1618,16 +1623,19 @@ topLevel             = const NAME : Type = expression ;
                      | struct NAME { ( field | static staticMember | function | operator )* }
                      | [ synchronized ] class NAME [ extends qualifiedName ] [ implements qualifiedName ( , qualifiedName )* ]
                            { ( field | static staticMember | [ override ] function | [ override ] native nativeFunction | native nativeLet | operator
-                               | cinclude "TEXT" ; | ccode { C TEXT } )* }
+                               | cinclude "TEXT" ; | ccode { C TEXT } | native nativeInterface )* }
                      | interface NAME [ extends qualifiedName ( , qualifiedName )* ]
                            { ( function NAME parameters [ : Type ] [ throws Type ] ; | static function )* }
                      | enum NAME { [ variant ( , variant )* [ , ] ] }
-                     | native type NAME { ( static staticMember | native ( nativeFunction | nativeLet | nativeOperator ) | function )* }
+                     | type NAME { ( static staticMember | nativeLet | nativeOperator | function )* }
                      | cinclude "TEXT" ;
                      | ccode { C TEXT }
+                     | native nativeInterface
                      | native cDeclaration
 
-(cinclude, ccode, native declarations and the native members of classes: only in the standard library, Appendix D.)
+(type NAME { }, and functions without a body: only in std.lang, §9.6. cinclude, ccode, native declarations
+and the native members of classes: only in the standard library, Appendix D; native interfaces also with
+[project] unsafe_c = true.)
 
 function             = function [ NAME . ] NAME parameters [ : Type ] [ in lives ] [ throws Type ]
                            [ wait until ( expression ) ] ( block | ; )
@@ -1654,6 +1662,11 @@ cMember              = cField
                      | function
                      | static ( function | native function NAME parameters [ : Type ] = C ; )
 cField               = let NAME : Type [ = NAME ] ;
+nativeInterface      = interface NAME STRING ( , STRING )* [ extends NAME ( , NAME )* ]
+                           { ( function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;
+                             | type NAME [ = CTYPE ] [ released by NAME ] ;
+                             | const NAME : Type [ = C ] ; | let NAME : Type [ = NAME ] ;
+                             | struct NAME [ = C ] { cField* } )* }
 C                    = NAME | struct NAME | c"TEXT"
 CTYPE                = [ struct ] NAME *... | c"TEXT"
 
@@ -1726,9 +1739,9 @@ These belong to the tools and the library, which have their own versions and doc
 
 - the modules of the standard library other than `std.lang` (`std.io`, `std.io.files`, `std.os`,
   `std.os.process`, `std.os.rpc`, `std.os.shared`, `std.time`, `std.crypto`, `std.encoding.json`,
-  `std.net`, `std.test`, ...), except what §19.3 says of `SystemProcess`;
+  `std.net`, `std.test`, ...), except what §19.3 says of `Task`;
 - the commands `larimar build`, `run`, `check`, `test`, `lsp`, `dap`, the plugins, and the file
-  `larimar.toml` (with `[packages]`);
+  `larimar.toml` (with `[dependencies]`);
 - the names and the shape of the generated C, other than what [Appendix D](#appendix-d-the-c-of-the-standard-library) defines
   (`RtMem*`, `rt_mem_alloc`, `lar"..."`, the names of native functions);
 - the text of compile errors.
@@ -1736,12 +1749,46 @@ These belong to the tools and the library, which have their own versions and doc
 ## Appendix D. The C of the standard library
 
 The standard library talks to the operating system in C, with the declarations of this appendix:
-`cinclude`, `ccode`, the `native` declarations, the functions with a body of C (also inside classes) and
-the classes for one system. They are allowed only in the modules of the standard library (and in
-`std.lang`). In any other module, of a program, a library or a service, each one is a compile error: a
-program has no C of its own ([§19](#19-libraries-services-and-tasks)). `larimarc --unsafe-c` lifts this
-rule for the compiler's own sources and tests; a program built with it has none of the guarantees of
-this document. The guide for whoever maintains the standard library is [std-c.md](std-c.md).
+native interfaces (§D.0), `cinclude`, `ccode`, the other `native` declarations, the functions with a body
+of C (also inside classes) and the classes for one system. `native` always means C. They are allowed
+only in the modules of the standard library (and in `std.lang`). In any other module, of a program, a
+library or a service, each one is a compile error: a program has no C of its own
+([§19](#19-libraries-services-and-tasks)), with one door:
+
+- A project whose `[project]` says **`unsafe_c = true`** (a program, a library or a service) may declare
+  **native interfaces** (§D.0) in its modules, and nothing else of this appendix. A program that uses such
+  a library is built with that C: every build says where it comes from (*unsafe C (native interface)
+  from: NAME*), and names the pointer types of those interfaces that nothing releases (no `released by`).
+  What that C does is outside every guarantee of this document.
+
+`larimarc --unsafe-c` lifts the whole rule for the compiler's own sources and tests; a program built
+with it has none of the guarantees of this document.
+
+The modules of the standard library whose path has a part `posix`, `windows`, `macos`, `common` or
+`internal` (`std.net.posix`, `std.os.process.internal`) are its own: only modules of the standard library
+import them. The modules of the standard library import each other without cycles. The guide for
+whoever maintains the standard library is [std-c.md](std-c.md).
+
+### D.0 Native interfaces
+
+```
+native interface NAME STRING ( , STRING )* [ extends NAME ( , NAME )* ] { member* }
+member = function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;
+       | type NAME [ = CTYPE ] [ released by NAME ] ;
+       | ( const | let ) NAME : Type [ = C ] ;
+       | struct NAME [ = C ] { ... }
+```
+
+A native interface is what C headers give, under one name: each STRING is a header (`"<math.h>"`), and
+the members are declared as in §D.3 to §D.5. Its functions and values are reached through its name:
+`LibM.cbrt(x)` calls the C function `cbrt`, `LibC.errno` reads `errno`. Its types and structs keep their
+names in the module (`type FILE released by fclose;`); a `type` without `=` is a pointer to the C type of
+its name (`FILE*`). A `released by` names a function of the same interface. An interface that `extends`
+others has their members too (imported by name, or of the same module). Imported by name
+(`import m { LibC }`), it brings its members with it.
+
+A native interface may be declared in a class: it is the class's own, and its C is only for the class's
+system (§D.9). The headers of a native interface reach the C only when something it declares is used.
 
 ### D.1 `cinclude`
 
@@ -1821,7 +1868,7 @@ Each native type is distinct, even when two declarations are equal. The members 
   written in Larimar. Both are called as `NAME.f(...)`.
 
 The methods of a type the compiler knows
-(`native type String { ... }`, without `=`) are declared only in the standard library ([§9.6](#96-native-types)).
+(`type String { ... }`) are declared only in `std.lang` ([§9.6](#96-types-of-the-language)).
 
 ### D.5 Native structs, constants and variables
 
@@ -1880,8 +1927,8 @@ the result of a native function. `self` is not visible; `lar"NAME"` is (§D.2). 
 
 ### D.9 Classes for one system
 
-A class body can also contain `cinclude "TEXT" ;` and `ccode { C TEXT }`: they are those of §D.1 and
-§D.2. `std.os` declares the platforms as interfaces:
+A class body can also contain `cinclude "TEXT" ;`, `ccode { C TEXT }` and native interfaces: they are
+those of §D.1, §D.2 and §D.0. `std.platform` declares the platforms as interfaces:
 
 ```
 public interface Platform {}
@@ -1895,19 +1942,21 @@ A class that implements one of them (itself, or a class it extends) is **for tha
 `linux`, `macos`, `windows`; `unix` is every one but Windows; the narrowest one when there are several, as `LinuxPlatform`
 under a superclass for `UnixPlatform`): its `cinclude`s, its `ccode`s and the C bodies of its methods
 are compiled only for that system (inside the matching `#if`). On another system, calling one of its
-methods with a C body panics. Platforms that do not contain one another (`UnixPlatform` and
+methods or static functions with a C body panics. Platforms that do not contain one another (`UnixPlatform` and
 `WindowsPlatform`) in one class are an error. Its other methods, its fields and its type exist
 everywhere: the program is checked for every system at once.
 
 `Platform.current()`, a static function of that interface, gives the system as
 `enum OS { Linux, MacOS, Windows, Unix }`, from the C compiler's macros (`Platform.name()`, as text); a
-`switch` on it chooses the class:
+`switch` on it chooses the class, often its static functions:
 
 ```
-let clock: Clock = switch (Platform.current()) {
-    case Linux, MacOS, Unix -> PosixClock {};
-    case Windows -> WindowsClock {};
-};
+public function now(): int64 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixClock.now();
+        case Windows -> WindowsClock.now();
+    };
+}
 ```
 
 An interface type is shared by threads like a value (§18) when every class that implements it is: it

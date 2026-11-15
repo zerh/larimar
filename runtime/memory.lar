@@ -1,4 +1,4 @@
-// std.runtime.memory: memories (arenas), their limits and finalizers.
+// runtime.memory: memories (arenas), their limits and finalizers.
 // Part of the runtime: the compiler takes from here what a program uses (it is not imported).
 ccode {
 /* ---- runtime: memories ------------------------------------------------ */

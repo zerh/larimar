@@ -1,4 +1,4 @@
-// std.runtime.base: the C headers every program includes.
+// runtime.base: the C headers every program includes.
 // Part of the runtime: the compiler takes from here what a program uses (it is not imported).
 ccode {
 #include <stdint.h>

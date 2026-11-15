@@ -1,4 +1,4 @@
-// std.runtime.string: String: texts and their memory.
+// runtime.string: String: texts and their memory.
 // Part of the runtime: the compiler takes from here what a program uses (it is not imported).
 ccode {
 /* ---- runtime: strings (immutable, always NUL-terminated) -------------- */

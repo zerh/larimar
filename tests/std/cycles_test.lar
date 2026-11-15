@@ -1,0 +1,82 @@
+// std's modules import each other without cycles: a part of std (std.net.posix, the C of one system)
+// imports what it needs from below it, never the module that uses it. The graph is read from the files.
+import std.os;
+import std.io { IoError };
+import std.io.files as Files;
+import std.io.path as Paths;
+import std.test { check, fail };
+
+/** The modules of std (std.x.y) and, for each one, the modules of std it imports. */
+class Graph {
+    let names: String[*] = [];
+    let imports: Any = {};
+}
+
+/** Reads every .lar of `dir` (the module `prefix`) and its folders. */
+function read(dir: String, prefix: String, g: Graph): void throws IoError {
+    for (entry in Files.list(dir)) {
+        let path: String = Paths.join(dir, entry);
+        if (Files.isDirectory(path)) {
+            read(path, "${prefix}.${entry}", g);
+        } else if (entry.endsWith(".lar")) {
+            let name: String = "${prefix}.${entry.substring(0, entry.length - 4)}";
+            g.names.push(name.clone());
+            let found: Any = {};
+            for (line in Files.readString(path).lines()) {
+                let t: String = line.trim();
+                if (!t.startsWith("import std.")) { continue; }
+                let rest: String = t.substring(7);
+                let end: int32 = 0;
+                while (end < rest.length && rest[end] != ' ' && rest[end] != ';') { end += 1; }
+                found.push(rest.substring(0, end).clone());
+            }
+            g.imports[name] = found.clone();
+        }
+    }
+}
+
+/** A cycle from `at` (the path so far in `path`), as text; "" when there is none. state: 1 visiting, 2 done. */
+function visit(g: Graph, at: String, state: Any, path: String[*]): String {
+    state[at] = 1;
+    path.push(at.clone());
+    if (g.imports[at] != null) {
+        for (i, next in g.imports[at]) {
+            let n: String = next as String ?? "";
+            if (state[n] == null && g.imports[n] == null) { continue; }      // not a module of std (a typo is check's)
+            if ((state[n] as int32 ?? 0) == 1) {
+                let cycle: String[*] = [];
+                let inside: bool = false;
+                for (p in path) {
+                    if (p == n) { inside = true; }
+                    if (inside) { cycle.push(p); }
+                }
+                cycle.push(n);
+                return cycle.join(" -> ").clone();
+            }
+            if (state[n] == null) {
+                let found: String = visit(g, n, state, path);
+                if (found != "") { return found; }
+            }
+        }
+    }
+    path.pop();
+    state[at] = 2;
+    return "";
+}
+
+test function stdHasNoCycles(): void throws IoError {
+    let home: String = os.env("LARIMAR_HOME") ?? ".";
+    let g: Graph = {};
+    read(Paths.join(home, "std"), "std", g);
+    check(g.names.length > 40, "std's modules were read (${g.names.length})");
+    let state: Any = {};
+    for (name in g.names) {
+        if (state[name] != null) { continue; }
+        let path: String[*] = [];
+        let cycle: String = visit(g, name, state, path);
+        if (cycle != "") {
+            fail("a cycle of imports in std: ${cycle}");
+            return;
+        }
+    }
+}

@@ -14,11 +14,11 @@
 
 import semantics.types {
     cCode, cCodeStd, classDepth, classes, ClassInfo, enums, externInfos,
-    files, FunctionInfo, functions, funcTypes, globals, includes, includeWhens, interfaceOf,
+    files, FunctionInfo, functions, funcTypes, globals, includes, includeGives, includeWhens, interfaceOf,
     interfaces, isMemory, LambdaInfo, lambdaList, MemK, MethodInfo, nativeMethods,
     platformCondition, structs, Symbol, syncField, T_VOID, TyK, Type, typeOrder, usesThreads
 };
-import codegen.prune { braceDelta, prune, selectRuntime };
+import codegen.prune { NATIVE_HEADERS, braceDelta, prune, selectRuntime };
 import semantics.linker { FILE_LINES, filePaths };
 import codegen.expressions { boxDescriptors, cType, tname, value };
 import codegen.expressions.clone { cloneFunctions, requireClone };
@@ -315,14 +315,26 @@ public function generate(): String {
 
     let out: StringBuilder = {} in default;     // the program; the runtime it needs goes before it
     let incSeen: Any = {} in default;
+    let headers: StringBuilder = {} in default;     // of native interfaces: each kept only when what it gives is used
     for (ii, inc in includes) {
         let pw: String = includeWhens[ii];
+        let gives: String = includeGives[ii];
+        if (gives != "") {
+            let text: String = inc.startsWith("<") || inc.startsWith("\"") ? "#include ${inc}" : "#include \"${inc}\"";
+            headers.add(pw == "" ? text : "#if ${platformCondition(pw)}\n${text}\n#endif");
+            headers.add("\n/* gives: ${gives} */\n\n");
+            continue;
+        }
         let key: String = "${inc}|${pw}";
         if (incSeen.contains(key)) { continue; }
         incSeen[key] = true;
         if (inc == "<stdint.h>" || inc == "<stdbool.h>" || inc == "<stdio.h>" || inc == "<stdlib.h>" || inc == "<string.h>") { continue; }
         let text: String = inc.startsWith("<") || inc.startsWith("\"") ? "#include ${inc}" : "#include \"${inc}\"";
         out.add(pw == "" ? "${text}\n" : "#if ${platformCondition(pw)}\n${text}\n#endif\n");
+    }
+    if (headers.length > 0) {
+        section(out, NATIVE_HEADERS);
+        out.add(headers.toString());
     }
 
     let named: StringBuilder = {} in default;      // what ccode names with lar"...": prototypes first

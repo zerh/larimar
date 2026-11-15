@@ -733,6 +733,7 @@ public class CatchInfo {
 
 public let includes: String[*] = [] in default;
 public let includeWhens: String[*] = [] in default;     // per include: its platform ("" every one)
+public let includeGives: String[*] = [] in default;     // per include of a native interface: the C names it gives ("" for cinclude)
 public let usesAny: bool = false;
 public let usesThreads: bool = false;
 public let cCode: String[*] = [] in default;

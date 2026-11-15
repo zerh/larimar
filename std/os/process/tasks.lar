@@ -1,13 +1,14 @@
-// std.os.process.tasks: how the objects of a program's SystemProcess classes go to another process.
+// std.os.process.tasks: how the objects of a program's Task classes go to another process.
 //
-// The compiler writes this module for each program whose classes implement SystemProcess: encode gives
-// the class and the fields of an object as a table (what is sent), and start makes the object again from
-// them (in the process that runs it). What is here is what a program without such classes has.
+// The compiler writes this module for each program whose classes implement Task: encode gives the class
+// and the fields of an object as a table (what is sent), and start makes the object again from them (in
+// the process that runs it); std.os.process's encodeTask and startTask then call them. Nothing imports
+// this file: it is what the module looks like, for a program without such classes.
 
-import std.os.process { SystemProcess };
+import std.os.process { Task };
 
 /** The class and fields of a task, as a table: { name, fields }; null when it is not a class of the program. */
-public function encode(task: SystemProcess): Any { return null; }
+public function encode(task: Task): Any { return null; }
 
 /** The task of class `name` with these fields; null when the program has no such class. */
-public function start(name: String, fields: Any): SystemProcess? { return null; }
+public function start(name: String, fields: Any): Task? { return null; }

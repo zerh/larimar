@@ -1,6 +1,6 @@
 // The platform of a class follows the hierarchy: LinuxPlatform is a UnixPlatform, and a subclass can be
 // for a narrower platform than its superclass.
-import std.os { UnixPlatform, LinuxPlatform };
+import std.platform { UnixPlatform, LinuxPlatform };
 
 class Base implements UnixPlatform {
     native function pid(): int64 { return (int64_t)getpid(); }

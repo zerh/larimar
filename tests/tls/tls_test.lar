@@ -10,7 +10,7 @@ import std.io.files as Files;
 import std.io { IoError };
 import std.io.path as Paths;
 import std.os;
-import std.os { Platform };
+import std.platform { Platform };
 
 const HTTPS_PORT: int32 = 47841;
 const HTTP_PORT: int32 = 47842;

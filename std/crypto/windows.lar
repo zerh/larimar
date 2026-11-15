@@ -1,14 +1,13 @@
 // std.crypto.windows: secure random bytes on Windows (RtlGenRandom).
 
-import std.crypto { RandomSource };
-import std.os { WindowsPlatform };
+import std.platform { WindowsPlatform };
 
-public class WindowsRandomSource implements RandomSource, WindowsPlatform {
+public class WindowsRandomSource implements WindowsPlatform {
     cinclude "<windows.h>";
 
     ccode {
         BOOLEAN NTAPI SystemFunction036(PVOID buffer, ULONG length);     /* RtlGenRandom, in advapi32 */
     }
 
-    override native function fill(items: byte[]): bool { return SystemFunction036(items, (ULONG)items_length) != 0; }
+    static native function fill(items: byte[]): bool { return SystemFunction036(items, (ULONG)items_length) != 0; }
 }

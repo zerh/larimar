@@ -1,4 +1,4 @@
-// std.runtime.thread: Thread and synchronized objects.
+// runtime.thread: Thread and synchronized objects.
 // Part of the runtime: the compiler takes from here what a program uses (it is not imported).
 ccode {
 /* ---- runtime: Thread and synchronized objects ------------------------- */

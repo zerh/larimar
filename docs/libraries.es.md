@@ -23,7 +23,7 @@ de memoria (`-fsanitize=address`, con detección de fugas). Ninguno dio avisos.
 6. [Una biblioteca que usa otras](#6-una-biblioteca-que-usa-otras)
 7. [Estado, objetos e hilos](#7-estado-objetos-e-hilos)
 8. [Probar una biblioteca](#8-probar-una-biblioteca)
-9. [Errores de `[packages]`](#9-errores-de-packages)
+9. [Errores de `[dependencies]`](#9-errores-de-dependencies)
 10. [Sin C propio](#10-sin-c-propio)
 
 **Parte III. Servicios: bibliotecas en su propio proceso**
@@ -49,13 +49,13 @@ de memoria (`-fsanitize=address`, con detección de fugas). Ninguno dio avisos.
 
 ## 1. El modelo
 
-El código escrito en Larimar se comparte de dos formas, y un programa nombra las dos en su `[packages]`:
+El código escrito en Larimar se comparte de dos formas, y un programa nombra las dos en su `[dependencies]`:
 
 ```mermaid
 flowchart LR
     lib["textkit/<br/>larimar.toml (kind = library)<br/>src/textkit.lar"]
     svc["calc/<br/>larimar.toml (kind = service)<br/>src/calc.lar"]
-    prog["Un programa<br/>[packages] textkit, calc<br/>import textkit, import calc"]
+    prog["Un programa<br/>[dependencies] textkit, calc<br/>import textkit, import calc"]
     exe["calc/build/calc<br/>su propio proceso"]
     lib -- "su código, compilado con el programa" --> prog
     svc -- "larimar build" --> exe
@@ -162,7 +162,7 @@ public function count(): int32 {
 
 ### 3.3 Usarla
 
-El programa nombra la carpeta de la biblioteca en `[packages]` (relativa a su `larimar.toml`):
+El programa nombra la carpeta de la biblioteca en `[dependencies]` (relativa a su `larimar.toml`):
 
 ```toml
 [project]
@@ -171,7 +171,7 @@ name = "app"
 [c]
 flags = ["-g", "-fsanitize=address"]
 
-[packages]
+[dependencies]
 textkit = "../textkit"
 ```
 
@@ -421,17 +421,17 @@ Como todos empiezan por el nombre de la biblioteca, nunca se encuentran con los 
 programa tiene además un `src/words.lar`, es un error, en vez de usar uno u otro en silencio:
 
 ```
-Module Error [src/main.lar:1]: Module 'words' is of the library 'words' of [packages], and the project has a file with its name too: rename the project's.
+Module Error [src/main.lar:1]: Module 'words' is of the library 'words' of [dependencies], and the project has a file with its name too: rename the project's.
 ```
 
 ## 6. Una biblioteca que usa otras
 
-Una biblioteca nombra las suyas en su propio `[packages]`, con rutas relativas a su carpeta. El programa
+Una biblioteca nombra las suyas en su propio `[dependencies]`, con rutas relativas a su carpeta. El programa
 nombra solo las que importa.
 
 ```mermaid
 flowchart LR
-    app["app<br/>[packages] four"] --> four["four<br/>[packages] tiny = ../tiny"]
+    app["app<br/>[dependencies] four"] --> four["four<br/>[dependencies] tiny = ../tiny"]
     four --> tiny["tiny<br/>una sola copia"]
     app -- "import tiny" --> tiny
 ```
@@ -459,7 +459,7 @@ version = "1.0.0"
 kind = "library"
 main = "src/four.lar"
 
-[packages]
+[dependencies]
 tiny = "../tiny"
 ```
 
@@ -497,7 +497,7 @@ name = "app"
 [c]
 flags = ["-g", "-fsanitize=address"]
 
-[packages]
+[dependencies]
 four = "../four"
 tiny = "../tiny2"
 ```
@@ -660,20 +660,20 @@ cd textkit && larimar test
 ```
 
 ```
-Project Error [larimar.toml]: unknown section [library] (sections: [project], [c], [packages])
+Project Error [larimar.toml]: unknown section [library] (sections: [project], [c], [dependencies])
 ```
 
-## 9. Errores de `[packages]`
+## 9. Errores de `[dependencies]`
 
-Cada nombre de `[packages]` es la carpeta de un proyecto de biblioteca con ese nombre. Lo que no lo es,
+Cada nombre de `[dependencies]` es la carpeta de un proyecto de biblioteca con ese nombre. Lo que no lo es,
 se dice antes de compilar:
 
-| `[packages]` | Error |
+| `[dependencies]` | Error |
 |---|---|
 | `textkit = "libs/textkit"` (no existe) | `library 'textkit': none/libs/textkit has no larimar.toml` |
 | `textkit = "../prog"` (un programa) | `library 'textkit': prog is a program, not a library or a service ([project] kind = "library" or "service")` |
 | `textkit = "../other"` (otro nombre) | `library 'textkit': the library in other is called 'other'` |
-| `textkit = 3` | `textkit in [packages] is the folder of the library: textkit = "libs/textkit"` |
+| `textkit = 3` | `textkit in [dependencies] is the folder of the library: textkit = "libs/textkit"` |
 
 ## 10. Sin C propio
 
@@ -704,7 +704,7 @@ Module Error [src/main.lar:1]: ccode is only for the standard library: C is writ
 o en una clase para un sistema:
 
 ```ts
-import std.os { UnixPlatform };
+import std.platform { UnixPlatform };
 
 class Clock implements UnixPlatform {
     cinclude "<time.h>";
@@ -795,7 +795,7 @@ public function crash(): int32 {
 function hidden(): int32 { return 1; }
 ```
 
-`larimar new calc --service` crea uno así, con una prueba. Un programa lo nombra en `[packages]` como a una
+`larimar new calc --service` crea uno así, con una prueba. Un programa lo nombra en `[dependencies]` como a una
 biblioteca:
 
 ```toml
@@ -805,7 +805,7 @@ name = "app"
 [c]
 flags = ["-g", "-fsanitize=address"]
 
-[packages]
+[dependencies]
 calc = "../calc"
 ```
 
@@ -1026,7 +1026,7 @@ servicio que falla no deja al programa en un estado roto.
 
 - **El código de una biblioteca se compila con cada programa.** Larimar compila rápido, pero una biblioteca
   grande alarga cada build.
-- **No hay gestor de paquetes ni versiones.** `[packages]` nombra carpetas; cómo llegan ahí (una copia, un
+- **No hay gestor de paquetes ni versiones.** `[dependencies]` nombra carpetas; cómo llegan ahí (una copia, un
   submódulo de git) lo decide el proyecto. Si dos bibliotecas necesitan versiones distintas de una tercera,
   hay que elegir una.
 - **Un servicio da valores**: sus objetos no cruzan todavía (un servicio que guarda estado lo guarda dentro,
@@ -1047,7 +1047,7 @@ servicio que falla no deja al programa en un estado roto.
 | Interfaces, listas, enums y errores entre programa y biblioteca | `theWholeLanguageCrosses` |
 | Las partes de una biblioteca y los nombres que chocan | `aLibraryHasItsParts` |
 | Una biblioteca que usa otras; dos con el mismo nombre | `aLibraryUsesItsOwnPackages` |
-| Lo que `[packages]` comprueba | `packagesAreChecked` |
+| Lo que `[dependencies]` comprueba | `dependenciesAreChecked` |
 | Sin C en una biblioteca | `aLibraryHasNoCOfItsOwn` |
 | Un runtime, nombres separados | `aLibraryAndItsProgramShareOneRuntime` |
 | Las pruebas de una biblioteca | `theTestsOfALibraryUseItsRules` |
@@ -1067,7 +1067,7 @@ name = "textkit"
 kind = "library"
 main = "src/textkit.lar"     # sus partes: src/textkit/<parte>.lar
 
-[packages]                    # las bibliotecas que usa
+[dependencies]                    # las bibliotecas que usa
 tiny = "../tiny"
 ```
 
@@ -1081,7 +1081,7 @@ main = "src/calc.lar"        # sus funciones públicas son lo que da
 
 ```toml
 # el programa
-[packages]
+[dependencies]
 textkit = "../textkit"
 calc = "../calc"
 ```

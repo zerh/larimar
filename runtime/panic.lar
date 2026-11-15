@@ -1,4 +1,4 @@
-// std.runtime.panic: panics: the message, the line, the exit code.
+// runtime.panic: panics: the message, the line, the exit code.
 // Part of the runtime: the compiler takes from here what a program uses (it is not imported).
 ccode {
 /* ---- runtime: panics -------------------------------------------------- */

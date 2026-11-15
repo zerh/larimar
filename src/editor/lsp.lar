@@ -12,7 +12,7 @@
 // changed last, and published for every file of its program.
 
 import std.os;
-import std.os { Platform, UnixPlatform, WindowsPlatform };
+import std.platform { Platform, UnixPlatform, WindowsPlatform };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io.console as Console;

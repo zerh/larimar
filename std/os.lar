@@ -3,92 +3,75 @@
 //   import std.os;
 //   let home: String = os.env("HOME") ?? "/";
 //
-// The system is Platform.current(): OS.Linux, MacOS, Windows or another Unix. What differs between them
-// is a class for each, marked with the platform it is for (implements UnixPlatform, LinuxPlatform,
-// MacOSPlatform or WindowsPlatform), with the C of that system in its methods: its C reaches only that
-// system's build. A switch on Platform.current() chooses the one that runs.
+// The system is std.platform's Platform.current(); what differs between systems is a class for each, in
+// std/os/posix.lar, macos.lar and windows.lar.
 
+import std.platform { Platform, OS };
 import std.os.posix { PosixSystem };
 import std.os.macos { MacOSSystem };
 import std.os.windows { WindowsSystem };
 
-/** The systems Larimar runs on (Unix: another Unix, a BSD). */
-public enum OS { Linux, MacOS, Windows, Unix }
+// What std.os needs of the system: the static functions of PosixSystem, MacOSSystem and WindowsSystem
+// (std/os/posix.lar, macos.lar, windows.lar), chosen by the system.
 
-/**
- * What a class is for: a class that implements one of these is for that platform. Its C (cinclude, ccode,
- * the C bodies of its methods) reaches only that system's build; elsewhere its methods with C panic.
- */
-public interface Platform {
-    /** The system this program was compiled for. */
-    static function current(): OS {
-        return switch (platformNumber()) {
-            case 1 -> OS.Windows;
-            case 2 -> OS.MacOS;
-            case 3 -> OS.Linux;
-            default -> OS.Unix;
-        };
-    }
+function hostProcessId(): int64 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixSystem.processId();
+        case Windows -> WindowsSystem.processId();
+    };
+}
 
-    /** Its name: "linux", "macos", "windows" or "unix". */
-    static function name(): String {
-        return switch (Platform.current()) {
-            case Linux -> "linux";
-            case MacOS -> "macos";
-            case Windows -> "windows";
-            case Unix -> "unix";
-        };
+function hostCwd(into: byte[]): bool {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixSystem.cwd(into);
+        case Windows -> WindowsSystem.cwd(into);
+    };
+}
+
+function hostProgramPath(into: byte[]): void {
+    switch (Platform.current()) {
+        case Linux, Unix -> PosixSystem.programPath(into);
+        case MacOS -> MacOSSystem.programPath(into);
+        case Windows -> WindowsSystem.programPath(into);
     }
 }
-public interface UnixPlatform extends Platform {}         // Linux, macOS and the other Unix
-public interface LinuxPlatform extends UnixPlatform {}
-public interface MacOSPlatform extends UnixPlatform {}
-public interface WindowsPlatform extends Platform {}
 
-/** Where Larimar learns the system: the C compiler's own macros (with --target, the compiler writes it). */
-native function platformNumber(): int32 {
-    #if defined(_WIN32)
-    return 1;
-    #elif defined(__APPLE__)
-    return 2;
-    #elif defined(__linux__)
-    return 3;
-    #else
-    return 0;
-    #endif
+function hostShell(command: String): int32 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixSystem.shell(command);
+        case Windows -> WindowsSystem.shell(command);
+    };
 }
 
-/** What std.os needs of the system: a class for each platform (std/os/posix.lar, macos.lar, windows.lar). */
-public interface System {
-    function processId(): int64;
-    function cwd(into: byte[]): bool;
-    function programPath(into: byte[]): void;
-    function shell(command: String): int32;
-    function catchTermination(): void;
-    function terminating(): bool;
+function hostCatchTermination(): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixSystem.catchTermination();
+        case Windows -> WindowsSystem.catchTermination();
+    }
 }
 
-let host: System = switch (Platform.current()) {
-    case Linux, Unix -> PosixSystem {};
-    case MacOS -> MacOSSystem {};
-    case Windows -> WindowsSystem {};
-};
+function hostTerminating(): bool {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixSystem.terminating();
+        case Windows -> WindowsSystem.terminating();
+    };
+}
 
-cinclude "<stdlib.h>";                 // getenv, exit (C declares them: no prototypes of ours)
-cinclude "<string.h>";                 // strlen
-
-native type CStream = FILE*;
-native const stdout: CStream;
-native function getenv(name: String): String?;
-native function fflush(f: CStream): int32;
-native function strlen(text: byte*): uint64;
-native function cExit(code: int32): void = exit;
+/** What C's stdlib.h, string.h and stdio.h give std.os. */
+native interface LibC "<stdlib.h>", "<string.h>", "<stdio.h>" {
+    type FILE;
+    let stdout: FILE;
+    function getenv(name: String): String?;
+    function fflush(f: FILE): int32;
+    function strlen(text: byte*): uint64;
+    function exit(code: int32): void;
+}
 
 /** The number the system gives this running program (its process id). */
-public function processId(): int64 { return host.processId(); }
+public function processId(): int64 { return hostProcessId(); }
 
 /** The value of an environment variable, or null if it is not set. */
-public function env(name: String): String? { return getenv(name); }
+public function env(name: String): String? { return LibC.getenv(name); }
 
 /** A zeroed buffer for C to write a path into. */
 function pathBuffer(): byte[*] {
@@ -99,25 +82,25 @@ function pathBuffer(): byte[*] {
 
 /** What C wrote into a buffer: up to its first zero byte. */
 function cText(b: byte[]): String {
-    return stringOfRange(b, 0, strlen(b) as int32);
+    return stringOfRange(b, 0, LibC.strlen(b) as int32);
 }
 
 /** The folder the program runs in. */
 public function cwd(): String {
     let b: byte[*] = pathBuffer();
-    return host.cwd(b) ? cText(b) : ".";
+    return hostCwd(b) ? cText(b) : ".";
 }
 
 /** Runs a command with the system's shell (sh, or cmd.exe on Windows) and gives its exit code. */
 public function run(command: String): int32 {
-    fflush(stdout);
-    return host.shell(command);
+    LibC.fflush(LibC.stdout);
+    return hostShell(command);
 }
 
 /** This program's executable (its full path), or "" if it cannot be known. */
 public function programPath(): String {
     let b: byte[*] = pathBuffer();
-    host.programPath(b);
+    hostProgramPath(b);
     return cText(b).clone();
 }
 
@@ -132,8 +115,8 @@ public function programDir(): String {
 
 /** Ends the program now with this exit code (memories are not freed first). */
 public function exit(code: int32): void {
-    fflush(stdout);
-    cExit(code);
+    LibC.fflush(LibC.stdout);
+    LibC.exit(code);
 }
 
 // ---- ending on request: Ctrl+C, SIGTERM (systemd, docker stop, kill) -------------------------
@@ -144,7 +127,7 @@ public function exit(code: int32): void {
  * The servers of std.net look at it: they stop accepting, finish the connections they serve, and run()
  * returns. Nothing changes until this is called.
  */
-public function catchTermination(): void { host.catchTermination(); }
+public function catchTermination(): void { hostCatchTermination(); }
 
 /** Whether Ctrl+C or SIGTERM arrived after catchTermination(). */
-public function terminating(): bool { return host.terminating(); }
+public function terminating(): bool { return hostTerminating(); }

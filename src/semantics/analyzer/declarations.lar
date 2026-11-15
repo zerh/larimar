@@ -9,7 +9,7 @@ import syntax.ast {
 import semantics.types {
     ArrK, cCode, cCodeStd, classes, classIndex, ClassInfo, classOf, ConstK, enumIndex, EnumInfo,
     enumOf, enums, escapeName, externInfoOf, externInfos, externTypeIndex, ExternTypeInfo, externTypes, FieldInfo,
-    findMethod, funcT, functionIndex, FunctionInfo, functionOf, functions, includes, includeWhens, interfaceIndex,
+    findMethod, funcT, functionIndex, FunctionInfo, functionOf, functions, includes, includeGives, includeWhens, interfaceIndex,
     InterfaceInfo, interfaceMethod, interfaceOf, interfaces, isArray, isClass, isCValue, isEnumT,
     isError, isExternTypeName, isFloat, isInteger, isOpt, isPrimName, isResource,
     maxText, MethodInfo, minOf, named, NamedK, nativeMethods, newOwner, optT, platformCondition, primByName,
@@ -68,10 +68,10 @@ function platformOfClass(name: String, line: int32): String {
     while (at != null && depth < 64) {
         for (i in withAncestors(at!.interfaces, line)) {
             let p: String = switch (i) {
-                case "std__os__LinuxPlatform" -> "linux";
-                case "std__os__MacOSPlatform" -> "macos";
-                case "std__os__WindowsPlatform" -> "windows";
-                case "std__os__UnixPlatform" -> "unix";
+                case "std__platform__LinuxPlatform", "std__os__LinuxPlatform" -> "linux";
+                case "std__platform__MacOSPlatform", "std__os__MacOSPlatform" -> "macos";
+                case "std__platform__WindowsPlatform", "std__os__WindowsPlatform" -> "windows";
+                case "std__platform__UnixPlatform", "std__os__UnixPlatform" -> "unix";
                 default -> "";
             };
             found = narrower(found, p, name, line);
@@ -121,10 +121,13 @@ function assignPlatforms(program: Program in default): void {
             case CIncludeDecl c when owner != "" -> { c.platform = written; }
             case CCodeDecl c when owner != "" -> { c.platform = written; }
             case ExternFunctionDecl f when owner != "" -> { f.platform = written; }
-            case ExternFunctionDecl f when target != "" && f.name == "std__os__platformNumber" -> {
+            case ExternFunctionDecl f when target != "" && f.name.endsWith("__platformNumber") && f.name.startsWith("std__") -> {
                 f.cBody = "return ${platformNumber(target)};" in default;          // what Platform.current() reads
             }
             case ClassDecl c -> onlyOn(c, platformOfClass(c.name, c.line));
+            case FunctionDecl f when f.cBodied && f.typeName != "" && classDecl(f.typeName) != null -> {
+                onlyOnFunction(f, f.typeName, platformOfClass(f.typeName, f.line));      // a static function of such a class
+            }
             default -> {}
         }
         kept.push(d);
@@ -144,22 +147,26 @@ function platformNumber(platform: String): int32 {
 
 /** The methods with a C body of a class for one platform: they call their C only there; elsewhere they panic. */
 function onlyOn(c: ClassDecl in default, system: String in default): void {
-    if (system == "" || target != "" && inTarget(system)) { return; }
     for (m in c.methods) {
-        if (!m.cBodied) { continue; }
-        let line: int32 = m.line;
-        let panic: Call = Call { line, callee: Ident { line, name: "panic" } in default } in default;
-        panic.args.push(StringLit { line, texts: ["'${c.name.replace("__", ".")}.${m.name}' is for ${system}, not for this system"] } in default);
-        let stop: Stmt = ExprStmt { line, expr: panic } in default;
-        if (target != "") {
-            m.body = [stop] in default;
-            continue;
-        }
-        let only: IfStmt = IfStmt { line, cond: BoolLit { line, value: true } in default, platform: system, hasElse: true } in default;
-        for (st in m.body) { only.thenBody.push(st); }
-        only.elseBody.push(stop);
-        m.body = [only] in default;
+        if (m.cBodied) { onlyOnFunction(m, c.name, system); }
     }
+}
+
+/** A method or static function with a C body, of a class (`owner`) for one platform: its C only there. */
+function onlyOnFunction(m: FunctionDecl in default, owner: String, system: String in default): void {
+    if (system == "" || target != "" && inTarget(system)) { return; }
+    let line: int32 = m.line;
+    let panic: Call = Call { line, callee: Ident { line, name: "panic" } in default } in default;
+    panic.args.push(StringLit { line, texts: ["'${owner.replace("__", ".")}.${m.name}' is for ${system}, not for this system" in default] } in default);
+    let stop: Stmt = ExprStmt { line, expr: panic } in default;
+    if (target != "") {
+        m.body = [stop] in default;
+        return;
+    }
+    let only: IfStmt = IfStmt { line, cond: BoolLit { line, value: true } in default, platform: system, hasElse: true } in default;
+    for (st in m.body) { only.thenBody.push(st); }
+    only.elseBody.push(stop);
+    m.body = [only] in default;
 }
 
 public function collect(program: Program in default): void {
@@ -195,6 +202,7 @@ public function collect(program: Program in default): void {
             case CIncludeDecl c -> {
                 includes.push(c.header);
                 includeWhens.push(c.platform);
+                includeGives.push(c.gives);
             }
             case CCodeDecl c -> {
                 cCode.push(c.platform == "" ? c.code : "#if ${platformCondition(c.platform)}\n${c.code}\n#endif" in default);

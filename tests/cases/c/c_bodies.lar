@@ -1,6 +1,6 @@
 // Methods whose body is C, in a class for each system (implements UnixPlatform / WindowsPlatform), chosen with a
 // switch on Platform.current(). The C of the other system never reaches this build.
-import std.os { Platform, OS, UnixPlatform, WindowsPlatform };
+import std.platform { Platform, OS, UnixPlatform, WindowsPlatform };
 
 interface Greeter {
     function twice(x: int32): int32;

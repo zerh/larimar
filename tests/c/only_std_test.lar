@@ -34,7 +34,7 @@ test function nativeIsForStd(): void {
 
 test function aClassForASystemHasNoCOfItsOwn(): void {
     failsInAProgram(raw"""
-        import std.os { UnixPlatform };
+        import std.platform { UnixPlatform };
         class Clock implements UnixPlatform {
             cinclude "<time.h>";
             native function now(): int64 { return (int64_t)time(NULL); }

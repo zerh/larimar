@@ -19,7 +19,7 @@
 //     a panic happens.
 
 import std.os;
-import std.os { Platform, UnixPlatform, WindowsPlatform };
+import std.platform { Platform, UnixPlatform, WindowsPlatform };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };

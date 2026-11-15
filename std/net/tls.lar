@@ -15,7 +15,8 @@
 // Everything blocks, like a TcpSocket: there are no threads inside. A connection closes itself when the
 // memory it lives in is freed.
 
-import std.net { Connection, TcpSocket, NetError, Socket };
+import std.net { Connection, TcpSocket, NetError };
+import std.net.internal { Socket };
 import std.io { IoError, InputStream, OutputStream };
 import std.net.tls.macos { MacOSTls };
 import std.net.tls.windows { WindowsTls };

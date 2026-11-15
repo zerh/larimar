@@ -1,4 +1,4 @@
-import std.os { Platform };
+import std.platform { Platform };
 // C without ccode-wrappers: pointers to C structs (a linked list), out parameters (&x), constants and
 // macros (native const), a C global (native let), C strings in structs, arrays where C takes T*, `when`.
 ccode {

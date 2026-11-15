@@ -1,8 +1,8 @@
 // std.os.windows: the process, its folder and the shell on Windows.
 
-import std.os { System, WindowsPlatform };
+import std.platform { WindowsPlatform };
 
-public class WindowsSystem implements System, WindowsPlatform {
+public class WindowsSystem implements WindowsPlatform {
     cinclude "<winsock2.h>";        // before windows.h (it includes it): no clash with the old winsock.h
     cinclude "<windows.h>";
     cinclude "<direct.h>";
@@ -16,17 +16,17 @@ public class WindowsSystem implements System, WindowsPlatform {
         }
     }
 
-    override native function processId(): int64 { return (int64_t)GetCurrentProcessId(); }
+    static native function processId(): int64 { return (int64_t)GetCurrentProcessId(); }
 
-    override native function cwd(into: byte[]): bool { return _getcwd((char*)into, into_length - 1) != NULL; }
+    static native function cwd(into: byte[]): bool { return _getcwd((char*)into, into_length - 1) != NULL; }
 
-    override native function programPath(into: byte[]): void { GetModuleFileNameA(NULL, (char*)into, (DWORD)into_length - 1); }
+    static native function programPath(into: byte[]): void { GetModuleFileNameA(NULL, (char*)into, (DWORD)into_length - 1); }
 
     /**
      * cmd.exe removes the first and the last quote of a command that starts with one ("C:\a b\x.exe" "arg"
      * loses both): the command goes inside one more pair of quotes, which cmd removes, so it runs as written.
      */
-    override native function shell(command: String): int32 {
+    static native function shell(command: String): int32 {
         size_t n = strlen(command);
         char* quoted = (char*)malloc(n + 3);
         if (quoted == NULL) return -1;
@@ -39,7 +39,7 @@ public class WindowsSystem implements System, WindowsPlatform {
         return (int32_t)r;
     }
 
-    override native function catchTermination(): void { SetConsoleCtrlHandler(lm_os_on_console, TRUE); }
+    static native function catchTermination(): void { SetConsoleCtrlHandler(lm_os_on_console, TRUE); }
 
-    override native function terminating(): bool { return InterlockedCompareExchange(&lm_os_terminating, 0, 0) != 0; }
+    static native function terminating(): bool { return InterlockedCompareExchange(&lm_os_terminating, 0, 0) != 0; }
 }

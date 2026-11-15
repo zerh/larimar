@@ -1,8 +1,7 @@
 // std.os.process.posix: processes on Unix (fork, exec, pipes, poll, waitpid).
 
-import std.os.process { Executables };
 import std.os.process.common;
-import std.os { UnixPlatform };
+import std.platform { UnixPlatform };
 
 /** Processes on Unix: fork and exec, pipes, poll and waitpid. */
 public class PosixProcesses implements UnixPlatform {
@@ -185,6 +184,6 @@ public class PosixProcesses implements UnixPlatform {
     }
 }
 
-public class PosixExecutables implements Executables, UnixPlatform {
-    override native function check(path: String): bool { return access(path, X_OK) == 0; }
+public class PosixExecutables implements UnixPlatform {
+    static native function check(path: String): bool { return access(path, X_OK) == 0; }
 }

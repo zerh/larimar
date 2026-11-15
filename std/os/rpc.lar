@@ -33,8 +33,7 @@ import std.encoding.json as Json;
 import std.encoding.json { JsonError };
 import std.os;
 import std.time as Time;
-import std.os.process { Process, ProcessError };
-import std.os.process as Processes;
+import std.os.process.internal { Child };
 import std.os.shared { SharedInputStream, SharedOutputStream, uniqueName };
 
 /** What went wrong with a call. */
@@ -187,7 +186,7 @@ class StreamWire implements Wire {
 class SharedWire implements Wire {
     let input: SharedInputStream;
     let output: SharedOutputStream;
-    let process: Process? = null;
+    let process: Child? = null;
     let frames: Frames = {};
 
     override function receive(ms: int32): String? throws RpcError {
@@ -229,7 +228,7 @@ class SharedWire implements Wire {
 
 /** Messages through the pipes of a program this one started. */
 class PipeWire implements Wire {
-    let process: Process;
+    let process: Child;
 
     override function receive(ms: int32): String? throws RpcError {
         let until: int64 = Time.monotonic() + (ms as int64);
@@ -254,18 +253,14 @@ class PipeWire implements Wire {
     }
 
     override function send(text: String): void throws RpcError {
-        try {
-            self.process.write(framed(text));
-        } catch (ProcessError e) {
-            throw RpcError.Ended(ended(self.process).clone());
-        }
+        if (!self.process.send(framed(text))) { throw RpcError.Ended(ended(self.process).clone()); }
     }
 
     override function close(): void { self.process.closeInput(); }
 }
 
 /** Why the other program cannot be reached: it ended (and how), or it closed. */
-function ended(p: Process?): String {
+function ended(p: Child?): String {
     if (p != null) {
         let code: int32? = p!.wait(1000);
         if (code != null) { return "the program ended (exit ${code!})"; }
@@ -278,19 +273,16 @@ function ended(p: Process?): String {
 /** A connection to a program that answers calls. It closes when its memory is freed. */
 public class Rpc {
     let wire: Wire;
-    let process: Process? = null;
+    let process: Child? = null;
     let nextId: int64 = 1;
     /** How long a call may wait for its answer, in ms (0: as long as it takes). */
     let timeout: int32 = 0;
 
     /** Starts a program that answers JSON-RPC on its standard input and output (any program). */
     static function start(program: String, args: String[*]): Rpc throws RpcError {
-        let p: Process = { program, args };
-        try {
-            p.start();
-        } catch (ProcessError e) {
-            throw RpcError.Ended(Processes.message(e).clone());
-        }
+        let p: Child = { program, args };
+        let why: String? = p.launch();
+        if (why != null) { throw RpcError.Ended("cannot start ${program}: ${why!}".clone()); }
         return Rpc { wire: PipeWire { process: p }, process: p };
     }
 
@@ -376,12 +368,9 @@ public function startSharedWith(program: String, args: String[*], env: String[*]
     }
     let all: String[*] = ["${SHARED_ENV}=${requests},${answers}"];
     for (e in env) { all.push(e); }
-    let p: Process = { program, args, env: all, shareConsole: true };
-    try {
-        p.start();
-    } catch (ProcessError e) {
-        throw RpcError.Ended(Processes.message(e).clone());
-    }
+    let p: Child = { program, args, env: all, shareConsole: true };
+    let why: String? = p.launch();
+    if (why != null) { throw RpcError.Ended("cannot start ${program}: ${why!}".clone()); }
     return Rpc { wire: SharedWire { input: input!, output: out!, process: p }, process: p };
 }
 

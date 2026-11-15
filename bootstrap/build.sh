@@ -7,6 +7,7 @@
 #   bin/larimarc    the compiler
 #   bin/larimar     wrapper that sets LARIMAR_HOME
 #   std/            copy of std/
+#   runtime/        copy of runtime/ (the C under every program)
 #   doc/            the manuals and the specification
 #   debug/          lldb and gdb formatters (from tools/debuggers) (larimar build --debug, VS Code)
 #
@@ -44,7 +45,7 @@ for arg in "$@"; do
     esac
 done
 
-for f in bootstrap/larimarc.c std/lang.lar docs/manual.md bin/larimar; do
+for f in bootstrap/larimarc.c std/lang.lar runtime/memory.lar docs/manual.md bin/larimar; do
     if [ ! -e "$f" ]; then
         echo "ERROR: $f not found in $HERE"
         exit 1
@@ -67,12 +68,12 @@ if [ "$VERIFY" = 1 ]; then
     echo "Step 2: checking that the compiler compiles itself..."
     mkdir -p build
     # stage 1: src/ compiled by the bootstrap compiler (it may be older than src/)
-    ./"$OUTPUT" src/main.lar -o build/stage1.c
+    ./"$OUTPUT" src/main.lar -o build/stage1.c --unsafe-c
     $CC $CFLAGS build/stage1.c -o build/larimarc_stage1
     # stage 2 and 3: src/ compiled by the compiler of src/ itself; they must be identical
-    ./build/larimarc_stage1 src/main.lar -o build/stage2.c
+    ./build/larimarc_stage1 src/main.lar -o build/stage2.c --unsafe-c
     $CC $CFLAGS build/stage2.c -o build/larimarc_stage2
-    ./build/larimarc_stage2 src/main.lar -o build/stage3.c
+    ./build/larimarc_stage2 src/main.lar -o build/stage3.c --unsafe-c
     if cmp -s build/stage2.c build/stage3.c; then
         echo "  OK: the compiler compiles itself (stage 2 and stage 3 are identical)"
     else
@@ -109,8 +110,9 @@ if [ "$INSTALL" = 1 ]; then
     
     cp bin/larimar "$PREFIX/bin/larimar"
     chmod +x "$PREFIX/bin/larimarc" "$PREFIX/bin/larimar"
-    rm -rf "$PREFIX/std"
+    rm -rf "$PREFIX/std" "$PREFIX/runtime"
     cp -R std "$PREFIX/std"
+    cp -R runtime "$PREFIX/runtime"
     rm -rf "$PREFIX/doc" "$PREFIX/MANUAL.md"
     mkdir -p "$PREFIX/doc"
     cp docs/*.md "$PREFIX/doc/"

@@ -9,7 +9,7 @@ import std.io.files as Files;
 import std.io { IoError };
 import std.io.path as Paths;
 import std.os;
-import std.os { Platform, OS };
+import std.platform { Platform, OS };
 
 function compiler(): String {
     let fromEnvironment: String = os.env("LARIMARC") ?? "";

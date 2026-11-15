@@ -25,7 +25,7 @@ if (!(Test-Path "bin")) {
 }
 
 # Validación adaptada para incluir larimar.cmd en lugar del script bash
-$requiredFiles = @("bootstrap/larimarc.c", "std/lang.lar", "docs/manual.md", "bin/larimar.cmd")
+$requiredFiles = @("bootstrap/larimarc.c", "std/lang.lar", "runtime/memory.lar", "docs/manual.md", "bin/larimar.cmd")
 foreach ($f in $requiredFiles) {
     if (!(Test-Path $f)) {
         Write-Error "ERROR: $f not found in $ScriptDir"
@@ -56,7 +56,7 @@ if ($Verify) {
     $stage2Exe = Join-Path $ScriptDir "build\larimarc_stage2.exe"
 
     # Generar stage1.c
-    & $Output "src/main.lar" -o "build/stage1.c"
+    & $Output "src/main.lar" -o "build/stage1.c" --unsafe-c
     if ($LASTEXITCODE -ne 0) { Write-Error "Failed to generate stage1.c"; exit $LASTEXITCODE }
 
     # Compilar stage1.exe
@@ -64,7 +64,7 @@ if ($Verify) {
     if ($LASTEXITCODE -ne 0) { Write-Error "GCC failed compiling stage1.c"; exit $LASTEXITCODE }
 
     # Ejecutar stage1
-    & $stage1Exe "src/main.lar" -o "build/stage2.c"
+    & $stage1Exe "src/main.lar" -o "build/stage2.c" --unsafe-c
     if ($LASTEXITCODE -ne 0) { Write-Error "stage1.exe failed generating stage2.c"; exit $LASTEXITCODE }
 
     # Compilar stage2.exe
@@ -72,7 +72,7 @@ if ($Verify) {
     if ($LASTEXITCODE -ne 0) { Write-Error "GCC failed compiling stage2.c"; exit $LASTEXITCODE }
 
     # Ejecutar stage2
-    & $stage2Exe "src/main.lar" -o "build/stage3.c"
+    & $stage2Exe "src/main.lar" -o "build/stage3.c" --unsafe-c
     if ($LASTEXITCODE -ne 0) { Write-Error "stage2.exe failed generating stage3.c"; exit $LASTEXITCODE }
 
     $stage2Bytes = Get-FileHash "build/stage2.c" -Algorithm SHA256
@@ -129,6 +129,9 @@ if (-not $NoInstall) {
 
     if (Test-Path $stdDir) { Remove-Item $stdDir -Recurse -Force }
     Copy-Item "std" $stdDir -Recurse -Force
+    $runtimeDir = Join-Path $PREFIX "runtime"
+    if (Test-Path $runtimeDir) { Remove-Item $runtimeDir -Recurse -Force }
+    Copy-Item "runtime" $runtimeDir -Recurse -Force
 
     $docDir = Join-Path $PREFIX "doc"
     if (Test-Path $docDir) { Remove-Item $docDir -Recurse -Force }

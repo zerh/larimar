@@ -10,30 +10,36 @@
 // now() is the wall clock (it can jump when the system's clock is set); monotonic() only moves forward,
 // so it is the one for measuring time and for deadlines. Dates are UTC.
 
-import std.os { Platform, OS };
+import std.platform { Platform, OS };
 import std.time.posix { PosixClock };
 import std.time.windows { WindowsClock };
 
-/** What std.time needs of the system: a class for each platform (std/time/posix.lar, windows.lar). */
-public interface Clock {
-    function now(): int64;
-    function monotonic(): int64;
-    function sleep(ms: int64): void;
-}
-
-let systemClock: Clock = switch (Platform.current()) {
-    case Linux, MacOS, Unix -> PosixClock {};
-    case Windows -> WindowsClock {};
-};
+// What std.time needs of the system: the static functions of PosixClock and WindowsClock
+// (std/time/posix.lar, windows.lar), chosen by the system.
 
 /** Milliseconds since 1970-01-01 00:00 UTC (the wall clock). */
-public function now(): int64 { return systemClock.now(); }
+public function now(): int64 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixClock.now();
+        case Windows -> WindowsClock.now();
+    };
+}
 
 /** Milliseconds from some fixed moment, only ever forward: for measuring time and for deadlines. */
-public function monotonic(): int64 { return systemClock.monotonic(); }
+public function monotonic(): int64 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixClock.monotonic();
+        case Windows -> WindowsClock.monotonic();
+    };
+}
 
 /** Waits that many milliseconds (this thread only). */
-public function sleep(ms: int64): void { systemClock.sleep(ms); }
+public function sleep(ms: int64): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixClock.sleep(ms);
+        case Windows -> WindowsClock.sleep(ms);
+    }
+}
 
 /** A moment split into its parts, in UTC. */
 public struct DateTime {

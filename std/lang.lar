@@ -4,26 +4,23 @@
 // What a Thread runs.
 public interface Runnable { function run(): void; }
 
-// What a C function gives back to its callback (C's void* user data): a native function that takes a callback
-// with a Context can take a Larimar function, with what it captures.
-public native type Context;
-
 // A thread of the operating system: Thread { run: ... } in memory, then start() and join().
+// What has no body here (start, join; the core of Any and String) the compiler writes.
 public class Thread {
     let run: Runnable;
     let name: String = "";
-    native function start(): void;
-    native function join(): void;
+    function start(): void;
+    function join(): void;
 }
 
-public native type Any {
-    native let length: int32;
-    native function push(x: Any in self): void;
-    native function containsKey(name: String): bool;
-    native function contains(x: Any): bool;
-    native function remove(name: String): bool;
-    native function removeAt(i: int64): void;
-    native function clear(): void;
+public type Any {
+    let length: int32;
+    function push(x: Any in self): void;
+    function containsKey(name: String): bool;
+    function contains(x: Any): bool;
+    function remove(name: String): bool;
+    function removeAt(i: int64): void;
+    function clear(): void;
 
     function removeIf(f: (Any) -> bool): int32 {
         let removed: int32 = 0;
@@ -39,16 +36,16 @@ public native type Any {
     }
 }
 
-public native type String {
-    // The core: the compiler knows these. Cuts are views (they share the bytes of the text).
-    native let length: int32;
-    native operator [](i: int32): byte;
-    native function substring(from: int32, to: int32): String in self;
-    native function bytes(): byte[0];
+public type String {
+    // The core: the compiler writes these. Cuts are views (they share the bytes of the text).
+    let length: int32;
+    operator [](i: int32): byte;
+    function substring(from: int32, to: int32): String in self;
+    function bytes(): byte[0];
     // split and lines give views of the text in a new list: the caller checks that the text lives as long
     // as the list, a rule a Larimar signature cannot say yet, so the compiler writes them.
-    native function split(sep: String): String[*];
-    native function lines(): String[*];
+    function split(sep: String): String[*];
+    function lines(): String[*];
 
     // Everything else is written here, in Larimar.
 

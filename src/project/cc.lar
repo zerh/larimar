@@ -1,7 +1,7 @@
 // project.cc: calling the C compiler and other programs (larimar build, larimar test).
 
 import std.os;
-import std.os { Platform };
+import std.platform { Platform };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
@@ -40,6 +40,7 @@ public function systemLibraries(c: String): String[*] {
     }
     if (c.contains("#define LM_NET_TLS_SERVER") && !windows() && !mac()) { out.push("-ldl"); }    // std.net: OpenSSL, when first used
     if (c.contains("#define LM_OS_SHARED") && !windows() && !mac()) { out.push("-lrt"); }      // std.os.shared: shm_open
+    if (c.contains("#include <math.h>") && !windows() && !mac()) { out.push("-lm"); }          // C's math (std.math, a native interface)
     return out;
 }
 

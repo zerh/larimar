@@ -1,5 +1,5 @@
 // A method of a class for another system: its C is not in this build, so calling it panics.
-import std.os { Platform, OS, WindowsPlatform, UnixPlatform };
+import std.platform { Platform, OS, WindowsPlatform, UnixPlatform };
 
 class WindowsOnly implements WindowsPlatform {
     native function ticks(): int64 { return (int64_t)GetTickCount64(); }

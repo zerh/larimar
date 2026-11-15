@@ -12,13 +12,13 @@
 //   larimar <file.lar> [-o out.c]   the same, written to a file (how the compiler is used by scripts)
 
 import std.os;
-import std.os { Platform };
+import std.platform { Platform };
 import std.text { isIdentifierPart, isDigit };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
 import std.io.console as Console;
-import semantics.linker { linkErrors, decode, readSource, testsKept, target, unsafeC };
+import semantics.linker { linkErrors, decode, readSource, testsKept, target, unsafeC, unsafeNotes, unsafeSources };
 import semantics.analyzer { analysisErrors };
 import editor.session { analyzeFile, readErrors, stdDir, checkCommand, sourceRoot };
 import editor.docstore { setDocument };
@@ -35,10 +35,10 @@ import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 import std.os.process { Process, ProcessError };
 
-const VERSION: String = "1.8.0";
+const VERSION: String = "1.10.0";
 
 /** The version of the language this compiler implements (docs/spec.md). */
-const LANGUAGE: String = "1.1";
+const LANGUAGE: String = "1.3";
 
 /** Set when a command fails; main prints it as "larimar: ...". */
 let toolError: String = "";
@@ -145,7 +145,7 @@ function buildProject(run: bool, rest: String[*], programArgs: String[*]): int32
     let p: Project? = load(Paths.absolute(rest.length == 1 ? rest[0] : "."));
     if (p == null) { return 1; }
     if (p.kind == "library") {
-        if (run) { return fail("${p.name} is a library: it has no main to run. A program uses it from its [packages]; its tests run with larimar test."); }
+        if (run) { return fail("${p.name} is a library: it has no main to run. A program uses it from its [dependencies]; its tests run with larimar test."); }
         return checkLibrary(p) ? 0 : 1;
     }
     if (p.kind == "service") {
@@ -218,7 +218,7 @@ function usage(): int32 {
           larimar new <name> [--library | --service]  create a project in a new folder (a program, a
                                         library, or a service: functions another program calls in a process)
           larimar build [folder]        compile the project (larimar.toml) to an executable (a library: check it;
-                                        programs use it from their [packages]; a service: its executable)
+                                        programs use it from their [dependencies]; a service: its executable)
           larimar run [folder] [-- args] build, then run it with the arguments
           larimar build --debug         with -g -O0 and the .lar lines, for a debugger (lldb, gdb, VS Code)
           larimar check [file|folder]   find the errors without generating C (--json for tools)
@@ -364,6 +364,10 @@ function compileFile(main: String, shownFrom: String): String {
         for (e in generatorErrors) { compileErrors.push(decode(e)); }
         return "";
     }
+    if (unsafeSources.length > 0) {             // said every time: the language's guarantees stop at that C
+        Console.printError("note: unsafe C (native interface) from: ${unsafeSources.join(", ")}");
+        for (n in unsafeNotes) { Console.printError("note: ${n}"); }
+    }
     return c;
 }
 
@@ -466,7 +470,7 @@ class Project {
     let buildDir: String;
     let compiler: String;
     let flags: String[*];
-    let larimarLibraries: LarimarLibrary[*];     // the libraries written in Larimar that it uses: those of [packages]
+    let larimarLibraries: LarimarLibrary[*];     // the libraries written in Larimar that it uses: those of [dependencies]
 }
 
 function load(dir: String): Project? {
@@ -487,7 +491,7 @@ function load(dir: String): Project? {
 
 let problems: String[*] = [] in default;
 
-const PROJECT_KEYS: String = "[build_dir, kind, main, name, output, version]";
+const PROJECT_KEYS: String = "[build_dir, kind, main, name, output, unsafe_c, version]";
 const C_KEYS: String = "[compiler, flags]";
 
 function keysOf(section: String): String {
@@ -505,10 +509,10 @@ function project(dir: String, config: Any): Project? {
             topKeys.push(sectionName.clone());
             continue;
         }
-        if (sectionName == "packages") { continue; }          // name = "folder": project.libraries reads them
+        if (sectionName == "dependencies") { continue; }          // name = "folder": project.libraries reads them
         // [c]: which C compiler builds the program, and its flags (the C itself is the standard library's)
         if (sectionName != "project" && sectionName != "c") {
-            problems.push("unknown section [${sectionName}] (sections: [project], [c], [packages])");
+            problems.push("unknown section [${sectionName}] (sections: [project], [c], [dependencies])");
             continue;
         }
         let allowed: String = keysOf(sectionName);
@@ -529,7 +533,7 @@ function project(dir: String, config: Any): Project? {
             }
         }
     }
-    if (topKeys.length > 0) { problems.push("keys must go inside [project], [c] or [packages]: [${topKeys.join(", ")}]"); }
+    if (topKeys.length > 0) { problems.push("keys must go inside [project], [c] or [dependencies]: [${topKeys.join(", ")}]"); }
     let p: Any = config.project;
     let c: Any = config.c;
     let name: String = text(p, "name", "");
@@ -655,7 +659,7 @@ function build(p: Project, debug: bool): String {
 }
 
 /**
- * The services of [packages] are built first, each by its own larimar build: the program calls their
+ * The services of [dependencies] are built first, each by its own larimar build: the program calls their
  * executables (it finds them next to its own, or where they were built).
  */
 function buildServices(p: Project): bool {
@@ -758,7 +762,7 @@ function buildFrom(p: Project, main: String, debug: bool): String {
 
 /**
  * larimar build of a library: its code is checked (its main file and every part it imports). A program uses
- * it from its [packages], compiling its source with its own; nothing is built for the library alone.
+ * it from its [dependencies], compiling its source with its own; nothing is built for the library alone.
  */
 function checkLibrary(p: Project): bool {
     let main: String = resolve(p.dir, p.main);
@@ -772,7 +776,7 @@ function checkLibrary(p: Project): bool {
     for (e in linkErrors) { compileErrors.push(decode(e)); }
     for (e in analysisErrors) { compileErrors.push(decode(e)); }
     if (!ok || compileErrors.length > 0) { return false; }
-    Console.printError("checked ${p.name}: a library is used from the [packages] of a program (its tests: larimar test)");
+    Console.printError("checked ${p.name}: a library is used from the [dependencies] of a program (its tests: larimar test)");
     return true;
 }
 
@@ -876,7 +880,7 @@ function createLibrary(path: String, name: String): int32 {
             kind = "library"
             main = "src/${name}.lar"
 
-            # A program uses it by its folder: [packages] ${name} = "../${name}", then import ${name}.
+            # A program uses it by its folder: [dependencies] ${name} = "../${name}", then import ${name}.
 
             [c]
             flags = ["-O2"]
@@ -899,7 +903,7 @@ function createLibrary(path: String, name: String): int32 {
     } catch (IoError e) {
         return fail("cannot create ${path}");
     }
-    println("created ${path}\n  cd ${path}\n  larimar test\n  (a program uses it: [packages] ${name} = \"../${name}\")");
+    println("created ${path}\n  cd ${path}\n  larimar test\n  (a program uses it: [dependencies] ${name} = \"../${name}\")");
     return 0;
 }
 
@@ -919,7 +923,7 @@ function createService(path: String): int32 {
             main = "src/${name}.lar"
 
             # larimar build makes build/${name}, which answers the calls of other programs.
-            # A program uses it by its folder: [packages] ${name} = "../${name}", then
+            # A program uses it by its folder: [dependencies] ${name} = "../${name}", then
             #   import ${name} { ${className(name)} };  let s: ${className(name)} = ${className(name)}.start();
 
             [c]
@@ -946,6 +950,6 @@ function createService(path: String): int32 {
     } catch (IoError e) {
         return fail("cannot create ${path}");
     }
-    println("created ${path}\n  cd ${path}\n  larimar test\n  larimar build     (build/${name}: a program uses it from [packages] ${name} = \"../${name}\")");
+    println("created ${path}\n  cd ${path}\n  larimar test\n  larimar build     (build/${name}: a program uses it from [dependencies] ${name} = \"../${name}\")");
     return 0;
 }

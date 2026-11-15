@@ -1,4 +1,6 @@
-// std.os.process: other programs, started and talked to through their input and output.
+// std.os.process: processes. A Process runs another program, or a task of this one in a copy of it; a
+// ProcessPool runs many tasks in a few copies. They are used as threads are: start() and join(), submit()
+// and wait().
 //
 //   import std.os.process { Process, ProcessError };
 //
@@ -14,45 +16,30 @@
 // with the rest) with `mergeErrors: true`. A Process that is still running when its memory is freed is
 // killed.
 //
-// Work of the program itself can run in other processes too: a class that implements SystemProcess is a
-// task, and a ProcessPool runs its objects in copies of this program. Their fields go there with them,
-// and what run() gives comes back; a panic there is a ProcessError here, and the pool starts another.
+// Work of the program itself runs in other processes too: a class that implements Task is work that goes
+// to a copy of this program with its fields, and what run() gives comes back; a panic there is a
+// ProcessError here.
 //
-//   class Resize implements SystemProcess {
+//   class Resize implements Task {
 //       let file: String;
 //       let width: int32;
 //       override function run(): Any { return Images.resize(self.file, self.width); }
 //   }
 //
+//   let p: Process = { run: Resize { file: "casa.jpg", width: 800 } };
+//   p.start();
+//   let r: Any = p.join();                    // what run() gave there
+//
 //   let pool: ProcessPool = { processes: 4 };
-//   let one: Any = pool.run(Resize { file: "casa.jpg", width: 800 });
-//   let all: Any = pool.runAll([Resize { file: "1.jpg", width: 800 }, Resize { file: "2.jpg", width: 800 }]);
+//   pool.submit(Resize { file: "1.jpg", width: 800 });
+//   pool.submit(Resize { file: "2.jpg", width: 800 });
+//   let all: Any = pool.wait();               // what each run() gave, in the order they were submitted
 
 import std.os;
-import std.os { Platform, OS };
-import std.os.process.posix { PosixProcesses, PosixExecutables };
-import std.os.process.windows { WindowsProcesses, WindowsExecutables };
-import std.os.process.tasks as Tasks;
-import std.os.rpc { Rpc, RpcCall, RpcError, serve };
+import std.os.process.internal { Child };
+import std.os.process.internal as Internal;
+import std.os.rpc { Rpc, RpcError, serve };
 import std.os.rpc as Calls;
-
-cinclude "<time.h>";
-cinclude "<errno.h>";
-
-native type ProcessHandle = LmProcess* released by lm_proc_free;
-native function lm_proc_free(p: ProcessHandle): void;
-native function lm_proc_new(program: String, quiet: int32, mergeErrors: int32, shareConsole: int32): ProcessHandle?;
-native function lm_proc_arg(p: ProcessHandle, arg: String): void;
-native function lm_proc_env(p: ProcessHandle, entry: String): void;
-native function lm_proc_start(p: ProcessHandle): int32;
-native function lm_proc_error_text(code: int32): String;
-native function lm_proc_write(p: ProcessHandle, bytes: byte*, count: int64): int32;
-native function lm_proc_read(p: ProcessHandle, into: byte*, size: int32, ms: int32): int32;
-native function lm_proc_wait(p: ProcessHandle, ms: int32): int32;
-native function lm_proc_code(p: ProcessHandle): int32;
-native function lm_proc_kill(p: ProcessHandle): void;
-native function lm_proc_close_input(p: ProcessHandle): void;
-native function lm_proc_now(): int64;
 
 /** Why a process could not be used. */
 public enum ProcessError {
@@ -60,7 +47,7 @@ public enum ProcessError {
     CannotStart(program: String, why: String),
     /** It is not running: never started, or it ended (or closed its input). */
     NotRunning,
-    /** A task (SystemProcess) did not finish: its process ended, or it could not be sent there. */
+    /** A task did not finish: its process ended, or it could not be sent there. */
     Failed(why: String)
 }
 
@@ -73,259 +60,227 @@ public function message(e: ProcessError): String {
     };
 }
 
-/** A program to run (the literal), and once started, the running process. */
-public class Process {
-    /** The program: a path, or a name looked for in the PATH. */
-    let program: String;
-    let args: String[*] = [];
-    /** "NAME=value": added to this program's environment for it. */
-    let env: String[*] = [];
-    /** true: its error output is thrown away (else it goes where this program's goes). */
-    let quiet: bool = false;
-    /** true: its error output comes with its output, read together (it wins over quiet). */
-    let mergeErrors: bool = false;
-    /** true: it uses this program's console (input, output, error output); nothing is read or written through the Process. */
-    let shareConsole: bool = false;
-
-    let handle: ProcessHandle? = null;
-    /** What was read and not given yet: from `taken` on. */
-    let pending: byte[*] = [];
-    let taken: int32 = 0;
-    let chunk: byte[*] = [];
-    let ended: bool = false;
-
-    /** Starts it. Throws ProcessError.CannotStart when it cannot (not found, not allowed). */
-    function start(): void throws ProcessError {
-        self.handle = lm_proc_new(self.program, self.quiet ? 1 : 0, self.mergeErrors ? 1 : 0, self.shareConsole ? 1 : 0);
-        if (self.handle == null) { throw ProcessError.CannotStart { program: self.program.clone(), why: "out of memory" }; }
-        for (a in self.args) { lm_proc_arg(self.handle!, a); }
-        for (e in self.env) { lm_proc_env(self.handle!, e); }
-        let code: int32 = lm_proc_start(self.handle!);
-        if (code != 0) {
-            self.handle = null;
-            throw ProcessError.CannotStart { program: self.program.clone(), why: lm_proc_error_text(code).clone() };
-        }
-        for (i in 0..4096) { self.chunk.push(0); }
-    }
-
-    /** Writes text to its input. Throws ProcessError.NotRunning when it does not read it any more. */
-    function write(text: String): void throws ProcessError {
-        if (self.handle == null) { throw ProcessError.NotRunning; }
-        let bytes: byte[*] = [];
-        for (b in text) { bytes.push(b); }
-        if (lm_proc_write(self.handle!, bytes, bytes.length as int64) == 0) { throw ProcessError.NotRunning; }
-    }
-
-    /** Closes its input: it reads the end (a program that reads until the end, like `cat`, then finishes). */
-    function closeInput(): void {
-        if (self.handle != null) { lm_proc_close_input(self.handle!); }
-    }
-
-    /**
-     * The next line of its output, without the line end (\n or \r\n). Waits up to `ms` milliseconds for
-     * it; null when it did not come in time, or the output ended (what is left without a line end is the
-     * last line).
-     */
-    function readLine(ms: int32): String? {
-        let until: int64 = lm_proc_now() + (ms as int64);
-        while (true) {
-            let i: int32 = self.taken;
-            while (i < self.pending.length) {
-                if (self.pending[i] == '\n') {
-                    let end: int32 = i > self.taken && self.pending[i - 1] == '\r' ? i - 1 : i;
-                    let line: String = stringOfRange(self.pending, self.taken, end).clone();
-                    self.taken = i + 1;
-                    return line;
-                }
-                i += 1;
-            }
-            if (self.ended) {
-                if (self.taken >= self.pending.length) { return null; }
-                let rest: String = stringOfRange(self.pending, self.taken, self.pending.length).clone();
-                self.taken = self.pending.length;
-                return rest;
-            }
-            if (!self.fill(until)) { return null; }
-        }
-        return null;
-    }
-
-    /** Exactly `count` bytes of its output, as text; waits up to `ms` for them (null if they did not all come). */
-    function read(count: int32, ms: int32): String? {
-        let until: int64 = lm_proc_now() + (ms as int64);
-        while (self.pending.length - self.taken < count) {
-            if (self.ended || !self.fill(until)) { return null; }
-        }
-        let text: String = stringOfRange(self.pending, self.taken, self.taken + count).clone();
-        self.taken += count;
-        return text;
-    }
-
-    /** All of its output until it ends, waiting up to `ms` in total (what came, if it did not end in time). */
-    function readAll(ms: int32): String {
-        let until: int64 = lm_proc_now() + (ms as int64);
-        while (!self.ended && self.fill(until)) { }
-        let text: String = stringOfRange(self.pending, self.taken, self.pending.length).clone();
-        self.taken = self.pending.length;
-        return text;
-    }
-
-    /** Reads more of its output into `pending`, waiting until `until`: false when nothing came in time. */
-    function fill(until: int64): bool {
-        if (self.handle == null || self.ended) { return false; }
-        if (self.taken > 65536 && self.taken * 2 > self.pending.length) { self.compact(); }
-        let left: int64 = until - lm_proc_now();
-        let n: int32 = lm_proc_read(self.handle!, self.chunk, 4096, left > 0 ? left as int32 : 0);
-        if (n < 0) {
-            self.ended = true;
-            return true;
-        }
-        let i: int32 = 0;
-        while (i < n) {
-            self.pending.push(self.chunk[i]);
-            i += 1;
-        }
-        return n > 0;
-    }
-
-    /** Drops what was already given. */
-    function compact(): void {
-        let kept: byte[*] = [];
-        let i: int32 = self.taken;
-        while (i < self.pending.length) {
-            kept.push(self.pending[i]);
-            i += 1;
-        }
-        self.pending.clear();
-        for (b in kept) { self.pending.push(b); }
-        self.taken = 0;
-    }
-
-    /** Waits up to `ms` (-1: as long as it takes) for it to end: its exit code, or null if it did not end yet. */
-    function wait(ms: int32): int32? {
-        if (self.handle == null) { return null; }
-        if (lm_proc_wait(self.handle!, ms) == 0) { return null; }
-        return lm_proc_code(self.handle!);
-    }
-
-    /** Ends it now (if it still runs). */
-    function kill(): void {
-        if (self.handle != null) { lm_proc_kill(self.handle!); }
-    }
-}
-
-/** Where a program is found in the PATH (with .exe on Windows), or null. A path with a folder is checked as it is. */
-public function findProgram(name: String): String? {
-    let windows: bool = Platform.current() == OS.Windows;
-    if (name.contains("/") || name.contains("\\")) { return isRunnable(name) ? name : null; }
-    let path: String = getenv("PATH") ?? "";
-    let separator: String = windows ? ";" : ":";
-    for (dir in path.split(separator)) {
-        if (dir == "") { continue; }
-        let candidate: String = "${dir}/${name}";
-        if (isRunnable(candidate)) { return candidate.clone(); }
-        if (windows && isRunnable("${candidate}.exe")) { return "${candidate}.exe".clone(); }
-    }
-    return null;
-}
-
-native function getenv(name: String): String?;
-/** Whether a program can be run: one class for each system. */
-public interface Executables {
-    function check(path: String): bool;
-}
-
-let executables: Executables = switch (Platform.current()) {
-    case Linux, MacOS, Unix -> PosixExecutables {};
-    case Windows -> WindowsExecutables {};
-};
-
-function isRunnable(path: String): bool { return executables.check(path); }
-
-// ---- tasks in other processes -------------------------------------------------------------------------
-
 /**
  * Work that runs in another process: a copy of this program, so that a panic or a crash there is only an
  * error here. The object goes there with its fields (numbers, bool, String, optionals and lists of them);
  * what run() gives comes back the same way (a table, a number, a String...). A class that implements it
- * says so itself (implements SystemProcess) and extends no other class.
+ * says so itself (implements Task) and extends no other class.
  */
-public interface SystemProcess {
+public interface Task {
     function run(): Any;
 }
 
 /** The variable that makes a copy of this program run tasks instead of its main. */
 const TASKS_ENV: String = "LARIMAR_PROCESS=1";
 
-/** Copies of this program that run SystemProcess tasks: each one a task at a time, several at once. */
+/** A copy of this program that runs tasks: started, and waiting for them. */
+function startCopy(): Rpc throws ProcessError {
+    try {
+        return Calls.startSharedWith(os.programPath(), [], [TASKS_ENV]);
+    } catch (RpcError e) {
+        throw ProcessError.CannotStart { program: os.programPath().clone(), why: Calls.message(e).clone() };
+    }
+}
+
+// The compiler writes these two for a program with Task classes (they ask std.os.process.tasks, which it
+// writes too); without them there is no task to send.
+
+/** The class and fields of a task, as a table: { name, fields }; null when it is not a Task class of the program. */
+function encodeTask(task: Task): Any { return null; }
+
+/** The task of class `name` with these fields; null when the program has no such class. */
+function startTask(name: String, fields: Any): Task? { return null; }
+
+/** What goes to the copy for a task: { name, fields }. */
+function encoded(task: Task): Any throws ProcessError {
+    let params: Any = encodeTask(task);
+    if (params == null) { throw ProcessError.Failed("the task is not of a class of this program that implements Task".clone()); }
+    return params;
+}
+
+/**
+ * A process: another program (`program`, with `args`), or a task of this program (`run`) in a copy of it;
+ * one or the other. The literal says what to run; start() runs it, and join() waits for it to end.
+ */
+public class Process extends Child {
+    /** The task to run in a copy of this program (instead of a program). */
+    let run: Task? = null;
+
+    let copy: Rpc? = null;
+    let call: int64 = 0;
+    let joined: bool = false;
+
+    /** Starts it. Throws ProcessError.CannotStart when it cannot (not found, not allowed, nothing to run). */
+    function start(): void throws ProcessError {
+        if (self.run != null) {
+            if (self.program != "") { throw ProcessError.CannotStart { program: self.program.clone(), why: "a Process runs a program or a task, not both".clone() }; }
+            let params: Any = encoded(self.run!);
+            self.copy = startCopy();
+            try {
+                self.call = self.copy!.begin("run", params);
+            } catch (RpcError e) {
+                self.copy!.stop();
+                self.copy = null;
+                throw ProcessError.Failed(Calls.message(e).clone());
+            }
+            return;
+        }
+        if (self.program == "") { throw ProcessError.CannotStart { program: "".clone(), why: "it has no program and no task to run".clone() }; }
+        let why: String? = self.launch();
+        if (why != null) { throw ProcessError.CannotStart { program: self.program.clone(), why: why!.clone() }; }
+    }
+
+    /**
+     * Waits for it to end: what the task's run() gave, or the exit code of the program. Throws
+     * ProcessError.NotRunning when it was not started (or was joined already), Failed when the task did
+     * not finish.
+     */
+    function join(): Any throws ProcessError {
+        if (self.copy != null) {
+            if (self.joined) { throw ProcessError.NotRunning; }
+            self.joined = true;
+            try {
+                let result: Any = self.copy!.finish(self.call);
+                self.copy!.close();
+                return result;
+            } catch (RpcError e) {
+                self.copy!.stop();
+                throw ProcessError.Failed(Calls.message(e).clone());
+            }
+        }
+        if (!self.started()) { throw ProcessError.NotRunning; }
+        let code: int32? = self.wait(-1);
+        return code ?? -1;
+    }
+
+    /** Writes text to its input. Throws ProcessError.NotRunning when it does not read it any more. */
+    function write(text: String): void throws ProcessError {
+        if (!self.send(text)) { throw ProcessError.NotRunning; }
+    }
+
+    /** Ends it now (if it still runs). */
+    override function kill(): void {
+        super.kill();
+        if (self.copy != null) { self.copy!.stop(); }
+    }
+}
+
+/** Where a program is found in the PATH (with .exe on Windows), or null. A path with a folder is checked as it is. */
+public function findProgram(name: String): String? { return Internal.findProgram(name); }
+
+// ---- many tasks ---------------------------------------------------------------------------------------
+
+/**
+ * Runs tasks in up to `processes` copies of this program, each one a task at a time:
+ * let pool: ProcessPool = { processes: 8 }; pool.submit(task); ... let all: Any = pool.wait();
+ * The copies start as tasks arrive and stay for the next ones until the pool's memory goes.
+ */
 public class ProcessPool {
     /** How many processes at most (they start when there is work for them). */
     let processes: int32 = 4;
     let workers: Rpc[*] = [];
+    /** For each worker, the task it runs (its place among the submitted ones), or -1. */
+    let busy: int32[*] = [];
+    let ids: int64[*] = [];
+    /** What goes for each task submitted and not sent yet. */
+    let queued: Any = {};
+    let sent: int32 = 0;
+    let results: Any = {};
+    let done: int32 = 0;
 
-    /** Runs the task in one of the processes and waits for it: what its run() gave. */
-    function run(task: SystemProcess): Any throws ProcessError {
-        let one: SystemProcess[*] = [task];
-        let results: Any = self.runAll(one);
-        return results[0].clone();
+    /** Runs the task in one of the processes, as soon as one is free (it does not wait for it). */
+    function submit(task: Task): void throws ProcessError {
+        let params: Any = encoded(task);
+        self.queued.push(params.clone());
+        self.results.push(null);
+        self.dispatch();
     }
 
-    /** Runs the tasks in the processes, at the same time, and waits for all: what each run() gave, in order. */
-    function runAll(tasks: SystemProcess[*]): Any throws ProcessError {
-        let results: Any = {};
-        for (t in tasks) { results.push(null); }
-        if (tasks.length == 0) { return results; }
-        let wanted: int32 = self.processes < tasks.length ? self.processes : tasks.length;
-        if (wanted < 1) { wanted = 1; }
-        let busy: int32[*] = [];
-        let ids: int64[*] = [];
-        let next: int32 = 0;
-        let done: int32 = 0;
-        try {
-            while (self.workers.length < wanted) {
-                self.workers.push(Calls.startSharedWith(os.programPath(), [], [TASKS_ENV]));
-            }
-            for (w in self.workers) {
-                busy.push(-1);
-                ids.push(0);
-            }
-            while (done < tasks.length) {
-                for (k in 0..busy.length) {
-                    if (busy[k] < 0 && next < tasks.length) {
-                        let params: Any = Tasks.encode(tasks[next]);
-                        if (params == null) { throw RpcError.Failed(-32602, "the task is not of a class of this program that implements SystemProcess".clone()); }
-                        ids[k] = self.workers[k].begin("run", params);
-                        busy[k] = next;
-                        next += 1;
+    /**
+     * Waits until every task submitted so far has finished: what each run() gave, in the order they were
+     * submitted. Throws ProcessError.Failed when one did not finish (the others are dropped too).
+     */
+    function wait(): Any throws ProcessError {
+        while (self.done < self.results.length) {
+            self.dispatch();
+            for (k in 0..self.busy.length) {
+                if (self.busy[k] >= 0) {
+                    try {
+                        self.results[self.busy[k]] = self.workers[k].finish(self.ids[k]);
+                    } catch (RpcError e) {
+                        self.reset();
+                        throw ProcessError.Failed(Calls.message(e).clone());
                     }
-                }
-                for (k in 0..busy.length) {
-                    if (busy[k] >= 0) {
-                        results[busy[k]] = self.workers[k].finish(ids[k]);
-                        busy[k] = -1;
-                        done += 1;
-                        break;
-                    }
+                    self.busy[k] = -1;
+                    self.done += 1;
+                    break;
                 }
             }
-        } catch (RpcError e) {
-            for (w in self.workers) { w.stop(); }        // the others too: a new start for whatever comes next
-            self.workers.clear();
-            throw ProcessError.Failed(Calls.message(e).clone());
         }
-        return results;
+        let all: Any = self.results.clone();
+        self.queued = {};
+        self.results = {};
+        self.sent = 0;
+        self.done = 0;
+        return all;
+    }
+
+    /** Sends queued tasks to free workers, starting workers up to `processes`. */
+    function dispatch(): void throws ProcessError {
+        let limit: int32 = self.processes > 0 ? self.processes : 1;
+        while (self.sent < self.queued.length) {
+            let k: int32 = -1;
+            for (i in 0..self.busy.length) {
+                if (self.busy[i] < 0) {
+                    k = i;
+                    break;
+                }
+            }
+            if (k < 0) {
+                if (self.workers.length >= limit) { return; }
+                try {
+                    self.workers.push(startCopy());
+                } catch (ProcessError e) {
+                    self.reset();
+                    throw e;
+                }
+                self.busy.push(-1);
+                self.ids.push(0);
+                k = self.workers.length - 1;
+            }
+            try {
+                self.ids[k] = self.workers[k].begin("run", self.queued[self.sent]);
+            } catch (RpcError e) {
+                self.reset();
+                throw ProcessError.Failed(Calls.message(e).clone());
+            }
+            self.busy[k] = self.sent;
+            self.sent += 1;
+        }
+    }
+
+    /** Drops the workers and the tasks: a new start for whatever comes next. */
+    function reset(): void {
+        for (w in self.workers) { w.stop(); }
+        self.workers.clear();
+        self.busy.clear();
+        self.ids.clear();
+        self.queued = {};
+        self.results = {};
+        self.sent = 0;
+        self.done = 0;
     }
 }
 
 /**
- * What a copy of this program started by a ProcessPool does instead of its main (the compiler calls it
- * when LARIMAR_PROCESS is set): it runs the tasks it is sent until the pool closes.
+ * What a copy of this program started for tasks does instead of its main (the compiler calls it when
+ * LARIMAR_PROCESS is set): it runs the tasks it is sent until it is closed.
  */
 public function serveTasks(): int32 {
     serve((call) -> {
-        let task: SystemProcess? = Tasks.start(call.params.name as String ?? "", call.params["fields"]);
+        let task: Task? = startTask(call.params.name as String ?? "", call.params["fields"]);
         if (task == null) {
-            call.fail(-32602, "this program has no SystemProcess class ${call.params.name}");
+            call.fail(-32602, "this program has no Task class ${call.params.name}");
             return null;
         }
         return task!.run();

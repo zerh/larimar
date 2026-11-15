@@ -1,4 +1,4 @@
-// std.runtime.any: Any: values of any type, tables.
+// runtime.any: Any: values of any type, tables.
 // Part of the runtime: the compiler takes from here what a program uses (it is not imported).
 ccode {
     /* ---- runtime: Any ---------------------------------------------------- */

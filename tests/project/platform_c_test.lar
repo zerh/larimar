@@ -1,4 +1,5 @@
-// larimar.toml: [c] for every platform, and [c.<platform>] added to it on that platform only. Each test
+// larimar.toml: [c] (the C compiler and its flags) for every platform, and [c.<platform>] added to it on
+// that platform only. Each test
 // writes a small project in build/test/ and builds it with the compiler under test ($LARIMARC, else the PATH).
 import std.test { check, checkText, checkInt, fail };
 import std.os.process { Process, ProcessError, message, findProgram };
@@ -6,7 +7,7 @@ import std.io.files as Files;
 import std.io { IoError };
 import std.io.path as Paths;
 import std.os;
-import std.os { Platform };
+import std.platform { Platform };
 
 function compiler(): String {
     let fromEnvironment: String = os.env("LARIMARC") ?? "";
@@ -17,21 +18,11 @@ function compiler(): String {
 /** Another platform than this one: its [c.<platform>] must not be used here. */
 function otherPlatform(): String { return Platform.name() == "linux" ? "macos" : "linux"; }
 
-/** Writes a project: its larimar.toml, a main that calls two C functions, and their C files. */
+/** Writes a project: its larimar.toml, and a main. */
 function writeProject(dir: String, toml: String): void throws IoError {
     Files.createDirectories(Paths.join(dir, "src"));
-    Files.createDirectories(Paths.join(dir, "c"));
     Files.writeString(Paths.join(dir, "larimar.toml"), toml);
-    Files.writeString(Paths.join(dir, "src/main.lar"), """
-        native function common_value(): int32;
-        native function here_value(): int32;
-        function main(): int32 {
-            println("\${common_value() + here_value()}");
-            return 0;
-        }
-        """);
-    Files.writeString(Paths.join(dir, "c/common.c"), "int common_value(void) { return 40; }\n");
-    Files.writeString(Paths.join(dir, "c/here.c"), "int here_value(void) { return 2; }\n");
+    Files.writeString(Paths.join(dir, "src/main.lar"), "function main(): int32 { println(\"42\"); return 0; }\n");
 }
 
 /** Runs the compiler (`larimarc <args>`): its exit code, and what it printed (errors too) into `output`. */
@@ -42,35 +33,49 @@ function larimarc(args: String[*], output: String[*]): int32 throws ProcessError
     return p.wait(10000) ?? -1;
 }
 
+// The flags of [c.<this platform>] are added to [c]'s, and those of another platform are not: a flag the C
+// compiler does not know shows which ones reached it.
 test function thisPlatformsSectionIsAdded(): void throws ProcessError {
     let dir: String = Paths.absolute("build/test/platform-c");
+    let output: String[*] = [];
     try {
         writeProject(dir, """
             [project]
             name = "platformc"
 
             [c]
-            sources = ["c/common.c"]
-
-            [c.${Platform.name()}]
-            sources = ["c/here.c"]
+            flags = ["-O1"]
 
             [c.${otherPlatform()}]
-            sources = ["c/not-there.c"]
+            flags = ["--no-such-flag-for-other"]
             """);
     } catch (IoError e) {
         fail("cannot write the project in ${dir}");
         return;
     }
-    let output: String[*] = [];
     checkInt(0, larimarc(["run", dir], output));
-    check(output.join("").contains("42"), "common.c and here.c are both compiled, and not-there.c is not: ${output.join("")}");
+    check(output.join("").contains("42"), "another platform's flags are not used: ${output.join("")}");
+    try {
+        writeProject(dir, """
+            [project]
+            name = "platformc"
+
+            [c.${Platform.name()}]
+            flags = ["--no-such-flag-for-here"]
+            """);
+    } catch (IoError e) {
+        fail("cannot write the project in ${dir}");
+        return;
+    }
+    output.clear();
+    checkInt(1, larimarc(["build", dir], output));
+    check(output.join("").contains("--no-such-flag-for-here"), "this platform's flags are: ${output.join("")}");
 }
 
 test function anUnknownPlatformIsAnError(): void throws ProcessError {
     let dir: String = Paths.absolute("build/test/platform-c-unknown");
     try {
-        writeProject(dir, "[project]\nname = \"unknown\"\n[c.solaris]\nsources = [\"c/here.c\"]\n[c.linux]\nmystery = 1\n");
+        writeProject(dir, "[project]\nname = \"unknown\"\n[c.solaris]\nflags = [\"-O2\"]\n[c.linux]\nmystery = 1\n");
     } catch (IoError e) {
         fail("cannot write the project in ${dir}");
         return;

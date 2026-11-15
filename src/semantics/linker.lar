@@ -12,7 +12,7 @@ import std.io.files as Files;
 import std.io { IoError };
 import std.text { isIdentifierPart, isDigit };
 import syntax.ast {
-    Node, Expr, Stmt, TK, TypeRef, Program, CIncludeDecl, CCodeDecl, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ConstDecl,
+    Node, Expr, Stmt, TK, TypeRef, Program, ImportDecl, NativeInterfaceDecl, CIncludeDecl, CCodeDecl, ExternTypeDecl, ExternFunctionDecl, ExternValueDecl, ConstDecl,
     Param, FunctionDecl, FieldDecl, StructDecl, ClassDecl, InterfaceDecl, NativeTypeDecl, EnumDecl, declName, isTypeDecl, VarDecl,
     AssignStmt, ReturnStmt, ExprStmt, IfStmt, WhileStmt, ForStmt, ThrowStmt, YieldStmt, TryStmt, SwitchStmt,
     BlockStmt, StringLit, Ident, Member, Index, Call, Unary, Binary, Ternary, IsExpr, Cast, Unwrap, Lambda, ObjectLit,
@@ -35,13 +35,14 @@ class Module {
     let values: Any;
     let types: Any;
     let aliases: Any;           // alias -> index in mods
+    let natives: Any;           // native interface (as seen here) -> { member: its mangled name }
 }
 
 function newModule(path: String in default, index: int32): Module {
     let prefix: String = path != "" ? ("${path.replace(".", "__")}__" in default) : "";
     return Module {
         path, prefix, index, ownValues: {} in default, ownTypes: {} in default, publics: {} in default,
-        values: {} in default, types: {} in default, aliases: {} in default
+        values: {} in default, types: {} in default, aliases: {} in default, natives: {} in default
     } in default;
 }
 
@@ -65,7 +66,7 @@ public function inTarget(platform: String): bool {
     return platform == "" || platform == target || platform == "unix" && target != "windows";
 }
 
-/** The folder of the standard library (codegen reads the runtime there, std/runtime). */
+/** The folder of the standard library (codegen reads the runtime beside it, in runtime/). */
 public let stdDir: String = "std";
 
 /** The files of the program, by index (for messages and RT_FILES). */
@@ -108,8 +109,10 @@ public function link(mainShown: String in default, mainSource: String in default
     if (root.program != null) { writeTasks(mainPath); }
     if (root.program != null && !langItself) { loadLang(); }
     for (m in order) { tables(m); }
+    unsafeSources.clear();
+    unsafeNotes.clear();
     for (m in order) {
-        if (!trusted(m, mainPath)) { noC(m); }
+        if (!trusted(m, mainPath)) { noC(m, unsafeModule(m)); }
     }
     let prog: Program = Program { line: 1 } in default;
     if (lang != null) {
@@ -124,7 +127,7 @@ public function link(mainShown: String in default, mainSource: String in default
         for (d in m.program!.decls) {
             if (langItself && m == root) { d.builtin = true; }       // its declarations are the language's
             if (d is CIncludeDecl c) {
-                let key: String = "${c.header}|${c.platform}|${c.owner != "" ? "${m.path}.${c.owner}" : ""}" in default;   // a class's: its system is known later
+                let key: String = "${c.header}|${c.platform}|${c.owner != "" ? "${m.path}.${c.owner}" : ""}|${c.gives}" in default;   // a class's: its system is known later
                 if (seen[key] != null) { continue; }
                 seen[key] = 1;
             }
@@ -220,18 +223,30 @@ function loadLang(): void {
 
 // ---- the tasks of other processes (std.os.process.tasks) --------------------------------------------
 
-/** The program has classes that implement SystemProcess: its copies run them (the C's main says so). */
-public let systemProcesses: bool = false;
+/** The program has classes that implement Task: its copies run them (the C's main says so). */
+public let taskClasses: bool = false;
 
 const TASKS_MODULE: String = "std.os.process.tasks";
+const PROCESS_MODULE: String = "std.os.process";
 
-/** The types a field of a SystemProcess can have: they go to the other process as they are. */
+/** The types a field of a Task can have: they go to the other process as they are. */
 const TASK_SCALARS: String = " int8 int16 int32 int64 uint8 uint16 uint32 uint64 byte float32 float64 bool String ";
 
-/** The name of `implements` that is SystemProcess, as the class wrote it ("" when it does not implement it). */
-function taskInterface(c: ClassDecl in default): String {
+/**
+ * The name of `implements` that is std.os.process.Task, as the class wrote it ("" when it does not
+ * implement it): Task imported by name, or through the alias of std.os.process.
+ */
+function taskInterface(c: ClassDecl in default, p: Program in default): String {
     for (i in c.interfaces) {
-        if (i == "SystemProcess" || i.endsWith(".SystemProcess")) { return i; }
+        for (im in p.imports) {
+            if (im.path != "std.os.process") { continue; }
+            if (im.hasNames && i == "Task") {
+                for (n in im.names) {
+                    if (n == "Task") { return i; }
+                }
+            }
+            if (im.alias != "" && i == "${im.alias}.Task") { return i; }
+        }
     }
     return "";
 }
@@ -268,13 +283,13 @@ function pathUnder(dir: String, file: String): String {
 }
 
 /**
- * For each module with classes that implement SystemProcess, two functions of its own: one gives the
+ * For each module with classes that implement Task, two functions of its own: one gives the
  * class and fields of a task as a table, the other makes it again from them. std.os.process.tasks is
  * then written to ask each of those modules.
  */
 function writeTasks(mainPath: String): void {
-    let at: int32 = modIndex[TASKS_MODULE] as int32 ?? -1;
-    if (at < 0) { return; }
+    let processAt: int32 = modIndex[PROCESS_MODULE] as int32 ?? -1;
+    if (processAt < 0) { return; }
     let owners: String[*] = [] in default;
     for (m in mods) {
         if (m.program == null || isStd(m.path) || m.path == TASKS_MODULE) { continue; }
@@ -284,14 +299,14 @@ function writeTasks(mainPath: String): void {
         let line: int32 = 0;
         for (d in m.program!.decls) {
             if (!(d is ClassDecl c)) { continue; }
-            let spelled: String = taskInterface(c);
+            let spelled: String = taskInterface(c, m.program!);
             if (spelled == "") { continue; }
             if (iface == "") {
                 iface = spelled;
                 line = c.line;
             }
             if (c.superName != "") {
-                error(c.line, "SystemProcess '${c.name}' extends '${c.superName}': a task goes to another process with its own fields, so it extends no class.");
+                error(c.line, "Task '${c.name}' extends '${c.superName}': a task goes to another process with its own fields, so it extends no class.");
                 continue;
             }
             let key: String = m.path != "" ? "${m.path}.${c.name}" : c.name;
@@ -317,7 +332,7 @@ function writeTasks(mainPath: String): void {
                     literal.push("${n}: []" in default);
                     fill.add("        for (i, v in fields[\"${n}\"]) { t.${n}.push(${fromTable(t.inner!, "v")}); }\n");
                 } else {
-                    error(fd.line, "Field '${n}' of SystemProcess '${c.name}' goes to another process: it is a number, a bool, a String, an optional of one of them, or a list of them.");
+                    error(fd.line, "Field '${n}' of Task '${c.name}' goes to another process: it is a number, a bool, a String, an optional of one of them, or a list of them.");
                 }
             }
             encode.add("        let out: Any = { name: \"${key}\" };\n        out[\"fields\"] = f;\n        return out;\n    }\n");
@@ -348,7 +363,7 @@ function writeTasks(mainPath: String): void {
         }
         let path: String = m == root ? modulePathOf(mainPath) : m.path;
         if (path == "") {
-            error(line, "The SystemProcess classes of this file are found by its module, and the file is not in the project's folder: move them to a module of the project.");
+            error(line, "The Task classes of this file are found by its module, and the file is not in the project's folder: move them to a module of the project.");
             continue;
         }
         owners.push(path.clone() in default);
@@ -360,22 +375,45 @@ function writeTasks(mainPath: String): void {
     for (i, o in owners) {
         imports.add("import ${o} as Tasks${i};\n");
         encodes.add("    let e${i}: Any = Tasks${i}.larimarTaskEncode(task);\n    if (e${i} != null) { return e${i}; }\n");
-        starts.add("    let t${i}: SystemProcess? = Tasks${i}.larimarTaskStart(name, fields);\n    if (t${i} != null) { return t${i}; }\n");
+        starts.add("    let t${i}: Task? = Tasks${i}.larimarTaskStart(name, fields);\n    if (t${i} != null) { return t${i}; }\n");
     }
     let registry: String = """
-        import std.os.process { SystemProcess };
+        import std.os.process { Task };
         ${imports.toString()}
-        public function encode(task: SystemProcess): Any {
+        public function encode(task: Task): Any {
         ${encodes.toString()}    return null;
         }
 
-        public function start(name: String, fields: Any): SystemProcess? {
+        public function start(name: String, fields: Any): Task? {
         ${starts.toString()}    return null;
         }
         """ in default;
-    let tasks: Module = mods[at];
+    // std.os.process.tasks, written here; std.os.process's encodeTask and startTask then ask it (std itself
+    // has no import of it: no cycle in its sources)
+    let tasks: Module = newModule(TASKS_MODULE, fileNames.length);
+    fileNames.push(shownName(TASKS_MODULE));
+    filePaths.push(Paths.absolute(moduleFile(TASKS_MODULE)).clone() in default);
+    fileSources.push(registry);
+    mods.push(tasks);
+    modIndex[TASKS_MODULE] = mods.length - 1;
     parse(tasks, registry);
     if (tasks.program == null) { return; }
+    let process: Module = mods[processAt];
+    if (process.program == null) { return; }
+    process.program!.imports.push(ImportDecl { line: 1, path: TASKS_MODULE, alias: "TaskRegistry" } in default);
+    let calls: Program = parseProgram("""
+        function encodeTask(task: Task): Any { return TaskRegistry.encode(task); }
+        function startTask(name: String, fields: Any): Task? { return TaskRegistry.start(name, fields); }
+        """, process.index * FILE_LINES + 1);
+    for (i, d in process.program!.decls) {
+        if (!(d is FunctionDecl f)) { continue; }
+        for (c in calls.decls) {
+            if (c is FunctionDecl g && g.name == f.name) {
+                g.line = f.line;
+                process.program!.decls[i] = g;
+            }
+        }
+    }
     let kept: Module[*] = [] in default;
     for (m in order) {
         if (m != tasks) { kept.push(m); }
@@ -383,7 +421,7 @@ function writeTasks(mainPath: String): void {
     order.clear();
     for (m in kept) { order.push(m); }
     visit(tasks);                                 // its imports (the modules of the tasks), then itself, last
-    systemProcesses = true;
+    taskClasses = true;
 }
 
 /** Adds the words of a text (not those of its comments) to `words`. */
@@ -450,9 +488,18 @@ function parse(m: Module in default, source: String in default): void {
         }
         p.decls = kept;
     }
+    let language: bool = isLanguage(m);
     for (i, d in p.decls) {                   // std.memory: limit and compact are written by the compiler, not C
         if (d is ExternFunctionDecl e && nativeKnown(m, e.name)) {
             p.decls[i] = FunctionDecl { line: e.line, name: e.name, params: e.params, ret: e.ret, isNative: true } in default;
+        } else if (d is FunctionDecl f && !f.hasBody && !f.isTest) {
+            if (nativeKnown(m, f.name)) {
+                f.isNative = true;
+            } else {
+                error(f.line, "Function '${f.name}' needs its body: function ${f.name}(...) { ... } (only the compiler's own, in std.lang, have none)");
+            }
+        } else if (d is NativeTypeDecl t && t.language && !language) {
+            error(t.line, "'type ${t.name} { }' is a type of the language: it is only in std.lang (C types are declared in a native interface of std)");
         }
     }
     m.program = p;
@@ -486,6 +533,32 @@ public function isStd(path: String): bool { return path.startsWith("std."); }
  */
 public let unsafeC: bool = false;
 
+/** [project] unsafe_c = true of the main file's project: its modules may have native interfaces. */
+public let projectUnsafe: bool = false;
+/** Per library of [dependencies] (the order of libraryNames): its [project] unsafe_c. */
+public let libraryUnsafe: bool[*] = [] in default;
+/**
+ * Where the program's C comes from, outside std: the project ("this project") and the libraries whose
+ * native interfaces it has, and what was noticed about them (a type that nothing releases). Built after
+ * linking; larimar build says it every time.
+ */
+public let unsafeSources: String[*] = [] in default;
+public let unsafeNotes: String[*] = [] in default;
+
+/** Whether the module may have native interfaces of its own (unsafe_c of its project or library). */
+function unsafeModule(m: Module in default): bool {
+    if (isStd(m.path)) { return false; }
+    let library: int32 = libraryOf(m.path);
+    if (library >= 0) { return library < libraryUnsafe.length && libraryUnsafe[library]; }
+    return projectUnsafe;
+}
+
+/** Who a module's C is from: its library, or the project. */
+function sourceOf(m: Module in default): String {
+    let library: int32 = libraryOf(m.path);
+    return library >= 0 ? libraryNames[library] : "this project";
+}
+
 /** Whether a module may have C: the standard library's (the installed one, or the copy being edited), and the language's. */
 function trusted(m: Module in default, mainPath: String): bool {
     if (unsafeC || isStd(m.path) || (lang != null && m == lang!)) { return true; }
@@ -497,9 +570,29 @@ function trusted(m: Module in default, mainPath: String): bool {
  * C is only the standard library's: a program, and a library written in Larimar, use what std gives (and,
  * for the rest, other programs). Whatever would bring C of its own here is an error.
  */
-function noC(m: Module in default): void {
+function noC(m: Module in default, interfaces: bool): void {
+    let parts: Any = {} in default;              // the names of what native interfaces declare: said once, at the interface
     for (d in m.program!.decls) {
+        if (d is NativeInterfaceDecl ni) {
+            for (n in ni.members) { parts["${ni.name}__${n}"] = 1; }
+        }
+    }
+    for (d in m.program!.decls) {
+        if (interfaces && d is NativeInterfaceDecl ni) {          // unsafe_c: allowed, and said at build
+            let from: String = sourceOf(m);
+            if (!unsafeSources.contains(from)) { unsafeSources.push(from.clone() in default); }
+            continue;
+        }
+        if (interfaces && d is ExternTypeDecl et && et.cType.trim().endsWith("*") && et.cType.trim() != "void*" && et.releasedBy == "" && interfaceTypes(m).contains(et.name)) {
+            unsafeNotes.push("${sourceOf(m)}: type ${et.name} (${et.cType}) has no 'released by': nothing frees it" in default);
+        }
         let what: String = switch (d) {
+            case NativeInterfaceDecl n -> "native interface";
+            case CIncludeDecl c when c.gives != "" -> "";
+            case ExternTypeDecl t when interfaces && interfaceTypes(m).contains(t.name) -> "";
+            case StructDecl st when interfaces && interfaceTypes(m).contains(st.name) -> "";
+            case ExternFunctionDecl f when parts[f.name] != null -> "";
+            case ExternValueDecl v when parts[v.name] != null -> "";
             case CIncludeDecl c -> "cinclude";
             case CCodeDecl c -> "ccode";
             case ExternTypeDecl t -> "native type";
@@ -511,13 +604,25 @@ function noC(m: Module in default): void {
             default -> "";
         };
         if (what != "") {
-            error(d.line, "${what} is only for the standard library: C is written there, and a program uses what std gives.");
+            let open: String = what == "native interface" ? ", or for a project with [project] unsafe_c = true (its C has none of the language's guarantees)" : "";
+            error(d.line, "${what} is only for the standard library${open}: C is written there, and a program uses what std gives.");
         }
     }
 }
 
+/** The types and structs the native interfaces of a module declare (their names). */
+function interfaceTypes(m: Module in default): String[*] {
+    let names: String[*] = [] in default;
+    for (d in m.program!.decls) {
+        if (d is NativeInterfaceDecl ni) {
+            for (t in ni.types) { names.push(t); }
+        }
+    }
+    return names;
+}
+
 /**
- * Where a module's file is: std/, else a library of [packages] (its name, or <name>.<part>), else the
+ * Where a module's file is: std/, else a library of [dependencies] (its name, or <name>.<part>), else the
  * project's folder (the main file's).
  */
 function moduleFile(path: String): String {
@@ -534,7 +639,7 @@ function moduleFile(path: String): String {
     return own;
 }
 
-/** The libraries of the project's [packages]: their names, and the folders of their modules (same order). */
+/** The libraries of the project's [dependencies]: their names, and the folders of their modules (same order). */
 public let libraryNames: String[*] = [] in default;
 public let libraryRoots: String[*] = [] in default;
 /** Per library: the executable of a service ("" for a library, whose code the program compiles). */
@@ -565,6 +670,10 @@ function visit(m: Module in default): void {
             modIndex[imp.path] = 0;                         // the file opened alone (root), imported back by its parts
             continue;
         }
+        if (!isStd(m.path) && stdOwn(imp.path) && !stdFileOpened(m)) {
+            error(imp.line, "'${imp.path}' is a part of std for std itself (its C for one system, or what its modules share): use what std gives (${stdPublicOf(imp.path)}).");
+            continue;
+        }
         let service: int32 = libraryOf(imp.path);
         if (service >= 0 && service < libraryServices.length && libraryServices[service] != "" && imp.path != libraryNames[service]) {
             error(imp.line, "'${imp.path}' is a part of the service '${libraryNames[service]}': a program uses what the service gives (import ${libraryNames[service]}).");
@@ -592,7 +701,7 @@ function visit(m: Module in default): void {
         parse(dep, text);
         let library: int32 = libraryOf(imp.path);
         if (library >= 0 && Files.isFile(Paths.join(rootDir, "${imp.path.replace(".", "/")}.lar"))) {
-            error(imp.line, "Module '${imp.path}' is of the library '${libraryNames[library]}' of [packages], and the project has a file with its name too: rename the project's.");
+            error(imp.line, "Module '${imp.path}' is of the library '${libraryNames[library]}' of [dependencies], and the project has a file with its name too: rename the project's.");
         }
         if (dep.program != null) { visit(dep); }
     }
@@ -612,6 +721,12 @@ function tables(m: Module in default): void {
     }
     dictFromSet(m.values, m.ownValues, m.prefix);
     dictFromSet(m.types, m.ownTypes, m.prefix);
+    for (d in m.program!.decls) {              // its native interfaces: Name.f is the C function f
+        if (!(d is NativeInterfaceDecl ni)) { continue; }
+        let members: Any = {} in default;
+        for (n in ni.members) { members[n] = "${m.prefix}${ni.name}__${n}" in default; }
+        m.natives[ni.name] = members;
+    }
     for (imp in m.program!.imports) {
         let ti: int32 = (modIndex[imp.path] as int32 ?? -1);
         if (ti < 0) { continue; }
@@ -641,6 +756,19 @@ function tables(m: Module in default): void {
                 bring(m, m.types, n, target, "${target.prefix}${n}" in default, imp.line);
             }
             if (!found) { error(imp.line, "Module '${target.path}' has no '${n}'."); }
+            if (found && target.natives[n] != null) { m.natives[n] = target.natives[n].clone() in default; }
+        }
+    }
+    for (d in m.program!.decls) {              // and what the native interfaces they extend give
+        if (!(d is NativeInterfaceDecl ni)) { continue; }
+        for (parent in ni.parents) {
+            if (m.natives[parent] == null) {
+                error(ni.line, "Native interface '${ni.name}' extends '${parent}', which is not a native interface known here (import it by name).");
+                continue;
+            }
+            for (k, v in m.natives[parent].fields) {
+                if (m.natives[ni.name][k] == null) { m.natives[ni.name][k] = v.clone() in default; }
+            }
         }
     }
 }
@@ -684,6 +812,42 @@ function local(n: String): bool {
 }
 
 /** The native functions of modules: Memory.limit and Memory.compact, in std/memory.lar (imported, or opened alone). */
+/**
+ * A module of std that only std imports: the C of one system (std.x.posix, .windows, .macos) and what the
+ * modules of a part share (std.x.common, std.x.internal).
+ */
+function stdOwn(path: String): bool {
+    if (!isStd(path)) { return false; }
+    for (part in path.split(".")) {
+        if (part == "posix" || part == "windows" || part == "macos" || part == "common" || part == "internal") { return true; }
+    }
+    return false;
+}
+
+/** std.net.posix -> std.net: where what it does is given. */
+function stdPublicOf(path: String): String {
+    let parts: String[*] = path.split(".");
+    let kept: String[*] = [];
+    for (p in parts) {
+        if (p == "posix" || p == "windows" || p == "macos" || p == "common" || p == "internal") { break; }
+        kept.push(p);
+    }
+    return kept.join(".").clone();
+}
+
+/** A file of std opened alone (the editor, larimar check std/x.lar): it is std, whatever its module path. */
+function stdFileOpened(m: Module in default): bool {
+    if (m.index >= filePaths.length) { return false; }
+    let f: String = Paths.normalize(Paths.absolute(filePaths[m.index]));
+    return f.startsWith("${Paths.normalize(Paths.absolute(stdDir))}/");
+}
+
+/** std.lang (or std/lang.lar opened alone): what has no body there the compiler writes. */
+function isLanguage(m: Module in default): bool {
+    if (m.path == "std.lang") { return true; }
+    return m.path == "" && m.index < filePaths.length && filePaths[m.index].replace("\\", "/").endsWith("std/lang.lar");
+}
+
 function nativeKnown(m: Module in default, name: String): bool {
     let alone: bool = m.path == "" && m.index < filePaths.length && filePaths[m.index].replace("\\", "/").endsWith("std/memory.lar");
     return (m.path == "std.memory" || alone) && (name == "limit" || name == "compact");
@@ -982,6 +1146,13 @@ function expr(e: Expr in default): Expr {
     switch (e) {
         case Ident id -> identName(id);
         case Member m -> {
+            if (m.object is Ident io && !local(io.name) && rm.natives[io.name] != null) {    // Native.f is the C function f
+                let found: String = rm.natives[io.name][m.name] as String ?? "";
+                if (found == "") { error(m.line, "Native interface '${io.name}' has no '${m.name}'."); }
+                let id: Ident = Ident { line: m.line, name: found == "" ? m.name : found, rewritten: true } in default;
+                m.replaced = id;
+                return id;
+            }
             if (m.object is Ident obj && isAlias(obj.name)) {          // alias.name is the name itself
                 let name: String = exported(mods[(rm.aliases[obj.name] as int32 ?? -1)], m.name, true, m.line);
                 let id: Ident = Ident { line: m.line, name: name == "" ? m.name : name, rewritten: true } in default;
@@ -1058,7 +1229,7 @@ function expr(e: Expr in default): Expr {
 /** Platform.current(), as the linker leaves it. */
 function asksPlatform(e: Expr in default): bool {
     return e is Call c && c.args.length == 0 && c.callee is Member m && m.name == "current"
-        && m.object is Ident t && t.name == "std__os__Platform";
+        && m.object is Ident t && (t.name == "std__platform__Platform" || t.name == "std__os__Platform");
 }
 
 /** A switch on the platform that --target reduced to its arm. */

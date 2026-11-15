@@ -10,26 +10,24 @@
 // SHA-1 is broken for signatures: it is here for protocols that need it (the WebSocket handshake). For
 // anything new, SHA-256. The results are new lists, created where the caller puts them.
 
-import std.os { Platform, OS };
+import std.platform { Platform, OS };
 import std.crypto.posix { UrandomSource };
 import std.crypto.macos { MacOSRandomSource };
 import std.crypto.windows { WindowsRandomSource };
 
-/** Where the secure random bytes come from: a class for each platform (std/crypto/posix.lar, macos.lar, windows.lar). */
-public interface RandomSource {
-    function fill(items: byte[]): bool;
+/** Secure random bytes from the system into `items` (std/crypto/posix.lar, macos.lar, windows.lar): false if it gave none. */
+function fillRandom(items: byte[]): bool {
+    return switch (Platform.current()) {
+        case Linux, Unix -> UrandomSource.fill(items);
+        case MacOS -> MacOSRandomSource.fill(items);
+        case Windows -> WindowsRandomSource.fill(items);
+    };
 }
-
-let randomSource: RandomSource = switch (Platform.current()) {
-    case Linux, Unix -> UrandomSource {};
-    case MacOS -> MacOSRandomSource {};
-    case Windows -> WindowsRandomSource {};
-};
 
 /** n bytes from the system's secure random source (it panics if there is none: it never gives weak bytes). */
 public function randomBytes(n: int32): byte[*] {
     let out: byte[*] = zeros(n);
-    if (n > 0 && !randomSource.fill(out)) { panic("std.crypto: the system gave no random bytes"); }
+    if (n > 0 && !fillRandom(out)) { panic("std.crypto: the system gave no random bytes"); }
     return out;
 }
 

@@ -1,4 +1,4 @@
-// std.runtime.string_methods: the methods of String written in C.
+// runtime.string_methods: the methods of String written in C.
 // Part of the runtime: the compiler takes from here what a program uses (it is not imported).
 ccode {
 /* ---- runtime: String methods ------------------------------------------ */

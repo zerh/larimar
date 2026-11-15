@@ -1,0 +1,55 @@
+// std.platform: the system the program is built for, and the marks of the classes that are for one.
+//
+//   import std.platform { Platform, OS };
+//   if (Platform.current() == OS.Windows) { ... }
+//
+// What differs between systems is a class for each, marked with the platform it is for (implements
+// UnixPlatform, LinuxPlatform, MacOSPlatform or WindowsPlatform), with the C of that system in it: its C
+// reaches only that system's build. A switch on Platform.current() chooses the one that runs (with
+// --target, the compiler chooses it). This module imports nothing: every part of std can mark its classes.
+
+/** The systems Larimar runs on (Unix: another Unix, a BSD). */
+public enum OS { Linux, MacOS, Windows, Unix }
+
+/**
+ * What a class is for: a class that implements one of these is for that platform. Its C (cinclude, ccode,
+ * the C bodies of its methods) reaches only that system's build; elsewhere its methods with C panic.
+ */
+public interface Platform {
+    /** The system this program was compiled for. */
+    static function current(): OS {
+        return switch (platformNumber()) {
+            case 1 -> OS.Windows;
+            case 2 -> OS.MacOS;
+            case 3 -> OS.Linux;
+            default -> OS.Unix;
+        };
+    }
+
+    /** Its name: "linux", "macos", "windows" or "unix". */
+    static function name(): String {
+        return switch (Platform.current()) {
+            case Linux -> "linux";
+            case MacOS -> "macos";
+            case Windows -> "windows";
+            case Unix -> "unix";
+        };
+    }
+}
+public interface UnixPlatform extends Platform {}         // Linux, macOS and the other Unix
+public interface LinuxPlatform extends UnixPlatform {}
+public interface MacOSPlatform extends UnixPlatform {}
+public interface WindowsPlatform extends Platform {}
+
+/** Where Larimar learns the system: the C compiler's own macros (with --target, the compiler writes it). */
+native function platformNumber(): int32 {
+    #if defined(_WIN32)
+    return 1;
+    #elif defined(__APPLE__)
+    return 2;
+    #elif defined(__linux__)
+    return 3;
+    #else
+    return 0;
+    #endif
+}

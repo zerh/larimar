@@ -2,7 +2,7 @@
 
 import std.net.tls.common;
 import std.net.openssl;
-import std.os { LinuxPlatform };
+import std.platform { LinuxPlatform };
 
 /** Linux: OpenSSL, loaded at run time (std.net's, shared with its TLS servers). */
 public class OpenSslTls implements LinuxPlatform {

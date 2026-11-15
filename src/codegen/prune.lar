@@ -7,14 +7,17 @@
 // stays whole; the ccode of the standard library ("ccode (std)") is cut like the rest. For the runtime,
 // the roots are the names the pruned program uses; #ifdef RT_THREADS and #ifdef RT_FILES are decided here.
 //
-// The runtime itself is C, in the ccode of std/runtime/*.lar (read in the order of runtimeFiles): editing
-// it does not change the compiler, nor the bootstrap.
+// The runtime itself is C, in the ccode of runtime/*.lar, beside std/ (read in the order of runtimeFiles):
+// editing it does not change the compiler, nor the bootstrap.
 
 import std.text { isIdentifierPart, isDigit };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
 import semantics.linker { stdDir };
+
+/** The section of the headers of native interfaces: each one a piece, kept when what it gives is used. */
+public const NATIVE_HEADERS: String = "Native headers";
 
 /** A piece of C: a declaration of the program, a paragraph of the runtime, or a heading over them. */
 class Piece {
@@ -50,13 +53,14 @@ public function prune(program: String, roots: String[*]): String {
             continue;
         }
         if (depth == 0 && t.isEmpty()) {
-            flush(pieces, cur, rootSection(title));
+            if (title == NATIVE_HEADERS) { flushHeader(pieces, cur); } else { flush(pieces, cur, rootSection(title)); }
             if (pieces.length > 0) { pieces[pieces.length - 1].blankAfter = true; }
             continue;
         }
         cur.push(ln);
         if (rootSection(title)) { continue; }               // whole, up to the next heading
         depth += braceDelta(ln);
+        if (title == NATIVE_HEADERS) { continue; }           // a header (and its #if) up to the blank line
         if (depth == 0 && (t.endsWith(";") || t.endsWith("}") || t.startsWith("#"))) { flush(pieces, cur, t.startsWith("#")); }
     }
     flush(pieces, cur, rootSection(title));
@@ -81,9 +85,24 @@ function flush(pieces: Piece[*], lines: String[*], root: bool): void {
     lines.clear();
 }
 
+/** The lines of a header of a native interface become a piece: it defines what its comment says it gives. */
+function flushHeader(pieces: Piece[*], lines: String[*]): void {
+    if (lines.length == 0) { return; }
+    pieces.push(Piece { text: lines.join("\n").clone() });
+    let p: Piece = pieces[pieces.length - 1];
+    for (ln in lines) {
+        let t: String = ln.trim();
+        if (!t.startsWith("/* gives: ") || !t.endsWith(" */")) { continue; }
+        for (n in t.substring(10, t.length - 3).split(" ")) {
+            if (n != "") { p.defines.push(n.clone()); }
+        }
+    }
+    lines.clear();
+}
+
 // ---- the runtime ----------------------------------------------------------------------------------
 
-/** The runtime's files, in std/runtime, in the order their C is written. */
+/** The runtime's files, in runtime/ (beside std/), in the order their C is written. */
 let runtimeFiles: String[*] = ["base", "threads", "panic", "memory", "thread", "string", "string_methods", "integer", "class", "any"];
 
 /** The C of a runtime file: between "ccode {" and the last "}" (each file is that one ccode). */
@@ -93,17 +112,17 @@ function runtimeC(file: String): String {
     return marker >= 0 && close > marker + 7 ? file.substring(marker + 7, close) : "";
 }
 
-/** The runtime's C, read once from std/runtime (an #error line for C if a file is missing). */
+/** The runtime's C, read once from runtime/ (an #error line for C if a file is missing). */
 let runtimeRead: String? = null;
 function runtimeSource(): String {
     if (runtimeRead != null) { return runtimeRead!; }
     let text: String = "";
     for (name in runtimeFiles) {
-        let path: String = Paths.join(Paths.join(stdDir, "runtime"), "${name}.lar");
+        let path: String = Paths.join(Paths.join(Paths.parent(Paths.normalize(Paths.absolute(stdDir))), "runtime"), "${name}.lar");
         try {
             text = "${text}${runtimeC(Files.readString(path))}";
         } catch (IoError e) {
-            text = "${text}#error \"Larimar's runtime was not found: ${path} (set LARIMAR_HOME to the folder that has std/)\"\n";
+            text = "${text}#error \"Larimar's runtime was not found: ${path} (set LARIMAR_HOME to the folder that has std/ and runtime/)\"\n";
         }
     }
     runtimeRead = text.clone() in default;

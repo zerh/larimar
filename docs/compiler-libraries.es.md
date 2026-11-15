@@ -1,7 +1,7 @@
 # Bibliotecas, servicios y tareas: cómo están hechos en el compilador
 
 Para quien tenga que **tocar el compilador**. Dice dónde vive cada pieza de las bibliotecas, los servicios
-y las tareas (`SystemProcess`), y qué recorre cada caso, con los nombres reales de las funciones.
+y las tareas (`Task`), y qué recorre cada caso, con los nombres reales de las funciones.
 
 - Para escribir o usar una biblioteca o un servicio: [libraries.es.md](libraries.es.md) y el capítulo 27 del
   [manual](manual.es.md). No hace falta nada de esto.
@@ -18,9 +18,11 @@ memoria compartida, los procesos) está en std.
 - **Un servicio** es un proyecto aparte. Para el programa, el linker escribe un módulo con una clase cuyas
   llamadas van al ejecutable del servicio (`project/services.lar`, `clientSource`); para el servicio,
   `main.lar` escribe el main de su ejecutable (`serverSource`).
-- **Una tarea** es un objeto de una clase que implementa `SystemProcess`. El linker escribe, en cada módulo
-  que tiene esas clases, cómo sus objetos van a otro proceso, y reescribe `std.os.process.tasks` para que
-  pregunte a esos módulos (`writeTasks`).
+- **Una tarea** es un objeto de una clase que implementa `std.os.process.Task` (importada por nombre o
+  por un alias de ese módulo: `taskInterface`). El linker escribe, en cada módulo que tiene esas clases,
+  cómo sus objetos van a otro proceso; escribe `std.os.process.tasks` para que pregunte a esos módulos, y
+  cambia `encodeTask` y `startTask` de `std.os.process` para que le pregunten a él (`writeTasks`). std no
+  importa `tasks`: así no tiene ciclos.
 
 ## Contenido
 
@@ -39,7 +41,7 @@ memoria compartida, los procesos) está en std.
 
 ```mermaid
 flowchart TB
-    toml["main.lar: project<br/>lee [packages]"]
+    toml["main.lar: project<br/>lee [dependencies]"]
     libs["project/libraries.lar<br/>larimarLibraries: carpetas, nombres,<br/>service y exe de cada una"]
     session["editor/session.lar<br/>findLibraryRoots"]
     linker["semantics/linker.lar<br/>libraryNames, libraryRoots, libraryServices<br/>moduleFile, visit"]
@@ -50,7 +52,7 @@ flowchart TB
     toml --> libs
     session --> libs
     session --> linker
-    linker -- "un servicio de [packages]" --> services
+    linker -- "un servicio de [dependencies]" --> services
     main -- "kind = service" --> services
     linker --> tasks
     tasks -. systemProcesses .-> wrapper
@@ -60,13 +62,13 @@ flowchart TB
 
 | Archivo | Qué hace |
 |---|---|
-| `src/project/libraries.lar` | `larimarLibraries`: las bibliotecas y servicios de `[packages]`, comprobados (`libraryConfig`). De un servicio guarda `service` y `exe` (donde se construye su ejecutable) y no lee sus `[packages]` |
+| `src/project/libraries.lar` | `larimarLibraries`: las bibliotecas y servicios de `[dependencies]`, comprobados (`libraryConfig`). De un servicio guarda `service` y `exe` (donde se construye su ejecutable) y no lee sus `[dependencies]` |
 | `src/editor/session.lar` | `findLibraryRoots`: lee el `larimar.toml` del archivo que se compila y llena `libraryNames`, `libraryRoots` y `libraryServices` |
 | `src/semantics/linker.lar` | `libraryOf` y `moduleFile`: un módulo `nombre` o `nombre.parte` se busca en la carpeta de su biblioteca. `visit`: el choque con un archivo del programa, y para un servicio el módulo escrito por `clientSource` en vez de su archivo. `writeTasks`: las tareas. `trusted` y `noC`: la regla de C |
 | `src/project/services.lar` | `contract`: las funciones públicas del servicio y sus tipos. `clientSource`: el módulo que importa el programa. `serverSource`: el main del ejecutable |
-| `src/main.lar` | `project`: `kind` (`program`, `library`, `service`) y `[packages]`. `checkLibrary`, `buildService`, `buildServices`, `createService`. `--unsafe-c` |
+| `src/main.lar` | `project`: `kind` (`program`, `library`, `service`) y `[dependencies]`. `checkLibrary`, `buildService`, `buildServices`, `createService`. `--unsafe-c` |
 | `src/codegen/gen/classes.lar` | `mainWrapper`: con `systemProcesses`, una copia arrancada por un `ProcessPool` corre `serveTasks` en vez de `main` |
-| `std/os/process.lar`, `std/os/process/tasks.lar` | `SystemProcess`, `ProcessPool`, `serveTasks`; `tasks.lar` es lo que tiene un programa sin tareas |
+| `std/os/process.lar`, `std/os/process/tasks.lar` | `Task`, `Process { run }`, `ProcessPool`, `serveTasks`, `encodeTask`/`startTask`; `tasks.lar` es cómo es ese módulo en un programa sin tareas |
 | `std/os/rpc.lar`, `std/os/shared.lar` | JSON-RPC y los streams de memoria compartida, sobre los que va todo lo demás |
 
 ---
@@ -85,7 +87,7 @@ sequenceDiagram
     participant A as analizador y generador
 
     S->>L: el larimar.toml del archivo
-    Note over L: por cada nombre de [packages]:<br/>su carpeta, su larimar.toml (kind = library<br/>o service, el mismo nombre), su main nombre.lar<br/>y, si es biblioteca, sus [packages]
+    Note over L: por cada nombre de [dependencies]:<br/>su carpeta, su larimar.toml (kind = library<br/>o service, el mismo nombre), su main nombre.lar<br/>y, si es biblioteca, sus [dependencies]
     L-->>S: nombre, carpeta de sus módulos, carpeta del proyecto, servicio
     S->>K: libraryNames, libraryRoots, libraryServices
     K->>K: import textkit.words
@@ -98,7 +100,7 @@ sequenceDiagram
 - Los nombres de C de un módulo de biblioteca salen de su ruta (`textkit__words__of`), como los de
   cualquier módulo: no chocan con los del programa.
 - `larimar check` y el editor usan el mismo camino, así que ven las bibliotecas igual que `larimar build`.
-- Los problemas de `[packages]` (sin carpeta, un programa, otro nombre, dos con el mismo nombre) los dice
+- Los problemas de `[dependencies]` (sin carpeta, un programa, otro nombre, dos con el mismo nombre) los dice
   `project` en `main.lar`, antes de compilar; `findLibraryRoots` los ignora.
 - `larimar build` de una biblioteca la revisa (`checkLibrary`: `analyzeFile` sin generar C).
 
@@ -132,7 +134,7 @@ sequenceDiagram
     participant K as linker: visit
     participant SV as services.lar
 
-    B->>SB: buildServices: otro larimar build, por cada servicio de [packages]
+    B->>SB: buildServices: otro larimar build, por cada servicio de [dependencies]
     Note over SB: buildService: contract del módulo,<br/>serverSource a build/nombre-service.lar,<br/>sourceRoot = carpeta del módulo, buildFrom
     SB-->>B: build/nombre (el ejecutable)
     B->>K: compilar el programa: import calc
@@ -152,7 +154,7 @@ sequenceDiagram
 - **El main del servicio** (`serverSource`) es un `serve((call) -> ...)` con un `if` por función: lee cada
   parámetro de `call.params`, llama a la función del módulo y devuelve el resultado como `Any`. Se escribe
   en la carpeta de build, donde se puede leer.
-- **Un servicio no lee sus `[packages]` en el programa**: van dentro de su ejecutable, que se construye con
+- **Un servicio no lee sus `[dependencies]` en el programa**: van dentro de su ejecutable, que se construye con
   su propio `larimar build`, en otro proceso del compilador (el compilador guarda estado global: dos
   programas en un mismo proceso se mezclarían).
 - Importar una parte del servicio (`calc.inner`) es un error de `visit`.
@@ -167,18 +169,19 @@ sequenceDiagram
     participant K as linker: link
     participant W as writeTasks
     participant G as generador
-    participant P as ProcessPool (en el programa)
+    participant P as Process o ProcessPool (en el programa)
     participant C as la copia del programa
 
     K->>W: después de visit(root), antes de loadLang
-    Note over W: por cada módulo que no es de std: sus clases<br/>con implements ...SystemProcess.<br/>Comprueba los campos y que no extienda otra clase
+    Note over W: por cada módulo que no es de std: sus clases<br/>con implements Task (de std.os.process).<br/>Comprueba los campos y que no extienda otra clase
     W->>W: añade al módulo larimarTaskEncode y larimarTaskStart<br/>(Larimar, parseado con la línea de la clase)
-    W->>W: reescribe std.os.process.tasks: import de cada módulo,<br/>encode y start le preguntan a cada uno
-    W-->>K: systemProcesses = true
+    W->>W: escribe std.os.process.tasks: import de cada módulo,<br/>encode y start le preguntan a cada uno
+    W->>W: std.os.process: import de tasks;<br/>encodeTask y startTask le preguntan
+    W-->>K: taskClasses = true
     K->>G: mainWrapper: if (getenv("LARIMAR_PROCESS")) serveTasks
     P->>C: Calls.startSharedWith(programPath, [], LARIMAR_PROCESS=1)
-    P->>C: begin("run", Tasks.encode(tarea))
-    Note over C: init_globals, serveTasks:<br/>Tasks.start(nombre, campos).run()
+    P->>C: begin("run", encodeTask(tarea))
+    Note over C: init_globals, serveTasks:<br/>startTask(nombre, campos).run()
     C-->>P: finish(id): lo que dio run()
 ```
 
@@ -190,11 +193,13 @@ sequenceDiagram
 - El módulo principal se importa por su ruta desde la carpeta del proyecto (`modulePathOf`; en las pruebas,
   también desde la carpeta de encima, como hace `moduleFile`). Ese import lo resuelve `visit` como el del
   archivo abierto solo que importan sus partes.
-- `tasks` se mueve al final de `order` (`visit` lo vuelve a añadir), así que se analiza después de los
-  módulos que importa.
+- `tasks` se crea en `writeTasks` (no viene de un import) y va al final de `order` (`visit`), así que se
+  analiza después de los módulos que importa.
 - La copia corre `init_globals` y después `serveTasks`: los globales del programa existen, `main` no corre.
-- Un `ProcessPool` es un `Rpc[*]`: `runAll` reparte con `begin` y recoge con `finish`; ante un `RpcError`
-  para todos (`stop`), vacía la lista y lanza `ProcessError.Failed`.
+- Un `Process { run: tarea }` arranca una copia en `start()` (`begin`) y la espera en `join()` (`finish`).
+  Un `ProcessPool` es un `Rpc[*]`: `submit` reparte con `begin` a un trabajador libre (arranca otro hasta
+  `processes`) y `wait` recoge con `finish`; ante un `RpcError` para todos (`stop`), vacía las listas y
+  lanza `ProcessError.Failed`.
 
 ---
 
@@ -213,7 +218,7 @@ flowchart LR
     rpc -. "Process: shareConsole,<br/>LARIMAR_RPC=rq,rs" .-> serve
 ```
 
-- **El anillo** (`std/os/shared/ring.lar`) es un productor y un consumidor: `head` lo mueve solo quien
+- **El anillo** (`std/os/shared/common.lar`) es un productor y un consumidor: `head` lo mueve solo quien
   escribe y `tail` solo quien lee, con stores de liberación y loads de adquisición (`__atomic_*`; en tcc,
   `mfence`). Un lado que espera gira 100 µs y después duerme en pasos que crecen (`lm_shm_wait`).
 - **El otro lado vivo** se mira cada 50 ms (`lm_shm_peer`): en Unix con `waitid(WNOWAIT)` para un hijo que
@@ -232,7 +237,7 @@ flowchart LR
 
 | Quieres | Toca |
 |---|---|
-| Cómo se busca o se comprueba una biblioteca o un servicio de `[packages]` | `collect`, `libraryConfig` (`project/libraries.lar`) |
+| Cómo se busca o se comprueba una biblioteca o un servicio de `[dependencies]` | `collect`, `libraryConfig` (`project/libraries.lar`) |
 | Qué módulos son de una biblioteca | `libraryOf`, `moduleFile`, `visit` (`semantics/linker.lar`) |
 | Dónde se permite C | `trusted`, `noC` (`semantics/linker.lar`) |
 | Qué tipos cruzan a un servicio | `crosses`, `fromAny`, `toAny`, `declareFrom` (`project/services.lar`) |
@@ -241,7 +246,7 @@ flowchart LR
 | Qué campos lleva una tarea | `TASK_SCALARS`, `taskScalar`, `fromTable`, `writeTasks` (`semantics/linker.lar`) |
 | Cómo arranca una copia | `mainWrapper` (`codegen/gen/classes.lar`), `serveTasks` y `TASKS_ENV` (`std/os/process.lar`) |
 | El protocolo | `Frames`, `framed`, `lengthOf` y los `Wire` (`std/os/rpc.lar`) |
-| Cómo esperan los streams | `lm_shm_wait`, `lm_shm_sys_nap` (`std/os/shared/ring.lar`, `posix.lar`, `windows.lar`) |
+| Cómo esperan los streams | `lm_shm_wait`, `lm_shm_sys_nap` (`std/os/shared/common.lar`, `posix.lar`, `windows.lar`) |
 
 Después de cualquier cambio en `src/`:
 

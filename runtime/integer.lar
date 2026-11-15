@@ -1,4 +1,4 @@
-// std.runtime.integer: integer arithmetic with overflow checks.
+// runtime.integer: integer arithmetic with overflow checks.
 // Part of the runtime: the compiler takes from here what a program uses (it is not imported).
 ccode {
 /* ---- runtime: integer arithmetic without undefined behavior ----------- */

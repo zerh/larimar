@@ -9,7 +9,7 @@ import syntax.ast {
 import syntax.lexer { Token, TT };
 import syntax.parser { endedBySemicolon, lives, looseList, Parser, qualifiedName, strictList };
 import syntax.parser.expressions { expression, level, waitFirst };
-import syntax.parser.natives { nativeDeclaration, nativeFunction, nativeProperty };
+import syntax.parser.natives { languageType, nativeDeclaration, nativeFunction, nativeInterface, nativeProperty };
 import syntax.parser.statements { block, variable };
 import syntax.parser.types { type };
 
@@ -40,6 +40,10 @@ public function topLevelDeclaration(p: Parser in default): Node {
     if (p.optional(TT.Interface)) { return interfaceDeclaration(p); }
     if (p.optional(TT.Enum)) { return enumDeclaration(p); }
     if (p.optional(TT.Native)) { return nativeDeclaration(p, start.line); }
+    if (p.atWord("type") && p.next().kind == TT.Ident) {      // type String { ... }: a type of the language (std.lang)
+        p.advance();
+        return languageType(p, start.line);
+    }
     if (p.at(TT.Override)) {
         p.error(start.line, "'override' is only valid inside a class");
         return BlockStmt { line: start.line } in default;
@@ -135,6 +139,8 @@ public function functionDeclaration(p: Parser in default, isOverride: bool, with
     if (withBody && p.at(TT.CCode)) {
         p.error(p.current().line, "A body of C belongs to a native function: native function ${name.text}(...): T { ... }");
         p.advance();
+    } else if (withBody && p.optional(TT.Semi)) {
+        declaration.hasBody = false;            // the compiler writes it (only in std.lang; the linker checks)
     } else if (withBody) {
         declaration.body = block(p, "body of '${name.text}'");
         declaration.hasBody = true;
@@ -225,7 +231,9 @@ function classDeclaration(p: Parser in default, isSynchronized: bool): ClassDecl
                 declaration.methods.push(method(p, isSynchronized, true));
             }
         } else if (p.optional(TT.Native)) {
-            if (p.optional(TT.Let)) {
+            if (p.optional(TT.Interface)) {
+                p.nativeParts.push(nativeInterface(p, declaration.name));
+            } else if (p.optional(TT.Let)) {
                 let property: FunctionDecl = nativeProperty(p, p.previous().line);
                 if (!property.hasBody) { p.error(property.line, "A native let of a class needs its value: native let ${property.name}: T = expression;"); }
                 declaration.methods.push(property);

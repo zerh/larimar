@@ -1,8 +1,7 @@
 // std.os.process.windows: processes on Windows (CreateProcess, pipes, handles).
 
-import std.os.process { Executables };
 import std.os.process.common;
-import std.os { WindowsPlatform };
+import std.platform { WindowsPlatform };
 
 /** Processes on Windows: CreateProcess, pipes and handles. */
 public class WindowsProcesses implements WindowsPlatform {
@@ -207,6 +206,6 @@ public class WindowsProcesses implements WindowsPlatform {
     }
 }
 
-public class WindowsExecutables implements Executables, WindowsPlatform {
-    override native function check(path: String): bool { return _access(path, 0) == 0; }
+public class WindowsExecutables implements WindowsPlatform {
+    static native function check(path: String): bool { return _access(path, 0) == 0; }
 }

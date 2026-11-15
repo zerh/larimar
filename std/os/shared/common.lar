@@ -1,4 +1,4 @@
-// std.os.shared.ring: the ring both systems share: one writer, one reader, in memory both programs map.
+// std.os.shared.common: the ring both systems share: one writer, one reader, in memory both programs map.
 // Its own module so that its C comes before the classes of each system, which give it the memory, the
 // clock and whether a program still runs (lm_shm_sys_*).
 //

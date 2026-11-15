@@ -6,7 +6,7 @@
 //   main = "src/imagen.lar"            # its public functions are what it gives
 //
 // larimar build makes its executable (build/imagen): a main that answers calls (std.os.rpc.serve) by
-// calling those functions. A program that names it in [packages] (imagen = "../imagen") imports a module
+// calling those functions. A program that names it in [dependencies] (imagen = "../imagen") imports a module
 // written for it instead of its code: a class with the same functions, each one a call to that executable.
 //
 //   import imagen { Imagen };
@@ -143,7 +143,7 @@ function declareFrom(t: TypeRef, name: String, x: String, indent: String): Strin
 public function clientSource(service: String, functions: ServiceFunction[*], built: String): String {
     let cls: String = className(service);
     let sb: StringBuilder = {};
-    sb.add("// Written by larimar for the service '${service}' of [packages]: each function calls its executable.\n");
+    sb.add("// Written by larimar for the service '${service}' of [dependencies]: each function calls its executable.\n");
     sb.add("import std.os;\nimport std.io.files as Files;\nimport std.io.path as Paths;\nimport std.os.rpc { Rpc, RpcError };\n\n");
     sb.add("/** The service ${service}, running in a process of its own. It ends when its memory is freed (or close()). */\n");
     sb.add("public class ${cls} {\n    let rpc: Rpc;\n\n");

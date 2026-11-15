@@ -1,4 +1,4 @@
-// std.runtime.class: classes: virtual tables, clone, casts.
+// runtime.class: classes: virtual tables, clone, casts.
 // Part of the runtime: the compiler takes from here what a program uses (it is not imported).
 ccode {
 /* ---- runtime: classes ------------------------------------------------- */

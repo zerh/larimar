@@ -1,7 +1,7 @@
 // std.net.openssl: the TLS servers on Unix, over OpenSSL loaded at run time (std.net.tls's client on
 // Linux uses it too).
 
-import std.os { UnixPlatform, LinuxPlatform, MacOSPlatform };
+import std.platform { UnixPlatform, LinuxPlatform, MacOSPlatform };
 
 ccode {
     #define LM_NET_TLS_SERVER       /* larimar build: -ldl on Linux */

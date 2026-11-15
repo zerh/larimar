@@ -1,7 +1,7 @@
 // A file of a copy of the standard library (the one of a repository, open in an editor) is checked
 // against that copy, not against the installed one: its parts import the file being read.
 import std.os;
-import std.os { Platform, OS };
+import std.platform { Platform, OS };
 import std.test { check, skip };
 import std.io.path as Paths;
 import tests.support.compiler { checked };

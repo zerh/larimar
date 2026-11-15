@@ -1,5 +1,5 @@
 // Services: a project whose public functions another program calls, each in its own process. A program
-// names it in [packages] and imports a module written for it: a class whose calls go to its executable.
+// names it in [dependencies] and imports a module written for it: a class whose calls go to its executable.
 // Each test writes its projects in build/test/ and builds them with the compiler under test.
 import std.test { check, checkInt, skip };
 import std.os.process { Process, ProcessError };
@@ -7,7 +7,7 @@ import std.io.files as Files;
 import std.io { IoError };
 import std.io.path as Paths;
 import std.os;
-import std.os { Platform };
+import std.platform { Platform };
 import tests.support.compiler { compiler };
 
 /** The service of the tests: what crosses (numbers, String, lists, optionals, Any) and what it prints. */
@@ -103,8 +103,8 @@ function service(folder: String, source: String): String throws IoError {
     return write(folder, "[project]\nname = \"calc\"\nkind = \"service\"\nmain = \"src/calc.lar\"\n", "calc.lar", source);
 }
 
-function program(folder: String, packages: String, source: String): String throws IoError {
-    return write(folder, "[project]\nname = \"app\"\n\n[packages]\n${packages}\n", "main.lar", source);
+function program(folder: String, dependencies: String, source: String): String throws IoError {
+    return write(folder, "[project]\nname = \"app\"\n\n[dependencies]\n${dependencies}\n", "main.lar", source);
 }
 
 function onlyLinuxOrMac(): bool {

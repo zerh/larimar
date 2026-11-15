@@ -86,7 +86,7 @@ function processClass(c: ClassInfo in default, done: Any): void {
     for (m in c.methods) {
         let line: int32 = m.decl.line;
         if (!m.decl.hasBody && !(c.thread && (m.name == "start" || m.name == "join"))) {
-            error(line, "Native method '${c.name}.${m.name}' needs an implementation.");
+            error(line, "Method '${c.name}.${m.name}' needs its body: function ${m.name}(...) { ... }");
         }
         let dup: bool = false;
         for (x in seen) {
@@ -239,7 +239,7 @@ public function checkMain(): void {
     let m: FunctionInfo? = functionOf("main");
     if (m == null || m.sig == null) { return; }
     if (buildingLibrary && !m.isExtern) {
-        error(m.line, "A library has no main: C (or the program that uses it) calls its export functions. Remove main, or build a program ([project] kind = \"program\").");
+        error(m.line, "A library has no main: the programs that use it call its functions. Remove main, or build a program ([project] kind = \"program\").");
         return;
     }
     let ps: Type[*] = m.sig!.params;

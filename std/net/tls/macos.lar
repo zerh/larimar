@@ -1,7 +1,7 @@
 // std.net.tls.macos: the TLS client on macOS (Network.framework).
 
 import std.net.tls.common;
-import std.os { MacOSPlatform };
+import std.platform { MacOSPlatform };
 
 /** macOS: Network.framework. */
 public class MacOSTls implements MacOSPlatform {

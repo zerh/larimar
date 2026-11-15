@@ -83,7 +83,7 @@ test function narrowerPlatform(): void {
 
 test function oneSystemPerClass(): void {
     failsWith(raw"""
-        import std.os { UnixPlatform, WindowsPlatform };
+        import std.platform { UnixPlatform, WindowsPlatform };
         class Both implements UnixPlatform, WindowsPlatform {}
         function main(): int32 { return 0; }
         """, "A class is for one system");

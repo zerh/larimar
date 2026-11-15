@@ -1,9 +1,9 @@
 // std.net.windows: sockets on Windows (Winsock), and its TLS servers (not there yet).
 
-import std.net { NetSystem, Socket };
-import std.os { WindowsPlatform };
+import std.net.internal { Socket };
+import std.platform { WindowsPlatform };
 
-public class WindowsNet implements NetSystem, WindowsPlatform {
+public class WindowsNet implements WindowsPlatform {
     cinclude "<winsock2.h>";
     cinclude "<ws2tcpip.h>";
 
@@ -39,12 +39,12 @@ public class WindowsNet implements NetSystem, WindowsPlatform {
         }
     }
 
-    override native function start(): void {
+    static native function start(): void {
         WSADATA data;
         WSAStartup(MAKEWORD(2, 2), &data);
     }
 
-    override native function lastError(): int32 {
+    static native function lastError(): int32 {
         int e = WSAGetLastError();
         if (e == WSAECONNREFUSED) return 2;
         if (e == WSAETIMEDOUT || e == WSAEWOULDBLOCK) return 3;
@@ -53,11 +53,11 @@ public class WindowsNet implements NetSystem, WindowsPlatform {
         return 100 + e;
     }
 
-    override native function interrupted(): bool { return WSAGetLastError() == WSAEINTR; }
+    static native function interrupted(): bool { return WSAGetLastError() == WSAEINTR; }
 
-    override native function finishWriting(s: Socket): void { shutdown(s, SD_SEND); }
+    static native function finishWriting(s: Socket): void { shutdown(s, SD_SEND); }
 
-    override native function setTimeout(s: Socket, which: int32, ms: int32): void {
+    static native function setTimeout(s: Socket, which: int32, ms: int32): void {
         DWORD w = (DWORD)ms;
         setsockopt(s, SOL_SOCKET, which, (const char*)&w, (int)sizeof w);
     }

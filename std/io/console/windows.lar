@@ -1,6 +1,6 @@
 // std.io.console.windows: the console on Windows.
 
-import std.os { WindowsPlatform };
+import std.platform { WindowsPlatform };
 
 /** Only Windows turns \n into \r\n on the way out: binary mode there. */
 public class WindowsConsole implements WindowsPlatform {

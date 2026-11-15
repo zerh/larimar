@@ -1,9 +1,9 @@
 // std.net.posix: sockets on Unix (BSD sockets, poll).
 
-import std.net { NetSystem, Socket };
-import std.os { UnixPlatform };
+import std.net.internal { Socket };
+import std.platform { UnixPlatform };
 
-public class PosixNet implements NetSystem, UnixPlatform {
+public class PosixNet implements UnixPlatform {
     cinclude "<sys/types.h>";
     cinclude "<sys/socket.h>";
     cinclude "<sys/time.h>";
@@ -42,9 +42,9 @@ public class PosixNet implements NetSystem, UnixPlatform {
         }
     }
 
-    override native function start(): void { signal(SIGPIPE, SIG_IGN); }
+    static native function start(): void { signal(SIGPIPE, SIG_IGN); }
 
-    override native function lastError(): int32 {
+    static native function lastError(): int32 {
         int e = errno;
         if (e == ECONNREFUSED) return 2;
         if (e == EAGAIN || e == EWOULDBLOCK || e == ETIMEDOUT) return 3;
@@ -53,11 +53,11 @@ public class PosixNet implements NetSystem, UnixPlatform {
         return 100 + e;
     }
 
-    override native function interrupted(): bool { return errno == EINTR; }
+    static native function interrupted(): bool { return errno == EINTR; }
 
-    override native function finishWriting(s: Socket): void { shutdown(s, SHUT_WR); }
+    static native function finishWriting(s: Socket): void { shutdown(s, SHUT_WR); }
 
-    override native function setTimeout(s: Socket, which: int32, ms: int32): void {
+    static native function setTimeout(s: Socket, which: int32, ms: int32): void {
         struct timeval tv;
         tv.tv_sec = ms / 1000;
         tv.tv_usec = (ms % 1000) * 1000;

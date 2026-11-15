@@ -24,7 +24,7 @@
 
 import std.io { IoError, InputStream, OutputStream, Closeable };
 import std.os;
-import std.os.shared.ring;
+import std.os.shared.common;
 import std.os.shared.posix { PosixShared };
 import std.os.shared.windows { WindowsShared };
 

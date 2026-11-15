@@ -8,43 +8,44 @@
 
 import std.io { IoError, raise };
 import std.io { InputStream, OutputStream };
-import std.os { Platform, OS };
+import std.platform { Platform, OS };
 import std.io.console.windows { WindowsConsole };
 
-cinclude "<errno.h>";
-
-native type CStream = FILE*;
-native const stdin: CStream;
-native const stdout: CStream;
-native const stderr: CStream;
-native const EOF: int32;
-native function fgetc(f: CStream): int32;
-native function fputc(b: int32, f: CStream): int32;
-native function fread(into: byte*, size: uint64, count: uint64, f: CStream): uint64;
-native function fwrite(from: byte*, size: uint64, count: uint64, f: CStream): uint64;
-native function fflush(f: CStream): int32;
-native function ferror(f: CStream): int32;
+/** What C's stdio.h gives the console. */
+native interface Stdio "<stdio.h>", "<errno.h>" {
+    type FILE;
+    const stdin: FILE;
+    const stdout: FILE;
+    const stderr: FILE;
+    const EOF: int32;
+    function fgetc(f: FILE): int32;
+    function fputc(b: int32, f: FILE): int32;
+    function fread(into: byte*, size: uint64, count: uint64, f: FILE): uint64;
+    function fwrite(from: byte*, size: uint64, count: uint64, f: FILE): uint64;
+    function fflush(f: FILE): int32;
+    function ferror(f: FILE): int32;
+}
 
 /** A line of a C stream, without its end; null at its end. */
-function lineOf(f: CStream): String? {
+function lineOf(f: FILE): String? {
     let line: byte[*] = [];
-    let c: int32 = fgetc(f);
-    if (c == EOF) { return null; }
-    while (c != EOF && c != '\n') {
+    let c: int32 = Stdio.fgetc(f);
+    if (c == Stdio.EOF) { return null; }
+    while (c != Stdio.EOF && c != '\n') {
         line.push(c as byte);
-        c = fgetc(f);
+        c = Stdio.fgetc(f);
     }
     if (line.length > 0 && line[line.length - 1] == '\r') { line.pop(); }
     return stringOfRange(line, 0, line.length);
 }
 
 /** All that is left of a C stream. */
-function allOf(f: CStream): String {
+function allOf(f: FILE): String {
     let all: byte[*] = [];
     let chunk: byte[*] = [];
     for (i in 0..65536) { chunk.push(0); }
     while (true) {
-        let n: uint64 = fread(chunk, 1, chunk.length as uint64, f);
+        let n: uint64 = Stdio.fread(chunk, 1, chunk.length as uint64, f);
         if (n == 0) { break; }
         for (i in 0..n as int32) { all.push(chunk[i]); }
     }
@@ -54,9 +55,9 @@ function allOf(f: CStream): String {
 /** Writes a text to a C stream (the error stream: after what is waiting in the output, and at once). */
 function put(text: String, error: bool): void {
     if (text.length == 0) { return; }
-    if (error) { fflush(stdout); }
-    fwrite(text.bytes(), 1, text.length as uint64, error ? stderr : stdout);
-    if (error) { fflush(stderr); }
+    if (error) { Stdio.fflush(Stdio.stdout); }
+    Stdio.fwrite(text.bytes(), 1, text.length as uint64, error ? Stdio.stderr : Stdio.stdout);
+    if (error) { Stdio.fflush(Stdio.stderr); }
 }
 
 /** How many bytes the last read() got (shared by the threads: one counter, with its lock). */
@@ -69,7 +70,7 @@ synchronized class Counter {
 let lastRead: Counter = {};
 
 /** The next line of the standard input, without its end, or null at its end. */
-public function readLine(): String? { return lineOf(stdin); }
+public function readLine(): String? { return lineOf(Stdio.stdin); }
 
 /** Exactly `count` bytes of the standard input (fewer only if it ends; see lastCount()). */
 public function read(count: int32): String {
@@ -79,7 +80,7 @@ public function read(count: int32): String {
     while (got < buffer.length) {            // fread may give less (a pipe): until count, or the end
         let rest: byte[*] = [];
         for (i in 0..buffer.length - got) { rest.push(0); }
-        let n: int32 = fread(rest, 1, rest.length as uint64, stdin) as int32;
+        let n: int32 = Stdio.fread(rest, 1, rest.length as uint64, Stdio.stdin) as int32;
         if (n == 0) { break; }
         for (i in 0..n) { buffer[got + i] = rest[i]; }
         got += n;
@@ -95,7 +96,7 @@ public function lastCount(): int32 { return lastRead.get(); }
 public function write(text: String): void { put(text, false); }
 
 /** Sends what was written to the standard output now. */
-public function flush(): void { fflush(stdout); }
+public function flush(): void { Stdio.fflush(Stdio.stdout); }
 
 /** Input and output byte by byte, as they are (on Windows, without turning \n into \r\n). */
 public function binaryMode(): void {
@@ -115,30 +116,30 @@ public function printError(text: String): void {
 class ConsoleInputStream implements InputStream {
     override function read(buffer: byte[]): int32 throws IoError {
         if (buffer.length == 0) { return 0; }
-        let b: int32 = fgetc(stdin);
-        if (b == EOF) {
-            if (ferror(stdin) != 0) { raise(3, "standard input"); }
+        let b: int32 = Stdio.fgetc(Stdio.stdin);
+        if (b == Stdio.EOF) {
+            if (Stdio.ferror(Stdio.stdin) != 0) { raise(3, "standard input"); }
             return 0;
         }
         buffer[0] = b as byte;
         return 1;
     }
     function close(): void throws IoError {}
-    function readLine(): String? throws IoError { return lineOf(stdin); }
-    function readAll(): String throws IoError { return allOf(stdin); }
+    function readLine(): String? throws IoError { return lineOf(Stdio.stdin); }
+    function readAll(): String throws IoError { return allOf(Stdio.stdin); }
 }
 
 class ConsoleOutputStream implements OutputStream {
     let error: bool;
     override function write(bytes: byte[]): void throws IoError {
         if (bytes.length == 0) { return; }
-        let f: CStream = self.error ? stderr : stdout;
-        if (fwrite(bytes, 1, bytes.length as uint64, f) != bytes.length as uint64) {
+        let f: FILE = self.error ? Stdio.stderr : Stdio.stdout;
+        if (Stdio.fwrite(bytes, 1, bytes.length as uint64, f) != bytes.length as uint64) {
             raise(3, self.error ? "standard error" : "standard output");
         }
     }
-    override function flush(): void throws IoError { fflush(self.error ? stderr : stdout); }
-    function close(): void throws IoError { fflush(self.error ? stderr : stdout); }
+    override function flush(): void throws IoError { Stdio.fflush(self.error ? Stdio.stderr : Stdio.stdout); }
+    function close(): void throws IoError { Stdio.fflush(self.error ? Stdio.stderr : Stdio.stdout); }
 }
 
 /** The standard input as a byte stream. */

@@ -34,7 +34,8 @@ import std.io { IoError };
 import std.io { InputStream, OutputStream, Closeable, buffer };
 import std.time as Time;
 import std.os;
-import std.os { Platform, OS };
+import std.platform { Platform, OS };
+import std.net.internal { Socket };
 import std.net.posix { PosixNet };
 import std.net.windows { WindowsNet, WindowsTlsServers };
 import std.net.openssl { LinuxOpenSslNames, MacOSOpenSslNames, OpenSslServers };
@@ -94,9 +95,6 @@ public function message(e: NetError): String {
 // BSD sockets and Winsock are almost the same functions (declared below once). What differs is in a
 // class for each system: its headers, what a Socket is in C, and the few things done differently.
 
-/** A socket of the system: an int on Unix, a SOCKET on Windows (LmSocket). Closed when its memory is freed. */
-public native type Socket = c"LmSocket" released by lm_socket_close;
-native function lm_socket_close(s: Socket): int32;
 
 native struct AddrInfo = struct addrinfo {
     let ai_flags: int32;
@@ -150,32 +148,51 @@ native function lm_net_readable(s: Socket, ms: int32): int32;
 native function lm_net_number(s: Socket): int64;
 native function lm_net_poll(fds: int64[], ready: int32[], ms: int32): int32;
 
-/** What std.net does differently on each system: a class for each platform (std/net/posix.lar, windows.lar). */
-public interface NetSystem {
-    /** Before a connection: Winsock started (it counts the calls); on Unix, a closed peer is an error, not a SIGPIPE. */
-    function start(): void;
-    /** Why the last call failed, as a code: 2 refused, 3 timeout, 5 reset, 6 address in use, 100+ other. */
-    function lastError(): int32;
-    /** The call was interrupted by a signal: try it again. */
-    function interrupted(): bool;
-    /** Nothing more will be written to this socket. */
-    function finishWriting(s: Socket): void;
-    /** How long reads (SO_RCVTIMEO) or writes (SO_SNDTIMEO) wait: ms, 0 for no limit. */
-    function setTimeout(s: Socket, which: int32, ms: int32): void;
+// What std.net does differently on each system: the static functions of PosixNet and WindowsNet
+// (std/net/posix.lar, windows.lar), chosen by the system.
+
+/** Before a connection: Winsock started (it counts the calls); on Unix, a closed peer is an error, not a SIGPIPE. */
+function start(): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixNet.start();
+        case Windows -> WindowsNet.start();
+    }
 }
 
-let netSystem: NetSystem = switch (Platform.current()) {
-    case Linux, MacOS, Unix -> PosixNet {};
-    case Windows -> WindowsNet {};
-};
+/** Why the last call failed, as a code: 2 refused, 3 timeout, 5 reset, 6 address in use, 100+ other. */
+function lastError(): int32 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixNet.lastError();
+        case Windows -> WindowsNet.lastError();
+    };
+}
+
+/** The call was interrupted by a signal: try it again. */
+function interrupted(): bool {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixNet.interrupted();
+        case Windows -> WindowsNet.interrupted();
+    };
+}
+
+/** Nothing more will be written to this socket. */
+function finishWriting(s: Socket): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixNet.finishWriting(s);
+        case Windows -> WindowsNet.finishWriting(s);
+    }
+}
+
+/** How long reads (SO_RCVTIMEO) or writes (SO_SNDTIMEO) wait: ms, 0 for no limit. */
+function setSocketTimeout(s: Socket, which: int32, ms: int32): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixNet.setTimeout(s, which, ms);
+        case Windows -> WindowsNet.setTimeout(s, which, ms);
+    }
+}
 
 // error codes, as NetError: 1 host not found, 2 refused, 3 timeout, 4 closed, 5 reset, 6 address in use, 100+ other
 
-function lastError(): int32 { return netSystem.lastError(); }
-
-function interrupted(): bool { return netSystem.interrupted(); }
-
-function start(): void { netSystem.start(); }
 
 /** The NetError of a code. */
 function raise(code: int32, host: String): void throws NetError {
@@ -309,7 +326,7 @@ public class TcpSocket implements InputStream, OutputStream, Closeable, Connecti
     /** Says that nothing more will be written: the other side reads the end, and can still answer. */
     function finishWriting(): void {
         if (self.socket == null) { return; }
-        netSystem.finishWriting(self.socket!);
+        finishWriting(self.socket!);
     }
 
     function isOpen(): bool { return self.socket != null; }
@@ -344,7 +361,7 @@ function receiveTimeout(s: Socket, ms: int32): void { socketTimeout(s, SO_RCVTIM
 function sendTimeout(s: Socket, ms: int32): void { socketTimeout(s, SO_SNDTIMEO, ms); }
 
 function socketTimeout(s: Socket, which: int32, ms: int32): void {
-    netSystem.setTimeout(s, which, ms > 0 ? ms : 0);
+    setSocketTimeout(s, which, ms > 0 ? ms : 0);
 }
 
 /** The local port of a socket (a listener bound to port 0 gets one from the system). */

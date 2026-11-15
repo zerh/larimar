@@ -31,8 +31,8 @@
 
 /** The most bytes `memory` may obtain from the system; past it the program stops with a message that names
     it. 0: no limit. Only for memories that grow (byte[*] in heap): a fixed one already has its size. */
-public native function limit(memory: byte[*], bytes: int64): void;
+public function limit(memory: byte[*], bytes: int64): void;
 
 /** Copies what the variables of `memory` still reach to new blocks, points them at the copies, and frees
     the old blocks: the memory then holds only what is alive. Data of other memories is left where it is. */
-public native function compact(memory: byte[*]): void;
+public function compact(memory: byte[*]): void;

@@ -9,7 +9,7 @@ import std.io.files as Files;
 import std.encoding.json as Json;
 import std.io.console as Console;
 import syntax.ast { Program };
-import semantics.linker { link, linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES, libraryNames, libraryRoots, libraryServices };
+import semantics.linker { link, linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES, libraryNames, libraryRoots, libraryServices, libraryUnsafe, projectUnsafe };
 import project.libraries { larimarLibraries };
 import semantics.types { files };
 import semantics.analyzer { analysisErrors, analyze };
@@ -45,13 +45,15 @@ public function analyzeFile(main: String, shownFrom: String): bool {
 }
 
 /**
- * The libraries the project of a file uses ([packages] of its larimar.toml, and theirs): `import textkit`
+ * The libraries the project of a file uses ([dependencies] of its larimar.toml, and theirs): `import textkit`
  * finds textkit.lar in the folder of its modules. A problem with them is larimar build's to say.
  */
 function findLibraryRoots(main: String): void {
     libraryNames.clear();
     libraryRoots.clear();
     libraryServices.clear();
+    libraryUnsafe.clear();
+    projectUnsafe = false;
     let dir: String = Paths.parent(main);
     while (dir != "") {
         let toml: String = Paths.join(dir, "larimar.toml");
@@ -60,11 +62,13 @@ function findLibraryRoots(main: String): void {
             if (source == null) { return; }
             try {
                 let config: Any = Toml.parse(source!);
+                projectUnsafe = config.project.unsafe_c as bool ?? false;
                 let ignored: String[*] = [];
                 for (l in larimarLibraries(dir, config, ignored)) {
                     libraryNames.push(l.name.clone() in default);
                     libraryRoots.push(l.dir.clone() in default);
                     libraryServices.push((l.service ? l.exe : "").clone() in default);
+                    libraryUnsafe.push(l.unsafeC);
                 }
             } catch (TomlError e) {}
             return;

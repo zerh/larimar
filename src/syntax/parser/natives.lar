@@ -2,11 +2,11 @@
 // Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
 
 import syntax.ast {
-    BlockStmt, Call, Expr, ExprStmt, ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, FieldDecl, FunctionDecl,
-    Ident, NativeTypeDecl, Node, Param, ReturnStmt, SelfExpr, StructDecl, TK, typeNamed
+    BlockStmt, Call, CIncludeDecl, Expr, ExprStmt, ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, FieldDecl, FunctionDecl,
+    Ident, NativeInterfaceDecl, NativeTypeDecl, Node, Param, ReturnStmt, SelfExpr, StructDecl, TK, typeNamed
 };
 import syntax.lexer { Token, TT };
-import syntax.parser { endedBySemicolon, lives, Parser };
+import syntax.parser { endedBySemicolon, lives, Parser, qualifiedName };
 import syntax.parser.declarations { cBodied, functionDeclaration, parameter, parameters, staticFunction };
 import syntax.parser.expressions { expression };
 import syntax.parser.types { type };
@@ -20,6 +20,7 @@ import syntax.parser.types { type };
  *   type NAME { ... }                                                                   (std) a type the compiler knows
  */
 public function nativeDeclaration(p: Parser in default, line: int32): Node {
+    if (p.optional(TT.Interface)) { return nativeInterface(p, ""); }
     if (p.optional(TT.Function)) { return nativeFunctionOfC(p); }
     if (p.at(TT.Const) || p.at(TT.Let)) { return nativeValue(p); }
     if (p.optional(TT.Struct)) { return nativeStruct(p); }
@@ -31,6 +32,98 @@ public function nativeDeclaration(p: Parser in default, line: int32): Node {
     let name: Token = p.expect(TT.Ident, "Expected the type's name after 'native type'");
     if (p.at(TT.LBrace)) { return nativeType(p, line, name); }
     return nativeCType(p, name);
+}
+
+/**
+ * (after `native interface`) NAME STRING ( , STRING )* [ extends NAME ( , NAME )* ]
+ *     { ( function ... ; | type NAME ... ; | const ... ; | let ... ; | struct ... )* }
+ * What C headers give, under one name: Name.f(...) calls the C function f. In a class (`owner`) it is its
+ * own, static: only on the class's system.
+ */
+public function nativeInterface(p: Parser in default, owner: String in default): NativeInterfaceDecl {
+    let name: Token = p.expect(TT.Ident, "Expected the name of the native interface");
+    let declaration: NativeInterfaceDecl = NativeInterfaceDecl { line: name.line, name: name.text, owner } in default;
+    if (p.at(TT.Str)) {
+        declaration.headers.push(p.advance().text);
+        while (p.optional(TT.Comma)) { declaration.headers.push(p.expect(TT.Str, "Expected another header after ','").text); }
+    }
+    if (p.optional(TT.Extends)) {
+        while (true) {
+            declaration.parents.push(qualifiedName(p, "Expected the name of the native interface it extends"));
+            if (!p.optional(TT.Comma)) { break; }
+        }
+    }
+    if (declaration.headers.length == 0 && declaration.parents.length == 0) {
+        p.error(name.line, "A native interface says its header: native interface ${name.text} \"<header.h>\" { ... }");
+    }
+    let gives: String[*] = [] in default;
+    let types: ExternTypeDecl[*] = [] in default;
+    let functions: ExternFunctionDecl[*] = [] in default;
+    p.expect(TT.LBrace, "Expected '{' with what the header gives");
+    while (!p.at(TT.RBrace) && !p.atEnd() && !p.hasFailed()) {
+        if (p.optional(TT.Function)) {
+            let f: ExternFunctionDecl = nativeFunctionOfC(p);
+            if (f.cBody == "") { gives.push(f.cName); }
+            declaration.members.push(f.name);
+            f.name = "${name.text}__${f.name}" in default;
+            f.owner = owner;
+            functions.push(f);
+            p.nativeParts.push(f);
+        } else if (p.at(TT.Const) || p.at(TT.Let)) {
+            let n: Node = nativeValue(p);
+            if (n is ExternValueDecl v) {
+                if (v.cExpr == "") { gives.push(v.cName); } else { cNames(v.cExpr, gives); }
+                declaration.members.push(v.name);
+                v.name = "${name.text}__${v.name}" in default;
+                p.nativeParts.push(v);
+            }
+        } else if (p.optional(TT.Struct)) {
+            let st: StructDecl = nativeStruct(p);
+            cNames(st.cName, gives);
+            declaration.types.push(st.name);
+            p.nativeParts.push(st);
+        } else if (p.atWord("type")) {
+            p.advance();
+            let typeName: Token = p.expect(TT.Ident, "Expected the type's name after 'type'");
+            let n: Node = nativeCType(p, typeName);
+            if (n is ExternTypeDecl t) {
+                if (t.cType == "") { t.cType = "${typeName.text}*" in default; }       // type FILE: a FILE* of C
+                cNames(t.cType, gives);
+                types.push(t);
+                declaration.types.push(t.name);
+            }
+            p.nativeParts.push(n);
+        } else {
+            p.error(p.current().line, "A native interface has what its header gives: function, type, const, let or struct (got '${p.current().text}')");
+            p.advance();
+        }
+    }
+    p.expect(TT.RBrace, "Expected '}' to close the native interface");
+    p.optional(TT.Semi);
+    for (t in types) {                          // released by fclose: its own fclose
+        if (declaration.members.contains(t.releasedBy)) { t.releasedBy = "${name.text}__${t.releasedBy}" in default; }
+    }
+    for (f in functions) {
+        if (declaration.members.contains(f.releasedBy)) { f.releasedBy = "${name.text}__${f.releasedBy}" in default; }
+    }
+    for (h in declaration.headers) {
+        p.nativeParts.push(CIncludeDecl { line: name.line, header: h, owner, gives: gives.join(" ") in default } in default);
+    }
+    return declaration;
+}
+
+/** The C names in C text (struct tm*: struct, tm), added to `into`. */
+function cNames(text: String, into: String[*] in default): void {
+    let word: byte[*] = [];
+    for (b in "${text} ") {
+        if (b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') && word.length > 0) {
+            word.push(b);
+        } else if (word.length > 0) {
+            let w: String = stringOfRange(word, 0, word.length);
+            if (w != "struct" && w != "const" && w != "unsigned") { into.push(w.clone() in default); }
+            word.clear();
+        }
+    }
 }
 
 /** At C text: c"...". */
@@ -144,21 +237,18 @@ function cField(p: Parser in default): FieldDecl {
 }
 
 /**
- * (after `native type NAME`) [ = CTYPE | = ( Type, ... ) -> Type ] [ released by NAME ] ( ; | { member* } )
+ * (after `native type NAME`) [ = CTYPE ] [ released by NAME ] ( ; | { member* } )
  *     CTYPE: [ struct ] NAME *...  or c"C TYPE";  without '=' it is opaque (void*)
  */
 function nativeCType(p: Parser in default, name: Token in default): Node {
     let declaration: ExternTypeDecl = ExternTypeDecl { line: name.line, name: name.text } in default;
     if (p.optional(TT.Assign)) {
-        if (p.at(TT.LParen)) {
-            declaration.func = type(p);
-            if (declaration.func!.kind != TK.Func) { p.error(name.line, "Expected a function type after '=': (int32, int32) -> int32"); }
-        } else if (atCText(p)) {
+        if (atCText(p)) {
             declaration.cType = p.advance().text;
             if (declaration.cType.trim() == "") { p.error(name.line, "The C type of '${name.text}' is empty"); }
         } else {
             let tagged: String = p.optional(TT.Struct) ? "struct " : "";             // = struct tm*
-            let cType: String = "${tagged}${p.expect(TT.Ident, "Expected the C type after 'native type ${name.text} =': a name (FILE*, struct tm*), c\"C text\" or a function type").text}";
+            let cType: String = "${tagged}${p.expect(TT.Ident, "Expected the C type after 'native type ${name.text} =': a name (FILE*, struct tm*) or c\"C text\"").text}";
             while (p.optional(TT.Star)) { cType = "${cType}*"; }
             declaration.cType = cType.clone() in default;
         }
@@ -185,8 +275,7 @@ function nativeCType(p: Parser in default, name: Token in default): Node {
  * first (self), and functions written in Larimar.
  */
 function nativeMembers(p: Parser in default, declaration: ExternTypeDecl in default): void {
-    let line: int32 = p.expect(TT.LBrace, "Expected '{'").line;
-    if (declaration.func != null) { p.error(line, "A pointer to a C function has no members"); }
+    p.expect(TT.LBrace, "Expected '{'");
     let methods: NativeTypeDecl = NativeTypeDecl { line: declaration.line, name: declaration.name } in default;
     let fields: StructDecl = StructDecl { line: declaration.line, name: "${declaration.name}__fields" in default } in default;
     while (!p.at(TT.RBrace) && !p.atEnd() && !p.hasFailed()) {
@@ -264,14 +353,10 @@ function nativeMember(p: Parser in default, owner: String in default, line: int3
         }
         let args: Expr[*] = [] in default;
         let kept: Param[*] = [] in default;
-        let late: Param[*] = [] in default;
         for (i, p in declaration.params) {
             let memory: bool = i == 0 && p.type != null && p.type!.kind == TK.Growable && p.type!.inner!.kind == TK.Named && p.type!.inner!.name == "byte";
-            let context: bool = p.type != null && p.type!.kind == TK.Named && p.type!.name == "Context";
             if (memory) {
                 cFunction.params.push(p.clone() in default);     // the memory of the call: before self, and not written in calls
-            } else if (context) {
-                late.push(p);                                    // C's Context: the compiler gives it, so the method has none
             } else {
                 kept.push(p);
             }
@@ -280,16 +365,11 @@ function nativeMember(p: Parser in default, owner: String in default, line: int3
             cFunction.params.push(Param { line: c.line, name: "receiver", type: typeNamed(owner, c.line) } in default);
             args.push(SelfExpr { line: c.line } in default);
         }
-        for (p in declaration.params) {
-            if (late.contains(p)) {
-                cFunction.params.push(p.clone() in default);
-            } else if (kept.contains(p)) {
-                cFunction.params.push(p.clone() in default);
-                args.push(Ident { line: c.line, name: p.name } in default);
-            }
+        for (p in kept) {
+            cFunction.params.push(p.clone() in default);
+            args.push(Ident { line: c.line, name: p.name } in default);
         }
         declaration.params = kept;
-        declaration.forwardsToC = true;
         p.nativeParts.push(cFunction);
         value = Call { line: c.line, callee: Ident { line: c.line, name: cFunction.name } in default, args } in default;
     } else {
@@ -310,6 +390,17 @@ function nativeMember(p: Parser in default, owner: String in default, line: int3
 }
 
 /**
+ * (after `type`) NAME { ( static ... | let NAME : Type [ = expression ] ; | operator ... ; | function ... ( ; | block ) )* }
+ * A type of the language (String, Any), in std.lang: what has no body the compiler writes.
+ */
+public function languageType(p: Parser in default, line: int32): NativeTypeDecl {
+    let name: Token = p.expect(TT.Ident, "Expected the type's name after 'type'");
+    let declaration: NativeTypeDecl = nativeType(p, line, name);
+    declaration.language = true;
+    return declaration;
+}
+
+/**
  * (after `native type NAME`) { ( static ... | native function ... | native let ... | native operator ... | function ... )* }
  * The methods of a type the compiler knows (String, Any): only in the standard library.
  */
@@ -317,7 +408,12 @@ function nativeType(p: Parser in default, line: int32, name: Token in default): 
     let declaration: NativeTypeDecl = NativeTypeDecl { line, name: name.text } in default;
     p.expect(TT.LBrace, "Expected '{' to open native type body");
     while (!p.at(TT.RBrace) && !p.atEnd()) {
-        if (p.optional(TT.Static)) {
+        if (p.at(TT.Let)) {
+            p.advance();
+            declaration.methods.push(nativeProperty(p, p.previous().line));
+        } else if (p.optional(TT.Operator)) {
+            declaration.methods.push(nativeOperator(p, p.previous().line));
+        } else if (p.optional(TT.Static)) {
             staticFunction(p, declaration.name);
         } else if (p.optional(TT.Native)) {
             if (p.optional(TT.Function)) {

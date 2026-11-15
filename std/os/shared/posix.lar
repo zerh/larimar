@@ -1,7 +1,7 @@
 // std.os.shared.posix: the shared memory of Unix (shm_open, mmap), and its clock.
 
-import std.os.shared.ring;
-import std.os { UnixPlatform };
+import std.os.shared.common;
+import std.platform { UnixPlatform };
 
 /** Shared memory on Unix: a name of shm_open, mapped with mmap. */
 public class PosixShared implements UnixPlatform {

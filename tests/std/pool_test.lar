@@ -1,11 +1,11 @@
-// std.os.process: tasks (SystemProcess) that run in copies of the program, through a ProcessPool.
+// std.os.process: tasks (Task) that run in copies of the program: one in a Process, many in a ProcessPool.
 import std.os;
-import std.os.process { ProcessPool, SystemProcess, ProcessError, message };
+import std.os.process { Process, ProcessPool, Task, ProcessError, message };
 import std.test { check, checkText, checkInt };
-import tests.support.compiler { failsInAProgram };
+import tests.support.compiler { failsInAProgram, runs, caseFile };
 
 /** A task: its fields go with it; what run gives comes back. A negative n is a panic there. */
-class Square implements SystemProcess {
+class Square implements Task {
     let n: int64;
     let label: String = "";
     let tags: String[*] = [];
@@ -25,21 +25,41 @@ class Square implements SystemProcess {
     }
 }
 
-// The task runs in another process, with its fields, and its result comes back.
+// A Process with a task runs it in a copy of this program, as a thread runs a Runnable: start, then join.
 test function aTaskRunsInAnotherProcess(): void throws ProcessError {
-    let pool: ProcessPool = { processes: 2 };
-    let r: Any = pool.run(Square { n: 7, label: "casa", tags: ["a", "b"], note: "n", scale: 2.0 });
+    let p: Process = { run: Square { n: 7, label: "casa", tags: ["a", "b"], note: "n", scale: 2.0 } };
+    p.start();
+    let r: Any = p.join();
     checkText("98.0", "${r.value}");
     checkText("casa:a+b:n", r.text as String ?? "");
     check((r.pid as int64 ?? 0) != os.processId(), "it ran in another process");
 }
 
-// runAll gives the tasks to the processes at the same time, and the results in the order of the tasks.
+// A Process runs a program or a task, not both; join before start is NotRunning.
+test function aProcessRunsOneThing(): void {
+    let why: String = "";
+    try {
+        let both: Process = { program: "ls", run: Square { n: 1 } };
+        both.start();
+    } catch (ProcessError e) {
+        why = message(e).clone();
+    }
+    checkText("cannot start ls: a Process runs a program or a task, not both", why);
+    let notYet: String = "";
+    try {
+        let p: Process = { run: Square { n: 1 } };
+        p.join();
+    } catch (ProcessError e) {
+        notYet = message(e).clone();
+    }
+    checkText("the process is not running", notYet);
+}
+
+// submit gives the tasks to the processes as they come; wait gives the results in the order submitted.
 test function manyTasksAtOnce(): void throws ProcessError {
     let pool: ProcessPool = { processes: 3 };
-    let tasks: SystemProcess[*] = [];
-    for (i in 0..12) { tasks.push(Square { n: i as int64 }); }
-    let all: Any = pool.runAll(tasks);
+    for (i in 0..12) { pool.submit(Square { n: i as int64 }); }
+    let all: Any = pool.wait();
     checkInt(12, all.length);
     let values: String[*] = [];
     let pids: Any = {};
@@ -51,38 +71,68 @@ test function manyTasksAtOnce(): void throws ProcessError {
     let used: int32 = 0;
     for (k, v in pids.fields) { used += 1; }
     check(used > 1 && used <= 3, "the tasks ran in up to 3 processes (${used})");
+    pool.submit(Square { n: 5 });
+    checkText("25.0", "${pool.wait()[0].value}");
 }
 
 // A panic in a task is a ProcessError here; the pool starts new processes for what comes next.
 test function aPanicThereIsAnErrorHere(): void throws ProcessError {
-    let pool: ProcessPool = { processes: 2 };
     let why: String = "";
     try {
-        pool.run(Square { n: -1 });
+        let p: Process = { run: Square { n: -1 } };
+        p.start();
+        p.join();
     } catch (ProcessError e) {
         why = message(e).clone();
     }
     checkText("the task failed: ended: the program ended (exit 101)", why);
-    checkText("9.0", "${pool.run(Square { n: 3 }).value}");
+    let pool: ProcessPool = { processes: 2 };
+    let inPool: String = "";
+    try {
+        pool.submit(Square { n: -1 });
+        pool.wait();
+    } catch (ProcessError e) {
+        inPool = message(e).clone();
+    }
+    checkText("the task failed: ended: the program ended (exit 101)", inPool);
+    pool.submit(Square { n: 3 });
+    checkText("9.0", "${pool.wait()[0].value}");
 }
 
 // What a task carries is checked: values that can go to another process, and no class above it.
 test function whatATaskCarriesIsChecked(): void {
     failsInAProgram(raw"""
-        import std.os.process { SystemProcess };
+        import std.os.process { Task };
         class Box { let n: int32 = 0; }
-        class Bad implements SystemProcess {
+        class Bad implements Task {
             let box: Box;
             override function run(): Any { return null; }
         }
         function main(): int32 { return 0; }
-        """, "Field 'box' of SystemProcess 'Bad' goes to another process");
+        """, "Field 'box' of Task 'Bad' goes to another process");
     failsInAProgram(raw"""
-        import std.os.process { SystemProcess };
+        import std.os.process { Task };
         class Base { let n: int32 = 0; }
-        class Child extends Base implements SystemProcess {
+        class Child extends Base implements Task {
             override function run(): Any { return null; }
         }
         function main(): int32 { return 0; }
-        """, "SystemProcess 'Child' extends 'Base'");
+        """, "Task 'Child' extends 'Base'");
+}
+
+// An interface of the program's own that is called Task is not std.os.process.Task: nothing is checked.
+test function anotherTaskIsNotChecked(): void {
+    runs(caseFile("own_task.lar", raw"""
+        interface Task { function run(): void; }
+        class Box { let n: int32 = 0; }
+        class Mine implements Task {
+            let box: Box;
+            override function run(): void { println("ran ${self.box.n}"); }
+        }
+        function main(): int32 {
+            let m: Mine = { box: Box { n: 3 } };
+            m.run();
+            return 0;
+        }
+        """), ["ran 3"]);
 }

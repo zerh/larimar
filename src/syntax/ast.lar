@@ -92,6 +92,7 @@ public class CIncludeDecl extends Node {
     let header: String;
     let platform: String = "";
     let owner: String = "";             // the class it is in ("" at the top level)
+    let gives: String = "";             // of a native interface: the C names it gives (it is kept only when one is used)
 }
 public class CCodeDecl extends Node {
     let code: String;
@@ -99,6 +100,20 @@ public class CCodeDecl extends Node {
     let owner: String = "";             // the class it is in ("" at the top level)
     let fromStd: bool = false;          // the standard library's: only what is used reaches the C
 }
+/**
+ * native interface Name "<h>" [extends A, B] { function...; type...; const...; struct... }: what a C header
+ * gives, under one name. Its functions and values become Name__f (called Name.f); its types and structs
+ * keep their names. The header reaches the C only when something of it is used.
+ */
+public class NativeInterfaceDecl extends Node {
+    let name: String;
+    let headers: String[*] = [];
+    let parents: String[*] = [];
+    let members: String[*] = [];        // the names of its functions and values (as written: f, not Name__f)
+    let types: String[*] = [];          // the names of its types and structs
+    let owner: String = "";             // the class it is in ("" at the top level)
+}
+
 /** native type X;  = T*;  = c"C TYPE";  ... released by f; */
 public class ExternTypeDecl extends Node {
     let name: String;
@@ -199,6 +214,7 @@ public class InterfaceDecl extends Node {
 public class NativeTypeDecl extends Node {
     let name: String;
     let methods: FunctionDecl[*] = [];
+    let language: bool = false;         // written `type X { }`: a type of the language (std.lang)
 }
 
 public class EnumVariant extends Node {
@@ -226,6 +242,7 @@ public function declName(d: Node): String {
         case ExternTypeDecl t -> t.name;
         case ExternFunctionDecl f -> f.name;
         case ExternValueDecl v -> v.name;
+        case NativeInterfaceDecl n -> n.name;
         default -> "";
     };
 }

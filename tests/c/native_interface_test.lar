@@ -1,0 +1,68 @@
+// The compiler's tests of native interface: what a C header gives, under one name (std, and --unsafe-c).
+import tests.support.compiler { failsWith, failsInAProgram, runs, generatedC };
+import std.test { check };
+
+// Name.f calls the C function f; a type keeps its name (FILE: a FILE* of C, released by its fclose); an
+// interface may extend others, and one in a class is its own.
+test function callsWhatTheHeaderGives(): void {
+    runs("tests/cases/c/native_interface.lar", ["65 66 -1"]);
+}
+
+// A header reaches the C only when something it gives is used.
+test function onlyUsedHeaders(): void {
+    let c: String = generatedC("tests/cases/c/native_interface.lar");
+    check(c.contains("#include <ctype.h>"), "ctype.h, used, is there");
+    check(!c.contains("#include <math.h>"), "math.h, not used, is not");
+}
+
+// What is not there, or extends what is not one, is said.
+test function namesAreChecked(): void {
+    failsWith(raw"""
+        native interface M "<math.h>" { function cbrt(x: float64): float64; }
+        function main(): int32 { return M.sqrt(4.0) as int32; }
+        """, "Native interface 'M' has no 'sqrt'.");
+    failsWith(raw"""
+        native interface M "<math.h>" extends Nope { function cbrt(x: float64): float64; }
+        function main(): int32 { return 0; }
+        """, "Native interface 'M' extends 'Nope', which is not a native interface known here");
+    failsWith(raw"""
+        native interface M { function cbrt(x: float64): float64; }
+        function main(): int32 { return 0; }
+        """, "A native interface says its header");
+}
+
+// Without unsafe C, a program has no native interface: it is said once, at the interface.
+test function onlyWithUnsafeC(): void {
+    failsInAProgram(raw"""
+        native interface M "<math.h>" { function cbrt(x: float64): float64; }
+        function main(): int32 { return M.cbrt(8.0) as int32; }
+        """, "native interface is only for the standard library");
+}
+
+// What the compiler writes has no body, and only std.lang has it: elsewhere a function needs its body.
+test function onlyTheLanguageHasNoBody(): void {
+    failsInAProgram(raw"""
+        function f(): int32;
+        function main(): int32 { return 0; }
+        """, "Function 'f' needs its body");
+    failsInAProgram(raw"""
+        class C { function f(): int32; }
+        function main(): int32 { return 0; }
+        """, "Method 'C.f' needs its body");
+    failsInAProgram(raw"""
+        type Mine { let length: int32; }
+        function main(): int32 { return 0; }
+        """, "is a type of the language: it is only in std.lang");
+}
+
+// The C of one system and what the parts of a module share are std's own: a program uses what std gives.
+test function partsOfStdAreItsOwn(): void {
+    failsInAProgram(raw"""
+        import std.time.posix { PosixClock };
+        function main(): int32 { return 0; }
+        """, "'std.time.posix' is a part of std for std itself");
+    failsInAProgram(raw"""
+        import std.os.process.internal { Child };
+        function main(): int32 { return 0; }
+        """, "use what std gives (std.os.process)");
+}

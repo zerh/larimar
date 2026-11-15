@@ -1,6 +1,6 @@
 // std.os.process: starting programs and talking to them (with the programs every Unix has: cat, sh, sleep).
 import std.os;
-import std.os { Platform, OS };
+import std.platform { Platform, OS };
 import std.test { check, checkText, checkInt, fail, skip };
 import std.os.process { Process, ProcessError, message, findProgram };
 
