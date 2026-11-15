@@ -1,0 +1,16 @@
+// A program without C of its own: std's C (files, text, math) is the standard library's.
+import std.math as Math;
+import std.io.files as Files;
+import std.io { IoError };
+
+function main(): int32 {
+    let n: int32 = Math.floor(3.7) as int32;
+    let path: String = "build/test/cases/uses_std_only.txt";
+    let back: String = "";
+    try {
+        Files.writeString(path, "HOLA");
+        back = Files.readString(path).toLowerCase();
+    } catch (IoError e) { return 1; }
+    println("${n} ${back} ${Files.isFile(path)}");
+    return 0;
+}

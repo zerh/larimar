@@ -35,9 +35,9 @@ failed=""
 
 # the files of tests/: larimarc test runs them (and says how each went)
 if [ -n "$FILTER" ]; then
-    CC="$CC" "$LARIMARC" test tests --only "$FILTER"
+    CC="$CC" "$LARIMARC" test tests --only "$FILTER" --unsafe-c
 else
-    CC="$CC" "$LARIMARC" test tests
+    CC="$CC" "$LARIMARC" test tests --unsafe-c
 fi
 tests_code=$?
 echo ""

@@ -7,7 +7,7 @@ import syntax.ast {
     Ternary, TK, TypeRef, Unary, Unwrap
 };
 import semantics.types {
-    arrayT, ArrK, classOf, Conversion, cTypeOf, EnumInfo, enumOf, externInfoOf, externSig, FieldInfo, findField,
+    arrayT, ArrK, classOf, Conversion, cTypeOf, EnumInfo, enumOf, externInfoOf, FieldInfo, findField,
     findMethod, Frame, FrameK, funcT, FunctionInfo, funcTypes, hasThreadSafe, interfaceMethod, interfaceOf,
     isByteArray, isClass, isEnumT, isError, isExternStruct, isExternT, isExternTypeName, isFloat, isInteger,
     isMemory, isNumeric, isOpt, isPrimName, isPtr, isResource, isStruct, maxText, MbK, MemberInfo, MemK, MethodInfo,
@@ -244,10 +244,6 @@ function checkIdent(id: Ident in default, expected: Type? in default): Type {
     }
     id.symbol = s;
     if (s.kind == SymK.Function) {
-        let et: Type? = expected != null && isOpt(expected) ? expected.elem : expected;
-        let sig: Type? = et != null ? externSig(et) : null;
-        let f: FunctionInfo? = s.func;
-        if (sig != null && f != null) { return cFunctionValue(id, f, et!, sig); }
         return wrong(id.line, "'${s.name}' is a function, not a value: pass ::${s.name} (a lambda that calls it), or write the lambda: (x) -> { return ${s.name}(x); }");
     }
     if (isMemory(s)) {
@@ -268,20 +264,6 @@ function checkIdent(id: Ident in default, expected: Type? in default): Type {
         return nt;
     }
     return s.type;
-}
-
-/** A function given where a pointer to a C function is expected: it must exist in C with that signature. */
-function cFunctionValue(id: Ident in default, f: FunctionInfo in default, ft: Type in default, sig: Type in default): Type {
-    if (!f.isExtern && f.exportName == "") {
-        return wrong(id.line, "'${f.name}' is a Larimar function: mark it 'export function ${f.name}' so C can call it as ${ft.text}.");
-    }
-    if (f.varargs) { return wrong(id.line, "'${f.name}' takes a variable number of arguments: it cannot be used as ${ft.text}."); }
-    if (f.sig == null || f.sig! != sig) {
-        let has: String = f.sig != null ? f.sig!.text : "?";
-        return wrong(id.line, "'${f.name}' is ${has}, but ${ft.text} is ${sig.text}.");
-    }
-    if (!f.isExtern) { edge(currentOwner(), f.owner); }
-    return ft;
 }
 
 /** The last self checked was reached from inside a lambda of the method. */

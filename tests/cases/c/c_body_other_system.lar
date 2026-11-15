@@ -2,10 +2,14 @@
 import std.platform { Platform, OS, WindowsPlatform, UnixPlatform };
 
 class WindowsOnly implements WindowsPlatform {
+    cinclude "<windows.h>";
+
     native function ticks(): int64 { return (int64_t)GetTickCount64(); }
 }
 
 class UnixOnly implements UnixPlatform {
+    cinclude "<unistd.h>";
+
     native function pid(): int64 { return (int64_t)getpid(); }
 }
 

@@ -4,8 +4,8 @@ import syntax.ast {
     Call, Cast, Expr, ExternFunctionDecl, Ident, Lambda, Member, NullLit, Param, SelfExpr, SuperMember, Unary
 };
 import semantics.types {
-    allFields, arrayT, ArrK, BK, CallInfo, CallK, ClassInfo, classOf, contextView, ConvK, EnumInfo, enumOf,
-    enumSimple, externSig, FieldInfo, findMethod, Frame, FrameK, funcT, FunctionInfo, functionOf, interfaceOf,
+    allFields, arrayT, ArrK, BK, CallInfo, CallK, ClassInfo, classOf, ConvK, EnumInfo, enumOf,
+    enumSimple, FieldInfo, findMethod, Frame, FrameK, funcT, FunctionInfo, functionOf, interfaceOf,
     isArray, isClass, isEnumT, isError, isExternT, isInteger, isInterface, isMemParam, isNumeric, isOpt, isPtr,
     isResource, isStruct, MbK, meet, MemberInfo, MemK, MethodInfo, named, NamedK, nativeMethods, P_GLOBAL, P_TEMP,
     parentOf, Place, PlaceK, platformWithin, R_STATIC, Region, structOf, Symbol, SymK, T_ANY, T_BOOL, T_BYTE,
@@ -135,23 +135,10 @@ function checkFunctionCall(c: Call in default, f: FunctionInfo in default, place
     let given: bool = callMemory(f);           // C that creates in the memory of the call
     let ps: Type[*] = [] in default;
     let mps: bool[*] = [] in default;
-    let callback: int32 = -1;                  // the argument that is the callback with a Context
     for (i, t in f.sig!.params) {
-        if ((given && i == 0) || i == f.ctxParam) { continue; }        // given by the compiler, not written
-        if (i == f.ctxCallback) { callback = ps.length; }
+        if (given && i == 0) { continue; }        // given by the compiler, not written
         ps.push(t);
         mps.push(i < f.memParams.length && f.memParams[i]);
-    }
-    // a function of C (native or export) goes as it is; any other function goes with its Context (what it captures)
-    let view: Type? = null;
-    let cType: Type? = null;
-    if (callback >= 0 && callback < c.args.length && !namesCFunction(c.args[callback])) {
-        cType = ps[callback];
-        view = contextView(cType!);
-        if (f.ctxParam < 0) {
-            error(c.args[callback].line, "'${f.name}' gives no Context to its callback (it has no parameter of type Context), so only a function of C goes here: a native or an export function.");
-        }
-        ps[callback] = view!;
     }
     let outer: bool = toC;
     toC = f.isExtern;
@@ -160,19 +147,6 @@ function checkFunctionCall(c: Call in default, f: FunctionInfo in default, place
     toC = outer;
     throwing(c, f.throwsType, "'${f.name}'");
     c.call = CallInfo { kind: CallK.Direct, func: f } in default;
-    if (view != null && f.ctxParam >= 0) {
-        c.call!.ctxArg = callback;
-        c.call!.ctxExtern = cType;
-        c.call!.ctxView = view;
-        if (f.ctxKeep) {                       // C keeps it: what it uses must outlive every call C makes
-            mustLiveForever(regionOf(c.args[callback]), c.args[callback].line,
-                "C keeps the function given to '${f.name}' (in default), so what it uses must live as long as the whole program, but it lives in {v}. Create what it uses in default.");
-        }
-        if (f.ctxSelf && c.args.length > 0) {  // the object keeps it: what it uses lives at least as long as the object
-            lifetime(regionOf(c.args[callback]), regionOf(c.args[0]), c.args[callback].line,
-                "The object keeps the function given to '${f.name}' (in self), so what it uses must live as long as the object, but it lives in {v} and the object in {st}.");
-        }
-    }
     // A String from C is static, unless C made it in a memory it received.
     let anyMem: bool = false;
     for (mp in f.memParams) {
@@ -187,13 +161,6 @@ function checkFunctionCall(c: Call in default, f: FunctionInfo in default, place
     let made: Region = given || f.creates ? placedResult(c, f.sig!.elem!, place) : R_STATIC;
     setRegion(c, !hasRefs(f.sig!.elem!) || (f.isExtern && !anyMem) ? R_STATIC : meet(r, made));
     return f.sig!.elem!;
-}
-
-/** Does the argument name a function of C, a native or an export function (it goes to C as it is)? */
-function namesCFunction(a: Expr): bool {
-    if (!(a is Ident id)) { return false; }
-    let s: Symbol? = lookup(id.name);
-    return s != null && s.kind == SymK.Function && s.func != null && (s.func!.isExtern || s.func!.exportName != "");
 }
 
 /** The arguments the result of a method call may point to. */
@@ -357,17 +324,6 @@ function checkNativeMethodCall(c: Call in default, callee: Member in default, mi
 
 function closureCall(c: Call in default, t: Type in default, calleeRegion: Region in default, place: Place in default): Type {
     if (isError(t)) { return checkAllArgs(c); }
-    let cs: Type? = externSig(t);
-    if (cs != null) {                       // a pointer to a C function: called like an extern function
-        let none: bool[*] = [] in default;
-        let outer: bool = toC;
-        toC = true;
-        checkArgs(c, cs.params, false, none, "this C function", same(c, P_TEMP), all(c.args.length, false));
-        toC = outer;
-        c.call = CallInfo { kind: CallK.CPointer, type: cs } in default;
-        setRegion(c, R_STATIC);
-        return cs.elem!;
-    }
     if (t.kind != TyK.Func) {
         error(c.line, "A value of type ${t.text} cannot be called.");
         return checkAllArgs(c);

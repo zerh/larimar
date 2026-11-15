@@ -2,7 +2,7 @@
 
 import syntax.ast { ArrayLit, Call, Cast, Expr, ExprStmt, Ident, Lambda, Member, NullLit, ObjectLit, Param };
 import semantics.types {
-    allFields, arrayT, ArrK, ClassInfo, classOf, EnumInfo, enumOf, externInfoOf, externSig, FieldInfo, FrameK,
+    allFields, arrayT, ArrK, ClassInfo, classOf, EnumInfo, enumOf, externInfoOf, FieldInfo, FrameK,
     InterfaceInfo, interfaceMethod, interfaceOf, isClass, isEnumT, isError, isExternT, isNumeric, isOpt, isPtr,
     isResource, isStruct, LambdaInfo, lambdaList, meet, MethodInfo, named, NamedK, newOwner, optT, P_TEMP, Place,
     PlaceK, R_STATIC, Region, Scope, StructInfo, structOf, Symbol, T_ANY, T_BOOL, T_ERROR, T_STRING, T_VOID, TyK,
@@ -23,9 +23,7 @@ public function checkLambda(l: Lambda in default, expected: Type? in default): T
             return wrong(l.line, "${refText(l.ref!)} is a reference to a function: use it where a function type is expected (a parameter, a variable or a field of type (A) -> B).");
         }
         if (expected == null) { return wrong(l.line, "Cannot infer the type of this lambda. Give it a function type, e.g. let f: (int32) -> int32 = (x) -> { ... };"); }
-        if (externSig(expected) != null) {
-            error(l.line, "${expected.text} is a pointer to a C function, and a lambda is not one: pass a native function or an 'export function' (or give the type a Context, so a lambda can go).");
-        } else if (!isError(expected)) {
+        if (!isError(expected)) {
             error(l.line, "A lambda cannot be used where ${expected.text} is expected.");
         }
         return T_ERROR;
@@ -336,12 +334,8 @@ public function checkCast(c: Cast in default): Type {
     }
     if (t == target || (isNumeric(t) && isNumeric(target))) { return target; }
     // C pointers: one pointer as another (a sockaddr_in* as a sockaddr*), or an opaque extern type as a pointer
-    let opaque: bool = (isExternT(t) && !isResource(t) && externSig(t) == null) || (isExternT(target) && !isResource(target) && externSig(target) == null);
+    let opaque: bool = (isExternT(t) && !isResource(t)) || (isExternT(target) && !isResource(target));
     if ((isPtr(t) && isPtr(target)) || (isPtr(t) && opaque) || (isPtr(target) && opaque)) { return target; }
-    // what dlsym gives (an opaque pointer) as a pointer to a C function, and back
-    let opaqueT: bool = isExternT(t) && !isResource(t) && externSig(t) == null && externInfoOf(t.name)!.decl.cType == "";
-    let opaqueTarget: bool = isExternT(target) && !isResource(target) && externSig(target) == null && externInfoOf(target.name)!.decl.cType == "";
-    if ((opaqueT && externSig(target) != null) || (opaqueTarget && externSig(t) != null)) { return target; }
     if (isClass(t) && isClass(target)) {
         return wrong(c.line, "Use a switch with a type pattern to convert ${t.text} to ${target.text}: switch (x) { case ${target.text} y -> ... }");
     }

@@ -1,14 +1,6 @@
 // The compiler's tests of memory: lambdas (the programs that run are in tests/cases/memory/).
 import tests.support.compiler { failsWith, runs };
 
-test function lambdaAsCPointer(): void {
-    failsWith(raw"""
-        native type Op = (int32, int32) -> int32;
-        native function apply(f: Op, a: int32, b: int32): int32;
-        function main(): int32 { return apply((a: int32, b: int32) -> { return a * b; }, 1, 2); }
-        """, "a lambda is not one");
-}
-
 test function lambdaCaptureLivesLess(): void {
     failsWith(raw"""
         class Button { let onClick: () -> void = () -> { }; }
