@@ -9,10 +9,10 @@ import std.io.files as Files;
 import std.encoding.json as Json;
 import std.io.console as Console;
 import syntax.ast { Program };
-import semantics.linker { linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES };
-import pipeline { analysisPasses, assembledProgram, Compilation, run };
-import semantics.types { files };
-import semantics.analyzer { analysisErrors };
+import semantics.linker { decode, FILE_LINES, linking, readSource };
+import pipeline { analysisPasses, assembledProgram, Compilation, compilationWith, run };
+import semantics.types { declared };
+import semantics.analyzer { analysis };
 import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 
@@ -31,13 +31,13 @@ public function analyzeFile(main: String, shownFrom: String): bool {
     let ok: bool = run(unit, analysisPasses());
     if (unit.unread != "") { readErrors.push(unit.unread.clone() in default); }
     if (unit.assembled) { program = assembledProgram(); }
-    for (f in fileNames) { files.push(f); }
+    for (f in linking.fileNames) { declared.files.push(f); }
     return ok;
 }
 
 /** A compilation of a main file, with this session's std and source root. */
 public function compilationOf(main: String, shownFrom: String): Compilation {
-    return Compilation { main: main.clone(), shownFrom: shownFrom.clone(), std: stdDir().clone(), sourceRoot: sourceRoot.clone() };
+    return compilationWith(main, shownFrom, stdDir(), sourceRoot);
 }
 
 /** Where std/ is: $LARIMAR_HOME/std, or next to the tool (bin/larimar -> std/). */
@@ -75,8 +75,8 @@ public class Diagnostic {
 public function diagnostics(): Diagnostic[*] {
     let out: Diagnostic[*] = [];
     for (e in readErrors) { out.push(Diagnostic { file: "", line: 0, message: e.clone(), kind: "Error" }); }
-    for (e in linkErrors) { out.push(diagnostic(e)); }
-    for (e in analysisErrors) { out.push(diagnostic(e)); }
+    for (e in linking.linkErrors) { out.push(diagnostic(e)); }
+    for (e in analysis.analysisErrors) { out.push(diagnostic(e)); }
     return out;
 }
 
@@ -87,7 +87,7 @@ function diagnostic(raw: String): Diagnostic {
     if (at == null || close == null) { return Diagnostic { file: "", line: 0, message: decode(raw).clone(), kind: "Error" }; }
     let encoded: int64 = raw.substring(at! + 7, close!).toInt() ?? 0;
     let index: int32 = (encoded / (FILE_LINES as int64)) as int32;
-    let file: String = index >= 0 && index < filePaths.length ? filePaths[index] : "";
+    let file: String = index >= 0 && index < linking.filePaths.length ? linking.filePaths[index] : "";
     return Diagnostic {
         file: file.clone(),
         line: (encoded % (FILE_LINES as int64)) as int32,
@@ -150,8 +150,8 @@ public function checkCommand(rest: String[*]): int32 {
         println(builder.toString());
     } else {
         for (e in readErrors) { Console.printError(e); }
-        for (e in linkErrors) { Console.printError(decode(e)); }
-        for (e in analysisErrors) { Console.printError(decode(e)); }
+        for (e in linking.linkErrors) { Console.printError(decode(e)); }
+        for (e in analysis.analysisErrors) { Console.printError(decode(e)); }
         if (ok) { Console.printError("no errors"); }
     }
     return ok ? 0 : 1;

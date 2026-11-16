@@ -7,7 +7,7 @@ import semantics.types {
     MethodInfo, NamedKind, P_TEMP, Place, PlaceKind, R_STATIC, Region, rLocal, rResult, Scope, StructInfo, structOf,
     Symbol, SymbolKind, T_ANY, T_BOOL, T_ERROR, T_STRING, T_VOID, TypeKind, Type
 };
-import semantics.analyzer { block, error, frame, scope, wrong };
+import semantics.analyzer { analysis, block, error, frame, wrong };
 import semantics.analyzer.flow { blockRegion, lifetime };
 import semantics.analyzer.threads { checkThreadSafeLambda };
 import semantics.expressions { check, note, resolvePlacement };
@@ -48,7 +48,7 @@ public function placeRegion(p: Place in default): Region {
 
 /** The current statement's temporaries (none at the top level: there it is the whole program). */
 function tempRegion(label: String in default): Region {
-    let c: Scope? = scope;
+    let c: Scope? = analysis.scope;
     while (c != null && c.frame == frame()) {
         if (c.statement) { return rLocal(c, label); }
         c = c.parent;

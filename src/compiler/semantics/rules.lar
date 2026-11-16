@@ -10,8 +10,8 @@
 import syntax.ast { CCodeDecl, CIncludeDecl, ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, FunctionDecl, NativeInterfaceDecl,
     NativeTypeDecl, Node, StructDecl };
 import semantics.linker {
-    declarationsOf, importsOf, isLanguage, isStd, Module, ruleError, sourceOf, stdFileOpened, trusted, unsafeModule,
-    unsafeNotes, unsafeSources, linkedMainFile
+    declarationsOf, importsOf, isLanguage, isStd, linkedMainFile, linking, Module, ruleError, sourceOf,
+    stdFileOpened, trusted, unsafeModule
 };
 
 /** A rule of the language. */
@@ -141,11 +141,11 @@ class NoCOutsideStd implements Rule {
         for (d in declarationsOf(module)) {
             if (interfaces && d is NativeInterfaceDecl) {          // unsafe_c: allowed, and said at build
                 let from: String = sourceOf(module);
-                if (!unsafeSources.contains(from)) { unsafeSources.push(from.clone() in default); }
+                if (!linking.unsafeSources.contains(from)) { linking.unsafeSources.push(from.clone() in default); }
                 continue;
             }
             if (interfaces && d is ExternTypeDecl et && et.cType.trim().endsWith("*") && et.cType.trim() != "void*" && et.releasedBy == "" && declared.contains(et.name)) {
-                unsafeNotes.push("${sourceOf(module)}: type ${et.name} (${et.cType}) has no 'released by': nothing frees it" in default);
+                linking.unsafeNotes.push("${sourceOf(module)}: type ${et.name} (${et.cType}) has no 'released by': nothing frees it" in default);
             }
             let what: String = cKind(d, interfaces, declared, parts);
             if (what != "") {

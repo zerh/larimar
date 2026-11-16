@@ -16,12 +16,12 @@ import syntax.ast {
     Node, Stmt, StructDecl, TryStmt, VarDecl
 };
 import semantics.types {
-    allFields, ArrayKind, CallInfo, CallK, chain, classes, ClassInfo, classOf, EnumInfo, enumOf, enums, externInfoOf,
-    externInfos, ExternTypeInfo, FieldInfo, findMethod, FunctionInfo, functionOf, functions, InterfaceInfo,
-    interfaceOf, interfaces, LambdaInfo, MemberKind, MemberInfo, MethodInfo, nativeMethods, StructInfo, structOf, structs,
-    Symbol, SymbolKind, T_ANY, T_STRING, TypeKind, Type, VariantInfo
+    allFields, ArrayKind, CallInfo, CallK, chain, ClassInfo, classOf, declared, EnumInfo, enumOf,
+    externInfoOf, ExternTypeInfo, FieldInfo, findMethod, FunctionInfo, functionOf, InterfaceInfo,
+    interfaceOf, LambdaInfo, MemberInfo, MemberKind, MethodInfo, StructInfo, structOf, Symbol, SymbolKind,
+    T_ANY, T_STRING, Type, TypeKind, VariantInfo
 };
-import semantics.linker { isLangHelper, filePaths, fileSources, FILE_LINES, decode, namesOfFile, aliasesOfFile, publicsOfModule, fileOfModule };
+import semantics.linker { aliasesOfFile, decode, FILE_LINES, fileOfModule, isLangHelper, linking, namesOfFile, publicsOfModule };
 import editor.session { program, stdDir, diagnostics, Diagnostic };
 import editor.opendocuments { openDocument, setOpenDocument };
 import std.io.console as Console;
@@ -39,9 +39,9 @@ class Lines {
 let lineCache: Lines[*] = [] in default;
 
 function linesOf(index: int32): Lines {
-    while (lineCache.length < fileSources.length) {
+    while (lineCache.length < linking.fileSources.length) {
         let i: int32 = lineCache.length;
-        lineCache.push(Lines { text: fileSources[i] });
+        lineCache.push(Lines { text: linking.fileSources[i] });
         let l: Lines = lineCache[i];
         l.starts.push(0);
         for (k, c in l.text) {
@@ -67,7 +67,7 @@ function lineCount(index: int32): int32 { return linesOf(index).starts.length; }
 /** The file index of a path in the analysis, or -1. */
 public function fileIndex(path: String): int32 {
     let p: String = Paths.normalize(path);
-    for (i, f in filePaths) {
+    for (i, f in linking.filePaths) {
         if (Paths.normalize(f) == p) { return i; }
     }
     return -1;
@@ -246,7 +246,7 @@ let collected: bool = false;
 function collect(): void {
     if (collected) { return; }
     collected = true;
-    for (f in functions) {
+    for (f in declared.functions) {
         if (f.isExtern || f.decl == null) { continue; }
         for (s in f.paramSymbols) {
             locals.push(s);
@@ -254,15 +254,15 @@ function collect(): void {
         }
         body(f.decl!.body);
     }
-    for (s in structs) {
+    for (s in declared.structs) {
         for (fi in s.fields) { exprAll(fi.defaultValue, true, exprs); }
         for (m in s.methods) { method(m); }
     }
-    for (c in classes) {
+    for (c in declared.classes) {
         for (fi in c.fields) { exprAll(fi.defaultValue, true, exprs); }
         for (m in c.methods) { method(m); }
     }
-    for (m in nativeMethods) { method(m); }
+    for (m in declared.nativeMethods) { method(m); }
     for (d in program.decls) {
         if (d is VarDecl v) { exprAll(v.init, true, exprs); }
         if (d is ConstDecl c) { exprAll(c.value, true, exprs); }
@@ -418,29 +418,29 @@ function targetAt(index: int32, line: int32, w: Word): Target {
     let word: String = w.text;
     if (word == "") { return none(); }
     // a declaration on this line
-    for (f in functions) {
+    for (f in declared.functions) {
         if (f.line == enc && shortName(f.name) == word) { return ofFunc(f); }
     }
-    for (s in structs) {
+    for (s in declared.structs) {
         if (s.line == enc && shortName(s.name) == word) { return ofType(s.name); }
         for (fi in s.fields) { if (fi.line == enc && fi.name == word) { return ofField(fi); } }
         for (m in s.methods) { if (m.decl.line == enc && m.name == word) { return ofMethod(m); } }
     }
-    for (c in classes) {
+    for (c in declared.classes) {
         if (c.line == enc && shortName(c.name) == word) { return ofType(c.name); }
         for (fi in c.fields) { if (fi.line == enc && fi.name == word) { return ofField(fi); } }
         for (m in c.methods) { if (m.decl.line == enc && m.name == word) { return ofMethod(m); } }
     }
-    for (i in interfaces) {
+    for (i in declared.interfaces) {
         if (i.line == enc && shortName(i.name) == word) { return ofType(i.name); }
         for (m in i.methods) { if (m.decl.line == enc && m.name == word) { return ofMethod(m); } }
     }
-    for (m in nativeMethods) { if (m.decl.line == enc && m.name == word) { return ofMethod(m); } }
-    for (e in enums) {
+    for (m in declared.nativeMethods) { if (m.decl.line == enc && m.name == word) { return ofMethod(m); } }
+    for (e in declared.enums) {
         if (e.line == enc && shortName(e.name) == word) { return ofType(e.name); }
         for (v in e.variants) { if (v.line == enc && v.name == word) { return ofVariant(e, v); } }
     }
-    for (x in externInfos) {
+    for (x in declared.externInfos) {
         if (x.decl.line == enc && shortName(x.name) == word) { return ofType(x.name); }
     }
     for (d in program.decls) {
@@ -741,8 +741,8 @@ function placeOf(target: Target): Place {
 }
 
 function locationJson(p: Place): String {
-    if (p.index < 0 || p.index >= filePaths.length) { return "null"; }
-    return "{\"uri\":${Json.quote(uriOfPath(filePaths[p.index]))},\"range\":${rangeJson(p.index, p.line, p.from, p.to)}}" in default;
+    if (p.index < 0 || p.index >= linking.filePaths.length) { return "null"; }
+    return "{\"uri\":${Json.quote(uriOfPath(linking.filePaths[p.index]))},\"range\":${rangeJson(p.index, p.line, p.from, p.to)}}" in default;
 }
 
 // =====================================================================================
@@ -817,7 +817,7 @@ public function referencesJson(path: String, line0: int32, char16: int32, withDe
         lines.push(-1);
     }
     if (target.kind == K_TYPE) {                 // types: every place their name is written, in the program's files
-        for (i, f in filePaths) {
+        for (i, f in linking.filePaths) {
             if (isStdFile(f) && !(i == fileOf(target.line))) { continue; }
             for (l in 1..lineCount(i) + 1) {
                 if (wordColumns(lineText(i, l), target.name, -1).length > 0) {
@@ -949,7 +949,7 @@ public function symbolsJson(path: String): String {
             case ConstDecl c -> { items.push(symbolJson(shortName(c.name), SK_CONSTANT, c.line, shortName(c.name), [] in default)); }
             case ExternTypeDecl x -> {
                 let kids: String[*] = [] in default;          // native type X = T { ... }: its members
-                for (m in nativeMethods) {
+                for (m in declared.nativeMethods) {
                     if (m.owner == x.name) { kids.push(symbolJson(m.name, SK_METHOD, m.decl.line, m.name, [] in default)); }
                 }
                 items.push(symbolJson(shortName(x.name), SK_CLASS, x.line, shortName(x.name), kids));
@@ -1225,7 +1225,7 @@ function memberItems(items: Items, index: int32): void {
         if (enumInfo != null) {
             for (v in enumInfo.variants) { add(items, v.name, CK_ENUM_MEMBER, detail(ofVariant(enumInfo, v)), ""); }
         }
-        for (f in functions) {
+        for (f in declared.functions) {
             if (f.decl != null && f.decl!.typeName == typeName!) { add(items, f.decl!.name, CK_FUNCTION, detail(ofFunc(f)), docOf(f.line)); }
         }
         return;
@@ -1262,7 +1262,7 @@ function typeMembers(items: Items, t: Type): void {
         return;
     }
     if (t.kind == TypeKind.Prim) {
-        for (m in nativeMethods) {
+        for (m in declared.nativeMethods) {
             if (m.owner == t.name && !m.isOperator) { memberItem(items, m); }
         }
         if (t == T_STRING) {
@@ -1362,16 +1362,16 @@ function nameItems(items: Items, index: int32): void {
 /** The line where the function or method around a line starts, or 0. */
 function enclosingStart(index: int32, line: int32): int32 {
     let best: int32 = 0;
-    for (f in functions) {
+    for (f in declared.functions) {
         if (f.decl != null && fileOf(f.line) == index) { best = closer(best, index, lineOf(f.line), line); }
     }
-    for (s in structs) {
+    for (s in declared.structs) {
         for (m in s.methods) { if (fileOf(m.decl.line) == index) { best = closer(best, index, lineOf(m.decl.line), line); } }
     }
-    for (c in classes) {
+    for (c in declared.classes) {
         for (m in c.methods) { if (fileOf(m.decl.line) == index) { best = closer(best, index, lineOf(m.decl.line), line); } }
     }
-    for (m in nativeMethods) { if (fileOf(m.decl.line) == index) { best = closer(best, index, lineOf(m.decl.line), line); } }
+    for (m in declared.nativeMethods) { if (fileOf(m.decl.line) == index) { best = closer(best, index, lineOf(m.decl.line), line); } }
     return best;
 }
 
@@ -1441,7 +1441,7 @@ public function signatureJson(path: String): String {
 function methodOf(firstType: Type, name: String): MethodInfo? {
     let type: Type = firstType.kind == TypeKind.Opt && firstType.elem != null ? firstType.elem! : firstType;
     if (type.kind == TypeKind.Prim) {
-        for (m in nativeMethods) {
+        for (m in declared.nativeMethods) {
             if (m.owner == type.name && m.name == name) { return m; }
         }
         return null;
@@ -1473,7 +1473,7 @@ function methodOf(firstType: Type, name: String): MethodInfo? {
 public function diagnosticsJson(requested: String): String {
     let found: Diagnostic[*] = diagnostics();
     let byFile: Any = {};
-    for (i, f in filePaths) {
+    for (i, f in linking.filePaths) {
         if (!isStdFile(f) || Paths.normalize(f) == Paths.normalize(requested)) { byFile[f] = true; }
     }
     for (d in found) {

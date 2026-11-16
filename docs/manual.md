@@ -4200,7 +4200,7 @@ larimar/
       semantics/             understanding the program: modules (linker), the rules (rules.lar), types,
                              analyzer and expressions (analyzer/, expressions/: their parts by theme)
       codegen/               from tree to C: gen, expressions (gen/, expressions/: their parts), the names
-                             of its variables (localnames), prune, debug map
+                             of its variables (localnames), the C as parts (cprogram), prune, debug map
       editor/                larimar check, lsp and dap
       project/               the C compiler, larimar test (larimar.toml is read with std.encoding.toml)
     std/                   the standard library (installed as std/)

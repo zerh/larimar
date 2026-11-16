@@ -6,14 +6,14 @@ import syntax.ast {
     SuperMember, SwitchExpr, Ternary, TypeRefKind, TypeRef, Unary, Unwrap, VarDecl, YieldStmt
 };
 import semantics.types {
-    classes, ClassInfo, classOf, describe, enumOf, FieldInfo, findField, FunctionInfo, functionOf, functions,
-    interfaces, isOpt, isResource, MethodInfo, named, NamedKind, nativeMethods, outlives, P_GLOBAL, P_RESULT, Place,
-    PlaceKind, primByName, R_STATIC, Region, resolveRegion, RegionKind, rLocal, Scope, structOf, structs, Symbol, symbolic,
-    SymbolKind, T_ANY, T_STRING, T_VOID, TypeKind, Type
+    ClassInfo, classOf, declared, describe, enumOf, FieldInfo, findField, FunctionInfo, functionOf, isOpt,
+    isResource, MethodInfo, named, NamedKind, outlives, P_GLOBAL, P_RESULT, Place, PlaceKind, primByName,
+    R_STATIC, Region, RegionKind, resolveRegion, rLocal, Scope, structOf, Symbol, symbolic, SymbolKind,
+    T_ANY, T_STRING, T_VOID, Type, TypeKind
 };
-import semantics.linker { target };
+import semantics.linker { linking };
 import semantics.expressions.conversions { hasRefs, namedHasRefs, regionOf };
-import semantics.analyzer { block, declare, Deferred, deferred, DefK, error, frame, lookup, scope, state };
+import semantics.analyzer { analysis, block, declare, Deferred, DefK, error, frame, lookup, state };
 import semantics.analyzer.compact { Mixing, mixings };
 import semantics.analyzer.statements { livesHint };
 
@@ -27,7 +27,7 @@ let argFlows: Any = {} in default;
 let creatingMethods: Any = {} in default;
 
 public function flowSummaries(): void {
-    for (f in functions) {
+    for (f in declared.functions) {
         if (!f.isExtern) {
             for (_ in f.params) { f.flows.push(false); }
         }
@@ -35,7 +35,7 @@ public function flowSummaries(): void {
     let changed: bool = true;
     while (changed) {        // grows until nothing changes (a call can make its caller return its arguments)
         changed = false;
-        for (f in functions) {
+        for (f in declared.functions) {
             if (f.isExtern) { continue; }
             flowParams = steadyParams(f.decl!.params, f.decl!.body);
             let flow: Any = flowNames(f.decl!.body, true);
@@ -51,15 +51,15 @@ public function flowSummaries(): void {
     }
     let names: Any = {};
     let all: MethodInfo[*] = [] in default;
-    for (st in structs) { for (m in st.methods) { all.push(m); } }
-    for (c in classes) { for (m in c.methods) { all.push(m); } }
-    for (m in nativeMethods) { all.push(m); }
+    for (st in declared.structs) { for (m in st.methods) { all.push(m); } }
+    for (c in declared.classes) { for (m in c.methods) { all.push(m); } }
+    for (m in declared.nativeMethods) { all.push(m); }
     let plain: Any = {};                // types whose methods no other class writes again: their flow is exact
-    for (st in structs) { plain[st.name] = 1; }
-    for (c in classes) {
+    for (st in declared.structs) { plain[st.name] = 1; }
+    for (c in declared.classes) {
         if (!c.builder && c.superName == "") { plain[c.name] = 1; }
     }
-    for (c in classes) {
+    for (c in declared.classes) {
         if (c.superName != "") { plain.remove(c.superName); }
     }
     for (m in all) {
@@ -96,7 +96,7 @@ public function flowSummaries(): void {
             }
         }
     }
-    for (i in interfaces) {
+    for (i in declared.interfaces) {
         for (m in i.methods) {
             m.returnsArgs = true;
             viewMethods[m.name] = 1;
@@ -108,7 +108,7 @@ public function flowSummaries(): void {
         if (!viewMethods.contains(n)) { freshMethods[n] = 1; }
     }
     // Which results are new data (created in the memory of the call): grows until nothing changes.
-    for (i in interfaces) {
+    for (i in declared.interfaces) {
         for (m in i.methods) {
             m.creates = true;
             creatingMethods[m.name] = 1;
@@ -117,7 +117,7 @@ public function flowSummaries(): void {
     changed = true;
     while (changed) {
         changed = false;
-        for (f in functions) {
+        for (f in declared.functions) {
             if (!f.isExtern && !f.creates && createsResult(f.decl!.body, f.sig!.elem!, f.params)) {
                 f.creates = true;
                 changed = true;
@@ -578,19 +578,19 @@ public function requireOutlives(value: Expr in default, storage: Region in defau
         forever: "This value lives in {v}, but ${target} lives for the whole program: create it with 'in default'.",
         expr: value, target: target.clone() in default
     } in default;
-    if (symbolic(d.value) || symbolic(storage)) { deferred.push(d); } else { runCheck(d, false); }
+    if (symbolic(d.value) || symbolic(storage)) { analysis.deferred.push(d); } else { runCheck(d, false); }
 }
 
 /** value must live at least as long as storage; checked now, or at the end if a variable is involved. */
 public function lifetime(value: Region in default, storage: Region in default, line: int32, msg: String in default): void {
     let d: Deferred = Deferred { line, kind: DefK.Outlives, value, storage, msg } in default;
-    if (symbolic(value) || symbolic(storage)) { deferred.push(d); } else { runCheck(d, false); }
+    if (symbolic(value) || symbolic(storage)) { analysis.deferred.push(d); } else { runCheck(d, false); }
 }
 
 /** The same, knowing the expression and what it is for (a field of a literal, a thrown error), to name the culprit. */
 public function lifetimeOf(value: Expr in default, storage: Region in default, line: int32, msg: String in default, role: String): void {
     let d: Deferred = Deferred { line, kind: DefK.Outlives, value: regionOf(value), storage, msg, expr: value, role: role.clone() in default } in default;
-    if (symbolic(d.value) || symbolic(storage)) { deferred.push(d); } else { runCheck(d, false); }
+    if (symbolic(d.value) || symbolic(storage)) { analysis.deferred.push(d); } else { runCheck(d, false); }
 }
 
 public function mustLiveForever(value: Region in default, line: int32, msg: String in default): void {

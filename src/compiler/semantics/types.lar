@@ -31,8 +31,45 @@ public class Type {
 
 let typeIndex: Any = {} in default;
 
-/** larimar build of a library ([project] kind = "library"): it has no main (the programs that use it do). */
-public let buildingLibrary: bool = false;
+/** What a program declares, gathered by the analysis: its types, functions, globals and lambdas, and what its C needs (includes, ccode, files). */
+public class Declarations {
+    /** larimar build of a library ([project] kind = "library"): it has no main (the programs that use it do). */
+    let buildingLibrary: bool = false;
+    let includes: String[*] = [];
+    let includeWhens: String[*] = [];     // per include: its platform ("" every one)
+    let includeGives: String[*] = [];     // per include of a native interface: the C names it gives ("" for cinclude)
+    let usesAny: bool = false;
+    let usesThreads: bool = false;
+    let cCode: String[*] = [];
+    let cCodeStd: bool[*] = [];       // per cCode: from the standard library
+    let files: String[*] = [];
+    let structs: StructInfo[*] = [];
+    let nativeMethods: MethodInfo[*] = [];
+    let structIndex: Any = {};
+    let classes: ClassInfo[*] = [];
+    let classIndex: Any = {};
+    let interfaces: InterfaceInfo[*] = [];
+    let interfaceIndex: Any = {};
+    let enums: EnumInfo[*] = [];
+    let enumIndex: Any = {};
+    let externTypes: String[*] = [];
+    let externTypeIndex: Any = {};
+    let externInfos: ExternTypeInfo[*] = [];     // in the order of externTypes
+    let functions: FunctionInfo[*] = [];
+    let functionIndex: Any = {};
+    let globals: VarDecl[*] = [];
+    let lambdaList: LambdaInfo[*] = [];
+    let funcTypes: Type[*] = [];     // closure types, by id
+    let usedTypes: Type[*] = [];
+    let typeOrder: Type[*] = [];
+}
+
+/** The Declarations of the compilation being done (pipeline: Compilation). */
+public let declared: Declarations = Declarations {} in default;
+
+/** Makes `state` the one the compiler works on. */
+public function useDeclarations(state: Declarations in default): void { declared = state; }
+
 public let allTypes: Type[*] = [] in default;
 
 function intern(type: Type in default): Type {
@@ -767,61 +804,34 @@ public class CatchInfo {
 // The analysis: everything the generator needs
 // =====================================================================================
 
-public let includes: String[*] = [] in default;
-public let includeWhens: String[*] = [] in default;     // per include: its platform ("" every one)
-public let includeGives: String[*] = [] in default;     // per include of a native interface: the C names it gives ("" for cinclude)
-public let usesAny: bool = false;
-public let usesThreads: bool = false;
-public let cCode: String[*] = [] in default;
-public let cCodeStd: bool[*] = [] in default;       // per cCode: from the standard library
-public let files: String[*] = [] in default;
 
-public let structs: StructInfo[*] = [] in default;
-public let nativeMethods: MethodInfo[*] = [] in default;
-public let structIndex: Any = {} in default;
-public let classes: ClassInfo[*] = [] in default;
-public let classIndex: Any = {} in default;
-public let interfaces: InterfaceInfo[*] = [] in default;
-public let interfaceIndex: Any = {} in default;
-public let enums: EnumInfo[*] = [] in default;
-public let enumIndex: Any = {} in default;
-public let externTypes: String[*] = [] in default;
-public let externTypeIndex: Any = {} in default;
-public let externInfos: ExternTypeInfo[*] = [] in default;     // in the order of externTypes
-public let functions: FunctionInfo[*] = [] in default;
-public let functionIndex: Any = {} in default;
-public let globals: VarDecl[*] = [] in default;
-public let lambdaList: LambdaInfo[*] = [] in default;
-public let funcTypes: Type[*] = [] in default;     // closure types, by id
-public let usedTypes: Type[*] = [] in default;
-public let typeOrder: Type[*] = [] in default;
 
 public function structOf(name: String): StructInfo? {
-    let i: int32 = (structIndex[name] as int32 ?? -1);
-    return i < 0 ? null : structs[i];
+    let i: int32 = (declared.structIndex[name] as int32 ?? -1);
+    return i < 0 ? null : declared.structs[i];
 }
 
 public function classOf(name: String): ClassInfo? {
-    let i: int32 = (classIndex[name] as int32 ?? -1);
-    return i < 0 ? null : classes[i];
+    let i: int32 = (declared.classIndex[name] as int32 ?? -1);
+    return i < 0 ? null : declared.classes[i];
 }
 
 public function interfaceOf(name: String): InterfaceInfo? {
-    let i: int32 = (interfaceIndex[name] as int32 ?? -1);
-    return i < 0 ? null : interfaces[i];
+    let i: int32 = (declared.interfaceIndex[name] as int32 ?? -1);
+    return i < 0 ? null : declared.interfaces[i];
 }
 
 public function enumOf(name: String): EnumInfo? {
-    let i: int32 = (enumIndex[name] as int32 ?? -1);
-    return i < 0 ? null : enums[i];
+    let i: int32 = (declared.enumIndex[name] as int32 ?? -1);
+    return i < 0 ? null : declared.enums[i];
 }
 
 public function functionOf(name: String): FunctionInfo? {
-    let i: int32 = (functionIndex[name] as int32 ?? -1);
-    return i < 0 ? null : functions[i];
+    let i: int32 = (declared.functionIndex[name] as int32 ?? -1);
+    return i < 0 ? null : declared.functions[i];
 }
 
-public function isExternTypeName(name: String): bool { return externTypeIndex[name] != null; }
+public function isExternTypeName(name: String): bool { return declared.externTypeIndex[name] != null; }
 
 /** An extern type declared `released by`: a resource that lives in a memory. */
 public function isResource(type: Type): bool {
@@ -855,8 +865,8 @@ public function nativeOwner(owner: String): Type {
 }
 
 public function externInfoOf(name: String): ExternTypeInfo? {
-    let i: int32 = (externTypeIndex[name] as int32 ?? -1);
-    return i < 0 ? null : externInfos[i];
+    let i: int32 = (declared.externTypeIndex[name] as int32 ?? -1);
+    return i < 0 ? null : declared.externInfos[i];
 }
 
 /** The C struct a `native struct X { ... }` describes ("" for other types). */

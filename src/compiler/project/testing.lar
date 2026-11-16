@@ -27,7 +27,7 @@ import std.io.files as Files;
 import std.io { IoError };
 import syntax.ast { FunctionDecl, Program };
 import syntax.parser { parseProgram };
-import semantics.linker { unsafeC };
+import semantics.linker { linking };
 import project.cc { windows, quote, commandLine, systemLibraries, selfPath, installHint };
 import std.io.console as Console;
 import std.encoding.json as Json;
@@ -446,7 +446,7 @@ function runTestFile(file: String, shown: String, source: String): void {
     let exe: String = exeName(b);
     let log: String = "${b}.compile.txt";
     let cmd: String[*] = [selfPath(), "test-main", file, "-o", cFile];
-    if (unsafeC) { cmd.push("--unsafe-c"); }         // the compiler's own tests, that try std's C
+    if (linking.unsafeC) { cmd.push("--unsafe-c"); }         // the compiler's own tests, that try std's C
     if (settings!.root != "") {
         cmd.push("--root");
         cmd.push(settings!.root);

@@ -10,11 +10,11 @@
 
 import syntax.ast { Expr, Param, Program, VarDecl };
 import semantics.types {
-    classes, classOf, EnumInfo, enumOf, enums, escapeName, Frame, FrameKind, functions, globals, interfaceOf,
-    isExternTypeName, isMemory, isStruct, LambdaInfo, named, NamedKind, nativeMethods, nativeOwner, newOwner, newScope,
-    Owner, R_STATIC, Region, Scope, structOf, structs, SwitchInfo, Symbol, SymbolKind, T_ERROR, Type
+    classOf, declared, EnumInfo, enumOf, escapeName, Frame, FrameKind, interfaceOf, isExternTypeName,
+    isMemory, isStruct, LambdaInfo, named, NamedKind, nativeOwner, newOwner, newScope, Owner, R_STATIC,
+    Region, Scope, structOf, SwitchInfo, Symbol, SymbolKind, T_ERROR, Type
 };
-import semantics.linker { target };
+import semantics.linker { linking };
 import semantics.analyzer.classes { checkFieldDefaults, checkMain, validateClasses, validateInterfaces };
 import semantics.analyzer.compact { resolveRegions };
 import semantics.analyzer.declarations { collect, constants, signatures };
@@ -33,10 +33,45 @@ public class Diag {
     let msg: String;
 }
 
-public let diags: Diag[*] = [] in default;
+/** The state of the analysis: its scopes and frames, every symbol, what it checks once the bodies are read (lifetimes, mutations, threads), and its errors. */
+public class Analysis {
+    let diags: Diag[*] = [];
+    let globalFrame: Frame;
+    let frames: Frame[*] = [];
+    let frameTop: int32 = 0;                  // frames in use
+    /** The scope being read, and the program's (newAnalysis makes both). */
+    let scope: Scope;
+    let globalScope: Scope;
+    let states: FrameState[*] = [];
+    let stateTop: int32 = 0;
+    let symbolIds: int32 = 0;
+    let allSymbols: Symbol[*] = [];
+    let mutations: Mutation[*] = [];
+    let varSyms: Symbol[*] = [];     // reassigned locals with a Var region
+    let deferred: Deferred[*] = [];
+    /** for (k, v in table.fields): the member being iterated. */
+    let anyFieldsLoop: Expr? = null;
+    let threadRuns: ThreadRun[*] = [];
+    /** The errors, sorted by line, without repeats. */
+    let analysisErrors: String[*] = [];
+}
+
+/** An analysis that has read nothing: its global frame and scope. */
+public function newAnalysis(): Analysis {
+    let frame: Frame = Frame { kind: FrameKind.Global } in default;
+    let top: Scope = newScope(null, frame);
+    return Analysis { globalFrame: frame, scope: top, globalScope: top } in default;
+}
+
+/** The Analysis of the compilation being done (pipeline: Compilation). */
+public let analysis: Analysis = newAnalysis();
+
+/** Makes `state` the one the compiler works on. */
+public function useAnalysis(state: Analysis in default): void { analysis = state; }
+
 
 public function error(line: int32, msg: String): void {
-    diags.push(Diag { line, msg: "Semantic Error [Line ${line}]: ${msg}" } in default);
+    analysis.diags.push(Diag { line, msg: "Semantic Error [Line ${line}]: ${msg}" } in default);
 }
 
 /** Reports an error where a type is expected: the result is the error type. */
@@ -47,9 +82,9 @@ public function wrong(line: int32, msg: String): Type {
 
 /** A symbol for the name after `is`, declared later where the test is true (see narrow). */
 public function bindingSymbol(name: String in default, type: Type in default, line: int32, region: Region in default): Symbol {
-    let symbol: Symbol = Symbol { name, kind: SymbolKind.Local, type, line, frame: frame(), scope, id: symbolIds, cName: "${escapeName(name)}_${symbolIds}", region } in default;
-    symbolIds += 1;
-    allSymbols.push(symbol);
+    let symbol: Symbol = Symbol { name, kind: SymbolKind.Local, type, line, frame: frame(), scope: analysis.scope, id: analysis.symbolIds, cName: "${escapeName(name)}_${analysis.symbolIds}", region } in default;
+    analysis.symbolIds += 1;
+    analysis.allSymbols.push(symbol);
     symbol.immutable = true;
     symbol.binding = true;
     return symbol;
@@ -67,15 +102,6 @@ public class FrameState {
     let returned: Any;
 }
 
-let globalFrame: Frame = Frame { kind: FrameKind.Global } in default;
-public let frames: Frame[*] = [] in default;
-public let frameTop: int32 = 0;                  // frames in use
-public let scope: Scope = newScope(null, globalFrame);
-public let globalScope: Scope = scope;
-public let states: FrameState[*] = [] in default;
-public let stateTop: int32 = 0;
-let symbolIds: int32 = 0;
-public let allSymbols: Symbol[*] = [] in default;
 
 public enum MutK { Reassign, Field, Push }
 
@@ -86,8 +112,6 @@ public class Mutation {
     let kind: MutK;
 }
 
-public let mutations: Mutation[*] = [] in default;
-public let varSyms: Symbol[*] = [] in default;     // reassigned locals with a Var region
 
 public enum DefK { Outlives, ReturnLocal }
 
@@ -106,10 +130,7 @@ public class Deferred {
     let role: String = "";              // "", "field <name>", "throw", "return"
 }
 
-public let deferred: Deferred[*] = [] in default;
 
-/** for (k, v in table.fields): the member being iterated. */
-public let anyFieldsLoop: Expr? = null;
 
 public class ThreadRun {
     let lambda: LambdaInfo;
@@ -117,24 +138,21 @@ public class ThreadRun {
     let safe: bool = false;          // a lambda given as a `thread safe` function, not the run of a Thread
 }
 
-public let threadRuns: ThreadRun[*] = [] in default;
 
-public function frame(): Frame { return frames[frameTop - 1]; }
-public function state(): FrameState { return states[stateTop - 1]; }
+public function frame(): Frame { return analysis.frames[analysis.frameTop - 1]; }
+public function state(): FrameState { return analysis.states[analysis.stateTop - 1]; }
 
 // =====================================================================================
 // Entry point
 // =====================================================================================
 
-/** Analyzes the program; the errors (sorted by line, without repeats) go to analysisErrors. */
-public let analysisErrors: String[*] = [] in default;
 
 public function analyze(program: Program in default): void {
-    frames.push(globalFrame);
-    frameTop = 1;
-    globalFrame.root = scope;
-    states.push(FrameState { reassigned: {} in default, returned: {} in default } in default);
-    stateTop = 1;
+    analysis.frames.push(analysis.globalFrame);
+    analysis.frameTop = 1;
+    analysis.globalFrame.root = analysis.scope;
+    analysis.states.push(FrameState { reassigned: {} in default, returned: {} in default } in default);
+    analysis.stateTop = 1;
 
     collect(program);
     constants(program);
@@ -148,28 +166,28 @@ public function analyze(program: Program in default): void {
     let initializers: Owner[*] = [] in default;       // what the initial value of each global calls and reads
     for (d in program.decls) {
         if (d is VarDecl v) {
-            globals.push(v);
+            declared.globals.push(v);
             let o: Owner = newOwner();
-            globalFrame.owner = o;
+            analysis.globalFrame.owner = o;
             analyzeVarDecl(v);
-            globalFrame.owner = null;
+            analysis.globalFrame.owner = null;
             initializers.push(o);
         }
     }
-    for (f in functions) {
+    for (f in declared.functions) {
         if (!f.isExtern && f.sig != null) { analyzeFunction(f); }
     }
-    for (s in structs) {
+    for (s in declared.structs) {
         for (m in s.methods) {
             if (m.sig != null) { analyzeMethod(m, named(s.name, NamedKind.Struct)); }
         }
     }
-    for (c in classes) {
+    for (c in declared.classes) {
         for (m in c.methods) {
             if (m.sig != null && m.decl.hasBody) { analyzeMethod(m, named(c.name, NamedKind.Class)); }
         }
     }
-    for (m in nativeMethods) {
+    for (m in declared.nativeMethods) {
         if (m.sig != null && m.decl.hasBody) { analyzeMethod(m, nativeOwner(m.owner)); }
     }
 
@@ -183,7 +201,7 @@ public function analyze(program: Program in default): void {
 
     // sorted by line (stable), each message once
     let sorted: Diag[*] = [] in default;
-    for (d in diags) {
+    for (d in analysis.diags) {
         let i: int32 = sorted.length;
         sorted.push(d);
         while (i > 0 && sorted[i - 1].line > d.line) {
@@ -196,7 +214,7 @@ public function analyze(program: Program in default): void {
     for (d in sorted) {
         if (!seen.contains(d.msg)) {
             seen[d.msg] = true;
-            analysisErrors.push(d.msg);
+            analysis.analysisErrors.push(d.msg);
         }
     }
 }
@@ -207,39 +225,39 @@ public function analyze(program: Program in default): void {
 
 public function pushFrame(kind: FrameKind, ret: Type? in default, throwsType: Type? in default, lambda: LambdaInfo? in default,
                           selfType: Type? in default, parent: Scope in default, owner: Owner? in default): Frame {
-    let frameOf: Frame = Frame { kind, owner, returnType: ret, throwsType, lambda, selfType, index: frameTop } in default;
-    if (frameTop < frames.length) { frames[frameTop] = frameOf; } else { frames.push(frameOf); }
-    frameTop += 1;
-    scope = newScope(parent, frameOf);
-    frameOf.root = scope;
+    let frameOf: Frame = Frame { kind, owner, returnType: ret, throwsType, lambda, selfType, index: analysis.frameTop } in default;
+    if (analysis.frameTop < analysis.frames.length) { analysis.frames[analysis.frameTop] = frameOf; } else { analysis.frames.push(frameOf); }
+    analysis.frameTop += 1;
+    analysis.scope = newScope(parent, frameOf);
+    frameOf.root = analysis.scope;
     let state: FrameState = FrameState { reassigned: {} in default, returned: {} in default } in default;
-    if (stateTop < states.length) { states[stateTop] = state; } else { states.push(state); }
-    stateTop += 1;
+    if (analysis.stateTop < analysis.states.length) { analysis.states[analysis.stateTop] = state; } else { analysis.states.push(state); }
+    analysis.stateTop += 1;
     if (lambda != null) { lambda.frame = frameOf; }
     return frameOf;
 }
 
 public function popFrame(restore: Scope in default): void {
-    frameTop -= 1;
-    stateTop -= 1;
-    scope = restore;
+    analysis.frameTop -= 1;
+    analysis.stateTop -= 1;
+    analysis.scope = restore;
 }
 
-public function pushScope(): void { scope = newScope(scope, frame()); }
+public function pushScope(): void { analysis.scope = newScope(analysis.scope, frame()); }
 
-public function popScope(): void { scope = scope.parent!; }
+public function popScope(): void { analysis.scope = analysis.scope.parent!; }
 
 /** The block the current statement is in (names are declared there, not in the statement). */
-public function block(): Scope { return scope.statement ? scope.parent! : scope; }
+public function block(): Scope { return analysis.scope.statement ? analysis.scope.parent! : analysis.scope; }
 
 public function declare(name: String in default, kind: SymbolKind, type: Type in default, line: int32): Symbol {
     let target: Scope = block();
-    let symbol: Symbol = Symbol { name, kind, type, line, frame: frame(), scope: target, id: symbolIds, cName: escapeName(name), region: R_STATIC } in default;
-    symbolIds += 1;
-    allSymbols.push(symbol);
+    let symbol: Symbol = Symbol { name, kind, type, line, frame: frame(), scope: target, id: analysis.symbolIds, cName: escapeName(name), region: R_STATIC } in default;
+    analysis.symbolIds += 1;
+    analysis.allSymbols.push(symbol);
     let ei: int32 = target.names[name] as int32 ?? -1;
     if (ei >= 0) {
-        let existing: Symbol = allSymbols[ei];
+        let existing: Symbol = analysis.allSymbols[ei];
         let what: String = existing.kind == SymbolKind.Function ? "as a function" : "in this scope";
         error(line, "'${name}' is already declared ${what} (line ${existing.line}).");
         return symbol;
@@ -249,22 +267,22 @@ public function declare(name: String in default, kind: SymbolKind, type: Type in
         && kind != SymbolKind.Function) {
         symbol.cName = "${escapeName(name)}_v${symbol.id}";
     }
-    target.names[name] = allSymbols.length - 1;
+    target.names[name] = analysis.allSymbols.length - 1;
     return symbol;
 }
 
 public function lookup(name: String): Symbol? {
-    let c: Scope? = scope;
+    let c: Scope? = analysis.scope;
     while (c != null) {
         let i: int32 = c.names[name] as int32 ?? -1;
-        if (i >= 0) { return allSymbols[i]; }
+        if (i >= 0) { return analysis.allSymbols[i]; }
         c = c.parent;
     }
     return null;
 }
 
 public function narrowedType(symbol: Symbol): Type? {
-    let c: Scope? = scope;
+    let c: Scope? = analysis.scope;
     while (c != null) {
         for (i, ns in c.narrowSyms) {
             if (ns == symbol) { return c.narrowTypes[i]; }
@@ -277,7 +295,7 @@ public function narrowedType(symbol: Symbol): Type? {
 
 /** Records that the current lambda (and every lambda in between) captures `s`. */
 public function noteCapture(symbol: Symbol in default, line: int32): void {
-    let cur: int32 = frameTop - 1;
+    let cur: int32 = analysis.frameTop - 1;
     let capturable: bool = symbol.kind == SymbolKind.Local || symbol.kind == SymbolKind.Param || symbol.kind == SymbolKind.Self;
     if (!capturable || symbol.frame.index >= cur) { return; }
     if (isMemory(symbol)) {
@@ -290,12 +308,12 @@ public function noteCapture(symbol: Symbol in default, line: int32): void {
     }
     let i: int32 = symbol.frame.index + 1;
     while (i <= cur) {
-        let lambdaInfo: LambdaInfo? = frames[i].lambda;
+        let lambdaInfo: LambdaInfo? = analysis.frames[i].lambda;
         if (lambdaInfo != null && !hasSymbol(lambdaInfo.captures, symbol)) { lambdaInfo.captures.push(symbol); }
         i += 1;
     }
     if (symbol.capturedAt < 0) {
-        let first: LambdaInfo? = frames[symbol.frame.index + 1].lambda;
+        let first: LambdaInfo? = analysis.frames[symbol.frame.index + 1].lambda;
         symbol.capturedAt = first != null ? first.node.line : line;
     }
 }
@@ -305,7 +323,7 @@ public function noteCapture(symbol: Symbol in default, line: int32): void {
 // =====================================================================================
 
 function checkMutations(): void {
-    for (m in mutations) {
+    for (m in analysis.mutations) {
         let symbol: Symbol = m.root;
         if (m.frame > symbol.frame.index) {
             let verb: String = m.kind == MutK.Reassign ? "reassign" : "modify";
@@ -318,7 +336,7 @@ function checkMutations(): void {
 }
 
 function checkMemoryUses(): void {
-    for (s in allSymbols) {
+    for (s in analysis.allSymbols) {
         if (isMemory(s) && s.dataUseLine >= 0) { error(s.dataUseLine, "'${s.name}' is used as a memory, so it cannot also be used as plain bytes."); }
     }
 }

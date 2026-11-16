@@ -1,0 +1,56 @@
+// codegen.cprogram: the C of a program as parts, not one text. EmitC makes a CProgram: text where the C is
+// written in pieces (headings, types, prototypes), and a CFunction for each function and lambda, whole.
+// NameC names the variables of each part; Prune keeps the parts main reaches, and needs to cut only the
+// text: a function is one part already, with what it uses.
+//
+// The bodies are text still; making them structure (CBlock, CStatement) is what comes next.
+
+/** A function of the C: its name, its whole text (header and body), and the names it uses (Prune fills them). */
+public class CFunction {
+    let name: String;
+    let text: String;
+    let uses: String[*] = [];
+}
+
+/** A part of the C, in order: text, or one function. */
+public class CPart {
+    let text: String = "";
+    let cFunction: CFunction? = null;
+}
+
+/** The C of the program, in parts. */
+public class CProgram {
+    let parts: CPart[*] = [];
+
+    /** Text at the end (a heading, a type, a prototype...): it joins the text part before it. */
+    function add(text: String): void {
+        if (text == "") { return; }
+        let n: int32 = self.parts.length;
+        if (n > 0 && self.parts[n - 1].cFunction == null) {
+            self.parts[n - 1].text = "${self.parts[n - 1].text}${text}".clone() in default;
+            return;
+        }
+        self.parts.push(CPart { text: text.clone() } in default);
+    }
+
+    /** A whole function. */
+    function addFunction(name: String, text: String): void {
+        self.parts.push(CPart { cFunction: CFunction { name: name.clone(), text: text.clone() } in default } in default);
+    }
+
+    /** The C as one text. */
+    function text(): String {
+        let out: StringBuilder = {};
+        for (p in self.parts) {
+            out.add(p.cFunction != null ? p.cFunction!.text : p.text);
+        }
+        return out.toString();
+    }
+}
+
+/** A heading of a section of the C: Prune knows the sections by it. */
+public function cSection(program: CProgram, title: String): void {
+    let n: int32 = 70 - title.length;
+    if (n < 3) { n = 3; }
+    program.add("\n/* ---- ${title} ${"-".repeat(n)} */\n");
+}

@@ -7,9 +7,7 @@ import semantics.types {
     meet, MethodInfo, named, NamedKind, optionalOf, P_TEMP, Place, pointable, pointerTo, R_STATIC, structMethod, structOf, Symbol,
     SymbolKind, T_ANY, T_BOOL, T_ERROR, T_STRING, TypeKind, Type
 };
-import semantics.analyzer {
-    bindingSymbol, declare, error, frame, frameTop, lookup, Mutation, mutations, MutK, noteCapture, wrong
-};
+import semantics.analyzer { analysis, bindingSymbol, declare, error, frame, lookup, Mutation, MutK, noteCapture, wrong };
 import semantics.analyzer.narrowing { nonNull };
 import semantics.analyzer.statements { requireBool };
 import semantics.analyzer.threads { currentOwner, edge };
@@ -191,7 +189,7 @@ function checkAddress(unary: Unary in default): Type {
     if (symbol.kind == SymbolKind.Global) {
         symbol.mutatedGlobal = true;
     } else {
-        mutations.push(Mutation { line: unary.line, root: symbol, frame: frameTop - 1, kind: MutK.Reassign } in default);   // C may write into it
+        analysis.mutations.push(Mutation { line: unary.line, root: symbol, frame: analysis.frameTop - 1, kind: MutK.Reassign } in default);   // C may write into it
     }
     setRegion(unary, R_STATIC);
     return noted(pointerTo(type));

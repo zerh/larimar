@@ -2,16 +2,15 @@
 
 import syntax.ast { Call, Expr, Ident, IfStmt, Index, Member, Param, ReturnStmt, SelfExpr, Stmt };
 import semantics.types {
-    ArrayKind, classes, describe, enumOf, FieldInfo, Frame, isAncestorOrSelf, isArray, isClass, isError, isInterface,
-    isMemory, isSubclass, meet, named, NamedKind, P_RESULT, P_TEMP, Place, PlaceKind, R_STATIC, Region, resolveRegion, RegionKind,
-    sameRegion, Scope, structOf, structs, Symbol, symbolic, SymbolKind, T_ANY, T_VOID, TypeKind, Type
+    ArrayKind, declared, describe, enumOf, FieldInfo, Frame, isAncestorOrSelf, isArray, isClass, isError,
+    isInterface, isMemory, isSubclass, meet, named, NamedKind, P_RESULT, P_TEMP, Place, PlaceKind,
+    R_STATIC, Region, RegionKind, resolveRegion, sameRegion, Scope, structOf, Symbol, symbolic, SymbolKind,
+    T_ANY, T_VOID, Type, TypeKind
 };
-import semantics.linker { target };
+import semantics.linker { linking };
 import semantics.expressions { check };
 import semantics.expressions.conversions { coerce, hasRefs, regionOf, typeOf };
-import semantics.analyzer {
-    allSymbols, block, declare, Deferred, deferred, DefK, error, frame, popScope, pushScope, scope, state, varSyms
-};
+import semantics.analyzer { analysis, block, declare, Deferred, DefK, error, frame, popScope, pushScope, state };
 import semantics.analyzer.flow { runCheck };
 import semantics.analyzer.narrowing { narrow, nonNull };
 import semantics.analyzer.statements { analyzeStmts, requireBool };
@@ -40,13 +39,13 @@ public function noteCompact(c: Call in default, m: Symbol in default): void {
         return;
     }
     let cc: CompactCall = CompactCall { call: c, memory: m } in default;
-    let sc: Scope? = scope;
+    let sc: Scope? = analysis.scope;
     while (sc != null) {
         if (sc.iterating) {
             error(c.line, "Memory.compact() cannot run inside a 'for' over a list, a table or a text: the loop keeps pointing to what it goes over. Compact before or after the loop.");
             return;
         }
-        for (k, v in sc.names.fields) { cc.visible.push(allSymbols[v as int32 ?? 0]); }
+        for (k, v in sc.names.fields) { cc.visible.push(analysis.allSymbols[v as int32 ?? 0]); }
         if (sc == m.scope) { break; }
         sc = sc.parent;
     }
@@ -103,11 +102,11 @@ function notMovable(t: Type in default, seen: Any in default): String {
     seen[t.text] = true;
     let parts: FieldInfo[*] = [] in default;            // what to look inside
     if (t == T_ANY) {                                   // a table can hold any class, struct or enum of the program
-        for (c in classes) {
+        for (c in declared.classes) {
             let why: String = notMovable(named(c.name, NamedKind.Class), seen);
             if (why != "") { return "${why} (an Any can hold a ${c.name})"; }
         }
-        for (st in structs) {
+        for (st in declared.structs) {
             let why: String = notMovable(named(st.name, NamedKind.Struct), seen);
             if (why != "") { return "${why} (an Any can hold a ${st.name})"; }
         }
@@ -123,7 +122,7 @@ function notMovable(t: Type in default, seen: Any in default): String {
                 for (vr in enumOf(t.name)!.variants) { for (f in vr.fields) { parts.push(f); } }
             }
             if (t.namedKind == NamedKind.Class) {                 // its fields, its parents' and those of the classes that extend it
-                for (c in classes) {
+                for (c in declared.classes) {
                     if (c.name == t.name || isSubclass(t.name, c.name) || isSubclass(c.name, t.name)) {
                         if (c.sync) { return "a synchronized object (${c.name})"; }
                         if (c.thread) { return "a thread (${c.name})"; }
@@ -142,12 +141,12 @@ function notMovable(t: Type in default, seen: Any in default): String {
 }
 
 public function resolveRegions(): void {
-    for (s in varSyms) { s.resolved = R_STATIC; }
+    for (s in analysis.varSyms) { s.resolved = R_STATIC; }
     let changed: bool = true;
     let guard: int32 = 0;
     while (changed && guard < 100) {
         changed = false;
-        for (s in varSyms) {
+        for (s in analysis.varSyms) {
             let old: Region = s.resolved!;
             let next: Region = meet(old, resolveRegion(s.varRegion ?? R_STATIC));
             if (!sameRegion(old, next) || old.memory != next.memory) {      // which memory of a block, too
@@ -157,7 +156,7 @@ public function resolveRegions(): void {
         }
         guard += 1;
     }
-    for (d in deferred) { runCheck(d, true); }
+    for (d in analysis.deferred) { runCheck(d, true); }
     checkCompacts();
 }
 
@@ -239,7 +238,7 @@ public function analyzeReturn(r: ReturnStmt in default): void {
     let reg: Region = regionOf(value);
     if (hasRefs(rt)) {
         let d: Deferred = Deferred { line: r.line, kind: DefK.ReturnLocal, value: reg, storage: R_STATIC, msg: "", frame: frameOf, expr: value, role: "return" } in default;
-        if (symbolic(reg)) { deferred.push(d); } else { runCheck(d, false); }
+        if (symbolic(reg)) { analysis.deferred.push(d); } else { runCheck(d, false); }
     }
 }
 
@@ -253,9 +252,9 @@ public let platformCtx: String = "";
  */
 function analyzeWhen(ifStmt: IfStmt in default): void {
     let outer: String = platformCtx;
-    let stmtScope: Scope = scope;
+    let stmtScope: Scope = analysis.scope;
     let blockScope: Scope = block();
-    scope = blockScope;
+    analysis.scope = blockScope;
     let syms: int32[*] = [] in default;              // what the branches declare (indexes in allSymbols)
     let branchOf: int32[*] = [] in default;          // and which branch
     let seen: String[*] = [] in default;
@@ -292,35 +291,35 @@ function analyzeWhen(ifStmt: IfStmt in default): void {
     if (covered) {
         for (x, k in syms) {
             if (branchOf[x] != 0) { continue; }
-            let f: Symbol = allSymbols[k];
+            let f: Symbol = analysis.allSymbols[k];
             let same: int32[*] = [] in default;
             for (y, j in syms) {
-                if (branchOf[y] != 0 && allSymbols[j].name == f.name && allSymbols[j].type.text == f.type.text) { same.push(j); }
+                if (branchOf[y] != 0 && analysis.allSymbols[j].name == f.name && analysis.allSymbols[j].type.text == f.type.text) { same.push(j); }
             }
             if (same.length != seen.length - 1) { continue; }
             for (j in same) {
-                allSymbols[j].cName = f.cName;        // one name in C, whichever branch the C compiler keeps
-                allSymbols[j].used = true;
+                analysis.allSymbols[j].cName = f.cName;        // one name in C, whichever branch the C compiler keeps
+                analysis.allSymbols[j].used = true;
             }
             blockScope.names[f.name] = k;
         }
     }
     platformCtx = outer;
-    scope = stmtScope;
+    analysis.scope = stmtScope;
 }
 
 /** One branch of an if for platforms, checked for `platform`; what it declares is hidden until every branch is seen. */
 function whenBranch(body: Stmt[*] in default, platform: String in default, branch: int32, syms: int32[*] in default, branchOf: int32[*] in default, blockScope: Scope in default): void {
     platformCtx = platform;
-    let start: int32 = allSymbols.length;
+    let start: int32 = analysis.allSymbols.length;
     let narrowed: int32 = blockScope.narrowSyms.length;
     analyzeStmts(body);
     while (blockScope.narrowSyms.length > narrowed) {   // what a branch learns about null holds only in it
         blockScope.narrowSyms.pop();
         blockScope.narrowTypes.pop();
     }
-    for (k in start..allSymbols.length) {
-        let symbol: Symbol = allSymbols[k];
+    for (k in start..analysis.allSymbols.length) {
+        let symbol: Symbol = analysis.allSymbols[k];
         if (symbol.scope != blockScope || (blockScope.names[symbol.name] as int32 ?? -1) != k) { continue; }
         syms.push(k);
         branchOf.push(branch);

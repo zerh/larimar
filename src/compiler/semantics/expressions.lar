@@ -7,18 +7,17 @@ import syntax.ast {
     Ternary, TypeRefKind, TypeRef, Unary, Unwrap
 };
 import semantics.types {
-    arrayTypeOf, ArrayKind, classOf, Conversion, cTypeOf, EnumInfo, enumOf, externInfoOf, FieldInfo, findField,
-    findMethod, Frame, FrameKind, functionTypeOf, FunctionInfo, funcTypes, hasThreadSafe, interfaceMethod, interfaceOf,
-    isByteArray, isClass, isEnumT, isError, isExternStruct, isExternT, isExternTypeName, isFloat, isInteger,
-    isMemory, isNumeric, isOpt, isPrimName, isPtr, isResource, isStruct, maxText, MemberKind, MemberInfo, MemoryKind, MethodInfo,
-    minOf, named, NamedKind, nativeMethods, optionalOf, P_GLOBAL, P_TEMP, Place, PlaceKind, platformWithin, pointable,
-    primByName, pointerTo, R_STATIC, rMemory, rStaticMemory, Scope, structField, structMethod, structOf, Symbol, SymbolKind,
-    T_ANY, T_BOOL, T_BYTE, T_ERROR, T_FLOAT32, T_FLOAT64, T_INT32, T_INT64, T_NULL, T_STRING, T_VOID, TypeKind, Type,
-    usedTypes, usesAny, VariantInfo, variantOf
+    ArrayKind, arrayTypeOf, classOf, Conversion, cTypeOf, declared, EnumInfo, enumOf, externInfoOf,
+    FieldInfo, findField, findMethod, Frame, FrameKind, FunctionInfo, functionTypeOf, hasThreadSafe,
+    interfaceMethod, interfaceOf, isByteArray, isClass, isEnumT, isError, isExternStruct, isExternT,
+    isExternTypeName, isFloat, isInteger, isMemory, isNumeric, isOpt, isPrimName, isPtr, isResource,
+    isStruct, maxText, MemberInfo, MemberKind, MemoryKind, MethodInfo, minOf, named, NamedKind, optionalOf,
+    P_GLOBAL, P_TEMP, Place, PlaceKind, platformWithin, pointable, pointerTo, primByName, R_STATIC,
+    rMemory, rStaticMemory, Scope, structField, structMethod, structOf, Symbol, SymbolKind, T_ANY, T_BOOL,
+    T_BYTE, T_ERROR, T_FLOAT32, T_FLOAT64, T_INT32, T_INT64, T_NULL, T_STRING, T_VOID, Type, TypeKind,
+    VariantInfo, variantOf
 };
-import semantics.analyzer {
-    anyFieldsLoop, declare, error, frame, frames, frameTop, lookup, narrowedType, noteCapture, scope, wrong
-};
+import semantics.analyzer { analysis, declare, error, frame, lookup, narrowedType, noteCapture, wrong };
 import semantics.analyzer.compact { platformCtx };
 import semantics.analyzer.statements { staticName };
 import semantics.analyzer.threads { callTargets, currentOwner, edge, useGlobal };
@@ -121,7 +120,7 @@ function resolveNamed(typeRef: TypeRef in default): Type {
 /** Registers a type (and its parts) so the generator emits it. */
 public function note(type: Type in default): void {
     if (isError(type) || type.kind == TypeKind.Null) { return; }
-    if (type == T_ANY) { usesAny = true; }
+    if (type == T_ANY) { declared.usesAny = true; }
     if (type.kind == TypeKind.Array && type.arrayKind == ArrayKind.Fixed && type.size < 0) { return; }
     if (type.used) { return; }
     if (hasThreadSafe(type)) {                       // C uses the type without `thread safe`
@@ -132,13 +131,13 @@ public function note(type: Type in default): void {
         return;
     }
     type.used = true;
-    usedTypes.push(type);
+    declared.usedTypes.push(type);
     if (type.kind == TypeKind.Func) {
         for (p in type.params) { note(p); }
         note(type.elem!);
         if (type.funcId < 0) {
-            type.funcId = funcTypes.length;
-            funcTypes.push(type);
+            type.funcId = declared.funcTypes.length;
+            declared.funcTypes.push(type);
         }
     } else if (type.kind == TypeKind.Array) {
         note(type.elem!);
@@ -270,12 +269,12 @@ function checkIdent(id: Ident in default, expected: Type? in default): Type {
 public let selfInLambda: bool = false;
 
 function checkSelf(se: Expr in default): Type {
-    let i: int32 = frameTop - 1;
+    let i: int32 = analysis.frameTop - 1;
     while (i >= 0) {
-        let frameOf: Frame = frames[i];
+        let frameOf: Frame = analysis.frames[i];
         let st: Type? = frameOf.selfType;
         if (st != null) {
-            selfInLambda = i < frameTop - 1;       // its fields, then, are not under the lock (checkMember)
+            selfInLambda = i < analysis.frameTop - 1;       // its fields, then, are not under the lock (checkMember)
             let s: Symbol = lookupIn(frameOf.root!, "self")!;
             se.symbol = s;
             noteCapture(s, se.line);
@@ -290,10 +289,10 @@ function checkSelf(se: Expr in default): Type {
 }
 
 public function lookupIn(sc: Scope in default, name: String): Symbol? {
-    let s0: Scope = scope;
-    scope = sc;
+    let s0: Scope = analysis.scope;
+    analysis.scope = sc;
     let r: Symbol? = lookup(name);
-    scope = s0;
+    analysis.scope = s0;
     return r;
 }
 
@@ -353,7 +352,7 @@ function checkMember(m: Member in default, place: Place in default): Type {
             setRegion(m, R_STATIC);
             return T_INT32;
         }
-        if (m.name == "fields" && anyFieldsLoop != null && anyFieldsLoop! == m) {
+        if (m.name == "fields" && analysis.anyFieldsLoop != null && analysis.anyFieldsLoop! == m) {
             m.anyFields = true;
             return T_ANY;
         }
@@ -441,7 +440,7 @@ public function methodOf(type: Type in default, name: String): MethodInfo? {
 
 /** A method that a native type declares for a C type. */
 function nativeMethodOf(owner: String, name: String): MethodInfo? {
-    for (mi in nativeMethods) {
+    for (mi in declared.nativeMethods) {
         if (mi.owner == owner && mi.name == name && !mi.isOperator) { return mi; }
     }
     return null;

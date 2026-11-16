@@ -10,8 +10,11 @@ runtime it uses.
 - `localnames.lar` (the pass NameC): the compiler's variables are asked for by what they are
   (`tmp("result")`) and named when their function is done: `result`, or `result_2` when the function's C
   already names `result`. They never meet a name of the program's code.
+- `cprogram.lar`: the C as parts. EmitC writes a `CProgram`: text, and each function and lambda whole
+  (`CFunction`, with the names it uses). The bodies are still text.
 - `prune.lar` (the pass Prune): keeps only what `main` (and std's C) reaches, of the program and of the
-  runtime (`runtime/`, one `ccode` per piece), with the `#include`s it needs.
+  runtime (`runtime/`, one `ccode` per piece), with the `#include`s it needs. A function of the
+  `CProgram` is one piece; only the text between functions is cut into declarations.
 - `debugmap.lar`: with `--debug`, what the debugger needs to show Larimar's names and values.
 - The names in the C read on their own: the runtime is `lar_` / `Lar` / `LAR_` in whole words
   (`LarMemory`, `lar_text_to_c`), a check says its line (`LINE(27)`), and a C name of the program that
@@ -21,6 +24,11 @@ runtime it uses.
 
 <!-- api: written by tools/reference.py from the code; not edited by hand -->
 
+- **`codegen.cprogram`**: the C of a program as parts, not one text
+  - `class CFunction`: A function of the C: its name, its whole text (header and body), and the names it uses (Prune fills them)
+  - `class CPart`: A part of the C, in order: text, or one function
+  - `class CProgram`: The C of the program, in parts
+  - `function cSection(program: CProgram, title: String): void`: A heading of a section of the C: Prune knows the sections by it
 - **`codegen.debugmap`**: with larimar build --debug, what the debugger (larimar dap) needs to show the program as Larimar: for each C function, its Larimar name and the variables it has (their Larimar names, their names in C and their types), the globals, and the shape of every type (fields with their C paths, enum variants, classes)
   - `function debugMap(): String`: The debug map of the program just generated, as JSON
 - **`codegen.expressions`**: C99 code generation (Gen.java), part 2: expressions
@@ -96,6 +104,8 @@ runtime it uses.
   - `class FunctionCode`
   - `class Temp`: A statement's temporary memory, declared before the statement only if something used it
   - `function newFunctionCode(): FunctionCode`
+  - `class Generation`: The state of the generator: the function being written, the pieces of C made on the way (lambdas, literals, helpers) and its errors
+  - `function useGeneration(state: Generation in default): void`: Makes `state` the one the compiler works on
   - `function internalError(line: int32, msg: String): void`
   - `function lineMark(encoded: int32): String`
   - `function spreadLines(c: String, cFile: String): String`: After generating with debugLines: inside a function, every line of C after a #line gets that same .lar line (C would count on: N, N+1, N+2...); after the function, the lines are the C file's again, so the runtime and helpers are shown as the C they are
@@ -107,9 +117,9 @@ runtime it uses.
   - `function topBlock(): Block`
   - `function rootBlock(): Block`
   - `function generate(): String`: The C of the analyzed program: emitC, then nameC, then pruneC (the passes EmitC, NameC and Prune)
-  - `function nameC(program: String): String`: The names of the compiler's variables left outside functions (codegen.localnames)
-  - `function emitC(): String`: EmitC: the whole program, every function and type, before anything is cut
-  - `function pruneC(emitted: String): String`: Prune: only what main and the ccode reach, after the runtime it needs
+  - `function nameC(program: CProgram): void`: NameC: the names of the compiler's variables (codegen.localnames)
+  - `function emitC(): CProgram`: EmitC: the whole program, every function and type, before anything is cut: text, and each function whole
+  - `function pruneC(emitted: CProgram): String`: Prune: only what main and the ccode reach, after the runtime it needs
   - `function section(out: StringBuilder, title: String): void`
   - `function classesByDepth(): ClassInfo[*]`
 - **`codegen.gen.classes`**: classes, interfaces and closures in C; globals and the entry point.
@@ -164,7 +174,7 @@ runtime it uses.
   - `function localNameFor(role: String, key: String): String`: The same temporary for a key that names it already (a memory of a block of the analysis: mem_3)
   - `function nameLocals(text: String): String`: The text with each mark replaced by its name: the role, or the role and a number when it is taken
 - **`codegen.prune`**: only the C the program reaches, of what it generates and of the runtime
-  - `function prune(program: String, roots: String[*]): String`: The generated program without what it does not reach
+  - `function prune(program: CProgram, roots: String[*]): String`: The generated program without what it does not reach
   - `function selectRuntime(program: String, threads: bool, files: bool, allHeaders: bool): String`: The runtime the program needs, in the runtime's order
   - `function braceDelta(ln: String): int32`: The braces a line opens minus those it closes (strings and comments left out)
   - `function isName(t: String): bool`

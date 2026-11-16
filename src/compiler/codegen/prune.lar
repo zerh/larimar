@@ -14,7 +14,8 @@ import std.text { isIdentifierPart, isDigit };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
-import semantics.linker { stdDir };
+import semantics.linker { linking };
+import codegen.cprogram { CFunction, CProgram };
 
 /** The section of the headers of native interfaces: each one a piece, kept when what it gives is used. */
 public const NATIVE_HEADERS: String = "Native headers";
@@ -37,31 +38,48 @@ function rootSection(title: String): bool {
     return title == "" || title == "ccode" || title == "Export functions" || title == "Entry point" || title == "Library";
 }
 
-/** The generated program without what it does not reach. roots: main and the export functions. */
-public function prune(program: String, roots: String[*]): String {
+/**
+ * The generated program without what it does not reach. roots: main and the export functions. A function
+ * of the CProgram is a piece as it is; its text between them is cut into declarations.
+ */
+public function prune(program: CProgram, roots: String[*]): String {
     let pieces: Piece[*] = [];
     let cur: String[*] = [];
     let depth: int32 = 0;
     let title: String = "";
     inComment = false;
-    for (ln in program.split("\n")) {
-        let t: String = ln.trim();
-        if (depth == 0 && t.startsWith("/* ---- ") && t.endsWith("*/")) {
+    for (at, part in program.parts) {
+        if (part.cFunction != null) {
             flush(pieces, cur, rootSection(title));
-            title = t.substring(8, t.indexOf(" -", 8) ?? t.length);          // after "/* ---- "
-            pieces.push(Piece { text: ln.clone(), heading: true });
+            let f: CFunction = part.cFunction!;
+            let text: String = f.text.trimEnd();
+            pieces.push(Piece { text: text.clone(), blankAfter: f.text.endsWith("\n\n") });
+            describe(pieces[pieces.length - 1]);
+            for (u in pieces[pieces.length - 1].uses) { f.uses.push(u.clone() in default); }
             continue;
         }
-        if (depth == 0 && t.isEmpty()) {
-            if (title == NATIVE_HEADERS) { flushHeader(pieces, cur); } else { flush(pieces, cur, rootSection(title)); }
-            if (pieces.length > 0) { pieces[pieces.length - 1].blankAfter = true; }
-            continue;
+        let lines: String[*] = part.text.split("\n");
+        let beforeFunction: bool = at + 1 < program.parts.length && program.parts[at + 1].cFunction != null;
+        if (beforeFunction && part.text.endsWith("\n")) { lines.pop(); }    // a function starts on the next line
+        for (ln in lines) {
+            let t: String = ln.trim();
+            if (depth == 0 && t.startsWith("/* ---- ") && t.endsWith("*/")) {
+                flush(pieces, cur, rootSection(title));
+                title = t.substring(8, t.indexOf(" -", 8) ?? t.length);          // after "/* ---- "
+                pieces.push(Piece { text: ln.clone(), heading: true });
+                continue;
+            }
+            if (depth == 0 && t.isEmpty()) {
+                if (title == NATIVE_HEADERS) { flushHeader(pieces, cur); } else { flush(pieces, cur, rootSection(title)); }
+                if (pieces.length > 0) { pieces[pieces.length - 1].blankAfter = true; }
+                continue;
+            }
+            cur.push(ln);
+            if (rootSection(title)) { continue; }               // whole, up to the next heading
+            depth += braceDelta(ln);
+            if (title == NATIVE_HEADERS) { continue; }           // a header (and its #if) up to the blank line
+            if (depth == 0 && (t.endsWith(";") || t.endsWith("}") || t.startsWith("#"))) { flush(pieces, cur, t.startsWith("#")); }
         }
-        cur.push(ln);
-        if (rootSection(title)) { continue; }               // whole, up to the next heading
-        depth += braceDelta(ln);
-        if (title == NATIVE_HEADERS) { continue; }           // a header (and its #if) up to the blank line
-        if (depth == 0 && (t.endsWith(";") || t.endsWith("}") || t.startsWith("#"))) { flush(pieces, cur, t.startsWith("#")); }
     }
     flush(pieces, cur, rootSection(title));
 
@@ -118,7 +136,7 @@ function runtimeSource(): String {
     if (runtimeRead != null) { return runtimeRead!; }
     let text: String = "";
     for (name in runtimeFiles) {
-        let path: String = Paths.join(Paths.join(Paths.parent(Paths.normalize(Paths.absolute(stdDir))), "runtime"), "${name}.lar");
+        let path: String = Paths.join(Paths.join(Paths.parent(Paths.normalize(Paths.absolute(linking.stdDir))), "runtime"), "${name}.lar");
         try {
             text = "${text}${runtimeC(Files.readString(path))}";
         } catch (IoError e) {

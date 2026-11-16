@@ -6,19 +6,20 @@ import syntax.ast {
     WhileStmt, YieldStmt
 };
 import semantics.types {
-    arrayTypeOf, ArrayKind, BuiltinKind, CallInfo, CallK, ClassInfo, classOf, FieldInfo, FrameKind, FunctionInfo, globals, isArray,
-    isClass, isError, isInteger, isMemory, isMemParam, isPtr, MemberKind, meet, MemberInfo, MemoryKind, MethodInfo, newScope,
-    P_RESULT, P_TEMP, Place, PlaceKind, R_STATIC, rCaller, Region, RegionKind, rLocal, rMemory, rStaticMemory, variableRegion, Scope,
-    StructInfo, structOf, SwitchInfo, Symbol, SymbolKind, T_ANY, T_BOOL, T_BYTE, T_ERROR, T_INT64, T_STRING, T_VOID, TypeKind,
-    Type
+    ArrayKind, arrayTypeOf, BuiltinKind, CallInfo, CallK, ClassInfo, classOf, declared, FieldInfo,
+    FrameKind, FunctionInfo, isArray, isClass, isError, isInteger, isMemory, isMemParam, isPtr, meet,
+    MemberInfo, MemberKind, MemoryKind, MethodInfo, newScope, P_RESULT, P_TEMP, Place, PlaceKind, R_STATIC,
+    rCaller, Region, RegionKind, rLocal, rMemory, rStaticMemory, Scope, StructInfo, structOf, SwitchInfo,
+    Symbol, SymbolKind, T_ANY, T_BOOL, T_BYTE, T_ERROR, T_INT64, T_STRING, T_VOID, Type, TypeKind,
+    variableRegion
 };
-import semantics.linker { target };
+import semantics.linker { linking };
 import semantics.expressions { check, note, resolveTop, TC_LET };
 import semantics.expressions.conversions { coerce, hasRefs, regionOf, typeOf };
 import semantics.expressions.switches { analyzeSwitch };
 import semantics.analyzer {
-    block, declare, error, frame, frameTop, globalScope, lookup, Mutation, mutations, MutK, noteCapture, popFrame,
-    popScope, pushFrame, pushScope, scope, state, varSyms
+    analysis, block, declare, error, frame, lookup, Mutation, MutK, noteCapture, popFrame, popScope,
+    pushFrame, pushScope, state
 };
 import semantics.analyzer.compact {
     analyzeIf, analyzeReturn, isLValue, isReference, placeFor, rootSymbol, storageRegion, throughReference
@@ -38,9 +39,9 @@ public let staticName: String = "";
 public function analyzeFunction(functionInfo: FunctionInfo in default): void {
     if (functionInfo.decl!.isNative) { return; }         // the linker checked it is one the compiler writes
     staticName = functionInfo.decl!.typeName != "" ? functionInfo.name : "";
-    let saved: Scope = scope;
+    let saved: Scope = analysis.scope;
     let body: Stmt[*] = functionInfo.decl!.body;
-    pushFrame(FrameKind.Function, functionInfo.sig!.elem, functionInfo.throwsType, null, null, globalScope, functionInfo.owner).returnsArgs = functionInfo.returnsArgs;
+    pushFrame(FrameKind.Function, functionInfo.sig!.elem, functionInfo.throwsType, null, null, analysis.globalScope, functionInfo.owner).returnsArgs = functionInfo.returnsArgs;
     state().reassigned = reassignedNames(body);
     state().returned = returnedNames(body);
     for (i, p in functionInfo.params) { functionInfo.paramSymbols.push(declareParam(p, functionInfo.sig!.params[i], isMemParam(functionInfo.memParams, i))); }
@@ -54,8 +55,8 @@ public function analyzeFunction(functionInfo: FunctionInfo in default): void {
 }
 
 public function analyzeMethod(method: MethodInfo in default, selfType: Type in default): void {
-    let saved: Scope = scope;
-    pushFrame(FrameKind.Method, method.sig!.elem, method.throwsType, null, selfType, globalScope, method.own).returnsArgs = method.returnsArgs;
+    let saved: Scope = analysis.scope;
+    pushFrame(FrameKind.Method, method.sig!.elem, method.throwsType, null, selfType, analysis.globalScope, method.own).returnsArgs = method.returnsArgs;
     state().reassigned = reassignedNames(method.decl.body);
     state().returned = returnedNames(method.decl.body);
     let symbol: Symbol = declare("self", SymbolKind.Self, selfType, method.decl.line);
@@ -230,22 +231,22 @@ function containsBreak(body: Stmt[*]): bool {
 // =====================================================================================
 
 public function analyzeStmts(body: Stmt[*] in default): void {
-    if (scope.body == null) { scope.body = body; }
+    if (analysis.scope.body == null) { analysis.scope.body = body; }
     for (s in body) {
         // A statement that assigns a narrowed variable ends the narrowing: before it, or after it
         // for `x = value` (the value can still use x as not null).
         let ends: Symbol[*] = [] in default;
         let one: Stmt[*] = [s] in default;
-        for (n in scope.narrowSyms) {
+        for (n in analysis.scope.narrowSyms) {
             if (assigns(one, n.name)) { ends.push(n); }
         }
         let direct: bool = s is AssignStmt a && a.target is Ident;
         if (!direct) { unnarrow(ends); }
-        let blockScope: Scope = scope;
-        scope = newScope(blockScope, frame());          // the statement's temporaries live here
-        scope.statement = true;
+        let blockScope: Scope = analysis.scope;
+        analysis.scope = newScope(blockScope, frame());          // the statement's temporaries live here
+        analysis.scope.statement = true;
         analyzeStmt(s);
-        scope = blockScope;
+        analysis.scope = blockScope;
         if (direct) { unnarrow(ends); }
         // if (x == null) { return; } -> x is not null in the rest of the block
         if (s is IfStmt i) {
@@ -277,7 +278,7 @@ function analyzeStmt(s: Stmt in default): void {
             let yes: Symbol[*] = nonNull(w.cond, true);
             state().loopDepth += 1;
             pushScope();
-            scope.loop = true;
+            analysis.scope.loop = true;
             narrow(yes);
             analyzeStmts(w.body);
             popScope();
@@ -341,7 +342,7 @@ public function analyzeVarDecl(v: VarDecl in default): void {
     if (!global && hasRefs(t) && state().reassigned[v.name] != null) {
         // Its region is the shortest of everything it ever holds; known at the end.
         s.varRegion = region;
-        varSyms.push(s);
+        analysis.varSyms.push(s);
         s.region = variableRegion(s);
     }
     v.symbol = s;
@@ -459,7 +460,7 @@ function analyzeAssign(asg: AssignStmt in default): void {
     if (root != null && (root.kind == SymbolKind.Local || root.kind == SymbolKind.Param || root.kind == SymbolKind.Self)) {
         // Fields of objects behind a reference are shared, not copied: only values count.
         let viaReference: bool = mk != MutK.Reassign && throughReference(target);
-        if (!viaReference) { mutations.push(Mutation { line: asg.line, root, frame: frameTop - 1, kind: mk } in default); }
+        if (!viaReference) { analysis.mutations.push(Mutation { line: asg.line, root, frame: analysis.frameTop - 1, kind: mk } in default); }
     }
 }
 

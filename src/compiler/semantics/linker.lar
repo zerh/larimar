@@ -45,34 +45,63 @@ function newModule(path: String in default, index: int32): Module {
     } in default;
 }
 
-let mods: Module[*] = [] in default;           // every module, by load order
-let modIndex: Any = {} in default;               // path -> index in mods (loaded or failed)
-let order: Module[*] = [] in default;          // a module comes after the ones it imports
-let errors: String[*] = [] in default;
-let root: Module = newModule("", 0);
-let lang: Module? = null;
-/** The words of the program's sources: what it can use from std.lang. */
-let words: Any = {} in default;
-let rootDir: String = "";
+/** The state of linking: the settings it was given (target, std, libraries, unsafe C), every module read and its order, the files of the program, and the errors. */
+public class Linking {
+    let mods: Module[*] = [];           // every module, by load order
+    let modIndex: Any = {};               // path -> index in mods (loaded or failed)
+    let order: Module[*] = [];          // a module comes after the ones it imports
+    let errors: String[*] = [];
+    let root: Module = newModule("", 0);
+    let lang: Module? = null;
+    /** The words of the program's sources: what it can use from std.lang. */
+    let words: Any = {};
+    let rootDir: String = "";
+    let target: String = "";
+    /** The folder of the standard library (codegen reads the runtime beside it, in runtime/). */
+    let stdDir: String = "std";
+    /** The files of the program, by index (for messages and LAR_FILES). */
+    let fileNames: String[*] = [];
+    /** Per file (same order as fileNames): its absolute path, and the text that was read (for larimar lsp). */
+    let filePaths: String[*] = [];
+    let fileSources: String[*] = [];
+    /** Links the program whose main file is `mainFile` (shown as `mainShown`). Errors go to linkErrors. */
+    let linkErrors: String[*] = [];
+    /** The main file's path, for what is asked after linking (trusted). */
+    let linkedMain: String = "";
+    /** The program has classes that implement Task: its copies run them (the C's main says so). */
+    let taskClasses: bool = false;
+    let testsKept: String = "none";
+    let unsafeC: bool = false;
+    /** [project] unsafe_c = true of the main file's project: its modules may have native interfaces. */
+    let projectUnsafe: bool = false;
+    /** Per library of [dependencies] (the order of libraryNames): its [project] unsafe_c. */
+    let libraryUnsafe: bool[*] = [];
+    let unsafeSources: String[*] = [];
+    let unsafeNotes: String[*] = [];
+    /** The libraries of the project's [dependencies]: their names, and the folders of their modules (same order). */
+    let libraryNames: String[*] = [];
+    let libraryRoots: String[*] = [];
+    /** When set, module files are shown relative to this folder (or absolute when outside it). */
+    let showFrom: String = "";
+}
+
+/** The Linking of the compilation being done (pipeline: Compilation). */
+public let linking: Linking = Linking {} in default;
+
+/** Makes `state` the one the compiler works on. */
+public function useLinking(state: Linking in default): void { linking = state; }
+
 /**
  * --target: the one platform the C is generated for (linux, macos, windows, unix); "" for every one,
  * chosen when the C is compiled. With a target, switch (Platform.current()) is its arm.
  */
-public let target: String = "";
 
 /** Whether what is for `platform` ("": every one) is for the target. */
 public function inTarget(platform: String): bool {
-    return platform == "" || platform == target || platform == "unix" && target != "windows";
+    return platform == "" || platform == linking.target || platform == "unix" && linking.target != "windows";
 }
 
-/** The folder of the standard library (codegen reads the runtime beside it, in runtime/). */
-public let stdDir: String = "std";
 
-/** The files of the program, by index (for messages and LAR_FILES). */
-public let fileNames: String[*] = [] in default;
-/** Per file (same order as fileNames): its absolute path, and the text that was read (for larimar lsp). */
-public let filePaths: String[*] = [] in default;
-public let fileSources: String[*] = [] in default;
 
 /**
  * The standard library a file belongs to, when it is one of its files (std/crypto.lar open in the
@@ -90,11 +119,7 @@ function ownStd(mainPath: String in default): String? {
     return null;
 }
 
-/** Links the program whose main file is `mainFile` (shown as `mainShown`). Errors go to linkErrors. */
-public let linkErrors: String[*] = [] in default;
 
-/** The main file's path, for what is asked after linking (trusted). */
-let linkedMain: String = "";
 
 /**
  * Link: reads the main file and every module it imports (parsing each), in an order where a module comes
@@ -102,65 +127,65 @@ let linkedMain: String = "";
  * modules next; assemble puts them together.
  */
 public function link(mainShown: String in default, mainSource: String in default, sourceDir: String in default, std: String in default, mainPath: String in default): void {
-    linkedMain = mainPath;
-    rootDir = sourceDir;
-    stdDir = ownStd(mainPath) ?? std;
-    fileNames.push(mainShown);
-    filePaths.push(mainPath);
-    fileSources.push(mainSource);
-    mods.push(root);
-    modIndex[""] = 0;
-    parse(root, mainSource);
-    if (root.program != null) { visit(root); }
+    linking.linkedMain = mainPath;
+    linking.rootDir = sourceDir;
+    linking.stdDir = ownStd(mainPath) ?? std;
+    linking.fileNames.push(mainShown);
+    linking.filePaths.push(mainPath);
+    linking.fileSources.push(mainSource);
+    linking.mods.push(linking.root);
+    linking.modIndex[""] = 0;
+    parse(linking.root, mainSource);
+    if (linking.root.program != null) { visit(linking.root); }
     // the main file is std/lang.lar itself (open in the editor): it is the language, not loaded again
     let langItself: bool = Paths.normalize(Paths.absolute(mainPath)) == Paths.normalize(Paths.absolute(moduleFile("std.lang")));
-    if (root.program != null) { writeTasks(mainPath); }
-    if (root.program != null && !langItself) { loadLang(); }
-    for (m in order) { tables(m); }
-    unsafeSources.clear();
-    unsafeNotes.clear();
+    if (linking.root.program != null) { writeTasks(mainPath); }
+    if (linking.root.program != null && !langItself) { loadLang(); }
+    for (m in linking.order) { tables(m); }
+    linking.unsafeSources.clear();
+    linking.unsafeNotes.clear();
     flushRuleErrors();
 }
 
 /** The errors said so far, into linkErrors (each once). */
 public function flushRuleErrors(): void {
-    for (e in errors) { linkErrors.push(e); }
-    errors.clear();
+    for (e in linking.errors) { linking.linkErrors.push(e); }
+    linking.errors.clear();
 }
 
 /** The modules linked, each after the ones it imports. */
-public function linkedModules(): Module[*] { return order; }
+public function linkedModules(): Module[*] { return linking.order; }
 
 /** The declarations of a module, as written (before assemble gives them their C names). */
 public function declarationsOf(module: Module in default): Node[*] { return module.program!.decls; }
 
 /** The main file linked. */
-public function linkedMainFile(): String { return linkedMain; }
+public function linkedMainFile(): String { return linking.linkedMain; }
 
 /** The imports of a module. */
 public function importsOf(module: Module in default): ImportDecl[*] { return module.program!.imports; }
 
 /** A broken rule of the language: its message, with the rule's id (semantics.rules). */
 public function ruleError(line: int32, rule: String, msg: String): void {
-    errors.push("Module Error [Line ${line}]: error[${rule}] ${msg}");
+    linking.errors.push("Module Error [Line ${line}]: error[${rule}] ${msg}");
 }
 
 /** Assemble: every module's declarations, with their C names, in one Program; the errors go to linkErrors. */
 public function assemble(): Program {
-    let mainPath: String = linkedMain;
+    let mainPath: String = linking.linkedMain;
     let langItself: bool = Paths.normalize(Paths.absolute(mainPath)) == Paths.normalize(Paths.absolute(moduleFile("std.lang")));
     let prog: Program = Program { line: 1 } in default;
-    if (lang != null) {
-        for (d in lang!.program!.decls) {
-            rewriteDecl(lang!, d);
+    if (linking.lang != null) {
+        for (d in linking.lang!.program!.decls) {
+            rewriteDecl(linking.lang!, d);
             d.builtin = true;
             prog.decls.push(d);
         }
     }
     let seen: Any = {} in default;
-    for (m in order) {
+    for (m in linking.order) {
         for (d in m.program!.decls) {
-            if (langItself && m == root) { d.builtin = true; }       // its declarations are the language's
+            if (langItself && m == linking.root) { d.builtin = true; }       // its declarations are the language's
             if (d is CIncludeDecl c) {
                 let key: String = "${c.header}|${c.platform}|${c.owner != "" ? "${m.path}.${c.owner}" : ""}|${c.gives}" in default;   // a class's: its system is known later
                 if (seen[key] != null) { continue; }
@@ -179,7 +204,7 @@ function dictFromSet(into: Any, names: Any in default, prefix: String): void {
 }
 
 function error(line: int32, msg: String): void {
-    errors.push("Module Error [Line ${line}]: ${msg}");
+    linking.errors.push("Module Error [Line ${line}]: ${msg}");
 }
 
 /**
@@ -192,17 +217,17 @@ function loadLang(): void {
         error(1, "The language's own module was not found (looked for ${shownName("std.lang")}); set LARIMAR_HOME to the folder that has std/.");
         return;
     }
-    let module: Module = newModule("", fileNames.length);
+    let module: Module = newModule("", linking.fileNames.length);
     let p: Program = parseProgram(source, module.index * FILE_LINES + 1);
     if (p.error != "") {
-        errors.push(p.error);
+        linking.errors.push(p.error);
         return;
     }
     let lines: String[*] = source.split("\n") in default;
     // String and Any have methods written here: every program may call them without naming the type
     // (\"ab\".repeat(2)). What it does not call leaves the C later (prune).
-    words["String"] = true;
-    words["Any"] = true;
+    linking.words["String"] = true;
+    linking.words["Any"] = true;
     let all: Node[*] = p.decls;
     let kept: bool[*] = [] in default;
     for (d in all) { kept.push(false); }
@@ -212,10 +237,10 @@ function loadLang(): void {
         for (i, d in all) {
             let name: String = declName(d);
             if (d is FunctionDecl sf && sf.typeName != "") {          // a static function: when its type and its name are used
-                name = words.contains(sf.typeName) ? sf.name : "";
+                name = linking.words.contains(sf.typeName) ? sf.name : "";
             }
-            let shadowed: bool = (root.ownTypes.contains(name) || root.ownValues.contains(name)) && p.publics.contains(name);
-            if (kept[i] || name == "" || !words.contains(name) || shadowed) { continue; }
+            let shadowed: bool = (linking.root.ownTypes.contains(name) || linking.root.ownValues.contains(name)) && p.publics.contains(name);
+            if (kept[i] || name == "" || !linking.words.contains(name) || shadowed) { continue; }
             kept[i] = true;
             changed = true;
             for (k in d.line % FILE_LINES - 1..(i + 1 < all.length ? all[i + 1].line % FILE_LINES - 1 : lines.length)) { addWords(lines[k]); }
@@ -243,9 +268,9 @@ function loadLang(): void {
         if (isTypeDecl(d)) { module.ownTypes[declName(d)] = 1; } else { module.ownValues[declName(d)] = 1; }
     }
     if (decls.length == 0) { return; }
-    fileNames.push(shownName("std.lang"));
-    filePaths.push(Paths.absolute(moduleFile("std.lang")).clone() in default);
-    fileSources.push(source!);
+    linking.fileNames.push(shownName("std.lang"));
+    linking.filePaths.push(Paths.absolute(moduleFile("std.lang")).clone() in default);
+    linking.fileSources.push(source!);
     p.decls = decls;
     module.program = p;
     for (n in p.publics) { module.publics[n] = 1; }
@@ -253,13 +278,11 @@ function loadLang(): void {
     // can declare an isSpace of its own
     for (k, v in module.ownValues.fields) { module.values[k] = module.publics.contains(k) ? k : "std__lang__${k}"; }
     for (k, v in module.ownTypes.fields) { module.types[k] = module.publics.contains(k) ? k : "std__lang__${k}"; }
-    lang = module;
+    linking.lang = module;
 }
 
 // ---- the tasks of other processes (std.os.process.tasks) --------------------------------------------
 
-/** The program has classes that implement Task: its copies run them (the C's main says so). */
-public let taskClasses: bool = false;
 
 const TASKS_MODULE: String = "std.os.process.tasks";
 const PROCESS_MODULE: String = "std.os.process";
@@ -301,9 +324,9 @@ function fromTable(typeRef: TypeRef in default, x: String): String {
  * folder above it, as moduleFile does). "" when it is under neither.
  */
 function modulePathOf(file: String): String {
-    let own: String = pathUnder(Paths.normalize(Paths.absolute(rootDir)), file);
-    if (own != "" || testsKept == "none") { return own; }
-    let dir: String = Paths.parent(Paths.normalize(Paths.absolute(rootDir)));     // the folders above, up to the project's (moduleFile)
+    let own: String = pathUnder(Paths.normalize(Paths.absolute(linking.rootDir)), file);
+    if (own != "" || linking.testsKept == "none") { return own; }
+    let dir: String = Paths.parent(Paths.normalize(Paths.absolute(linking.rootDir)));     // the folders above, up to the project's (moduleFile)
     while (dir != "") {
         let found: String = pathUnder(dir, file);
         if (found != "") { return found; }
@@ -332,10 +355,10 @@ function pathUnder(dir: String, file: String): String {
  * then written to ask each of those modules.
  */
 function writeTasks(mainPath: String): void {
-    let processAt: int32 = modIndex[PROCESS_MODULE] as int32 ?? -1;
+    let processAt: int32 = linking.modIndex[PROCESS_MODULE] as int32 ?? -1;
     if (processAt < 0) { return; }
     let owners: String[*] = [] in default;
-    for (m in mods) {
+    for (m in linking.mods) {
         if (m.program == null || isStd(m.path) || m.path == TASKS_MODULE) { continue; }
         let encode: StringBuilder = {} in default;
         let start: StringBuilder = {} in default;
@@ -396,7 +419,7 @@ function writeTasks(mainPath: String): void {
             """ in default;
         let p: Program = parseProgram(source, m.index * FILE_LINES + line);
         if (p.error != "") {
-            errors.push(p.error);
+            linking.errors.push(p.error);
             continue;
         }
         addWords(source);
@@ -405,7 +428,7 @@ function writeTasks(mainPath: String): void {
             m.ownValues[declName(d)] = 1;
             m.publics[declName(d)] = 1;
         }
-        let path: String = m == root ? modulePathOf(mainPath) : m.path;
+        let path: String = m == linking.root ? modulePathOf(mainPath) : m.path;
         if (path == "") {
             error(line, "The Task classes of this file are found by its module, and the file is not in the project's folder: move them to a module of the project.");
             continue;
@@ -434,15 +457,15 @@ function writeTasks(mainPath: String): void {
         """ in default;
     // std.os.process.tasks, written here; std.os.process's encodeTask and startTask then ask it (std itself
     // has no import of it: no cycle in its sources)
-    let tasks: Module = newModule(TASKS_MODULE, fileNames.length);
-    fileNames.push(shownName(TASKS_MODULE));
-    filePaths.push(Paths.absolute(moduleFile(TASKS_MODULE)).clone() in default);
-    fileSources.push(registry);
-    mods.push(tasks);
-    modIndex[TASKS_MODULE] = mods.length - 1;
+    let tasks: Module = newModule(TASKS_MODULE, linking.fileNames.length);
+    linking.fileNames.push(shownName(TASKS_MODULE));
+    linking.filePaths.push(Paths.absolute(moduleFile(TASKS_MODULE)).clone() in default);
+    linking.fileSources.push(registry);
+    linking.mods.push(tasks);
+    linking.modIndex[TASKS_MODULE] = linking.mods.length - 1;
     parse(tasks, registry);
     if (tasks.program == null) { return; }
-    let process: Module = mods[processAt];
+    let process: Module = linking.mods[processAt];
     if (process.program == null) { return; }
     process.program!.imports.push(ImportDecl { line: 1, path: TASKS_MODULE, alias: "TaskRegistry" } in default);
     let calls: Program = parseProgram("""
@@ -459,13 +482,13 @@ function writeTasks(mainPath: String): void {
         }
     }
     let kept: Module[*] = [] in default;
-    for (m in order) {
+    for (m in linking.order) {
         if (m != tasks) { kept.push(m); }
     }
-    order.clear();
-    for (m in kept) { order.push(m); }
+    linking.order.clear();
+    for (m in kept) { linking.order.push(m); }
     visit(tasks);                                 // its imports (the modules of the tasks), then itself, last
-    taskClasses = true;
+    linking.taskClasses = true;
 }
 
 /** Adds the words of a text (not those of its comments) to `words`. */
@@ -477,7 +500,7 @@ function addWords(text: String in default): void {
             while (i < text.length && text[i] != '\n') { i += 1; }
         } else if (isIdentifierPart(text[i]) && !isDigit(text[i])) {
             while (i < text.length && isIdentifierPart(text[i])) { i += 1; }
-            words[text.substring(start, i)] = true;
+            linking.words[text.substring(start, i)] = true;
         } else {
             i += 1;
         }
@@ -516,16 +539,15 @@ function cCodeUses(code: String in default, cSymbols: Any in default): bool {
  * Which test functions stay in the program: "none" (larimar build: they are not compiled), "all" (larimar
  * check and the editor: they are checked like the rest) or "main" (larimar test: the main file's).
  */
-public let testsKept: String = "none";
 
 function parse(module: Module in default, source: String in default): void {
     addWords(source);
     let p: Program = parseProgram(source, module.index * FILE_LINES + 1);
     if (p.error != "") {
-        errors.push(p.error);
+        linking.errors.push(p.error);
         return;
     }
-    if (testsKept != "all" && !(testsKept == "main" && module == root)) {
+    if (linking.testsKept != "all" && !(linking.testsKept == "main" && module == linking.root)) {
         let kept: Node[*] = [] in default;
         for (d in p.decls) {
             if (!(d is FunctionDecl f && f.isTest)) { kept.push(d); }
@@ -568,39 +590,32 @@ public function isStd(path: String): bool { return path.startsWith("std."); }
  * Whether a program may have C of its own (larimarc --unsafe-c). Only for the compiler's own sources and
  * tests, which try what std's C does: a program built with it has none of the language's guarantees.
  */
-public let unsafeC: bool = false;
 
-/** [project] unsafe_c = true of the main file's project: its modules may have native interfaces. */
-public let projectUnsafe: bool = false;
-/** Per library of [dependencies] (the order of libraryNames): its [project] unsafe_c. */
-public let libraryUnsafe: bool[*] = [] in default;
 /**
  * Where the program's C comes from, outside std: the project ("this project") and the libraries whose
  * native interfaces it has, and what was noticed about them (a type that nothing releases). Built after
  * linking; larimar build says it every time.
  */
-public let unsafeSources: String[*] = [] in default;
-public let unsafeNotes: String[*] = [] in default;
 
 /** Whether the module may have native interfaces of its own (unsafe_c of its project or library). */
 public function unsafeModule(module: Module in default): bool {
     if (isStd(module.path)) { return false; }
     let library: int32 = libraryOf(module.path);
-    if (library >= 0) { return library < libraryUnsafe.length && libraryUnsafe[library]; }
-    return projectUnsafe;
+    if (library >= 0) { return library < linking.libraryUnsafe.length && linking.libraryUnsafe[library]; }
+    return linking.projectUnsafe;
 }
 
 /** Who a module's C is from: its library, or the project. */
 public function sourceOf(module: Module in default): String {
     let library: int32 = libraryOf(module.path);
-    return library >= 0 ? libraryNames[library] : "this project";
+    return library >= 0 ? linking.libraryNames[library] : "this project";
 }
 
 /** Whether a module may have C: the standard library's (the installed one, or the copy being edited), and the language's. */
 public function trusted(module: Module in default, mainPath: String): bool {
-    if (unsafeC || isStd(module.path) || (lang != null && module == lang!)) { return true; }
-    let file: String = module == root ? mainPath : filePaths[module.index];
-    return Paths.normalize(Paths.absolute(file)).startsWith("${Paths.normalize(Paths.absolute(stdDir))}/");
+    if (linking.unsafeC || isStd(module.path) || (linking.lang != null && module == linking.lang!)) { return true; }
+    let file: String = module == linking.root ? mainPath : linking.filePaths[module.index];
+    return Paths.normalize(Paths.absolute(file)).startsWith("${Paths.normalize(Paths.absolute(linking.stdDir))}/");
 }
 
 /**
@@ -608,14 +623,14 @@ public function trusted(module: Module in default, mainPath: String): bool {
  * project's folder (the main file's).
  */
 function moduleFile(path: String): String {
-    if (isStd(path)) { return Paths.join(stdDir, "${path.substring(4).replace(".", "/")}.lar"); }
+    if (isStd(path)) { return Paths.join(linking.stdDir, "${path.substring(4).replace(".", "/")}.lar"); }
     let relative: String = "${path.replace(".", "/")}.lar";
     let library: int32 = libraryOf(path);
-    if (library >= 0) { return Paths.join(libraryRoots[library], relative); }
-    let own: String = Paths.join(rootDir, relative);
+    if (library >= 0) { return Paths.join(linking.libraryRoots[library], relative); }
+    let own: String = Paths.join(linking.rootDir, relative);
     if (Files.isFile(own)) { return own; }
-    if (testsKept != "none") {                        // tests (and the editor): also from a folder above (the project's: tests.support...)
-        let dir: String = Paths.parent(rootDir);
+    if (linking.testsKept != "none") {                        // tests (and the editor): also from a folder above (the project's: tests.support...)
+        let dir: String = Paths.parent(linking.rootDir);
         while (dir != "") {
             let fromProject: String = Paths.join(dir, relative);
             if (Files.isFile(fromProject)) { return fromProject; }
@@ -628,13 +643,10 @@ function moduleFile(path: String): String {
     return own;
 }
 
-/** The libraries of the project's [dependencies]: their names, and the folders of their modules (same order). */
-public let libraryNames: String[*] = [] in default;
-public let libraryRoots: String[*] = [] in default;
 
 /** The library a module belongs to (its name, or <name>.<part>): its index, or -1. */
 public function libraryOf(path: String): int32 {
-    for (i, n in libraryNames) {
+    for (i, n in linking.libraryNames) {
         if (path == n || path.startsWith("${n}.")) { return i; }
     }
     return -1;
@@ -643,18 +655,16 @@ public function libraryOf(path: String): int32 {
 /** How a module's file is shown in messages. */
 function shownName(path: String): String {
     if (isStd(path)) { return "${path.replace(".", "/")}.lar"; }
-    return showFrom != "" ? Paths.relative(showFrom, moduleFile(path)) : moduleFile(path);
+    return linking.showFrom != "" ? Paths.relative(linking.showFrom, moduleFile(path)) : moduleFile(path);
 }
 
-/** When set, module files are shown relative to this folder (or absolute when outside it). */
-public let showFrom: String = "";
 
 /** Loads the imports first, so each module comes after the ones it uses (and globals start in that order). */
 function visit(module: Module in default): void {
     for (imp in module.program!.imports) {
-        if (modIndex[imp.path] != null) { continue; }       // already loaded, or a cycle: fine for declarations
-        if (root.index < filePaths.length && Paths.normalize(Paths.absolute(moduleFile(imp.path))) == Paths.normalize(filePaths[root.index])) {
-            modIndex[imp.path] = 0;                         // the file opened alone (root), imported back by its parts
+        if (linking.modIndex[imp.path] != null) { continue; }       // already loaded, or a cycle: fine for declarations
+        if (linking.root.index < linking.filePaths.length && Paths.normalize(Paths.absolute(moduleFile(imp.path))) == Paths.normalize(linking.filePaths[linking.root.index])) {
+            linking.modIndex[imp.path] = 0;                         // the file opened alone (root), imported back by its parts
             continue;
         }
         let source: String? = readSource(moduleFile(imp.path));
@@ -663,31 +673,31 @@ function visit(module: Module in default): void {
             continue;
         }
         let text: String = source!;
-        let dep: Module = newModule(imp.path, fileNames.length);
-        fileNames.push(shownName(imp.path));
-        filePaths.push(Paths.absolute(moduleFile(imp.path)).clone() in default);
-        fileSources.push(text);
-        mods.push(dep);
-        modIndex[dep.path] = mods.length - 1;
+        let dep: Module = newModule(imp.path, linking.fileNames.length);
+        linking.fileNames.push(shownName(imp.path));
+        linking.filePaths.push(Paths.absolute(moduleFile(imp.path)).clone() in default);
+        linking.fileSources.push(text);
+        linking.mods.push(dep);
+        linking.modIndex[dep.path] = linking.mods.length - 1;
         parse(dep, text);
         let library: int32 = libraryOf(imp.path);
-        if (library >= 0 && Files.isFile(Paths.join(rootDir, "${imp.path.replace(".", "/")}.lar"))) {
-            error(imp.line, "Module '${imp.path}' is of the library '${libraryNames[library]}' of [dependencies], and the project has a file with its name too: rename the project's.");
+        if (library >= 0 && Files.isFile(Paths.join(linking.rootDir, "${imp.path.replace(".", "/")}.lar"))) {
+            error(imp.line, "Module '${imp.path}' is of the library '${linking.libraryNames[library]}' of [dependencies], and the project has a file with its name too: rename the project's.");
         }
         if (dep.program != null) { visit(dep); }
     }
-    order.push(module);
+    linking.order.push(module);
 }
 
 // ---- what each module can see ----------------------------------------------------------
 
 function tables(module: Module in default): void {
-    if (lang != null && module != lang!) {     // the language's public names: visible everywhere, below the module's own
-        for (k, v in lang!.types.fields) {
-            if (lang!.publics.contains(k)) { module.types[k] = v; }
+    if (linking.lang != null && module != linking.lang!) {     // the language's public names: visible everywhere, below the module's own
+        for (k, v in linking.lang!.types.fields) {
+            if (linking.lang!.publics.contains(k)) { module.types[k] = v; }
         }
-        for (k, v in lang!.values.fields) {
-            if (lang!.publics.contains(k)) { module.values[k] = v; }
+        for (k, v in linking.lang!.values.fields) {
+            if (linking.lang!.publics.contains(k)) { module.values[k] = v; }
         }
     }
     dictFromSet(module.values, module.ownValues, module.prefix);
@@ -699,9 +709,9 @@ function tables(module: Module in default): void {
         module.natives[nativeInterface.name] = members;
     }
     for (imp in module.program!.imports) {
-        let ti: int32 = (modIndex[imp.path] as int32 ?? -1);
+        let ti: int32 = (linking.modIndex[imp.path] as int32 ?? -1);
         if (ti < 0) { continue; }
-        let target: Module = mods[ti];
+        let target: Module = linking.mods[ti];
         if (target.program == null) { continue; }
         if (target == module) {
             error(imp.line, "A module cannot import itself.");
@@ -758,7 +768,7 @@ function bring(module: Module, into: Any, n: String in into, from: Module, mangl
 // ---- renaming ---------------------------------------------------------------------------------
 // Declarations are renamed in place; an expression may be replaced (alias.name becomes the name).
 
-let rm: Module = root;                          // the module being rewritten
+let rm: Module = linking.root;                          // the module being rewritten
 let scopes: Any[*] = [] in default;
 let scopeDepth: int32 = 0;
 
@@ -785,19 +795,19 @@ function local(n: String): bool {
 /** The native functions of modules: Memory.limit and Memory.compact, in std/memory.lar (imported, or opened alone). */
 /** A file of std opened alone (the editor, larimar check std/x.lar): it is std, whatever its module path. */
 public function stdFileOpened(module: Module in default): bool {
-    if (module.index >= filePaths.length) { return false; }
-    let f: String = Paths.normalize(Paths.absolute(filePaths[module.index]));
-    return f.startsWith("${Paths.normalize(Paths.absolute(stdDir))}/");
+    if (module.index >= linking.filePaths.length) { return false; }
+    let f: String = Paths.normalize(Paths.absolute(linking.filePaths[module.index]));
+    return f.startsWith("${Paths.normalize(Paths.absolute(linking.stdDir))}/");
 }
 
 /** std.lang (or std/lang.lar opened alone): what has no body there the compiler writes. */
 public function isLanguage(module: Module in default): bool {
     if (module.path == "std.lang") { return true; }
-    return module.path == "" && module.index < filePaths.length && filePaths[module.index].replace("\\", "/").endsWith("std/lang.lar");
+    return module.path == "" && module.index < linking.filePaths.length && linking.filePaths[module.index].replace("\\", "/").endsWith("std/lang.lar");
 }
 
 function nativeKnown(module: Module in default, name: String): bool {
-    let alone: bool = module.path == "" && module.index < filePaths.length && filePaths[module.index].replace("\\", "/").endsWith("std/memory.lar");
+    let alone: bool = module.path == "" && module.index < linking.filePaths.length && linking.filePaths[module.index].replace("\\", "/").endsWith("std/memory.lar");
     return (module.path == "std.memory" || alone) && (name == "limit" || name == "compact");
 }
 
@@ -835,7 +845,7 @@ function larName(module: Module in default, name: String): String {
     if (dot == null) { return (module.values[name] as String ?? module.types[name] as String ?? "").clone(); }
     let path: String = name.substring(0, dot!);
     let n: String = name.substring(dot! + 1);
-    for (other in mods) {
+    for (other in linking.mods) {
         let alias: bool = module.aliases[path] != null && (module.aliases[path] as int32 ?? -1) == other.index;
         if (other.path == path || alias) {
             if (other.ownValues[n] != null || other.ownTypes[n] != null) { return "${other.prefix}${n}"; }
@@ -849,7 +859,7 @@ function rewriteDecl(module: Module in default, d: Node in default): void {
     scopeDepth = 0;
     let dn: String = declName(d);
     let mapped: String = (isTypeDecl(d) ? module.types[dn] : module.values[dn]) as String ?? "";
-    let own: String = (lang != null && module == lang! && mapped != "" ? mapped : "${module.prefix}${dn}") in default;
+    let own: String = (linking.lang != null && module == linking.lang! && mapped != "" ? mapped : "${module.prefix}${dn}") in default;
     switch (d) {
         case FunctionDecl f -> {
             if (f.typeName == "") {
@@ -902,7 +912,7 @@ function rewriteDecl(module: Module in default, d: Node in default): void {
             for (v in e.variants) { params(v.fields); }
         }
         case CCodeDecl c -> {
-            c.fromStd = (lang != null && module == lang!) || isStd(module.path);
+            c.fromStd = (linking.lang != null && module == linking.lang!) || isStd(module.path);
             if (c.code.contains("lar\"")) { c.code = larNames(module, c.code, c.line); }
             if (c.owner != "") { c.owner = typeName(c.owner, c.line); }
         }
@@ -944,7 +954,7 @@ function rewriteDecl(module: Module in default, d: Node in default): void {
  */
 function hasHeaders(module: Module in default): bool {
     let parts: String = "${module.path}.";
-    for (x in mods) {
+    for (x in linking.mods) {
         if (x != module && (module.path == "" || !x.path.startsWith(parts))) { continue; }
         if (x.program == null) { continue; }
         for (d in x.program!.decls) {
@@ -998,7 +1008,7 @@ function typeName(name: String in default, line: int32): String {
         let r: String = rest.substring(1);
         let dot2: int32? = r.indexOf(".");
         let member: String = dot2 != null ? r.substring(0, dot2) : r;
-        let mangled: String = exported(mods[(rm.aliases[head] as int32 ?? -1)], member, false, line);
+        let mangled: String = exported(linking.mods[(rm.aliases[head] as int32 ?? -1)], member, false, line);
         return mangled == "" ? name : ("${mangled}${dot2 != null ? r.substring(dot2) : ""}" in default);
     }
     hidden(head, line);
@@ -1021,7 +1031,7 @@ function exported(from: Module, n: String, values: bool, line: int32): String {
 
 /** Modules do not see the main file's declarations (nobody imports the main file). */
 function hidden(n: String, line: int32): void {
-    if (rm != root && (root.ownValues[n] != null || root.ownTypes[n] != null)) {
+    if (rm != linking.root && (linking.root.ownValues[n] != null || linking.root.ownTypes[n] != null)) {
         error(line, "'${n}' is declared in the main file, which modules cannot see; move it to a module and import it.");
     }
 }
@@ -1102,7 +1112,7 @@ function expr(e: Expr in default): Expr {
                 return id;
             }
             if (m.object is Ident obj && isAlias(obj.name)) {          // alias.name is the name itself
-                let name: String = exported(mods[(rm.aliases[obj.name] as int32 ?? -1)], m.name, true, m.line);
+                let name: String = exported(linking.mods[(rm.aliases[obj.name] as int32 ?? -1)], m.name, true, m.line);
                 let id: Ident = Ident { line: m.line, name: name == "" ? m.name : name, rewritten: true } in default;
                 m.replaced = id;
                 return id;
@@ -1182,13 +1192,13 @@ function asksPlatform(e: Expr in default): bool {
 
 /** A switch on the platform that --target reduced to its arm. */
 function chosen(switchExpr: SwitchExpr in default): bool {
-    return target != "" && switchExpr.cases.length == 1 && switchExpr.cases[0].isDefault && asksPlatform(switchExpr.subject);
+    return linking.target != "" && switchExpr.cases.length == 1 && switchExpr.cases[0].isDefault && asksPlatform(switchExpr.subject);
 }
 
 /** With --target, a switch on Platform.current() keeps only the arm of that platform, as its default. */
 function choosePlatform(switchExpr: SwitchExpr in default): void {
-    if (target == "" || !asksPlatform(switchExpr.subject)) { return; }
-    let variant: String = switch (target) {
+    if (linking.target == "" || !asksPlatform(switchExpr.subject)) { return; }
+    let variant: String = switch (linking.target) {
         case "linux" -> "Linux";
         case "macos" -> "MacOS";
         case "windows" -> "Windows";
@@ -1290,7 +1300,7 @@ function replaceLines(msg: String, key: String, bracket: bool): String {
         let n: int64 = msg.substring(j, k).toInt() ?? 0;
         let file: int32 = (n / 1000000) as int32;
         let name: String = "?";
-        if (file < fileNames.length) { name = fileNames[file]; }
+        if (file < linking.fileNames.length) { name = linking.fileNames[file]; }
         builder.add(msg.substring(done, at));
         if (bracket) {
             builder.add("[${name}:${n % 1000000}]");
@@ -1308,10 +1318,10 @@ function replaceLines(msg: String, key: String, bracket: bool): String {
 // ---- for the editor (ide.lar) ----------------------------------------------------------------
 
 function moduleOfFile(index: int32): Module? {
-    for (m in mods) {
+    for (m in linking.mods) {
         if (m.index == index) { return m; }
     }
-    if (lang != null && lang!.index == index) { return lang; }
+    if (linking.lang != null && linking.lang!.index == index) { return linking.lang; }
     return null;
 }
 
@@ -1327,9 +1337,9 @@ public function namesOfFile(index: int32): Any {
 
 /** A name std.lang keeps to itself (its helpers): every file sees it, but the editor does not offer it. */
 public function isLangHelper(name: String): bool {
-    if (lang == null) { return false; }
-    let own: bool = lang!.ownValues[name] != null || lang!.ownTypes[name] != null;
-    return own && lang!.publics[name] == null;
+    if (linking.lang == null) { return false; }
+    let own: bool = linking.lang!.ownValues[name] != null || linking.lang!.ownTypes[name] != null;
+    return own && linking.lang!.publics[name] == null;
 }
 
 /** The modules a file imports with a name: alias -> module path ("geo.shapes"). */
@@ -1339,7 +1349,7 @@ public function aliasesOfFile(index: int32): Any {
     if (module == null) { return out; }
     for (k, v in module!.aliases.fields) {
         let i: int32 = v as int32 ?? -1;
-        if (i >= 0 && i < mods.length) { out[k] = mods[i].path.clone() in default; }
+        if (i >= 0 && i < linking.mods.length) { out[k] = linking.mods[i].path.clone() in default; }
     }
     return out;
 }
@@ -1347,17 +1357,17 @@ public function aliasesOfFile(index: int32): Any {
 /** The public names of a module, each with its name after linking. */
 public function publicsOfModule(path: String): Any {
     let out: Any = {} in default;
-    let i: int32 = modIndex[path] as int32 ?? -1;
-    if (i < 0 || i >= mods.length) { return out; }
-    let module: Module = mods[i];
+    let i: int32 = linking.modIndex[path] as int32 ?? -1;
+    if (i < 0 || i >= linking.mods.length) { return out; }
+    let module: Module = linking.mods[i];
     for (k, v in module.publics.fields) { out[k] = "${module.prefix}${k}" in default; }
     return out;
 }
 
 /** The file of a module, from its path ("geo.shapes"), or "". */
 public function fileOfModule(path: String): String {
-    let i: int32 = modIndex[path] as int32 ?? -1;
-    if (i < 0 || i >= mods.length) { return ""; }
-    let idx: int32 = mods[i].index;
-    return idx >= 0 && idx < filePaths.length ? filePaths[idx] : "";
+    let i: int32 = linking.modIndex[path] as int32 ?? -1;
+    if (i < 0 || i >= linking.mods.length) { return ""; }
+    let idx: int32 = linking.mods[i].index;
+    return idx >= 0 && idx < linking.filePaths.length ? linking.filePaths[idx] : "";
 }

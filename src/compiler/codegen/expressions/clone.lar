@@ -2,8 +2,9 @@
 
 import syntax.ast { Call };
 import semantics.types {
-    ArrayKind, CallInfo, classes, EnumInfo, enumOf, escapeName, FieldInfo, isArray, isClass, isEnumT, isInterface, isOpt,
-    isStruct, NamedKind, optIsPointer, structOf, Symbol, T_ANY, T_STRING, TypeKind, Type
+    ArrayKind, CallInfo, declared, EnumInfo, enumOf, escapeName, FieldInfo, isArray, isClass, isEnumT,
+    isInterface, isOpt, isStruct, NamedKind, optIsPointer, structOf, Symbol, T_ANY, T_STRING, Type,
+    TypeKind
 };
 import codegen.gen { line, tmp };
 import codegen.expressions { cType, mangle, memoryRef, placeMem, structName, value };
@@ -51,7 +52,7 @@ public function requireClone(t: Type in default): void {
         }
     }
     if (isClass(t)) {
-        for (c in classes) {
+        for (c in declared.classes) {
             if (!c.sync && !c.thread) {
                 for (f in c.fields) { requireClone(f.type); }
             }
@@ -72,7 +73,7 @@ public function cloneOf(type: Type in default, v: String): String {
 
 /** A class object is copied by its own class (a subclass, maybe): every class's fields may need copying. */
 function requireClassClones(): void {
-    for (ci in classes) {
+    for (ci in declared.classes) {
         if (!ci.sync && !ci.thread) {
             for (f in ci.fields) { requireClone(f.type); }
         }

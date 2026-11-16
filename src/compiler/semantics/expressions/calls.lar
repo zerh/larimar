@@ -4,14 +4,15 @@ import syntax.ast {
     Call, Cast, Expr, ExternFunctionDecl, Ident, Lambda, Member, NullLit, Param, SelfExpr, SuperMember, Unary
 };
 import semantics.types {
-    allFields, arrayTypeOf, ArrayKind, BuiltinKind, CallInfo, CallK, ClassInfo, classOf, ConversionKind, EnumInfo, enumOf,
-    enumSimple, FieldInfo, findMethod, Frame, FrameKind, functionTypeOf, FunctionInfo, functionOf, interfaceOf,
-    isArray, isClass, isEnumT, isError, isExternT, isInteger, isInterface, isMemParam, isNumeric, isOpt, isPtr,
-    isResource, isStruct, MemberKind, meet, MemberInfo, MemoryKind, MethodInfo, named, NamedKind, nativeMethods, P_GLOBAL, P_TEMP,
-    parentOf, Place, PlaceKind, platformWithin, R_STATIC, Region, structOf, Symbol, SymbolKind, T_ANY, T_BOOL, T_BYTE,
-    T_ERROR, T_INT32, T_INT64, T_STRING, T_VOID, TypeKind, Type, VariantInfo, variantOf
+    allFields, ArrayKind, arrayTypeOf, BuiltinKind, CallInfo, CallK, ClassInfo, classOf, ConversionKind,
+    declared, EnumInfo, enumOf, enumSimple, FieldInfo, findMethod, Frame, FrameKind, FunctionInfo,
+    functionOf, functionTypeOf, interfaceOf, isArray, isClass, isEnumT, isError, isExternT, isInteger,
+    isInterface, isMemParam, isNumeric, isOpt, isPtr, isResource, isStruct, meet, MemberInfo, MemberKind,
+    MemoryKind, MethodInfo, named, NamedKind, P_GLOBAL, P_TEMP, parentOf, Place, PlaceKind, platformWithin,
+    R_STATIC, Region, structOf, Symbol, SymbolKind, T_ANY, T_BOOL, T_BYTE, T_ERROR, T_INT32, T_INT64,
+    T_STRING, T_VOID, Type, TypeKind, VariantInfo, variantOf
 };
-import semantics.analyzer { error, frame, frameTop, lookup, Mutation, mutations, MutK, noteCapture, wrong };
+import semantics.analyzer { analysis, error, frame, lookup, Mutation, MutK, noteCapture, wrong };
 import semantics.analyzer.compact {
     isLValue, isReference, noteCompact, objectOf, placeFor, platformCtx, rootSymbol, storageRegion
 };
@@ -250,7 +251,7 @@ function checkMethodCall(c: Call in default, callee: Member in default, expected
         error(callee.line, "'${name}' is read without parentheses: ${describeExpr(obj)}.${name}");
         return checkAllArgs(c);
     }
-    for (mi in nativeMethods) {
+    for (mi in declared.nativeMethods) {
         if (mi.owner == ot.text && mi.name == name && mi.sig!.params.length == c.args.length && !mi.isOperator && mi.decl.hasBody) {
             return checkNativeMethodCall(c, callee, mi, place);
         }
@@ -634,7 +635,7 @@ function checkStringMethod(call: Call in default, member: Member in default, pla
     let forms: String = stringForms(name);
     if (forms == "") {
         let counts: String[*] = [] in default;          // written in std, but with another number of arguments
-        for (mi in nativeMethods) {
+        for (mi in declared.nativeMethods) {
             if (mi.owner == "String" && mi.name == name && mi.sig != null) { counts.push("${mi.sig!.params.length}"); }
         }
         if (counts.length > 0) {
@@ -779,7 +780,7 @@ function recordValueMutation(obj: Expr in default, line: int32): void {
     let root: Symbol? = rootSymbol(obj);
     if (root == null || !(root.kind == SymbolKind.Local || root.kind == SymbolKind.Param || root.kind == SymbolKind.Self)) { return; }
     if (isReference(typeOf(obj)) || throughRef(obj)) { return; }
-    mutations.push(Mutation { line, root, frame: frameTop - 1, kind: MutK.Push } in default);
+    analysis.mutations.push(Mutation { line, root, frame: analysis.frameTop - 1, kind: MutK.Push } in default);
 }
 
 function throughRef(target: Expr): bool {

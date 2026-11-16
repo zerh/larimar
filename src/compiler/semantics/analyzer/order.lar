@@ -1,8 +1,8 @@
 // semantics.analyzer.order: orders that must exist: globals get their values in order, C structs are defined before they are embedded.
 
 import semantics.types {
-    ArrayKind, classes, ClassInfo, classOf, cTypeOf, enumOf, enums, globals, hasThreadSafe, interfaces, isArray, isError,
-    lambdaList, named, NamedKind, optIsPointer, Owner, structOf, structs, Symbol, TypeKind, Type, typeOrder, usedTypes
+    ArrayKind, ClassInfo, classOf, cTypeOf, declared, enumOf, hasThreadSafe, isArray, isError, named,
+    NamedKind, optIsPointer, Owner, structOf, Symbol, Type, TypeKind
 };
 import semantics.analyzer { error };
 import semantics.analyzer.threads { markRound };
@@ -12,7 +12,7 @@ import semantics.analyzer.threads { markRound };
  * initialized after it (or itself): it would find it without its value.
  */
 public function checkGlobalOrder(initializers: Owner[*] in default): void {
-    for (k, v in globals) {
+    for (k, v in declared.globals) {
         markRound += 1;
         let todo: Owner[*] = [initializers[k]] in default;
         let found: bool = false;
@@ -38,8 +38,8 @@ public function checkGlobalOrder(initializers: Owner[*] in default): void {
 /** Whether global `g` is the k-th one or one initialized after it. */
 function initializedFrom(g: Symbol in default, k: int32): bool {
     let j: int32 = k;
-    while (j < globals.length) {
-        let s: Symbol? = globals[j].symbol;
+    while (j < declared.globals.length) {
+        let s: Symbol? = declared.globals[j].symbol;
         if (s != null && s! == g) { return true; }
         j += 1;
     }
@@ -52,12 +52,12 @@ function initializedFrom(g: Symbol in default, k: int32): bool {
 
 public function computeTypeOrder(): void {
     let nodes: Type[*] = [] in default;
-    for (s in structs) { nodes.push(named(s.name, NamedKind.Struct)); }
-    for (e in enums) { nodes.push(named(e.name, NamedKind.Enum)); }
-    for (c in classes) { nodes.push(named(c.name, NamedKind.Class)); }
-    for (i in interfaces) { nodes.push(named(i.name, NamedKind.Interface)); }
+    for (s in declared.structs) { nodes.push(named(s.name, NamedKind.Struct)); }
+    for (e in declared.enums) { nodes.push(named(e.name, NamedKind.Enum)); }
+    for (c in declared.classes) { nodes.push(named(c.name, NamedKind.Class)); }
+    for (i in declared.interfaces) { nodes.push(named(i.name, NamedKind.Interface)); }
     let snapshot: Type[*] = [] in default;
-    for (t in usedTypes) { snapshot.push(t); }
+    for (t in declared.usedTypes) { snapshot.push(t); }
     for (t in snapshot) {
         if (t.kind == TypeKind.Func || t.kind == TypeKind.Array || t.kind == TypeKind.Opt) { nodes.push(t); }
     }
@@ -87,7 +87,7 @@ function visitType(type: Type in default, path: Type[*] in default): void {
     for (d in valueDeps(type)) { visitType(d, path); }
     path.pop();
     type.order = 2;
-    typeOrder.push(type);
+    declared.typeOrder.push(type);
 }
 
 function display(type: Type): String { return type.kind == TypeKind.Func ? "closure ${type.text}" : type.text; }
@@ -99,7 +99,7 @@ function typeLine(t: Type): int32 {
         return t.namedKind == NamedKind.Enum ? enumOf(t.name)!.line : 0;
     }
     if (t.kind == TypeKind.Func) {
-        for (l in lambdaList) {
+        for (l in declared.lambdaList) {
             if (l.type == t && l.captures.length > 0) { return l.node.line; }
         }
     }
@@ -126,7 +126,7 @@ function valueDeps(t: Type in default): Type[*] {
     } else if (t.kind == TypeKind.Opt) {
         if (!optIsPointer(t)) { addValueDep(out, t.elem!); }
     } else if (t.kind == TypeKind.Func) {
-        for (l in lambdaList) {
+        for (l in declared.lambdaList) {
             if (l.type == t) {
                 for (s in l.captures) { addValueDep(out, s.type); }
             }

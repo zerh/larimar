@@ -4206,7 +4206,7 @@ larimar/
       semantics/             entender el programa: módulos (linker), las reglas (rules.lar), tipos,
                              analyzer y expressions (analyzer/, expressions/: sus partes por tema)
       codegen/               del árbol a C: gen, expressions (gen/, expressions/: sus partes), los nombres
-                             de sus variables (localnames), prune, mapa de depuración
+                             de sus variables (localnames), el C por partes (cprogram), prune, mapa de depuración
       editor/                larimar check, lsp y dap
       project/               el compilador de C, larimar test (larimar.toml se lee con std.encoding.toml)
     std/                   la biblioteca estándar (se instala como std/)

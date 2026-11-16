@@ -5,16 +5,14 @@ import syntax.ast {
     Lambda, NullLit, Param, Stmt, ThrowStmt, TryStmt, Unary, YieldStmt
 };
 import semantics.types {
-    CatchInfo, EnumInfo, enumOf, enums, ForInfo, Frame, FrameKind, isEnumT, isError, isInteger, isOpt, meet, named,
-    NamedKind, P_GLOBAL, P_RESULT, P_TEMP, R_STATIC, SwitchInfo, Symbol, SymbolKind, T_ANY, T_BYTE, T_ERROR, T_INT32,
-    T_STRING, TypeKind, Type
+    CatchInfo, declared, EnumInfo, enumOf, ForInfo, Frame, FrameKind, isEnumT, isError, isInteger, isOpt,
+    meet, named, NamedKind, P_GLOBAL, P_RESULT, P_TEMP, R_STATIC, SwitchInfo, Symbol, SymbolKind, T_ANY,
+    T_BYTE, T_ERROR, T_INT32, T_STRING, Type, TypeKind
 };
-import semantics.linker { target };
+import semantics.linker { linking };
 import semantics.expressions { check };
 import semantics.expressions.conversions { coerce, hasRefs, regionOf };
-import semantics.analyzer {
-    anyFieldsLoop, block, declare, error, frame, FrameState, HandledSet, lookup, popScope, pushScope, scope, state
-};
+import semantics.analyzer { analysis, block, declare, error, frame, FrameState, HandledSet, lookup, popScope, pushScope, state };
 import semantics.analyzer.flow { lifetimeOf };
 import semantics.analyzer.statements { alwaysExits, analyzeBlock, analyzeStmts };
 
@@ -68,10 +66,10 @@ public function narrow(syms: Symbol[*] in default): void {
                 error(s.line, "'${s.name}' is already declared (line ${existing.line}); give the name after 'is' another name.");
                 continue;
             }
-            scope.names[s.name] = s.id;
-        } else if (!hasSymbol(scope.narrowSyms, s)) {
-            scope.narrowSyms.push(s);
-            scope.narrowTypes.push(s.type.elem!);
+            analysis.scope.names[s.name] = s.id;
+        } else if (!hasSymbol(analysis.scope.narrowSyms, s)) {
+            analysis.scope.narrowSyms.push(s);
+            analysis.scope.narrowTypes.push(s.type.elem!);
         }
     }
 }
@@ -80,14 +78,14 @@ public function unnarrow(syms: Symbol[*]): void {
     if (syms.length == 0) { return; }
     let keepS: Symbol[*] = [] in default;
     let keepT: Type[*] = [] in default;
-    for (i, s in scope.narrowSyms) {
+    for (i, s in analysis.scope.narrowSyms) {
         if (!hasSymbol(syms, s)) {
             keepS.push(s);
-            keepT.push(scope.narrowTypes[i]);
+            keepT.push(analysis.scope.narrowTypes[i]);
         }
     }
-    scope.narrowSyms = keepS;
-    scope.narrowTypes = keepT;
+    analysis.scope.narrowSyms = keepS;
+    analysis.scope.narrowTypes = keepT;
 }
 
 /** Does the block always leave (return, throw, break, continue)? */
@@ -140,10 +138,10 @@ public function analyzeFor(f: ForStmt in default): void {
         popScope();
         return;
     }
-    anyFieldsLoop = f.iterable;
+    analysis.anyFieldsLoop = f.iterable;
     // what the loop variable gives may be returned: then the list is created where the result goes
     let type: Type = check(f.iterable, null, state().returned.contains(f.varName) ? P_RESULT : P_TEMP);
-    anyFieldsLoop = null;
+    analysis.anyFieldsLoop = null;
     if (type == T_ANY) {
         info.any = f.iterable.anyFields ? 2 : 1;
         info.elemType = T_ANY;
@@ -177,7 +175,7 @@ public function analyzeFor(f: ForStmt in default): void {
         idx.immutable = true;
         info.index = idx;
     }
-    scope.iterating = f.rangeEnd == null;
+    analysis.scope.iterating = f.rangeEnd == null;
     let v: Symbol = declare(f.varName, SymbolKind.Local, elem, f.line);
     v.immutable = true;
     v.region = hasRefs(elem) ? regionOf(f.iterable) : R_STATIC;
@@ -189,7 +187,7 @@ public function analyzeFor(f: ForStmt in default): void {
 function loopBody(body: Stmt[*] in default): void {
     state().loopDepth += 1;
     pushScope();
-    scope.loop = true;              // its memory is freed on every turn
+    analysis.scope.loop = true;              // its memory is freed on every turn
     analyzeStmts(body);
     popScope();
     state().loopDepth -= 1;

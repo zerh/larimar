@@ -20,8 +20,9 @@ and its symbol; or the errors that say why not.
   - What a thread may share: values, and `synchronized` objects (`threads.lar`).
 - `types.lar` is what all of them share: `Type`, `Region`, `Symbol`, `Scope`, and the tables of what a
   program declares.
-- The state of a compilation still lives in variables of these modules; it moves into
-  `pipeline.Compilation` one part at a time.
+- The state of each stage is one object, held by `pipeline.Compilation`: `Linking` (linker.lar),
+  `Declarations` (types.lar) and `Analysis` (analyzer.lar), reached as `linking`, `declared` and
+  `analysis`.
 
 ## Its API
 
@@ -29,6 +30,9 @@ and its symbol; or the errors that say why not.
 
 - **`semantics.analyzer`**: semantic analysis (Analyzer.java), part 1: declarations, statements, regions and the final passes
   - `class Diag`
+  - `class Analysis`: The state of the analysis: its scopes and frames, every symbol, what it checks once the bodies are read (lifetimes, mutations, threads), and its errors
+  - `function newAnalysis(): Analysis`: An analysis that has read nothing: its global frame and scope
+  - `function useAnalysis(state: Analysis in default): void`: Makes `state` the one the compiler works on
   - `function error(line: int32, msg: String): void`
   - `function wrong(line: int32, msg: String): Type`: Reports an error where a type is expected: the result is the error type
   - `function bindingSymbol(name: String in default, type: Type in default, line: int32, region: Region in default): Symbol`: A symbol for the name after `is`, declared later where the test is true (see narrow)
@@ -194,6 +198,8 @@ and its symbol; or the errors that say why not.
   - `function analyzeSwitch(switchExpr: SwitchExpr in default, isExpr: bool, expected: Type? in default, place: Place in default): Type`
 - **`semantics.linker`**: modules (Linker.java)
   - `class Module`
+  - `class Linking`: The state of linking: the settings it was given (target, std, libraries, unsafe C), every module read and its order, the files of the program, and the errors
+  - `function useLinking(state: Linking in default): void`: Makes `state` the one the compiler works on
   - `function inTarget(platform: String): bool`: Whether what is for `platform` ("": every one) is for the target
   - `function link(mainShown: String in default, mainSource: String in default, sourceDir: String in default, std: String in default, mainPath: String in default): void`: Link: reads the main file and every module it imports (parsing each), in an order where a module comes after the ones it uses, and gives each the names it sees
   - `function flushRuleErrors(): void`: The errors said so far, into linkErrors (each once)
@@ -229,6 +235,8 @@ and its symbol; or the errors that say why not.
   - `enum NamedKind`
   - `enum ArrayKind`
   - `class Type`
+  - `class Declarations`: What a program declares, gathered by the analysis: its types, functions, globals and lambdas, and what its C needs (includes, ccode, files)
+  - `function useDeclarations(state: Declarations in default): void`: Makes `state` the one the compiler works on
   - `function primByName(name: String): Type?`: A built-in type by name (uint8 is byte), or null
   - `function isPrimName(name: String): bool`
   - `function named(name: String in default, namedKind: NamedKind): Type`

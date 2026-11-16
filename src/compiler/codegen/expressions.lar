@@ -13,7 +13,7 @@ import semantics.types {
     Place, PlaceKind, StructInfo, structOf, Symbol, SymbolKind, T_ANY, T_BOOL, T_FLOAT32, T_INT32, T_INT64, T_STRING,
     T_UINT32, T_UINT64, TypeKind, Type
 };
-import codegen.gen { Block, writing, line, resizeHelpers, resizeSeen, tmp, topBlock };
+import codegen.gen { Block, generation, line, tmp, topBlock };
 import codegen.localnames { localNameFor };
 import codegen.gen.classes { dispatchName, methodName, returnsData };
 import codegen.gen.statements { switchCode, tempMem };
@@ -244,11 +244,11 @@ public let lazyPre: String = "";
 
 /** Generates `e` (its value) into a separate buffer: its statements go to lazyPre. */
 public function lazy(e: Expr in default): String {
-    let saved: StringBuilder = writing.out;
+    let saved: StringBuilder = generation.writing.out;
     let buf: StringBuilder = {} in default;
-    writing.out = buf;
+    generation.writing.out = buf;
     let v: String = value(e);
-    writing.out = saved;
+    generation.writing.out = saved;
     lazyPre = buf.toString() in default;
     return v;
 }
@@ -339,9 +339,9 @@ function convert(v: String, conversion: Conversion in default, e: Expr? in defau
             let to: Type = conversion.to;
             let name: String = "${structName(from)}_to_${to.size}";
             let h: String = "static inline ${cType(to)} ${name}(${cType(from)} a) { ${cType(to)} r; memset(&r, 0, sizeof r); r.length = a.length; for (int32_t i = 0; i < a.length; i++) r.items[i] = a.items[i]; return r; }\n";
-            if (!resizeSeen.contains(h)) {
-                resizeSeen[h] = true;
-                resizeHelpers.push(h.clone());
+            if (!generation.resizeSeen.contains(h)) {
+                generation.resizeSeen[h] = true;
+                generation.resizeHelpers.push(h.clone());
             }
             return "${name}(${v})";
         }
@@ -518,7 +518,7 @@ function identExpr(id: Ident in default): String {
         let functionInfo: FunctionInfo = s.func!;
         return functionInfo.cName;
     }
-    let lambdaInfo: LambdaInfo? = writing.lambda;
+    let lambdaInfo: LambdaInfo? = generation.writing.lambda;
     let base: String = lambdaInfo != null && hasCapture(lambdaInfo, s) ? "env->${envField(s)}" : s.cName;
     return id.narrowed && isOpt(s.type) && !optIsPointer(s.type) ? "${base}.value" : base;
 }
@@ -536,7 +536,7 @@ function constValue(symbol: Symbol): String {
 
 function selfExpr(se: Expr in default): String {
     let s: Symbol = se.symbol!;
-    let lambdaInfo: LambdaInfo? = writing.lambda;
+    let lambdaInfo: LambdaInfo? = generation.writing.lambda;
     if (lambdaInfo != null && hasCapture(lambdaInfo, s)) { return "env->${envField(s)}"; }
     return isStruct(s.type) ? "(*self)" : "self";
 }
@@ -586,7 +586,7 @@ function fieldAccess(obj: Expr in default, f: MemberInfo): String {
     let ot: Type = f.objectType!;
     if (isClass(ot)) { return "${paren(expr(obj))}->${classFieldPath(ot.name, f.field!)}"; }
     if (obj is SelfExpr) {
-        let lambdaInfo: LambdaInfo? = writing.lambda;
+        let lambdaInfo: LambdaInfo? = generation.writing.lambda;
         if (!(lambdaInfo != null && hasCapture(lambdaInfo, obj.symbol!))) { return "self->${fieldC(f.field!)}"; }
     }
     return "${paren(expr(obj))}.${fieldC(f.field!)}";
@@ -663,12 +663,12 @@ public function placeMem(e: Expr in default): String { return placeMemOf(e.place
 public function callMem(c: Expr in default): String { return c.place != null ? placeMem(c) : "NULL"; }
 
 public function placeMemOf(p: Place? in default): String {
-    if (p == null || p.kind == PlaceKind.Temp) { return writing.placeOverride != "" ? writing.placeOverride : tempMem(); }
+    if (p == null || p.kind == PlaceKind.Temp) { return generation.writing.placeOverride != "" ? generation.writing.placeOverride : tempMem(); }
     let place: Place = p;
     if (place.kind == PlaceKind.Global) { return "&lar_default_memory"; }
     if (place.kind == PlaceKind.Block) { return "&${localNameFor("memory", place.scope!.memory)}"; }
     if (place.kind == PlaceKind.Result) {
-        writing.destUsed = true;
+        generation.writing.destUsed = true;
         return "lar_result_memory";
     }
     if (place.kind == PlaceKind.Memory) { return memoryRef(place.memory!); }

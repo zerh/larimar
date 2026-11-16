@@ -130,9 +130,12 @@ Without `--target`, the C of every platform is written, each under its `#if`; wi
 - Text of several lines is a text block (`"""`), not a line after another.
 - `switch` with patterns instead of chains of `if (x is ...)`.
 - Files of a few hundred lines: past ~800, split the module in parts.
-- No mutable globals in the compiler: each phase is a class. Today `Lexer`, `Parser`, the passes and
-  the rules are; the linker, the analyzer and the generator still keep their state in variables of their
-  modules, which move into `pipeline.Compilation` one by one (to do).
+- The state of the compiler is in objects: `Lexer`, `Parser`, the passes and the rules are classes, and
+  the state of each stage is one object the `Compilation` holds (`Linking`, `Declarations`, `Analysis`,
+  `Generation`), reached in its module through one variable (`linking.order`, `declared.classes`,
+  `analysis.scope`, `generation.writing`). A new variable of a stage is a field of its object, never a
+  global of a module. What is left: a few variables that carry context between two functions of one
+  module (`flowParams`, `selfInLambda`...), to become parameters.
 - C is only the standard library's: a program and a library written in Larimar cannot have any
   (`semantics/linker.lar`, `refuseC`); what Larimar does not have runs in another process (`std.os.rpc`,
   `std.os.sharedmemory`). The compiler has no C of its own either: it is built without `--unsafe-c`, which

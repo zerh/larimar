@@ -1,15 +1,15 @@
 // codegen.gen.classes: classes, interfaces and closures in C; globals and the entry point.
 
 import semantics.types {
-    allFields, ArrayKind, ClassInfo, cSuffix, findMethod, FunctionInfo, functions, globals, InterfaceInfo, interfaceOf,
-    interfaces, isArray, isMemory, isMemParam, LambdaInfo, MemoryKind, MethodInfo, nativeMethods, nativeOwner,
-    optIsPointer, parentOf, StructInfo, structOf, Symbol, T_VOID, TypeKind, Type, usesThreads
+    allFields, ArrayKind, ClassInfo, cSuffix, declared, findMethod, FunctionInfo, InterfaceInfo,
+    interfaceOf, isArray, isMemory, isMemParam, LambdaInfo, MemoryKind, MethodInfo, nativeOwner,
+    optIsPointer, parentOf, StructInfo, structOf, Symbol, T_VOID, Type, TypeKind
 };
 import semantics.expressions.conversions { hasRefs };
-import semantics.linker { taskClasses };
+import semantics.linker { linking };
 import codegen.expressions { classFieldPath, cType, expr, structName, typeCName, value };
 import codegen.expressions.clone { cloneHeader, cloneOf, cloneTypeList, needsDeepClone };
-import codegen.gen { Block, classesByDepth, writing, hasInit, line, newFunctionCode, pushBlock };
+import codegen.gen { Block, classesByDepth, generation, line, newFunctionCode, pushBlock };
 import codegen.gen.statements { body, ret };
 
 function errParam(throwsOut: bool): String {
@@ -40,7 +40,7 @@ public function functionHeader(functionInfo: FunctionInfo): String {
 
 public function methodName(method: MethodInfo): String {
     // a native type may have two methods with the same name and a different number of parameters
-    for (o in nativeMethods) {
+    for (o in declared.nativeMethods) {
         if (o != method && o.owner == method.owner && o.name == method.name && o.decl.hasBody && method.decl.hasBody && !method.isOperator
             && o.sig != null && method.sig != null && o.sig!.params.length != method.sig!.params.length) {
             return "${method.owner}_${cSuffix(method)}_${method.sig!.params.length}";
@@ -256,9 +256,9 @@ public function collectionHelpers(out: StringBuilder, type: Type): void {
 // =====================================================================================
 
 public function initGlobals(): String {
-    writing = newFunctionCode();
+    generation.writing = newFunctionCode();
     pushBlock(Block {} in default);
-    for (v in globals) {
+    for (v in declared.globals) {
         let s: Symbol = v.symbol!;
         if (s.memKind == MemoryKind.FixedStatic) {
             line("${s.cName} = lar_memory_fixed(${s.cName}__buf, sizeof ${s.cName}__buf);");
@@ -272,14 +272,14 @@ public function initGlobals(): String {
             line("${s.cName} = ${val};");
         }
     }
-    let body: String = writing.out.toString();
-    hasInit = !body.isEmpty();
-    return !hasInit ? "" : "static void init_globals(void) {\n${body}}\n\n";
+    let body: String = generation.writing.out.toString();
+    generation.hasInit = !body.isEmpty();
+    return !generation.hasInit ? "" : "static void init_globals(void) {\n${body}}\n\n";
 }
 
 public function mainWrapper(): String {
     let mo: FunctionInfo? = null;
-    for (f in functions) {
+    for (f in declared.functions) {
         if (f.name == "main") { mo = f; }
     }
     if (mo == null || mo.isExtern) { return ""; }
@@ -287,9 +287,9 @@ public function mainWrapper(): String {
     let withArgs: bool = main.sig!.params.length > 0;
     let builder: StringBuilder = {} in default;
     if (withArgs) { builder.add("int main(int argc, char** argv) {\n"); } else { builder.add("int main(void) {\n"); }
-    if (hasInit) { builder.add("    init_globals();\n"); }
-    if (taskClasses) {      // a copy started for tasks runs them, not main
-        for (f in functions) {
+    if (generation.hasInit) { builder.add("    init_globals();\n"); }
+    if (linking.taskClasses) {      // a copy started for tasks runs them, not main
+        for (f in declared.functions) {
             if (f.name == "std__os__process__serveTasks") { builder.add("    if (getenv(\"LARIMAR_PROCESS\")) return (int)${f.cName}();\n"); }
         }
     }
@@ -305,9 +305,9 @@ public function mainWrapper(): String {
     if (throwsOut) { a = "${a}&err"; }
     let call: String = "user_main(${a})";
     if (main.sig!.elem! == T_VOID) { builder.add("    ${call};\n"); } else { builder.add("    int32_t result = ${call};\n"); }
-    if (usesThreads) {
+    if (declared.usesThreads) {
         builder.add("    lar_memory_finalize(&lar_default_memory);\n");
-        for (v in globals) {
+        for (v in declared.globals) {
             let g: Symbol = v.symbol!;
             if (isMemory(g)) { builder.add("    lar_memory_finalize(&${g.cName});\n"); }
         }

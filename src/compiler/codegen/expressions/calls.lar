@@ -6,7 +6,7 @@ import semantics.types {
     FunctionInfo, isClass, isEnumT, isOpt, isResource, MethodInfo, Place, PlaceKind, Symbol, syncField, T_FLOAT32,
     T_STRING, T_VOID, TypeKind, Type, VariantInfo
 };
-import codegen.gen { counter, writing, internalError, line, tmp };
+import codegen.gen { generation, internalError, line, tmp };
 import codegen.gen.classes { dispatchName, ifaceCallName, methodName, returnsData };
 import codegen.gen.statements { propagate, tempMem };
 import codegen.gen.types { externCType };
@@ -120,9 +120,9 @@ public function call(c: Call in default): String {
     let result: String = "";
     if (ret == T_VOID) { line("${callExpr};"); } else { result = hoist(cType(ret), callExpr); }
     line("if (err.kind != 0) {");
-    writing.indent += 1;
+    generation.writing.indent += 1;
     propagate();
-    writing.indent -= 1;
+    generation.writing.indent -= 1;
     line("}");
     return result;
 }
@@ -342,7 +342,7 @@ function anyRemoveIf(call: Call in default): String {
     line("int32_t ${removed} = 0;");
     let callText: String = "call_Closure_${functionType.funcId}(${fnv}, ";
     line("{");
-    writing.indent += 1;
+    generation.writing.indent += 1;
     line("int32_t ${w} = 0;");
     if (!isNamed) {
         lines("""
@@ -363,7 +363,7 @@ function anyRemoveIf(call: Call in default): String {
         ${table}->count = ${w};
         lar_table_rehash(${table});
         """);
-    writing.indent -= 1;
+    generation.writing.indent -= 1;
     line("}");
     return removed;
 }

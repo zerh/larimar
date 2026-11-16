@@ -5,7 +5,7 @@ import semantics.types {
     bits, isClass, isEnumT, isFloat, isInteger, isInterface, isOpt, isPtr, isSigned, MethodInfo, optIsPointer,
     structOf, Symbol, T_ANY, T_STRING, TypeKind, Type
 };
-import codegen.gen { writing, indent4, line, resizeHelpers, resizeSeen, tmp };
+import codegen.gen { generation, indent4, line, tmp };
 import codegen.gen.classes { dispatchName, methodName, returnsData };
 import codegen.expressions {
     addrOf, anyKind, anyPayload, boxType, callMem, cType, expr, hoist, hoistIfNeeded, intLiteral, lazy, lazyPre,
@@ -47,7 +47,7 @@ public function binary(b: Binary in default, type: Type): String {
         let tv: String = tmp("condition");
         line("bool ${tv} = ${l};");
         line(op == "&&" ? "if (${tv}) {" : "if (!${tv}) {");
-        writing.out.add(indent4(pre));
+        generation.writing.out.add(indent4(pre));
         line("    ${tv} = ${r};");
         line("}");
         return tv;
@@ -114,10 +114,10 @@ public function ternary(te: Ternary in default, type: Type): String {
     let res: String = tmp("value");
     line("${cType(type)} ${res};");
     line("if (${strip(c)}) {");
-    writing.out.add(indent4(preA));
+    generation.writing.out.add(indent4(preA));
     line("    ${res} = ${a};");
     line("} else {");
-    writing.out.add(indent4(preB));
+    generation.writing.out.add(indent4(preB));
     line("    ${res} = ${b};");
     line("}");
     return res;
@@ -132,7 +132,7 @@ function coalesce(binary: Binary in default, type: Type): String {
         let r: String = lazy(binary.right);
         let pre: String = lazyPre;
         line("if (${res} == NULL) {");
-        writing.out.add(indent4(pre));
+        generation.writing.out.add(indent4(pre));
         line("    ${res} = ${r};");
         line("}");
     } else {
@@ -142,7 +142,7 @@ function coalesce(binary: Binary in default, type: Type): String {
         let pre: String = lazyPre;
         line("if (${ov}.has) ${res} = ${ov}.value;");
         line("else {");
-        writing.out.add(indent4(pre));
+        generation.writing.out.add(indent4(pre));
         line("    ${res} = ${r};");
         line("}");
     }
@@ -188,9 +188,9 @@ function anyAs(v: String, type: Type in default, objectType: Type): String {
     let o: String = cType(objectType);
     if (isClass(type)) {
         let h: String = "static inline ${o} ${name}(LarAny a) { return lar_any_is_obj(a, &lar_class_${type.name}) ? (${o})a.as.box.ptr : NULL; }\n";
-        if (!resizeSeen.contains(h)) {
-            resizeSeen[h] = true;
-            resizeHelpers.push(h.clone());
+        if (!generation.resizeSeen.contains(h)) {
+            generation.resizeSeen[h] = true;
+            generation.resizeHelpers.push(h.clone());
         }
         return "${name}(${v})";
     }
@@ -209,9 +209,9 @@ function anyAs(v: String, type: Type in default, objectType: Type): String {
     }
     h.add("    return r;\n}\n");
     let hs: String = h.toString();
-    if (!resizeSeen.contains(hs)) {
-        resizeSeen[hs] = true;
-        resizeHelpers.push(hs.clone());
+    if (!generation.resizeSeen.contains(hs)) {
+        generation.resizeSeen[hs] = true;
+        generation.resizeHelpers.push(hs.clone());
     }
     return "${name}(${v})";
 }

@@ -7,16 +7,14 @@ import syntax.ast {
     Node, Param, PL_MEMORY, Placed, Program, Stmt, StringLit, StructDecl, TypeRefKind, TypeRef
 };
 import semantics.types {
-    ArrayKind, cCode, cCodeStd, classes, classIndex, ClassInfo, classOf, ConstantKind, enumIndex, EnumInfo,
-    enumOf, enums, escapeName, externInfoOf, externInfos, externTypeIndex, ExternTypeInfo, externTypes, FieldInfo,
-    findMethod, functionTypeOf, functionIndex, FunctionInfo, functionOf, functions, includes, includeGives, includeWhens, interfaceIndex,
-    InterfaceInfo, interfaceMethod, interfaceOf, interfaces, isArray, isClass, isCValue, isEnumT,
-    isError, isExternTypeName, isFloat, isInteger, isOpt, isPrimName, isResource,
-    maxText, MethodInfo, minOf, named, NamedKind, nativeMethods, newOwner, optionalOf, platformCondition, primByName,
-    structIndex, StructInfo, structMethod, structOf, structs, Symbol, SymbolKind, T_ANY, T_BOOL, T_BYTE, T_ERROR,
-    T_STRING, T_VOID, TypeKind, Type, usesThreads, VariantInfo, variantOf
+    ArrayKind, ClassInfo, classOf, ConstantKind, declared, EnumInfo, enumOf, escapeName, externInfoOf,
+    ExternTypeInfo, FieldInfo, findMethod, FunctionInfo, functionOf, functionTypeOf, InterfaceInfo,
+    interfaceMethod, interfaceOf, isArray, isClass, isCValue, isEnumT, isError, isExternTypeName, isFloat,
+    isInteger, isOpt, isPrimName, isResource, maxText, MethodInfo, minOf, named, NamedKind, newOwner,
+    optionalOf, platformCondition, primByName, StructInfo, structMethod, structOf, Symbol, SymbolKind,
+    T_ANY, T_BOOL, T_BYTE, T_ERROR, T_STRING, T_VOID, Type, TypeKind, VariantInfo, variantOf
 };
-import semantics.linker { inTarget, target };
+import semantics.linker { inTarget, linking };
 import semantics.expressions { resolveTop, resolveType, resolveValue, TC_OTHER, TC_PARAM };
 import semantics.expressions.constants { ConstVal, evalConst, intFits };
 import semantics.analyzer { declare, error };
@@ -115,14 +113,14 @@ function assignPlatforms(program: Program in default): void {
             default -> "";
         };
         let system: String = owner != "" ? platformOfClass(owner, d.line) : "";
-        if (target != "" && !inTarget(system)) { continue; }           // another platform's C: not generated
-        let written: String = target != "" ? "" : system;              // the target's C: no #if around it
+        if (linking.target != "" && !inTarget(system)) { continue; }           // another platform's C: not generated
+        let written: String = linking.target != "" ? "" : system;              // the target's C: no #if around it
         switch (d) {
             case CIncludeDecl c when owner != "" -> { c.platform = written; }
             case CCodeDecl c when owner != "" -> { c.platform = written; }
             case ExternFunctionDecl f when owner != "" -> { f.platform = written; }
-            case ExternFunctionDecl f when target != "" && f.name.endsWith("__platformNumber") && f.name.startsWith("std__") -> {
-                f.cBody = "return ${platformNumber(target)};" in default;          // what Platform.current() reads
+            case ExternFunctionDecl f when linking.target != "" && f.name.endsWith("__platformNumber") && f.name.startsWith("std__") -> {
+                f.cBody = "return ${platformNumber(linking.target)};" in default;          // what Platform.current() reads
             }
             case ClassDecl c -> onlyOn(c, platformOfClass(c.name, c.line));
             case FunctionDecl f when f.cBodied && f.typeName != "" && classDecl(f.typeName) != null -> {
@@ -154,12 +152,12 @@ function onlyOn(c: ClassDecl in default, system: String in default): void {
 
 /** A method or static function with a C body, of a class (`owner`) for one platform: its C only there. */
 function onlyOnFunction(m: FunctionDecl in default, owner: String, system: String in default): void {
-    if (system == "" || target != "" && inTarget(system)) { return; }
+    if (system == "" || linking.target != "" && inTarget(system)) { return; }
     let line: int32 = m.line;
     let panic: Call = Call { line, callee: Ident { line, name: "panic" } in default } in default;
     panic.args.push(StringLit { line, texts: ["'${owner.replace("__", ".")}.${m.name}' is for ${system}, not for this system" in default] } in default);
     let stop: Stmt = ExprStmt { line, expr: panic } in default;
-    if (target != "") {
+    if (linking.target != "") {
         m.body = [stop] in default;
         return;
     }
@@ -200,19 +198,19 @@ public function collect(program: Program in default): void {
     for (d in program.decls) {
         switch (d) {
             case CIncludeDecl c -> {
-                includes.push(c.header);
-                includeWhens.push(c.platform);
-                includeGives.push(c.gives);
+                declared.includes.push(c.header);
+                declared.includeWhens.push(c.platform);
+                declared.includeGives.push(c.gives);
             }
             case CCodeDecl c -> {
-                cCode.push(c.platform == "" ? c.code : "#if ${platformCondition(c.platform)}\n${c.code}\n#endif" in default);
-                cCodeStd.push(c.fromStd);
+                declared.cCode.push(c.platform == "" ? c.code : "#if ${platformCondition(c.platform)}\n${c.code}\n#endif" in default);
+                declared.cCodeStd.push(c.fromStd);
             }
             case ExternTypeDecl t -> {
                 if (!typeNameTaken(t.name, t.line)) {
-                    externTypes.push(t.name);
-                    externInfos.push(ExternTypeInfo { name: t.name, decl: t } in default);
-                    externTypeIndex[t.name] = externTypes.length - 1;
+                    declared.externTypes.push(t.name);
+                    declared.externInfos.push(ExternTypeInfo { name: t.name, decl: t } in default);
+                    declared.externTypeIndex[t.name] = declared.externTypes.length - 1;
                 }
             }
             case NativeTypeDecl n -> {
@@ -224,14 +222,14 @@ public function collect(program: Program in default): void {
                 }
                 for (m in n.methods) {
                     let mi: MethodInfo = MethodInfo { name: m.name, owner: n.name, decl: m, isOperator: m.isOperator, introducer: n.name, own: newOwner() } in default;
-                    nativeMethods.push(mi);
+                    declared.nativeMethods.push(mi);
                     m.method = mi;
                 }
             }
             case StructDecl s -> {
                 if (!typeNameTaken(s.name, s.line)) {
-                    structs.push(StructInfo { name: s.name, line: s.line, decl: s } in default);
-                    structIndex[s.name] = structs.length - 1;
+                    declared.structs.push(StructInfo { name: s.name, line: s.line, decl: s } in default);
+                    declared.structIndex[s.name] = declared.structs.length - 1;
                 }
             }
             case ClassDecl c -> {
@@ -240,28 +238,28 @@ public function collect(program: Program in default): void {
                     classInfo.sync = c.isSynchronized;
                     classInfo.thread = c.builtin && c.name == "Thread";
                     classInfo.builder = false;
-                    if (classInfo.sync || classInfo.thread) { usesThreads = true; }
-                    classes.push(classInfo);
-                    classIndex[c.name] = classes.length - 1;
+                    if (classInfo.sync || classInfo.thread) { declared.usesThreads = true; }
+                    declared.classes.push(classInfo);
+                    declared.classIndex[c.name] = declared.classes.length - 1;
                 }
             }
             case InterfaceDecl i -> {
                 if (!typeNameTaken(i.name, i.line)) {
-                    interfaces.push(InterfaceInfo { name: i.name, line: i.line } in default);
-                    interfaceIndex[i.name] = interfaces.length - 1;
+                    declared.interfaces.push(InterfaceInfo { name: i.name, line: i.line } in default);
+                    declared.interfaceIndex[i.name] = declared.interfaces.length - 1;
                 }
             }
             case EnumDecl e -> {
                 if (!typeNameTaken(e.name, e.line)) {
-                    enums.push(EnumInfo { name: e.name, line: e.line, errorId: enums.length + 1 } in default);
-                    enumIndex[e.name] = enums.length - 1;
+                    declared.enums.push(EnumInfo { name: e.name, line: e.line, errorId: declared.enums.length + 1 } in default);
+                    declared.enumIndex[e.name] = declared.enums.length - 1;
                 }
             }
             case FunctionDecl f -> {
                 if (f.typeName == "" && !functionNameTaken(f.name, f.line)) {
                     let c: String = (f.name == "main" ? "user_main" : escapeName(f.name)) in default;
-                    functions.push(FunctionInfo { name: f.name, params: f.params, isExtern: false, decl: f, line: f.line, cName: c, owner: newOwner() } in default);
-                    functionIndex[f.name] = functions.length - 1;
+                    declared.functions.push(FunctionInfo { name: f.name, params: f.params, isExtern: false, decl: f, line: f.line, cName: c, owner: newOwner() } in default);
+                    declared.functionIndex[f.name] = declared.functions.length - 1;
                 }
             }
             case ExternFunctionDecl f -> {
@@ -270,8 +268,8 @@ public function collect(program: Program in default): void {
                         name: f.name, params: f.params, isExtern: true, varargs: f.varargs, ext: f, line: f.line, cName: f.cName, owner: newOwner()
                     } in default;
                     fi.prototype = f.prototype;
-                    functions.push(fi);
-                    functionIndex[f.name] = functions.length - 1;
+                    declared.functions.push(fi);
+                    declared.functionIndex[f.name] = declared.functions.length - 1;
                 }
             }
             default -> {}
@@ -306,8 +304,8 @@ function collectStatic(f: FunctionDecl in default): void {
     if (f.isOverride) { error(f.line, "Static functions cannot override ('${full}')."); }
     if (functionNameTaken(full, f.line)) { return; }
     let c: String = "${escapeName(t)}_${escapeName(f.name)}" in default;
-    functions.push(FunctionInfo { name: full, params: f.params, isExtern: false, decl: f, line: f.line, cName: c, owner: newOwner() } in default);
-    functionIndex[full] = functions.length - 1;
+    declared.functions.push(FunctionInfo { name: full, params: f.params, isExtern: false, decl: f, line: f.line, cName: c, owner: newOwner() } in default);
+    declared.functionIndex[full] = declared.functions.length - 1;
 }
 
 /** An instance method `name` of the type `t` (to reject a static function with the same name). */
@@ -315,7 +313,7 @@ function instanceMethodNamed(t: String in default, name: String): bool {
     let structInfo: StructInfo? = structOf(t);
     if (structInfo != null) { return structMethod(structInfo, name, false, 0) != null; }
     if (classOf(t) != null) { return findMethod(t, name, false, 0) != null; }
-    for (m in nativeMethods) {
+    for (m in declared.nativeMethods) {
         if (m.owner == t && m.name == name && !m.isOperator) { return true; }
     }
     return false;
@@ -488,13 +486,13 @@ public function signatures(program: Program in default): void {
             default -> {}
         }
     }
-    for (f in functions) {
+    for (f in declared.functions) {
         let sd: FunctionDecl? = f.decl;
         if (sd != null && sd.typeName != "" && instanceMethodNamed(sd.typeName, sd.name)) {
             error(f.line, "'${sd.typeName}' already has a method '${sd.name}'; a static function needs another name.");
         }
     }
-    for (f in functions) {
+    for (f in declared.functions) {
         let e: ExternFunctionDecl? = f.ext;
         if (e != null) {
             let paramTypes: Type[*] = [] in default;
@@ -535,10 +533,10 @@ public function signatures(program: Program in default): void {
     for (d in program.decls) {
         if (d is ExternValueDecl v) { externValue(v); }
     }
-    for (e in externInfos) {
+    for (e in declared.externInfos) {
         externResource(e);
     }
-    for (f in functions) {
+    for (f in declared.functions) {
         if (f.isExtern && f.sig != null) {
             externResourceRules(f);
             textReleaser(f);

@@ -4,16 +4,16 @@ import syntax.ast {
     ArrayLit, BoolLit, Expr, FloatLit, Ident, IntLit, Member, NullLit, ObjectLit, Param, StringLit, Unary
 };
 import semantics.types {
-    ArrayKind, buildingLibrary, classes, ClassInfo, classOf, enumOf, FieldInfo, findField, findMethod, FunctionInfo,
-    functionOf, functions, InterfaceInfo, interfaceMethod, interfaceOf, interfaces, isArray, isError, MethodInfo, P_TEMP, parentOf,
-    structs, Symbol, SymbolKind, T_INT32, T_STRING, T_VOID, Type
+    ArrayKind, ClassInfo, classOf, declared, enumOf, FieldInfo, findField, findMethod, FunctionInfo,
+    functionOf, InterfaceInfo, interfaceMethod, interfaceOf, isArray, isError, MethodInfo, P_TEMP,
+    parentOf, Symbol, SymbolKind, T_INT32, T_STRING, T_VOID, Type
 };
 import semantics.expressions.conversions { coerce };
 import semantics.analyzer { declare, error, lookup };
 
 public function validateClasses(): void {
     let inCycle: Any = {} in default;
-    for (start in classes) {
+    for (start in declared.classes) {
         let path: String[*] = [] in default;
         let cur: String = start.name;
         while (cur != "" && classOf(cur) != null) {
@@ -49,7 +49,7 @@ public function validateClasses(): void {
             cur = classOf(cur)!.superName;
         }
     }
-    for (c in classes) {
+    for (c in declared.classes) {
         if (inCycle[c.name] != null) {
             c.valid = false;
         } else if (c.superName != "" && classOf(c.superName) == null) {
@@ -59,7 +59,7 @@ public function validateClasses(): void {
         }
     }
     let done: Any = {} in default;
-    for (c in classes) { processClass(c, done); }
+    for (c in declared.classes) { processClass(c, done); }
 }
 
 function processClass(classInfo: ClassInfo in default, done: Any): void {
@@ -162,7 +162,7 @@ function checkSameSig(classInfo: ClassInfo, method: MethodInfo, parentMethod: Me
 }
 
 public function validateInterfaces(): void {
-    for (c in classes) {
+    for (c in declared.classes) {
         let seen: Any = {} in default;
         for (iname in c.interfaces) {
             if (seen.contains(iname)) {
@@ -191,10 +191,10 @@ public function validateInterfaces(): void {
 
 public function checkFieldDefaults(): void {
     let all: FieldInfo[*] = [] in default;
-    for (s in structs) {
+    for (s in declared.structs) {
         for (f in s.fields) { all.push(f); }
     }
-    for (c in classes) {
+    for (c in declared.classes) {
         for (f in c.fields) { all.push(f); }
     }
     for (f in all) {
@@ -238,7 +238,7 @@ function isConstantExpr(e: Expr): bool {
 public function checkMain(): void {
     let m: FunctionInfo? = functionOf("main");
     if (m == null || m.sig == null) { return; }
-    if (buildingLibrary && !m.isExtern) {
+    if (declared.buildingLibrary && !m.isExtern) {
         error(m.line, "A library has no main: the programs that use it call its functions. Remove main, or build a program ([project] kind = \"program\").");
         return;
     }

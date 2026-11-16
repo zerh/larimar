@@ -14,20 +14,21 @@
 //   Prune       only what main reaches, after the runtime it needs (codegen.prune)
 //
 // larimar check and the editor run the passes up to Analyze (analysisPasses); a build runs them all.
-// The state of the linker, the analyzer and the generator still lives in their modules; it moves into
-// Compilation one part at a time.
+// The state of each stage is one object the Compilation holds (Linking, Declarations, Analysis,
+// Generation); each module reaches the one in use through a variable (linking, declared, analysis,
+// generation), and install(unit) makes a compilation's the ones in use.
 
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 import syntax.ast { Program };
-import semantics.linker {
-    assemble, flushRuleErrors, link, linkedModules, linkErrors, readSource, showFrom, libraryNames, libraryRoots, libraryUnsafe, projectUnsafe
-};
+import semantics.linker { assemble, flushRuleErrors, link, linkedModules, linking, Linking, readSource, useLinking };
 import semantics.rules { languageRules };
-import semantics.analyzer { analysisErrors, analyze };
-import codegen.gen { emitC, generatorErrors, nameC, pruneC };
+import semantics.types { declared, Declarations, useDeclarations };
+import semantics.analyzer { analysis, Analysis, analyze, useAnalysis };
+import codegen.cprogram { CProgram };
+import codegen.gen { emitC, generation, Generation, nameC, pruneC, useGeneration };
 import project.libraries { larimarLibraries };
 
 /** One compilation: what goes in, and what each pass leaves. */
@@ -39,6 +40,11 @@ public class Compilation {
     let std: String;
     /** Where `import a.b` looks for a/b.lar ("": next to the main file). */
     let sourceRoot: String = "";
+    /** The state of each stage: what it was told (target, libraries...) and what it found. */
+    let linking: Linking;
+    let declared: Declarations;
+    let analysis: Analysis;
+    let generation: Generation;
     /** Assemble put the program together (assembledProgram()). */
     let assembled: bool = false;
     /** The C, once Prune cut it. */
@@ -72,6 +78,25 @@ let program: Program = Program { line: 1 } in default;
 
 public function assembledProgram(): Program { return program; }
 
+/** A compilation of a main file with the state the compiler has now (and the settings given to it). */
+public function compilationWith(main: String, shownFrom: String, std: String, sourceRoot: String): Compilation {
+    return Compilation {
+        main: main.clone(), shownFrom: shownFrom.clone(), std: std.clone(), sourceRoot: sourceRoot.clone(),
+        linking, declared, analysis, generation
+    } in default;
+}
+
+/**
+ * Makes the state of a compilation the one the stages work on (useLinking, useAnalysis...): for a second
+ * compilation in the same process, with states of its own. compilationWith takes the ones in use.
+ */
+public function install(unit: Compilation in default): void {
+    useLinking(unit.linking);
+    useDeclarations(unit.declared);
+    useAnalysis(unit.analysis);
+    useGeneration(unit.generation);
+}
+
 /** Runs the passes in order, until one leaves problems. true: none did. */
 public function run(unit: Compilation, passes: Pass[*]): bool {
     for (p in passes) {
@@ -95,69 +120,68 @@ class LinkPass implements Pass {
             unit.unread = "Cannot read ${mainName}: no such file".clone();
             return;
         }
-        showFrom = Paths.absolute(unit.shownFrom).clone() in default;
+        linking.showFrom = Paths.absolute(unit.shownFrom).clone() in default;
         let mainPath: String = Paths.normalize(Paths.absolute(unit.main));
         let root: String = unit.sourceRoot != "" ? unit.sourceRoot : Paths.parent(Paths.absolute(unit.main));
         findLibraryRoots(mainPath);
-        let start: int32 = linkErrors.length;
+        let start: int32 = unit.linking.linkErrors.length;
         link(mainName.clone() in default, source!, root.clone() in default, unit.std.clone() in default, mainPath.clone() in default);
-        gather(unit, linkErrors, start);
+        gather(unit, unit.linking.linkErrors, start);
     }
 }
 
 class CheckRulesPass implements Pass {
     override function name(): String { return "CheckRules"; }
     override function run(unit: Compilation): void {
-        let start: int32 = linkErrors.length;
+        let start: int32 = unit.linking.linkErrors.length;
         for (module in linkedModules()) {
             for (rule in languageRules()) { rule.check(module); }
         }
         flushRuleErrors();
-        gather(unit, linkErrors, start);
+        gather(unit, unit.linking.linkErrors, start);
     }
 }
 
 class AssemblePass implements Pass {
     override function name(): String { return "Assemble"; }
     override function run(unit: Compilation): void {
-        let start: int32 = linkErrors.length;
+        let start: int32 = unit.linking.linkErrors.length;
         program = assemble();
         unit.assembled = true;
-        gather(unit, linkErrors, start);
+        gather(unit, unit.linking.linkErrors, start);
     }
 }
 
 class AnalyzePass implements Pass {
     override function name(): String { return "Analyze"; }
     override function run(unit: Compilation): void {
-        let start: int32 = analysisErrors.length;
+        let start: int32 = unit.analysis.analysisErrors.length;
         analyze(program);
-        gather(unit, analysisErrors, start);
+        gather(unit, unit.analysis.analysisErrors, start);
     }
 }
 
-/** The C of the passes between EmitC and Prune. */
-let emitted: String = "";
+/** The C between EmitC and Prune: text, and each function whole (codegen.cprogram). */
+let emitted: CProgram = {} in default;
 
 class EmitCPass implements Pass {
     override function name(): String { return "EmitC"; }
     override function run(unit: Compilation): void {
-        let start: int32 = generatorErrors.length;
-        emitted = emitC().clone() in default;
-        gather(unit, generatorErrors, start);
+        let start: int32 = unit.generation.generatorErrors.length;
+        emitted = emitC() in default;
+        gather(unit, unit.generation.generatorErrors, start);
     }
 }
 
 class NameCPass implements Pass {
     override function name(): String { return "NameC"; }
-    override function run(unit: Compilation): void { emitted = nameC(emitted).clone() in default; }
+    override function run(unit: Compilation): void { nameC(emitted); }
 }
 
 class PrunePass implements Pass {
     override function name(): String { return "Prune"; }
     override function run(unit: Compilation): void {
         unit.c = pruneC(emitted).clone();
-        emitted = "";
     }
 }
 
@@ -166,10 +190,10 @@ class PrunePass implements Pass {
  * finds textkit.lar in the folder of its modules. A problem with them is larimar build's to say.
  */
 function findLibraryRoots(main: String): void {
-    libraryNames.clear();
-    libraryRoots.clear();
-    libraryUnsafe.clear();
-    projectUnsafe = false;
+    linking.libraryNames.clear();
+    linking.libraryRoots.clear();
+    linking.libraryUnsafe.clear();
+    linking.projectUnsafe = false;
     let dir: String = Paths.parent(main);
     while (dir != "") {
         let toml: String = Paths.join(dir, "larimar.toml");
@@ -178,12 +202,12 @@ function findLibraryRoots(main: String): void {
             if (source == null) { return; }
             try {
                 let config: Any = Toml.parse(source!);
-                projectUnsafe = config.project.unsafe_c as bool ?? false;
+                linking.projectUnsafe = config.project.unsafe_c as bool ?? false;
                 let ignored: String[*] = [];
                 for (l in larimarLibraries(dir, config, ignored)) {
-                    libraryNames.push(l.name.clone() in default);
-                    libraryRoots.push(l.dir.clone() in default);
-                    libraryUnsafe.push(l.unsafeC);
+                    linking.libraryNames.push(l.name.clone() in default);
+                    linking.libraryRoots.push(l.dir.clone() in default);
+                    linking.libraryUnsafe.push(l.unsafeC);
                 }
             } catch (TomlError e) {}
             return;

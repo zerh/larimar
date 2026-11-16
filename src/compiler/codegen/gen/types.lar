@@ -1,10 +1,10 @@
 // codegen.gen.types: the C of the types of a program.
 
 import semantics.types {
-    ArrayKind, ClassInfo, classOf, EnumInfo, enumOf, escapeName, externInfoOf, ExternTypeInfo, hasBigCaptures,
-    FieldInfo, FunctionInfo, functions, globals, isClass, isExternT, isMemParam, isOpt, isResource, LambdaInfo,
-    lambdaList, MethodInfo, NamedKind, optIsPointer, optionalOf, StructInfo, structOf, Symbol, syncField, T_ANY, T_STRING,
-    T_VOID, TypeKind, Type
+    ArrayKind, ClassInfo, classOf, declared, EnumInfo, enumOf, escapeName, externInfoOf, ExternTypeInfo,
+    FieldInfo, FunctionInfo, hasBigCaptures, isClass, isExternT, isMemParam, isOpt, isResource, LambdaInfo,
+    MethodInfo, NamedKind, optionalOf, optIsPointer, StructInfo, structOf, Symbol, syncField, T_ANY,
+    T_STRING, T_VOID, Type, TypeKind
 };
 import std.text { isDigit, isIdentifierPart };
 import codegen.expressions { cType, structName, typeCName };
@@ -76,7 +76,7 @@ public function larPrototypes(code: String, out: StringBuilder): void {
         let close: int32? = at != null ? code.indexOf("\"", at! + 4) : null;
         if (at == null || close == null) { return; }
         let name: String = code.substring(at! + 4, close!);
-        for (f in functions) {
+        for (f in declared.functions) {
             if (f.name == name && !f.isExtern && f.sig != null && plainSig(f.sig!)) { out.add("${functionHeader(f)};\n"); }
         }
         i = close! + 1;
@@ -94,12 +94,12 @@ function plainSig(signature: Type): bool {
 }
 
 function cNameOf(name: String): String {
-    for (f in functions) {
+    for (f in declared.functions) {
         if (f.name == name) { return f.cName; }
     }
     if (structOf(name) != null || classOf(name) != null || enumOf(name) != null) { return typeCName(name); }
     if (externInfoOf(name) != null) { return "LarNative_${name}"; }
-    for (g in globals) {
+    for (g in declared.globals) {
         if (g.name == name && g.symbol != null) { return g.symbol!.cName; }
     }
     return name;
@@ -191,7 +191,7 @@ public function define(out: StringBuilder, t: Type): void {
     if (t.kind == TypeKind.Func) {
         let id: int32 = t.funcId;
         let withEnv: LambdaInfo[*] = [] in default;
-        for (l in lambdaList) {
+        for (l in declared.lambdaList) {
             if (l.type == t && l.captures.length > 0) { withEnv.push(l); }
         }
         for (l in withEnv) {

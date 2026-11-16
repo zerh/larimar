@@ -5,10 +5,7 @@ import semantics.types {
     ArrayKind, ClassInfo, hasBigCaptures, classOf, Conversion, FieldInfo, hasCapture, InterfaceInfo, interfaceOf, LambdaInfo, NamedKind,
     parentOf, StructInfo, structOf, Symbol, SymbolKind, syncField, T_ANY, T_VOID, Type, VariantInfo
 };
-import codegen.gen {
-    Block, counter, writing, lambdaDefs, lambdaDone, line, literalPrototypes, literalTables, literalThunks, literalTypes,
-    loopBlock, samInterfaces, samSeen, tmp
-};
+import codegen.gen { Block, generation, line, tmp };
 import codegen.gen.classes { lambdaHeader, paramCTypes };
 import codegen.gen.statements { body };
 import codegen.gen.types { envField };
@@ -34,16 +31,16 @@ public function lambdaValue(l: Lambda in default): String {
 }
 
 function captureValue(symbol: Symbol): String {
-    let lambdaInfo: LambdaInfo? = writing.lambda;
+    let lambdaInfo: LambdaInfo? = generation.writing.lambda;
     if (lambdaInfo != null && hasCapture(lambdaInfo, symbol)) { return "env->${envField(symbol)}"; }
     return symbol.kind == SymbolKind.Self ? "self" : symbol.cName;
 }
 
 function genLambda(lambdaInfo: LambdaInfo in default): void {
-    if (lambdaDone[lambdaInfo.id]) { return; }
-    lambdaDone[lambdaInfo.id] = true;
-    let savedLoop: Block? = loopBlock;
-    loopBlock = null;
+    if (generation.lambdaDone[lambdaInfo.id]) { return; }
+    generation.lambdaDone[lambdaInfo.id] = true;
+    let savedLoop: Block? = generation.loopBlock;
+    generation.loopBlock = null;
     let builder: StringBuilder = {} in default;
     builder.add(lambdaHeader(lambdaInfo));
     builder.add(" {\n");
@@ -56,16 +53,16 @@ function genLambda(lambdaInfo: LambdaInfo in default): void {
     }
     builder.add(body(lambdaInfo.node.body, lambdaInfo.type.elem!, false, lambdaInfo, lambdaInfo.params, "", lambdaInfo.node.line));
     builder.add("}\n\n");
-    loopBlock = savedLoop;
-    lambdaDefs[lambdaInfo.id] = builder.toString();
+    generation.loopBlock = savedLoop;
+    generation.lambdaDefs[lambdaInfo.id] = builder.toString();
 }
 
 /** A lambda used as a single-method interface: a small object holding the closure. */
 public function singleMethodObject(lambda: Lambda in default, conversion: Conversion in default): String {
     let interfaceInfo: InterfaceInfo = conversion.iface!;
-    if (!samSeen.contains(interfaceInfo.name)) {
-        samSeen[interfaceInfo.name] = true;
-        samInterfaces.push(interfaceInfo.name);
+    if (!generation.samSeen.contains(interfaceInfo.name)) {
+        generation.samSeen[interfaceInfo.name] = true;
+        generation.samInterfaces.push(interfaceInfo.name);
     }
     let closure: String = lambdaValue(lambda);
     let mem: String = placeMem(lambda);
@@ -144,10 +141,10 @@ function fieldInits(fields: FieldInfo[*] in default, literal: ObjectLit in defau
         } else if (f.defaultValue == null) {
             continue;                        // a field of a C struct that was not given: zero
         } else {
-            let saved: String = writing.placeOverride;
-            if (mem != "") { writing.placeOverride = mem; }
+            let saved: String = generation.writing.placeOverride;
+            if (mem != "") { generation.writing.placeOverride = mem; }
             v = value(f.defaultValue!);
-            writing.placeOverride = saved;
+            generation.writing.placeOverride = saved;
         }
         out.push(".${fieldC(f)} = ${v}");
     }
@@ -166,12 +163,12 @@ function classInit(level: ClassInfo in default, concrete: String, literal: Objec
 }
 
 function interfaceLit(literal: ObjectLit in default, interfaceInfo: InterfaceInfo in default): String {
-    let id: int32 = counter;
-    counter += 1;
+    let id: int32 = generation.counter;
+    generation.counter += 1;
     let sn: String = "ILit_${id}";
-    literalTypes.add("typedef struct ${sn} {");
-    for (m in interfaceInfo.methods) { literalTypes.add(" ${cType(m.sig!)} ${m.name};"); }
-    literalTypes.add(" } ${sn};\n");
+    generation.literalTypes.add("typedef struct ${sn} {");
+    for (m in interfaceInfo.methods) { generation.literalTypes.add(" ${cType(m.sig!)} ${m.name};"); }
+    generation.literalTypes.add(" } ${sn};\n");
     for (m in interfaceInfo.methods) {
         let parameterText: StringBuilder = {} in default;
         let asb: StringBuilder = {} in default;
@@ -180,13 +177,13 @@ function interfaceLit(literal: ObjectLit in default, interfaceInfo: InterfaceInf
             asb.add(", a${k}");
         }
         let head: String = "static ${cType(m.sig!.elem!)} ${sn}__${m.name}(void* self${parameterText.toString()})";
-        literalPrototypes.add("${head};\n");
+        generation.literalPrototypes.add("${head};\n");
         let ret: String = m.sig!.elem! == T_VOID ? "" : "return ";
-        literalThunks.add("${head} { ${ret}call_Closure_${m.sig!.funcId}(((${sn}*)self)->${m.name}${asb.toString()}); }\n");
+        generation.literalThunks.add("${head} { ${ret}call_Closure_${m.sig!.funcId}(((${sn}*)self)->${m.name}${asb.toString()}); }\n");
     }
-    literalTables.add("const ${interfaceInfo.name}_Table ${sn}_table = { NULL");
-    for (m in interfaceInfo.methods) { literalTables.add(", ${sn}__${m.name}"); }
-    literalTables.add(" };\n");
+    generation.literalTables.add("const ${interfaceInfo.name}_Table ${sn}_table = { NULL");
+    for (m in interfaceInfo.methods) { generation.literalTables.add(", ${sn}__${m.name}"); }
+    generation.literalTables.add(" };\n");
     let mem: String = placeMem(literal);
     let obj: String = tmp("interface_object");
     line("${sn}* ${obj} = (${sn}*)lar_memory_alloc(${mem}, sizeof(${sn}), LINE(${literal.line}));");

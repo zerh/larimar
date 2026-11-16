@@ -18,16 +18,16 @@ import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
 import std.io.console as Console;
-import semantics.linker { linkErrors, decode, readSource, testsKept, target, unsafeC, unsafeNotes, unsafeSources };
-import semantics.analyzer { analysisErrors };
+import semantics.linker { decode, linking, readSource };
+import semantics.analyzer { analysis };
 import editor.session { analyzeFile, compilationOf, readErrors, stdDir, checkCommand, sourceRoot };
 import pipeline { Compilation, compilerPasses, run };
 import editor.opendocuments { setOpenDocument };
 import project.testing { TestSettings, TestFunction, runTests, testFunctions, hasMain, withMain };
 import editor.lsp { serve, worker };
 import editor.dap { serveDebugger };
-import codegen.gen { debugLines, spreadLines };
-import semantics.types { buildingLibrary };
+import codegen.gen { generation, spreadLines };
+import semantics.types { declared };
 import project.libraries { LarimarLibrary, larimarLibraries };
 import codegen.debugmap { debugMap };
 import project.cc { CCompiler, chooseCompiler, commandLine, installHint, quote, selfPath, systemLibraries, windows };
@@ -35,7 +35,7 @@ import std.encoding.toml as Toml;
 import std.encoding.toml { TomlError };
 import std.os.process { Process, ProcessError };
 
-const VERSION: String = "1.11.0";
+const VERSION: String = "1.12.0";
 
 /** The version of the language this compiler implements (docs/spec.md). */
 const LANGUAGE: String = "1.4";
@@ -97,21 +97,21 @@ function command(args: String[]): int32 {
         switch (a) {
             case "--" -> { dashed = true; }
             case "--debug" -> { debugBuild = true; }
-            case "--unsafe-c" -> { unsafeC = true; }
+            case "--unsafe-c" -> { linking.unsafeC = true; }
             case "--cc" when next != null -> {
                 compilerOverride = next!.clone() in default;
                 i += 1;
             }
             case "--target" when next != null -> {
                 if (!isPlatform(next!)) { return fail("--target ${next!}: the platforms are linux, macos, windows and unix"); }
-                target = next!.clone() in default;
+                linking.target = next!.clone() in default;
                 i += 1;
             }
             default -> rest.push(a);
         }
     }
     let cmd: String = args[0];
-    if (cmd == "check" || cmd == "lsp" || cmd == "lsp-worker") { testsKept = "all"; }     // test functions are checked too
+    if (cmd == "check" || cmd == "lsp" || cmd == "lsp-worker") { linking.testsKept = "all"; }     // test functions are checked too
     return switch (cmd) {
         case "new" -> newProject(rest);
         case "build", "run" -> buildProject(cmd == "run", rest, programArgs);
@@ -162,7 +162,7 @@ function test(rest: String[*]): int32 {
 function file(main: String, rest: String[*], programArgs: String[*]): int32 {
     if (rest.contains("-o")) {
         if (rest.length != 2 || rest[0] != "-o") { return fail("usage: larimar <file.lar> -o <out.c> [--debug] [--target <platform>]"); }
-        debugLines = debugBuild;
+        generation.debugLines = debugBuild;
         return writeC(main, rest[1]);
     }
     let scriptArgs: String[*] = [];
@@ -175,14 +175,14 @@ function file(main: String, rest: String[*], programArgs: String[*]): int32 {
 function writeC(main: String, output: String): int32 {
     let generated: String = compileFile(main, ".");
     if (compileErrors.length > 0) { return 1; }
-    let c: String = debugLines ? spreadLines(generated, Paths.normalize(Paths.absolute(output != "" ? output : "out.c"))) : generated;
+    let c: String = generation.debugLines ? spreadLines(generated, Paths.normalize(Paths.absolute(output != "" ? output : "out.c"))) : generated;
     if (output == "") {
         print(c);
         return 0;
     }
     try {
         Files.writeString(output, c);
-        if (debugLines) { Files.writeString(debugMapPath(output), debugMap()); }
+        if (generation.debugLines) { Files.writeString(debugMapPath(output), debugMap()); }
     } catch (IoError e) {
         return fail("cannot write ${output}");
     }
@@ -358,9 +358,9 @@ function compileFile(main: String, shownFrom: String): String {
     for (e in unit.problems) { compileErrors.push(decode(e).clone() in default); }
     if (!ok) { return ""; }
     let c: String = unit.c;
-    if (unsafeSources.length > 0) {             // said every time: the language's guarantees stop at that C
-        Console.printError("note: unsafe C (native interface) from: ${unsafeSources.join(", ")}");
-        for (n in unsafeNotes) { Console.printError("note: ${n}"); }
+    if (linking.unsafeSources.length > 0) {             // said every time: the language's guarantees stop at that C
+        Console.printError("note: unsafe C (native interface) from: ${linking.unsafeSources.join(", ")}");
+        for (n in linking.unsafeNotes) { Console.printError("note: ${n}"); }
     }
     return c;
 }
@@ -429,7 +429,7 @@ function testMain(rest: String[*]): int32 {
     let tests: TestFunction[*] = testFunctions(source!);
     let full: String = withMain(source!, tests);
     setOpenDocument(Paths.normalize(Paths.absolute(file)), full);
-    testsKept = "main";
+    linking.testsKept = "main";
     if (root != "") { sourceRoot = Paths.normalize(Paths.absolute(root)).clone() in default; }
     let base: String = output.endsWith(".c") ? output.substring(0, output.length - 2) : output;
     let names: String[*] = [];
@@ -654,7 +654,7 @@ function build(p: Project, debug: bool): String {
 /** Compiles `main` (and what it imports) to the project's executable. */
 function buildFrom(p: Project, main: String, debug: bool): String {
     let dir: String = p.dir;
-    debugLines = debug;
+    generation.debugLines = debug;
     let generated: String = compileFile(main, dir);
     if (compileErrors.length > 0) { return ""; }
     let cFile: String = resolve(Paths.join(dir, p.buildDir), "${p.name}.c");
@@ -716,11 +716,11 @@ function checkLibrary(p: Project): bool {
         toolError = "the main file ${p.main} does not exist (set it with main = \"...\" in [project])" in default;
         return false;
     }
-    buildingLibrary = true;
+    declared.buildingLibrary = true;
     let ok: bool = analyzeFile(main, p.dir);
     for (e in readErrors) { compileErrors.push(e); }
-    for (e in linkErrors) { compileErrors.push(decode(e)); }
-    for (e in analysisErrors) { compileErrors.push(decode(e)); }
+    for (e in linking.linkErrors) { compileErrors.push(decode(e)); }
+    for (e in analysis.analysisErrors) { compileErrors.push(decode(e)); }
     if (!ok || compileErrors.length > 0) { return false; }
     Console.printError("checked ${p.name}: a library is used from the [dependencies] of a program (its tests: larimar test)");
     return true;

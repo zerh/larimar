@@ -2,18 +2,18 @@
 
 import syntax.ast { Call, Expr, Lambda, ObjectLit, Placed };
 import semantics.types {
-    ArrayKind, classes, ClassInfo, classOf, enumOf, enums, functions, implementor, interfaces, isClass, isError,
-    isMemory, isMemParam, isSubclass, LambdaInfo, MethodInfo, NamedKind, Owner, structOf, structs, Symbol, SymbolKind, T_ANY,
-    T_VOID, TypeKind, Type
+    ArrayKind, ClassInfo, classOf, declared, enumOf, implementor, isClass, isError, isMemory, isMemParam,
+    isSubclass, LambdaInfo, MethodInfo, NamedKind, Owner, structOf, Symbol, SymbolKind, T_ANY, T_VOID,
+    Type, TypeKind
 };
 import semantics.expressions.conversions { typeOf };
 import semantics.expressions.literals { refText };
-import semantics.analyzer { declare, error, frames, frameTop, state, ThreadRun, threadRuns };
+import semantics.analyzer { analysis, declare, error, state, ThreadRun };
 
 public function currentOwner(): Owner? {
-    let i: int32 = frameTop - 1;
+    let i: int32 = analysis.frameTop - 1;
     while (i >= 0) {
-        let o: Owner? = frames[i].owner;
+        let o: Owner? = analysis.frames[i].owner;
         if (o != null) { return o; }
         i -= 1;
     }
@@ -36,7 +36,7 @@ public function useGlobal(symbol: Symbol in default, line: int32): void {
 public function callTargets(receiver: Type, method: MethodInfo in default): MethodInfo[*] {
     let out: MethodInfo[*] = [method] in default;
     if (receiver.namedKind == NamedKind.Struct) { return out; }
-    for (c in classes) {
+    for (c in declared.classes) {
         let related: bool = receiver.namedKind == NamedKind.Class ? isSubclass(c.name, receiver.name) : implementor(c.name, receiver.name) != "";
         if (!related) { continue; }
         for (cm in c.methods) {
@@ -76,7 +76,7 @@ function sendableIn(t: Type in default, visiting: Any): bool {
         return true;
     }
     if (t.namedKind == NamedKind.Interface) {             // shared like its classes: every one that implements it
-        for (c in classes) {
+        for (c in declared.classes) {
             if (!implementsInterface(c, t.name)) { continue; }
             if (!(c.sync || stateFields(c.name) == "")) { return false; }
         }
@@ -102,7 +102,7 @@ function implementsInterface(classInfo: ClassInfo in default, i: String): bool {
  * keeps state of its own.
  */
 public function stateFields(name: String in default): String {
-    for (c in classes) {
+    for (c in declared.classes) {
         if (!isSubclass(c.name, name)) { continue; }
         if (c.thread || c.builder) { return "the state of ${c.thread ? "a Thread" : "a StringBuilder"}"; }
         if (c.fields.length > 0) {
@@ -122,7 +122,7 @@ function changeable(type: Type in default): String {
 }
 
 public function checkSynchronizedClasses(): void {
-    for (c in classes) {
+    for (c in declared.classes) {
         let parent: ClassInfo? = c.superName != "" ? classOf(c.superName) : null;
         // synchronized from synchronized: every method, the parent's too, takes the same lock
         if (c.sync && parent != null && !parent.sync) {
@@ -151,7 +151,7 @@ public function checkSynchronizedClasses(): void {
 
 /** A lambda given where a `thread safe` function is expected: checked like the run of a Thread. */
 public function checkThreadSafeLambda(lambdaInfo: LambdaInfo in default, line: int32): void {
-    threadRuns.push(ThreadRun { lambda: lambdaInfo, line, safe: true } in default);
+    analysis.threadRuns.push(ThreadRun { lambda: lambdaInfo, line, safe: true } in default);
 }
 
 /** Thread { run: ... }: a lambda written here, or a synchronized object. */
@@ -160,7 +160,7 @@ public function checkThreadRun(literal: ObjectLit in default): void {
         if (fi.name != "run") { continue; }
         let v: Expr = fi.value is Placed p ? p.expr : fi.value;
         if (v is Lambda l && l.lambda != null) {
-            threadRuns.push(ThreadRun { lambda: l.lambda!, line: literal.line } in default);
+            analysis.threadRuns.push(ThreadRun { lambda: l.lambda!, line: literal.line } in default);
             return;
         }
         let type: Type = typeOf(v);
@@ -174,7 +174,7 @@ public function checkThreadRun(literal: ObjectLit in default): void {
 public let markRound: int32 = 0;
 
 public function checkThreads(): void {
-    for (tr in threadRuns) {
+    for (tr in analysis.threadRuns) {
         let ref: Call? = tr.lambda.node.ref;
         // a reference: '::bump' / 'b::get' is given where a 'thread safe' function is expected, but it ...
         let given: String = ref != null ? "'${refText(ref!)}' is given where a 'thread safe' function is expected, but it" : "";

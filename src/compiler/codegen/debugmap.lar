@@ -10,11 +10,10 @@
 import std.encoding.json as Json;
 import syntax.ast { Stmt, Expr, VarDecl, ForStmt, TryStmt, SwitchStmt, IsExpr, SwitchExpr, allStmts, allExprs };
 import semantics.types {
-    ArrayKind, classes, ClassInfo, classOf, EnumInfo, enumOf, enums, escapeName, FieldInfo, functions, globals,
-    LambdaInfo, lambdaList, MethodInfo, NamedKind, nativeMethods, optIsPointer, StructInfo, structOf, structs, Symbol,
-    T_ANY, T_STRING, Type
+    ArrayKind, ClassInfo, classOf, declared, EnumInfo, enumOf, escapeName, FieldInfo, LambdaInfo,
+    MethodInfo, NamedKind, optIsPointer, StructInfo, structOf, Symbol, T_ANY, T_STRING, Type
 };
-import semantics.linker { filePaths, FILE_LINES, decode };
+import semantics.linker { decode, FILE_LINES, linking };
 import codegen.gen.classes { methodName };
 import codegen.gen.types { envField };
 
@@ -24,37 +23,37 @@ let typesSeen: Any = {} in default;
 /** The debug map of the program just generated, as JSON. */
 public function debugMap(): String {
     // every type: an Animal variable may hold a Dog, and an Any any struct or enum
-    for (c in classes) { describe(c.name, NamedKind.Class); }
-    for (s in structs) { describe(s.name, NamedKind.Struct); }
-    for (e in enums) { describe(e.name, NamedKind.Enum); }
+    for (c in declared.classes) { describe(c.name, NamedKind.Class); }
+    for (s in declared.structs) { describe(s.name, NamedKind.Struct); }
+    for (e in declared.enums) { describe(e.name, NamedKind.Enum); }
     let fns: String[*] = [];
-    for (f in functions) {
+    for (f in declared.functions) {
         if (f.isExtern || f.decl == null || f.prototype) { continue; }
         let d: String = f.decl!.typeName != "" ? "${decode(f.decl!.typeName)}.${f.decl!.name}" : decode(f.name);
         fns.push(fnJson(f.cName, d, f.line, f.paramSymbols, null, f.decl!.body, null));
     }
-    for (s in structs) {
+    for (s in declared.structs) {
         for (m in s.methods) { fns.push(methodJson(m, true)); }
     }
-    for (c in classes) {
+    for (c in declared.classes) {
         for (m in c.methods) { fns.push(methodJson(m, false)); }
     }
-    for (m in nativeMethods) {
+    for (m in declared.nativeMethods) {
         if (m.decl.hasBody) { fns.push(methodJson(m, false)); }
     }
-    for (l in lambdaList) {
+    for (l in declared.lambdaList) {
         let at: int32 = l.node.line % FILE_LINES;
         fns.push(fnJson("lambda_${l.id}", "lambda (line ${at})", l.node.line, l.params, null, l.node.body, l));
     }
     let gs: String[*] = [];
-    for (g in globals) {
+    for (g in declared.globals) {
         if (g.symbol != null) {
             let s: Symbol = g.symbol!;
             gs.push(varJson(decode(s.name), s.cName, s.type, s.line));
         }
     }
     let files: String[*] = [];
-    for (p in filePaths) { files.push(Json.quote(p)); }
+    for (p in linking.filePaths) { files.push(Json.quote(p)); }
     return "{\"version\":1,\"files\":[${files.join(",")}],\"functions\":{${fns.join(",")}},\"globals\":[${gs.join(",")}],\"types\":{${typesOut.join(",")}}}\n";
 }
 
@@ -78,7 +77,7 @@ function fnJson(cName: String, display: String, line: int32, params: Symbol[*], 
     }
     for (s in localsOf(body)) { vars.push(varJson(s.name, s.cName, s.type, s.line % FILE_LINES)); }
     let file: int32 = line / FILE_LINES;
-    let path: String = file >= 0 && file < filePaths.length ? filePaths[file] : "";
+    let path: String = file >= 0 && file < linking.filePaths.length ? linking.filePaths[file] : "";
     return "${Json.quote(cName)}:{\"name\":${Json.quote(display)},\"file\":${Json.quote(path)},\"line\":${line % FILE_LINES},\"vars\":[${vars.join(",")}]}";
 }
 

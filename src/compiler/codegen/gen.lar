@@ -13,14 +13,13 @@
 //  - memories   -> LarMemory; heap memories are freed on every exit of their block.
 
 import semantics.types {
-    cCode, cCodeStd, classDepth, classes, ClassInfo, enums, externInfos,
-    files, FunctionInfo, functions, funcTypes, globals, includes, includeGives, includeWhens, interfaceOf,
-    interfaces, isMemory, LambdaInfo, lambdaList, MemoryKind, MethodInfo, nativeMethods,
-    platformCondition, structs, Symbol, syncField, T_VOID, TypeKind, Type, typeOrder, usesThreads
+    classDepth, ClassInfo, declared, FunctionInfo, interfaceOf, isMemory, LambdaInfo, MemoryKind,
+    MethodInfo, platformCondition, Symbol, syncField, T_VOID, Type, TypeKind
 };
 import codegen.localnames { localName, nameLocals };
+import codegen.cprogram { CProgram };
 import codegen.prune { NATIVE_HEADERS, braceDelta, prune, selectRuntime };
-import semantics.linker { FILE_LINES, filePaths };
+import semantics.linker { FILE_LINES, linking };
 import codegen.expressions { boxDescriptors, cType, typeCName, value };
 import codegen.expressions.clone { cloneFunctions, requireClone };
 import codegen.gen.classes {
@@ -76,42 +75,53 @@ public class Temp {
 
 public function newFunctionCode(): FunctionCode { return FunctionCode { out: {} in default, ret: T_VOID } in default; }
 
-public let writing: FunctionCode = newFunctionCode();
-public let counter: int32 = 0;
-public let hasErrors: bool = false;
-
-/** Bugs of the compiler found while generating: reported instead of writing C that would crash. */
-public let generatorErrors: String[*] = [] in default;
-
-public function internalError(line: int32, msg: String): void {
-    generatorErrors.push("Internal Error [Line ${line}]: ${msg} This is a bug of the compiler, not of your program: please report it." in default);
+/** The state of the generator: the function being written, the pieces of C made on the way (lambdas, literals, helpers) and its errors. */
+public class Generation {
+    let writing: FunctionCode = newFunctionCode();
+    let counter: int32 = 0;
+    let hasErrors: bool = false;
+    /** Bugs of the compiler found while generating: reported instead of writing C that would crash. */
+    let generatorErrors: String[*] = [];
+    // helpers discovered while generating bodies
+    let samInterfaces: String[*] = [];
+    let samSeen: Any = {};
+    let literalTypes: StringBuilder = {};
+    let literalPrototypes: StringBuilder = {};
+    let literalTables: StringBuilder = {};
+    let literalThunks: StringBuilder = {};
+    let lambdaDefs: String[*] = [];     // by lambda id ("" until generated)
+    let lambdaDone: bool[*] = [];
+    let resizeHelpers: String[*] = [];
+    let resizeSeen: Any = {};
+    let loopBlock: Block? = null;                  // innermost loop body (per function, saved/restored)
+    /** #line before each statement, so a debugger (lldb, gdb) shows and stops on the .lar lines. */
+    let debugLines: bool = false;
+    let hasInit: bool = false;
 }
 
-// helpers discovered while generating bodies
-public let samInterfaces: String[*] = [] in default;
-public let samSeen: Any = {} in default;
-public let literalTypes: StringBuilder = {} in default;
-public let literalPrototypes: StringBuilder = {} in default;
-public let literalTables: StringBuilder = {} in default;
-public let literalThunks: StringBuilder = {} in default;
-public let lambdaDefs: String[*] = [] in default;     // by lambda id ("" until generated)
-public let lambdaDone: bool[*] = [] in default;
-public let resizeHelpers: String[*] = [] in default;
-public let resizeSeen: Any = {} in default;
-public let loopBlock: Block? = null;                  // innermost loop body (per function, saved/restored)
+/** The Generation of the compilation being done (pipeline: Compilation). */
+public let generation: Generation = Generation {} in default;
+
+/** Makes `state` the one the compiler works on. */
+public function useGeneration(state: Generation in default): void { generation = state; }
+
+
+
+public function internalError(line: int32, msg: String): void {
+    generation.generatorErrors.push("Internal Error [Line ${line}]: ${msg} This is a bug of the compiler, not of your program: please report it." in default);
+}
+
 
 // =====================================================================================
 // Debugging (larimar build --debug): the C says which .lar line each part comes from
 // =====================================================================================
 
-/** #line before each statement, so a debugger (lldb, gdb) shows and stops on the .lar lines. */
-public let debugLines: bool = false;
 
 public function lineMark(encoded: int32): String {
     let index: int32 = encoded / FILE_LINES;
     let ln: int32 = encoded % FILE_LINES;
-    if (index < 0 || index >= filePaths.length || ln <= 0) { return ""; }
-    return "#line ${ln} ${cPathLiteral(filePaths[index])}";
+    if (index < 0 || index >= linking.filePaths.length || ln <= 0) { return ""; }
+    return "#line ${ln} ${cPathLiteral(linking.filePaths[index])}";
 }
 
 function cPathLiteral(path: String): String { return "\"${path.replace("\\", "/").replace("\"", "\\\"")}\""; }
@@ -183,11 +193,11 @@ function firstMark(all: String[*], k: int32): String {
 
 public function line(s: String): void {
     let i: int32 = 0;
-    while (i < writing.indent) {
-        writing.out.add("    ");
+    while (i < generation.writing.indent) {
+        generation.writing.out.add("    ");
         i += 1;
     }
-    writing.out.addLine(s);
+    generation.writing.out.addLine(s);
 }
 
 /** A temporary of the function being generated, by what it is: its name comes from codegen.localnames. */
@@ -206,53 +216,67 @@ public function indent4(text: String in default): String {
     return builder.toString();
 }
 
-public function pushBlock(blockCode: Block in default): void { writing.blocks.push(blockCode); }
+public function pushBlock(blockCode: Block in default): void { generation.writing.blocks.push(blockCode); }
 
 public function popBlock(): void {
     let rest: Block[*] = [] in default;
     let i: int32 = 0;
-    while (i < writing.blocks.length - 1) {
-        rest.push(writing.blocks[i]);
+    while (i < generation.writing.blocks.length - 1) {
+        rest.push(generation.writing.blocks[i]);
         i += 1;
     }
-    writing.blocks = rest;
+    generation.writing.blocks = rest;
 }
 
-public function topBlock(): Block { return writing.blocks[writing.blocks.length - 1]; }
-public function rootBlock(): Block { return writing.blocks[0]; }
+public function topBlock(): Block { return generation.writing.blocks[generation.writing.blocks.length - 1]; }
+public function rootBlock(): Block { return generation.writing.blocks[0]; }
 
 // =====================================================================================
 // Output assembly
 // =====================================================================================
 
-public let hasInit: bool = false;
 
 /** The C of the analyzed program: emitC, then nameC, then pruneC (the passes EmitC, NameC and Prune). */
-public function generate(): String { return pruneC(nameC(emitC())); }
+public function generate(): String {
+    let program: CProgram = emitC();
+    nameC(program);
+    return pruneC(program);
+}
 
-/** The names of the compiler's variables left outside functions (codegen.localnames). */
-public function nameC(program: String): String { return nameLocals(program); }
-
-/** EmitC: the whole program, every function and type, before anything is cut. */
-public function emitC(): String {
-    for (e in enums) {
-        if (e.thrown) { hasErrors = true; }
+/**
+ * NameC: the names of the compiler's variables (codegen.localnames). A function's are named when it is
+ * written; here, those left in the text between them.
+ */
+public function nameC(program: CProgram): void {
+    for (p in program.parts) {
+        if (p.cFunction == null) { p.text = nameLocals(p.text).clone() in default; }
     }
-    for (l in lambdaList) {
-        lambdaDefs.push("");
-        lambdaDone.push(false);
+}
+
+/** EmitC: the whole program, every function and type, before anything is cut: text, and each function whole. */
+public function emitC(): CProgram {
+    for (e in declared.enums) {
+        if (e.thrown) { generation.hasErrors = true; }
+    }
+    for (l in declared.lambdaList) {
+        generation.lambdaDefs.push("");
+        generation.lambdaDone.push(false);
     }
     // Bodies first: they discover lambdas, literal objects and helpers.
-    let functionsOut: StringBuilder = {} in default;
-    for (f in functions) {
+    let functionTexts: String[*] = [] in default;
+    let functionNames: String[*] = [] in default;
+    for (f in declared.functions) {
         if (f.isExtern || f.decl!.isNative) { continue; }     // native: every call is written in place
-        functionsOut.add(functionHeader(f));
-        functionsOut.addLine(" {");
-        functionsOut.add(body(f.decl!.body, f.sig!.elem!, f.throwsType != null, null, f.paramSymbols, "", f.line));
-        functionsOut.add("}\n\n");
+        let one: StringBuilder = {} in default;
+        one.add(functionHeader(f));
+        one.addLine(" {");
+        one.add(body(f.decl!.body, f.sig!.elem!, f.throwsType != null, null, f.paramSymbols, "", f.line));
+        one.add("}\n\n");
+        functionTexts.push(one.toString());
+        functionNames.push(f.cName);
     }
     let methods: StringBuilder = {} in default;
-    for (s in structs) {
+    for (s in declared.structs) {
         for (m in s.methods) {
             methods.add(methodHeader(m, true));
             methods.addLine(" {");
@@ -301,7 +325,7 @@ public function emitC(): String {
             methods.add("}\n\n");
         }
     }
-    for (m in nativeMethods) {
+    for (m in declared.nativeMethods) {
         if (!m.decl.hasBody) { continue; }
         methods.add(nativeMethodHeader(m));
         methods.addLine(" {");
@@ -311,7 +335,7 @@ public function emitC(): String {
     }
     let init: String = initGlobals();
     let main: String = mainWrapper();
-    for (c in classes) {
+    for (c in declared.classes) {
         if (!c.sync && !c.thread) {
             for (f in c.fields) { requireClone(f.type); }
         }
@@ -319,12 +343,13 @@ public function emitC(): String {
     let boxes: String = boxDescriptors();     // may need clone functions: before generating them
     let clones: String = cloneFunctions();
 
-    let out: StringBuilder = {} in default;     // the program; the runtime it needs goes before it
+    let out: StringBuilder = {} in default;     // the text being written; it goes into `program` before each function
+    let program: CProgram = {} in default;      // the program; the runtime it needs goes before it
     let incSeen: Any = {} in default;
     let headers: StringBuilder = {} in default;     // of native interfaces: each kept only when what it gives is used
-    for (ii, inc in includes) {
-        let platformName: String = includeWhens[ii];
-        let gives: String = includeGives[ii];
+    for (ii, inc in declared.includes) {
+        let platformName: String = declared.includeWhens[ii];
+        let gives: String = declared.includeGives[ii];
         if (gives != "") {
             let text: String = inc.startsWith("<") || inc.startsWith("\"") ? "#include ${inc}" : "#include \"${inc}\"";
             headers.add(platformName == "" ? text : "#if ${platformCondition(platformName)}\n${text}\n#endif");
@@ -344,22 +369,22 @@ public function emitC(): String {
     }
 
     let named: StringBuilder = {} in default;      // what ccode names with lar"...": prototypes first
-    for (code in cCode) {
+    for (code in declared.cCode) {
         if (code.contains("lar\"")) { larPrototypes(code, named); }
     }
-    for (f in functions) {
+    for (f in declared.functions) {
         if (f.isExtern && f.ext!.cBody.contains("lar\"")) { larPrototypes(f.ext!.cBody, named); }
     }
     sectionOf(out, "Larimar functions named in ccode", named);
-    for (ci, code in cCode) {
-        section(out, cCodeStd[ci] ? "ccode (std)" : "ccode");
+    for (ci, code in declared.cCode) {
+        section(out, declared.cCodeStd[ci] ? "ccode (std)" : "ccode");
         out.add(stripIndent(code.contains("lar\"") ? larInC(code) : code));
         out.add("\n");
     }
 
     let part: StringBuilder = {} in default;
     let anyResource: bool = false;
-    for (e in externInfos) {
+    for (e in declared.externInfos) {
         part.add("typedef ${e.decl.cType != "" ? e.decl.cType : "void*"} LarNative_${e.name};\n");
         if (e.decl.releasedBy != "") {
             if (!anyResource) {
@@ -369,74 +394,74 @@ public function emitC(): String {
             part.add("typedef struct { LarResource h; LarNative_${e.name} value; } LarResource_${e.name};\n");
         }
     }
-    for (t in typeOrder) { forward(part, t); }
+    for (t in declared.typeOrder) { forward(part, t); }
     sectionOf(out, "Forward declarations", part);
     part = {} in default;
-    for (t in typeOrder) { define(part, t); }
+    for (t in declared.typeOrder) { define(part, t); }
     sectionOf(out, "Types", part);
 
-    if (hasErrors) {
+    if (generation.hasErrors) {
         section(out, "Errors");
         out.add("typedef struct LarError {\n    int32_t kind;\n    union {");
-        for (e in enums) {
+        for (e in declared.enums) {
             if (e.thrown) { out.add(" ${typeCName(e.name)} e_${e.name};"); }
         }
         out.add(" char _none; } as;\n} LarError;\n");
     }
 
-    if (classes.length > 0 || interfaces.length > 0) {
+    if (declared.classes.length > 0 || declared.interfaces.length > 0) {
         section(out, "Virtual tables and interface tables");
         for (c in classesByDepth()) { vtableStruct(out, c); }
-        for (i in interfaces) { interfaceTableStruct(out, i); }
+        for (i in declared.interfaces) { interfaceTableStruct(out, i); }
     }
-    if (literalTypes.length > 0 || samInterfaces.length > 0) {
+    if (generation.literalTypes.length > 0 || generation.samInterfaces.length > 0) {
         section(out, "Objects created from literals and lambdas");
-        out.add(literalTypes.toString());
-        for (i in samInterfaces) {
+        out.add(generation.literalTypes.toString());
+        for (i in generation.samInterfaces) {
             let m: MethodInfo = interfaceOf(i)!.methods[0];
             out.add("typedef struct ${i}__Sam { ${cType(m.sig!)} fn; } ${i}__Sam;\n");
         }
     }
 
     section(out, "Prototypes");
-    let declared: Any = {} in default;
-    for (f in functions) {                      // native function f(...): T { C }: its C function, here
-        if (f.isExtern && f.ext!.cBody != "" && !declared.contains(f.cName)) {
-            declared[f.cName] = true;
+    let written: Any = {} in default;
+    for (f in declared.functions) {                      // native function f(...): T { C }: its C function, here
+        if (f.isExtern && f.ext!.cBody != "" && !written.contains(f.cName)) {
+            written[f.cName] = true;
             let platformName: String = f.ext!.platform;
             let body: String = (f.ext!.cBody.contains("lar\"") ? larInC(f.ext!.cBody) : f.ext!.cBody).clone() in default;
             let text: String = "static ${externDefinition(f)} {\n${bodyText(body)}\n}";
             out.add(platformName == "" ? "${text}\n" : "#if ${platformCondition(platformName)}\n${text}\n#endif\n");
         }
     }
-    for (f in functions) {
-        if (f.isExtern && f.prototype && !declared.contains(f.cName) && isCName(f.cName)) {     // "(f)", a cast...: C text, no prototype
-            declared[f.cName] = true;
+    for (f in declared.functions) {
+        if (f.isExtern && f.prototype && !written.contains(f.cName) && isCName(f.cName)) {     // "(f)", a cast...: C text, no prototype
+            written[f.cName] = true;
             let platformName: String = f.ext!.platform;
             out.add(platformName == "" ? "${externPrototype(f)};\n" : "#if ${platformCondition(platformName)}\n${externPrototype(f)};\n#endif\n");
         }
     }
-    for (f in functions) {
+    for (f in declared.functions) {
         if (!f.isExtern && !f.decl!.isNative) { out.add("${functionHeader(f)};\n"); }
     }
-    for (s in structs) {
+    for (s in declared.structs) {
         for (m in s.methods) { out.add("${methodHeader(m, true)};\n"); }
     }
     for (c in classesByDepth()) {
         for (m in c.methods) { out.add("${methodHeader(m, false)};\n"); }
         out.add("static void* ${c.name}__clone(void* self_, LarMemory* mem, LarCloneMap* cm);\n");
     }
-    for (m in nativeMethods) {
+    for (m in declared.nativeMethods) {
         if (m.decl.hasBody) { out.add("${nativeMethodHeader(m)};\n"); }
     }
-    for (l in lambdaList) { out.add("${lambdaHeader(l)};\n"); }
+    for (l in declared.lambdaList) { out.add("${lambdaHeader(l)};\n"); }
     out.add(clonePrototypes());
-    out.add(literalPrototypes.toString());
+    out.add(generation.literalPrototypes.toString());
     if (anyResource) { resources(out); }
 
-    if (enums.length > 0) {
+    if (declared.enums.length > 0) {
         section(out, "Enum names");
-        for (e in enums) {
+        for (e in declared.enums) {
             out.add("const char* const ${e.name}__names[] = { ");
             for (i, v in e.variants) {
                 if (i > 0) { out.add(", "); }
@@ -446,7 +471,7 @@ public function emitC(): String {
         }
     }
 
-    if (classes.length > 0 || interfaces.length > 0) {
+    if (declared.classes.length > 0 || declared.interfaces.length > 0) {
         section(out, "Class information, vtables and dispatch");
         for (c in classesByDepth()) {
             let parent: String = c.superName != "" ? "&lar_class_${c.superName}" : "NULL";
@@ -458,28 +483,28 @@ public function emitC(): String {
                 if (m.introducer == c.name) { dispatchHelper(out, c, m); }
             }
         }
-        for (i in interfaces) {
+        for (i in declared.interfaces) {
             for (m in i.methods) { interfaceCallHelper(out, i, m); }
         }
         interfaceImplementations(out);
-        out.add(literalTables.toString());
-        for (i in samInterfaces) { samTable(out, interfaceOf(i)!); }
+        out.add(generation.literalTables.toString());
+        for (i in generation.samInterfaces) { samTable(out, interfaceOf(i)!); }
     }
 
-    if (funcTypes.length > 0) {
+    if (declared.funcTypes.length > 0) {
         section(out, "Closure calls");
-        for (ft in funcTypes) { closureCallHelper(out, ft); }
+        for (ft in declared.funcTypes) { closureCallHelper(out, ft); }
     }
 
     part = {} in default;
-    for (t in typeOrder) { collectionHelpers(part, t); }
+    for (t in declared.typeOrder) { collectionHelpers(part, t); }
     part.add(boxes);
-    for (r in resizeHelpers) { part.add(r); }
+    for (r in generation.resizeHelpers) { part.add(r); }
     sectionOf(out, "Array and optional helpers", part);
 
-    if (globals.length > 0) {
+    if (declared.globals.length > 0) {
         section(out, "Globals");
-        for (v in globals) {
+        for (v in declared.globals) {
             let s: Symbol = v.symbol!;
             if (s.memKind == MemoryKind.FixedStatic) {
                 let n: int64 = s.type.size;
@@ -495,9 +520,11 @@ public function emitC(): String {
     }
 
     section(out, "Functions");
-    out.add(functionsOut.toString());
+    program.add(out.toString());
+    out.clear();
+    for (i, text in functionTexts) { program.addFunction(functionNames[i], text); }
     let anyBuilder: bool = false;
-    for (c in classes) {
+    for (c in declared.classes) {
         if (c.builder) { anyBuilder = true; }
     }
     if (anyBuilder) {
@@ -510,50 +537,53 @@ public function emitC(): String {
         out.add(methods.toString());
     }
     let anyLambda: bool = false;
-    for (d in lambdaDone) {
+    for (d in generation.lambdaDone) {
         if (d) { anyLambda = true; }
     }
     if (anyLambda) {
         section(out, "Lambdas");
-        for (i, d in lambdaDefs) {
-            if (lambdaDone[i]) { out.add(d); }
+        program.add(out.toString());
+        out.clear();
+        for (i, d in generation.lambdaDefs) {
+            if (generation.lambdaDone[i]) { program.addFunction("lambda_${i}", d); }
         }
     }
-    if (literalThunks.length > 0 || classes.length > 0) {
+    if (generation.literalThunks.length > 0 || declared.classes.length > 0) {
         section(out, "Interface thunks and cloning");
-        out.add(literalThunks.toString());
-        for (i in samInterfaces) { samThunk(out, interfaceOf(i)!); }
+        out.add(generation.literalThunks.toString());
+        for (i in generation.samInterfaces) { samThunk(out, interfaceOf(i)!); }
         for (c in classesByDepth()) { classClone(out, c); }
     }
     out.add(clones);
     section(out, "Entry point");
     out.add(init);
     out.add(main);
-    return out.toString();
+    program.add(out.toString());
+    return program;
 }
 
 /** Prune: only what main and the ccode reach, after the runtime it needs. */
-public function pruneC(emitted: String): String {
+public function pruneC(emitted: CProgram): String {
     let roots: String[*] = ["main"] in default;
     let program: String = prune(emitted, roots);
     let head: StringBuilder = {} in default;
     head.add("/* Generated by the transpiler. Runtime first, then the program. */\n");
-    let ownC: bool = cCode.length > 0 || includes.length > 0;
-    for (f in functions) {
+    let ownC: bool = declared.cCode.length > 0 || declared.includes.length > 0;
+    for (f in declared.functions) {
         if (f.isExtern) { ownC = true; }
     }
-    let runtime: String = selectRuntime(program, usesThreads, files.length > 0, ownC);
+    let runtime: String = selectRuntime(program, declared.usesThreads, declared.files.length > 0, ownC);
     if (runtime.contains("LAR_FILES")) {
         head.add("#define LAR_FILES ");
-        for (i, f in files) {
+        for (i, f in declared.files) {
             if (i > 0) { head.add(", "); }
             head.add("\"${f.replace("\\", "/")}\"");
         }
         head.add("\n");
     }
     // POSIX functions (threads, and those C code calls) are only declared when asked for
-    if (usesThreads || cCode.length > 0 || includes.length > 0) { head.add("#if !defined(_WIN32) && !defined(_XOPEN_SOURCE)\n#define _XOPEN_SOURCE 700\n#endif\n"); }
-    if (usesThreads) { head.add("#define LAR_THREADS\n"); }
+    if (declared.usesThreads || declared.cCode.length > 0 || declared.includes.length > 0) { head.add("#if !defined(_WIN32) && !defined(_XOPEN_SOURCE)\n#define _XOPEN_SOURCE 700\n#endif\n"); }
+    if (declared.usesThreads) { head.add("#define LAR_THREADS\n"); }
     head.add(runtime);
     head.add(program);
     return head.toString();
@@ -572,7 +602,7 @@ function resources(out: StringBuilder): void {
         }
         static inline void lar_resource_release(void* p) { if (p) lar_resource_final(p); }
         """);
-    for (e in externInfos) {
+    for (e in declared.externInfos) {
         if (e.decl.releasedBy == "") { continue; }
         let n: String = e.name;
         let functionInfo: FunctionInfo? = e.releaser;
@@ -659,7 +689,7 @@ function stripIndent(code: String in default): String {
 
 public function classesByDepth(): ClassInfo[*] {
     let list: ClassInfo[*] = [] in default;
-    for (c in classes) {
+    for (c in declared.classes) {
         let d: int32 = classDepth(c.name);
         let i: int32 = list.length;
         list.push(c);

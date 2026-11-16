@@ -2,13 +2,13 @@
 
 import syntax.ast { ArrayLit, Call, Cast, Expr, ExprStmt, Ident, Lambda, Member, NullLit, ObjectLit, Param };
 import semantics.types {
-    allFields, arrayTypeOf, hasBigCaptures, ArrayKind, ClassInfo, classOf, EnumInfo, enumOf, externInfoOf, FieldInfo, FrameKind,
-    InterfaceInfo, interfaceMethod, interfaceOf, isClass, isEnumT, isError, isExternT, isNumeric, isOpt, isPtr,
-    isResource, isStruct, LambdaInfo, lambdaList, meet, MethodInfo, named, NamedKind, newOwner, optionalOf, P_TEMP, Place,
-    PlaceKind, R_STATIC, Region, Scope, StructInfo, structOf, Symbol, T_ANY, T_BOOL, T_ERROR, T_STRING, T_VOID, TypeKind,
-    Type, VariantInfo, variantOf
+    allFields, ArrayKind, arrayTypeOf, ClassInfo, classOf, declared, EnumInfo, enumOf, externInfoOf,
+    FieldInfo, FrameKind, hasBigCaptures, InterfaceInfo, interfaceMethod, interfaceOf, isClass, isEnumT,
+    isError, isExternT, isNumeric, isOpt, isPtr, isResource, isStruct, LambdaInfo, meet, MethodInfo, named,
+    NamedKind, newOwner, optionalOf, P_TEMP, Place, PlaceKind, R_STATIC, Region, Scope, StructInfo,
+    structOf, Symbol, T_ANY, T_BOOL, T_ERROR, T_STRING, T_VOID, Type, TypeKind, VariantInfo, variantOf
 };
-import semantics.analyzer { error, popFrame, popScope, pushFrame, pushScope, scope, state, wrong };
+import semantics.analyzer { analysis, error, popFrame, popScope, pushFrame, pushScope, state, wrong };
 import semantics.analyzer.flow { lifetime, lifetimeOf, returnedNames };
 import semantics.analyzer.narrowing { narrow, reassignedNames };
 import semantics.analyzer.statements { analyzeStmts, checkReturns, declareParam };
@@ -46,12 +46,12 @@ public function checkLambda(l: Lambda in default, expected: Type? in default, pl
             error(p.line, "Lambda parameter '${p.name}' is declared as ${paramType.text} but the function type expects ${functionType.params[i].text}.");
         }
     }
-    let info: LambdaInfo = LambdaInfo { id: lambdaList.length, type: functionType, node: l, owner: newOwner() } in default;
-    lambdaList.push(info);
+    let info: LambdaInfo = LambdaInfo { id: declared.lambdaList.length, type: functionType, node: l, owner: newOwner() } in default;
+    declared.lambdaList.push(info);
     l.lambda = info;
-    let saved: Scope = scope;
+    let saved: Scope = analysis.scope;
     edge(currentOwner(), info.owner);   // creating a lambda may run it
-    pushFrame(FrameKind.Lambda, functionType.elem, null, info, null, scope, info.owner);
+    pushFrame(FrameKind.Lambda, functionType.elem, null, info, null, analysis.scope, info.owner);
     state().reassigned = reassignedNames(l.body);
     state().returned = returnedNames(l.body);
     for (i, p in l.params) { info.params.push(declareParam(p, functionType.params[i], false)); }
