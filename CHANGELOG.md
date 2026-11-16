@@ -2,6 +2,20 @@
 
 Each version of the compiler (`larimar --version`) and the version of the language it implements.
 
+## 1.12.0 — 2026-11-16 (language 1.4)
+
+- **The state of each stage is one object**, which the `Compilation` holds: `Linking` (what linking was
+  told and what it found: modules, files, libraries, errors), `Declarations` (what the program declares:
+  types, functions, globals, lambdas, what its C needs), `Analysis` (scopes, frames, symbols, what is
+  checked at the end, errors) and `Generation` (the function being written, the pieces made on the way,
+  errors). Their modules reach them through one variable each (`linking`, `declared`, `analysis`,
+  `generation`); `useLinking`... and `pipeline.install` change them, for a compilation with states of its
+  own. A pass reads its errors from the compilation (`unit.analysis.analysisErrors`).
+- **The C as parts** (`codegen.cprogram`): EmitC makes a `CProgram`, text between its functions and each
+  function and lambda whole (`CFunction`, with the names it uses). Prune keeps or drops a function as one
+  piece, and cuts only the text between them; NameC names that text part by part. The bodies are text
+  still; the C of a program is the same.
+
 ## 1.11.0 — 2026-11-16 (language 1.4)
 
 The compiler has no C of its own, names that read, readable C, a pipeline of passes, and everything

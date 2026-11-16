@@ -1,6 +1,6 @@
 # Bibliotecas en Larimar: manual de desarrollo
 
-Versión descrita: Larimar 1.11.0 (lenguaje 1.4). La referencia breve está en el
+Versión descrita: Larimar 1.12.0 (lenguaje 1.4). La referencia breve está en el
 [manual, capítulo 27](manual.es.md#27-bibliotecas-escritas-en-larimar). Cómo está hecho esto dentro del
 compilador, para quien vaya a tocarlo, está aparte: [compiler-libraries.es.md](compiler-libraries.es.md).
 
