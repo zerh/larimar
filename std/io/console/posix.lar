@@ -1,0 +1,21 @@
+// std.io.console.posix: the console on Unix (Linux, macOS, the BSDs).
+
+import std.platform { UnixPlatform };
+
+/** Waiting for the standard input, with poll(). */
+public class PosixConsole implements UnixPlatform {
+    cinclude "<poll.h>";
+    cinclude "<stdio.h>";
+
+    /** The standard input without a buffer of its own: what has not been read is still in the system's pipe. */
+    static native function unbufferInput(): void { setvbuf(stdin, NULL, _IONBF, 0); }
+
+    /** Whether something arrives on the standard input within ms milliseconds (-1: as long as it takes). */
+    static native function waitForInput(ms: int32): bool {
+        struct pollfd p;
+        p.fd = 0;
+        p.events = POLLIN;
+        p.revents = 0;
+        return poll(&p, 1, ms) > 0;
+    }
+}

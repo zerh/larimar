@@ -1032,8 +1032,6 @@ servicio que falla no deja al programa en un estado roto.
 - **Un servicio da valores**: sus objetos no cruzan todavía (un servicio que guarda estado lo guarda dentro,
   y el programa lo nombra con números o textos). Cada llamada pasa por JSON, también sobre memoria
   compartida: para mover muchos datos, `std.os.shared` tiene streams.
-- **El compilador se construye con `--unsafe-c`.** Su propio código tiene C (el servidor de lenguaje y el
-  depurador) que debería pasar a `std`.
 
 ---
 

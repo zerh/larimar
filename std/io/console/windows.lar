@@ -7,8 +7,34 @@ public class WindowsConsole implements WindowsPlatform {
     cinclude "<io.h>";
     cinclude "<fcntl.h>";
 
+    cinclude "<windows.h>";
+    cinclude "<stdio.h>";
+
     native function binaryMode(): void {
         _setmode(_fileno(stdin), _O_BINARY);
         _setmode(_fileno(stdout), _O_BINARY);
+    }
+
+    /** The standard input without a buffer of its own: what has not been read is still in the system's pipe. */
+    static native function unbufferInput(): void { setvbuf(stdin, NULL, _IONBF, 0); }
+
+    /**
+     * Whether something arrives on the standard input within ms milliseconds (-1: as long as it takes). A
+     * pipe (an editor) is looked at with PeekNamedPipe every few ms; a console is waited for.
+     */
+    static native function waitForInput(ms: int32): bool {
+        HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
+        if (GetFileType(in) != FILE_TYPE_PIPE) {
+            return WaitForSingleObject(in, ms < 0 ? INFINITE : (DWORD)ms) == WAIT_OBJECT_0;
+        }
+        DWORD waited = 0;
+        for (;;) {
+            DWORD avail = 0;
+            if (!PeekNamedPipe(in, NULL, 0, NULL, &avail, NULL)) return true;   /* closed: a read sees the end */
+            if (avail > 0) return true;
+            if (ms >= 0 && (int32_t)waited >= ms) return false;
+            Sleep(2);
+            waited += 2;
+        }
     }
 }

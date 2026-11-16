@@ -3599,16 +3599,15 @@ habla por la entrada y la salida estándar. Responde:
 
 Cómo trabaja:
 
-- Guarda en memoria el texto de los archivos abiertos (lo que aún no has guardado incluido), en memoria
-  de C que se libera cuando el texto cambia: el servidor puede estar horas abierto sin crecer.
-- Cada pregunta la responde un proceso nuevo (`fork()`): enlaza y analiza el programa con esos textos,
-  responde y termina. Así ningún análisis deja memoria atrás ni ve el estado del anterior, y si uno
+- Guarda en memoria el texto de los archivos abiertos (lo que aún no has guardado incluido), en una
+  memoria que compacta a medida que cambian: el servidor puede estar horas abierto sin crecer.
+- Cada pregunta la responde un proceso nuevo, `larimarc lsp-worker`: enlaza y analiza el programa con
+  esos textos, responde y termina. Así ningún análisis deja memoria atrás ni ve el estado del anterior, y si uno
   falla solo se pierde esa respuesta. En el compilador mismo (unas 16.000 líneas) cada respuesta tarda
   unos 0,2 s.
 - El programa de un archivo es el `main` del `larimar.toml` que tiene encima; si ese programa no lo
   importa (o no hay `larimar.toml`), el archivo se analiza como programa por sí solo.
-- Donde no hay `fork()` (Windows), o con `LARIMAR_LSP_NO_FORK=1`, cada pregunta va a un
-  `larimarc lsp-worker` a través de dos archivos temporales.
+- Funciona igual en todos los sistemas: el servidor está escrito solo en Larimar, sin C.
 - Los mensajes de diagnóstico del servidor van a la salida de error (el editor los muestra en su
   panel de salida); la salida estándar es solo del protocolo.
 
@@ -4304,7 +4303,7 @@ rechazarse. **Cada fallo que se encuentre entra primero como prueba**, y despué
 Tres archivos de pruebas lanzan otros programas con `std.os.process` y les hablan como lo haría un editor,
 sin Python. `tests/lsp/lsp_test.lar` prueba `larimar check --json` y habla con `larimar lsp` sobre el
 proyecto de `tests/lsp/project`: errores publicados, hover, definición, referencias, símbolos,
-autocompletado y ayuda de firma, con `fork()` y con `LARIMAR_LSP_NO_FORK=1`.
+autocompletado y ayuda de firma.
 `tests/debug/debug_test.lar` compila `tests/debug/values.lar` con `--debug`, para con lldb y con gdb (los
 que haya) en una línea del `.lar` y comprueba cómo se ven los valores; con `lldb-dap`, habla con
 `larimar dap` como un editor (pila, variables, hijos, caminos en evaluate, y un panic de

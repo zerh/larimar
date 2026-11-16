@@ -68,12 +68,12 @@ if [ "$VERIFY" = 1 ]; then
     echo "Step 2: checking that the compiler compiles itself..."
     mkdir -p build
     # stage 1: src/ compiled by the bootstrap compiler (it may be older than src/)
-    ./"$OUTPUT" src/main.lar -o build/stage1.c --unsafe-c
+    ./"$OUTPUT" src/main.lar -o build/stage1.c
     $CC $CFLAGS build/stage1.c -o build/larimarc_stage1
     # stage 2 and 3: src/ compiled by the compiler of src/ itself; they must be identical
-    ./build/larimarc_stage1 src/main.lar -o build/stage2.c --unsafe-c
+    ./build/larimarc_stage1 src/main.lar -o build/stage2.c
     $CC $CFLAGS build/stage2.c -o build/larimarc_stage2
-    ./build/larimarc_stage2 src/main.lar -o build/stage3.c --unsafe-c
+    ./build/larimarc_stage2 src/main.lar -o build/stage3.c
     if cmp -s build/stage2.c build/stage3.c; then
         echo "  OK: the compiler compiles itself (stage 2 and stage 3 are identical)"
     else

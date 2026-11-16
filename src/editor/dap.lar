@@ -19,328 +19,14 @@
 //     a panic happens.
 
 import std.os;
-import std.platform { Platform, UnixPlatform, WindowsPlatform };
+import std.platform { Platform };
+import std.os.process { Process, ProcessError };
 import std.io.path as Paths;
 import std.io.files as Files;
 import std.io { IoError };
 import std.io.console as Console;
 import std.encoding.json as Json;
 import std.encoding.json { JsonError };
-
-/** Dap's C on Unix. */
-class DapUnix implements UnixPlatform {
-    ccode {
-        #include <stdlib.h>
-        #include <string.h>
-        #include <unistd.h>
-        #include <poll.h>
-        #include <signal.h>
-        #include <sys/types.h>
-        #include <sys/wait.h>
-
-        /* two input streams: 0 the editor (stdin), 1 the backend (lldb-dap's stdout) */
-        typedef struct { char* buf; size_t len, cap; bool eof; } LmDapIn;
-        static LmDapIn lm_dap_in[2];
-        static int lm_dap_child_in = -1, lm_dap_child_out = -1;
-        static pid_t lm_dap_pid = -1;
-
-        /* starts the backend with pipes for its input and output; false if it cannot */
-        static bool lm_dap_spawn(const char* path) {
-            int in[2], out[2];
-            if (pipe(in) != 0 || pipe(out) != 0) return false;
-            pid_t p = fork();
-            if (p < 0) return false;
-            if (p == 0) {
-                dup2(in[0], 0);
-                dup2(out[1], 1);
-                close(in[0]); close(in[1]); close(out[0]); close(out[1]);
-                execlp(path, path, (char*)NULL);
-                _exit(127);
-            }
-            close(in[0]); close(out[1]);
-            lm_dap_child_in = in[1]; lm_dap_child_out = out[0]; lm_dap_pid = p;
-            signal(SIGPIPE, SIG_IGN);
-            return true;
-        }
-
-        static void lm_dap_kill(void) {
-            if (lm_dap_pid > 0) { kill(lm_dap_pid, SIGTERM); waitpid(lm_dap_pid, NULL, 0); lm_dap_pid = -1; }
-        }
-
-        static void lm_dap_append(int which, const char* data, size_t n) {
-            LmDapIn* in = &lm_dap_in[which];
-            if (in->len + n + 1 > in->cap) {
-                in->cap = (in->len + n + 1) * 2;
-                in->buf = (char*)realloc(in->buf, in->cap);
-                if (!in->buf) rt_panic("out of memory (larimar dap)", 0);
-            }
-            memcpy(in->buf + in->len, data, n);
-            in->len += n;
-            in->buf[in->len] = 0;
-        }
-
-        /* reads what is ready on either stream, waiting up to ms milliseconds (-1: until something comes) */
-        static void lm_dap_fill(int32_t ms) {
-            char tmp[65536];
-            struct pollfd p[2];
-            p[0].fd = lm_dap_in[0].eof ? -1 : 0;
-            p[1].fd = lm_dap_in[1].eof ? -1 : lm_dap_child_out;
-            p[0].events = p[1].events = POLLIN;
-            p[0].revents = p[1].revents = 0;
-            if (poll(p, 2, ms) <= 0) return;
-            for (int i = 0; i < 2; i++) {
-                if (!(p[i].revents & (POLLIN | POLLHUP | POLLERR))) continue;
-                ssize_t n = read(p[i].fd, tmp, sizeof tmp);
-                if (n > 0) lm_dap_append(i, tmp, (size_t)n); else lm_dap_in[i].eof = true;
-            }
-        }
-
-        static bool lm_dap_eof(int32_t which) { return lm_dap_in[which].eof && lm_dap_in[which].len == 0; }
-
-        /* the body of the next complete message of a stream, or "" (and lm_dap_took() false) */
-        static bool lm_dap_got;
-        static const char* lm_dap_take(RtMem* m, int32_t which) {
-            LmDapIn* in = &lm_dap_in[which];
-            lm_dap_got = false;
-            if (in->len == 0) return "";
-            char* end = strstr(in->buf, "\r\n\r\n");
-            if (!end) return "";
-            long length = -1;
-            for (char* h = in->buf; h < end; ) {
-                char* eol = strstr(h, "\r\n");
-                if (!eol || eol > end) eol = end;
-                if (eol - h > 15 && (strncmp(h, "Content-Length:", 15) == 0 || strncmp(h, "content-length:", 15) == 0)) length = atol(h + 15);
-                h = eol + 2;
-            }
-            size_t head = (size_t)(end - in->buf) + 4;
-            if (length < 0) {                          /* not a message: drop the header */
-                memmove(in->buf, in->buf + head, in->len - head + 1);
-                in->len -= head;
-                return "";
-            }
-            if (in->len < head + (size_t)length) return "";
-            char* body = (char*)rt_mem_alloc(m, (size_t)length + 1, 0);
-            memcpy(body, in->buf + head, (size_t)length);
-            body[length] = 0;
-            memmove(in->buf, in->buf + head + length, in->len - head - (size_t)length + 1);
-            in->len -= head + (size_t)length;
-            lm_dap_got = true;
-            return body;
-        }
-        static bool lm_dap_took(void) { return lm_dap_got; }
-
-        /* writes one message: 0 to the editor, 1 to the backend */
-        static void lm_dap_write(int32_t which, const char* body, int32_t len) {
-            char head[64];
-            int hn = snprintf(head, sizeof head, "Content-Length: %d\r\n\r\n", len);
-            if (which == 0) {
-                fwrite(head, 1, (size_t)hn, stdout);
-                fwrite(body, 1, (size_t)len, stdout);
-                fflush(stdout);
-                return;
-            }
-            size_t done = 0;
-            while (done < (size_t)hn) { ssize_t k = write(lm_dap_child_in, head + done, (size_t)hn - done); if (k <= 0) return; done += (size_t)k; }
-            done = 0;
-            while (done < (size_t)len) { ssize_t k = write(lm_dap_child_in, body + done, (size_t)len - done); if (k <= 0) return; done += (size_t)k; }
-        }
-
-        /* handles the editor gets for variables: what each one shows (freed at every stop) */
-        typedef struct { int32_t kind, frame, ref; char* expr; char* type; } LmDapHandle;
-        static LmDapHandle* lm_dap_h;
-        static int32_t lm_dap_hn, lm_dap_hcap;
-        static char* lm_dap_dup(const char* s) { size_t n = strlen(s); char* p = (char*)malloc(n + 1); if (p) memcpy(p, s, n + 1); return p; }
-        static int32_t lm_dap_handle(int32_t kind, int32_t frame, int32_t ref, const char* expr, const char* type) {
-            if (lm_dap_hn == lm_dap_hcap) {
-                lm_dap_hcap = lm_dap_hcap ? lm_dap_hcap * 2 : 256;
-                lm_dap_h = (LmDapHandle*)realloc(lm_dap_h, sizeof(LmDapHandle) * (size_t)lm_dap_hcap);
-                if (!lm_dap_h) rt_panic("out of memory (larimar dap)", 0);
-            }
-            LmDapHandle* h = &lm_dap_h[lm_dap_hn++];
-            h->kind = kind; h->frame = frame; h->ref = ref; h->expr = lm_dap_dup(expr); h->type = lm_dap_dup(type);
-            return lm_dap_hn;                          /* from 1: 0 means "no children" */
-        }
-        static void lm_dap_clear(void) {
-            for (int32_t i = 0; i < lm_dap_hn; i++) { free(lm_dap_h[i].expr); free(lm_dap_h[i].type); }
-            lm_dap_hn = 0;
-        }
-        static bool lm_dap_valid(int32_t id) { return id >= 1 && id <= lm_dap_hn; }
-        static int32_t lm_dap_h_kind(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].kind : 0; }
-        static int32_t lm_dap_h_frame(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].frame : 0; }
-        static int32_t lm_dap_h_ref(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].ref : 0; }
-        static const char* lm_dap_h_expr(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].expr : ""; }
-        static const char* lm_dap_h_type(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].type : ""; }
-    }
-}
-
-/** Dap's C on Windows. */
-class DapWindows implements WindowsPlatform {
-    ccode {
-        #include <stdlib.h>
-        #include <string.h>
-        #include <windows.h>
-        #include <io.h>
-
-        /* two input streams: 0 the editor (stdin), 1 the backend (lldb-dap's stdout) */
-        typedef struct { char* buf; size_t len, cap; bool eof; } LmDapIn;
-        static LmDapIn lm_dap_in[2];
-        static HANDLE lm_dap_child_in, lm_dap_child_out, lm_dap_proc;
-
-        /* starts the backend with pipes for its input and output; false if it cannot */
-        static bool lm_dap_spawn(const char* path) {
-            SECURITY_ATTRIBUTES sa = { sizeof sa, NULL, TRUE };
-            HANDLE inR, inW, outR, outW;
-            if (!CreatePipe(&inR, &inW, &sa, 0) || !CreatePipe(&outR, &outW, &sa, 0)) return false;
-            SetHandleInformation(inW, HANDLE_FLAG_INHERIT, 0);
-            SetHandleInformation(outR, HANDLE_FLAG_INHERIT, 0);
-            STARTUPINFOA si; PROCESS_INFORMATION pi;
-            memset(&si, 0, sizeof si); memset(&pi, 0, sizeof pi);
-            si.cb = sizeof si;
-            si.dwFlags = STARTF_USESTDHANDLES;
-            si.hStdInput = inR; si.hStdOutput = outW; si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
-            char cmd[4096];
-            snprintf(cmd, sizeof cmd, "\"%s\"", path);
-            if (!CreateProcessA(NULL, cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) return false;
-            CloseHandle(inR); CloseHandle(outW); CloseHandle(pi.hThread);
-            lm_dap_child_in = inW; lm_dap_child_out = outR; lm_dap_proc = pi.hProcess;
-            _setmode(_fileno(stdin), 0x8000); _setmode(_fileno(stdout), 0x8000);   /* _O_BINARY */
-            return true;
-        }
-
-        static void lm_dap_kill(void) {
-            if (lm_dap_proc) TerminateProcess(lm_dap_proc, 0);
-        }
-
-        static void lm_dap_append(int which, const char* data, size_t n) {
-            LmDapIn* in = &lm_dap_in[which];
-            if (in->len + n + 1 > in->cap) {
-                in->cap = (in->len + n + 1) * 2;
-                in->buf = (char*)realloc(in->buf, in->cap);
-                if (!in->buf) rt_panic("out of memory (larimar dap)", 0);
-            }
-            memcpy(in->buf + in->len, data, n);
-            in->len += n;
-            in->buf[in->len] = 0;
-        }
-
-        /* reads what is ready on either stream, waiting up to ms milliseconds (-1: until something comes) */
-        static void lm_dap_fill(int32_t ms) {
-            char tmp[65536];
-            HANDLE hs[2] = { GetStdHandle(STD_INPUT_HANDLE), lm_dap_child_out };
-            DWORD waited = 0;
-            for (;;) {
-                bool got = false;
-                for (int i = 0; i < 2; i++) {
-                    if (lm_dap_in[i].eof) continue;
-                    DWORD avail = 0;
-                    if (!PeekNamedPipe(hs[i], NULL, 0, NULL, &avail, NULL)) { lm_dap_in[i].eof = true; got = true; continue; }
-                    if (avail > 0) {
-                        DWORD n = 0;
-                        if (ReadFile(hs[i], tmp, avail < sizeof tmp ? avail : sizeof tmp, &n, NULL) && n > 0) lm_dap_append(i, tmp, n);
-                        else lm_dap_in[i].eof = true;
-                        got = true;
-                    }
-                }
-                if (got || (ms >= 0 && (int32_t)waited >= ms) || (lm_dap_in[0].eof && lm_dap_in[1].eof)) return;
-                Sleep(2);
-                waited += 2;
-            }
-        }
-
-        static bool lm_dap_eof(int32_t which) { return lm_dap_in[which].eof && lm_dap_in[which].len == 0; }
-
-        /* the body of the next complete message of a stream, or "" (and lm_dap_took() false) */
-        static bool lm_dap_got;
-        static const char* lm_dap_take(RtMem* m, int32_t which) {
-            LmDapIn* in = &lm_dap_in[which];
-            lm_dap_got = false;
-            if (in->len == 0) return "";
-            char* end = strstr(in->buf, "\r\n\r\n");
-            if (!end) return "";
-            long length = -1;
-            for (char* h = in->buf; h < end; ) {
-                char* eol = strstr(h, "\r\n");
-                if (!eol || eol > end) eol = end;
-                if (eol - h > 15 && (strncmp(h, "Content-Length:", 15) == 0 || strncmp(h, "content-length:", 15) == 0)) length = atol(h + 15);
-                h = eol + 2;
-            }
-            size_t head = (size_t)(end - in->buf) + 4;
-            if (length < 0) {                          /* not a message: drop the header */
-                memmove(in->buf, in->buf + head, in->len - head + 1);
-                in->len -= head;
-                return "";
-            }
-            if (in->len < head + (size_t)length) return "";
-            char* body = (char*)rt_mem_alloc(m, (size_t)length + 1, 0);
-            memcpy(body, in->buf + head, (size_t)length);
-            body[length] = 0;
-            memmove(in->buf, in->buf + head + length, in->len - head - (size_t)length + 1);
-            in->len -= head + (size_t)length;
-            lm_dap_got = true;
-            return body;
-        }
-        static bool lm_dap_took(void) { return lm_dap_got; }
-
-        /* writes one message: 0 to the editor, 1 to the backend */
-        static void lm_dap_write(int32_t which, const char* body, int32_t len) {
-            char head[64];
-            int hn = snprintf(head, sizeof head, "Content-Length: %d\r\n\r\n", len);
-            if (which == 0) {
-                fwrite(head, 1, (size_t)hn, stdout);
-                fwrite(body, 1, (size_t)len, stdout);
-                fflush(stdout);
-                return;
-            }
-            DWORD n;
-            WriteFile(lm_dap_child_in, head, (DWORD)hn, &n, NULL);
-            WriteFile(lm_dap_child_in, body, (DWORD)len, &n, NULL);
-        }
-
-        /* handles the editor gets for variables: what each one shows (freed at every stop) */
-        typedef struct { int32_t kind, frame, ref; char* expr; char* type; } LmDapHandle;
-        static LmDapHandle* lm_dap_h;
-        static int32_t lm_dap_hn, lm_dap_hcap;
-        static char* lm_dap_dup(const char* s) { size_t n = strlen(s); char* p = (char*)malloc(n + 1); if (p) memcpy(p, s, n + 1); return p; }
-        static int32_t lm_dap_handle(int32_t kind, int32_t frame, int32_t ref, const char* expr, const char* type) {
-            if (lm_dap_hn == lm_dap_hcap) {
-                lm_dap_hcap = lm_dap_hcap ? lm_dap_hcap * 2 : 256;
-                lm_dap_h = (LmDapHandle*)realloc(lm_dap_h, sizeof(LmDapHandle) * (size_t)lm_dap_hcap);
-                if (!lm_dap_h) rt_panic("out of memory (larimar dap)", 0);
-            }
-            LmDapHandle* h = &lm_dap_h[lm_dap_hn++];
-            h->kind = kind; h->frame = frame; h->ref = ref; h->expr = lm_dap_dup(expr); h->type = lm_dap_dup(type);
-            return lm_dap_hn;                          /* from 1: 0 means "no children" */
-        }
-        static void lm_dap_clear(void) {
-            for (int32_t i = 0; i < lm_dap_hn; i++) { free(lm_dap_h[i].expr); free(lm_dap_h[i].type); }
-            lm_dap_hn = 0;
-        }
-        static bool lm_dap_valid(int32_t id) { return id >= 1 && id <= lm_dap_hn; }
-        static int32_t lm_dap_h_kind(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].kind : 0; }
-        static int32_t lm_dap_h_frame(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].frame : 0; }
-        static int32_t lm_dap_h_ref(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].ref : 0; }
-        static const char* lm_dap_h_expr(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].expr : ""; }
-        static const char* lm_dap_h_type(int32_t id) { return lm_dap_valid(id) ? lm_dap_h[id - 1].type : ""; }
-    }
-}
-
-native function lm_dap_spawn(path: String): bool;
-native function lm_dap_kill(): void;
-native function lm_dap_fill(ms: int32): void;
-native function lm_dap_eof(which: int32): bool;
-native function lm_dap_take(m: byte[*], which: int32): String;
-native function lm_dap_took(): bool;
-native function lm_dap_write(which: int32, body: String, length: int32): void;
-native function lm_dap_handle(kind: int32, frame: int32, ref: int32, expr: String, type: String): int32;
-native function lm_dap_clear(): void;
-native function lm_dap_h_kind(id: int32): int32;
-native function lm_dap_h_frame(id: int32): int32;
-native function lm_dap_h_ref(id: int32): int32;
-native function lm_dap_h_expr(id: int32): String;
-native function lm_dap_h_type(id: int32): String;
-
-const EDITOR: int32 = 0;
-const BACKEND: int32 = 1;
 
 // handle kinds
 const H_LOCALS: int32 = 1;       // the Larimar variables of a frame
@@ -367,6 +53,121 @@ let toEditor: Any = {} in default;           // our seq to the editor -> the bac
 let panicBreakpoint: bool = false;
 let panicId: int32 = 0;                       // lldb's id of the breakpoint on rt_panic
 let backendPath: String = "";
+
+// =====================================================================================
+// The two ends: the editor (stdin, stdout) and the backend (a Process, through its pipes)
+// =====================================================================================
+
+let backend: Process = { program: "" };
+let editorEnded: bool = false;
+let backendEnded: bool = false;
+
+/** The value of a "Content-Length: N" header line, or -1. */
+function contentLength(line: String): int32 {
+    let colon: int32? = line.indexOf(":");
+    if (colon == null || line.substring(0, colon!).trim().toLowerCase() != "content-length") { return -1; }
+    return (line.substring(colon! + 1).trim().toInt() ?? -1) as int32;
+}
+
+/** The body of the editor's next message, waiting up to ms for it (-1: until one comes); null when none came or it ended. */
+function editorMessage(ms: int32): String? {
+    if (editorEnded || !Console.waitForInput(ms)) { return null; }
+    let length: int32 = -1;
+    while (true) {
+        let line: String? = Console.readLine();
+        if (line == null) {
+            editorEnded = true;
+            return null;
+        }
+        let t: String = line!.trim();
+        if (t == "") {
+            if (length >= 0) { break; }
+            continue;
+        }
+        let n: int32 = contentLength(t);
+        if (n >= 0) { length = n; }
+    }
+    let body: String = Console.read(length);
+    if (Console.lastCount() < length) {
+        editorEnded = true;
+        return null;
+    }
+    return body;
+}
+
+/** The body of the backend's next message, waiting up to ms for it to begin; null when none came or it ended. */
+function backendMessage(ms: int32): String? {
+    if (backendEnded) { return null; }
+    let line: String? = backend.readLine(ms);
+    if (line == null) {
+        if (backend.wait(0) != null) { backendEnded = true; }
+        return null;
+    }
+    let length: int32 = -1;
+    while (true) {
+        let t: String = line!.trim();
+        if (t == "") {
+            if (length >= 0) { break; }
+        } else {
+            let n: int32 = contentLength(t);
+            if (n >= 0) { length = n; }
+        }
+        line = backend.readLine(5000);           // the rest of a message comes right after its start
+        if (line == null) {
+            backendEnded = true;
+            return null;
+        }
+    }
+    let body: String? = backend.read(length, 5000);
+    if (body == null) { backendEnded = true; }
+    return body;
+}
+
+/** Writes one message to the backend (nothing when it has ended). */
+function toBackendRaw(body: String): void {
+    try {
+        backend.write("Content-Length: ${body.length}\r\n\r\n${body}");
+    } catch (ProcessError e) {
+        backendEnded = true;
+    }
+}
+
+// =====================================================================================
+// The variables the editor sees: handles (from 1; 0 means "no children"), cleared at every stop
+// =====================================================================================
+
+struct Handle {
+    let kind: int32;
+    let frame: int32;
+    let ref: int32;
+    let expr: String;
+    let type: String;
+}
+
+let handles: Handle[*] = [] in default;
+/** Each text a handle names, kept once: a debugging session of hours names the same few again and again. */
+let texts: Any = {} in default;
+
+function keep(text: String): void {
+    if (texts[text] == null) {
+        let copy: String = text.clone() in default;
+        texts[copy] = copy;
+    }
+}
+
+function newHandle(kind: int32, frame: int32, ref: int32, expr: String, type: String): int32 {
+    keep(expr);
+    keep(type);
+    let e: String = texts[expr] as String ?? "";
+    let t: String = texts[type] as String ?? "";
+    handles.push(Handle { kind, frame, ref, expr: e, type: t });
+    return handles.length;
+}
+
+function handleAt(id: int32): Handle? {
+    if (id < 1 || id > handles.length) { return null; }
+    return handles[id - 1];
+}
 
 function log(text: String): void { Console.printError("[larimar dap] ${text}"); }
 
@@ -406,7 +207,11 @@ function withNumber(json: String, key: String, value: int32): String {
     return "${json.substring(0, open + 1)}${quoted}:${value},${json.substring(open + 1)}";
 }
 
-function toEditorRaw(body: String): void { lm_dap_write(EDITOR, body, body.length); }
+function toEditorRaw(body: String): void {
+    Console.write("Content-Length: ${body.length}\r\n\r\n");
+    Console.write(body);
+    Console.flush();
+}
 
 /** A message to the editor with our sequence number. */
 function emit(body: String): void {
@@ -444,7 +249,7 @@ function sendBackend(command: String, args: String): int32 {
     let s: int32 = nextSeq;
     nextSeq += 1;
     let body: String = "{\"seq\":${s},\"type\":\"request\",\"command\":${Json.quote(command)},\"arguments\":${args}}";
-    lm_dap_write(BACKEND, body, body.length);
+    toBackendRaw(body);
     return s;
 }
 
@@ -455,12 +260,12 @@ function sendBackend(command: String, args: String): int32 {
 function call(command: String, args: String): String {
     let s: int32 = sendBackend(command, args);
     while (true) {
-        let body: String = lm_dap_take(BACKEND);
-        if (!lm_dap_took()) {
-            if (lm_dap_eof(BACKEND)) { return "{\"success\":false}"; }
-            lm_dap_fill(-1);
+        let got: String? = backendMessage(1000);
+        if (got == null) {
+            if (backendEnded) { return "{\"success\":false}"; }
             continue;
         }
+        let body: String = got!;
         let msg: Any = parse(body);
         if ((msg.type as String ?? "") == "response" && (msg.request_seq as int64 ?? -1) == s as int64) {
             return body.clone();
@@ -673,13 +478,13 @@ function show(frame: int32, expr: String, t: Any, preview: bool): Shown? {
                     s.value = "[${n!}] [${parts.join(", ")}${n! > 5 ? ", …" : ""}]" in default;
                 }
                 s.indexed = n! as int32;
-                if (n! > 0) { s.ref = lm_dap_handle(H_VALUE, frame, 0, expr, Json.stringify(t)); }
+                if (n! > 0) { s.ref = newHandle(H_VALUE, frame, 0, expr, Json.stringify(t)); }
             }
         }
         case "struct" -> {
             let entry: Any = typeEntry(t.name as String ?? "");
             s.value = fieldsPreview(frame, entry, "(${expr}).", preview, entry.display as String ?? "").clone() in default;
-            if (!preview) { s.ref = lm_dap_handle(H_VALUE, frame, 0, expr, Json.stringify(t)); }
+            if (!preview) { s.ref = newHandle(H_VALUE, frame, 0, expr, Json.stringify(t)); }
         }
         case "class" -> {
             let a: int64? = evalAddress(frame, expr);
@@ -695,7 +500,7 @@ function show(frame: int32, expr: String, t: Any, preview: bool): Shown? {
             s.value = fieldsPreview(frame, entry, "((${real}*)(${expr}))->", preview, display).clone() in default;
             if (!preview) {
                 let objectType: String = "{\"k\":\"object\",\"name\":${Json.quote(real)}}";
-                s.ref = lm_dap_handle(H_VALUE, frame, 0, "((${real}*)(${expr}))", objectType);
+                s.ref = newHandle(H_VALUE, frame, 0, "((${real}*)(${expr}))", objectType);
             }
         }
         case "interface" -> {
@@ -725,7 +530,7 @@ function show(frame: int32, expr: String, t: Any, preview: bool): Shown? {
                 s.value = "${vname}(${parts.join(", ")})" in default;
                 if (!preview) {
                     let payloadType: String = "{\"k\":\"payload\",\"enum\":${Json.quote(t.name as String ?? "")},\"variant\":${Json.quote(vname)}}";
-                    s.ref = lm_dap_handle(H_VALUE, frame, 0, "(${expr}).as.${vname}", payloadType);
+                    s.ref = newHandle(H_VALUE, frame, 0, "(${expr}).as.${vname}", payloadType);
                 }
             }
         }
@@ -744,7 +549,7 @@ function show(frame: int32, expr: String, t: Any, preview: bool): Shown? {
             let n: int64 = evalInt(frame, "(${expr})->length") ?? 0;
             let c: int64 = evalInt(frame, "(${expr})->count") ?? 0;
             s.value = (c == 0 ? "{ ${n} items }" : n == 0 ? "{ ${c} entries }" : "{ ${n} items, ${c} entries }").clone() in default;
-            if (!preview && n + c > 0) { s.ref = lm_dap_handle(H_VALUE, frame, 0, expr, "{\"k\":\"table\"}"); }
+            if (!preview && n + c > 0) { s.ref = newHandle(H_VALUE, frame, 0, expr, "{\"k\":\"table\"}"); }
         }
         default -> {
             let v: String? = eval(frame, expr);
@@ -816,9 +621,11 @@ function variableJson(name: String, s: Shown, evaluateName: String): String {
 /** The children of a value handle. */
 function children(id: int32, start: int32, count: int32): String[*] {
     let out: String[*] = [];
-    let frame: int32 = lm_dap_h_frame(id);
-    let expr: String = lm_dap_h_expr(id).clone();
-    let t: Any = parse(lm_dap_h_type(id));
+    let h: Handle? = handleAt(id);
+    if (h == null) { return out; }
+    let frame: int32 = h!.frame;
+    let expr: String = h!.expr.clone();
+    let t: Any = parse(h!.type);
     let k: String = t.k as String ?? "";
     switch (k) {
         case "list", "slice", "array" -> {
@@ -1069,7 +876,7 @@ function fromEditor(body: String): bool {
         let ours: int32 = (msg.request_seq as int64 ?? 0) as int32;
         let theirs: int32 = (toEditor["${ours}"] as int64 ?? ours as int64) as int32;
         let fixed: String = withNumber(body, "request_seq", theirs);
-        lm_dap_write(BACKEND, fixed, fixed.length);
+        toBackendRaw(fixed);
         return true;
     }
     let cmd: String = msg.command as String ?? "";
@@ -1105,7 +912,7 @@ function forward(body: String, msg: Any, args: String): void {
     toBackend["${s}"] = msg.seq as int64 ?? 0;
     let text: String = args == "" ? withNumber(body, "seq", s)
         : "{\"seq\":${s},\"type\":\"request\",\"command\":${Json.quote(msg.command as String ?? "")},\"arguments\":${args}}";
-    lm_dap_write(BACKEND, text, text.length);
+    toBackendRaw(text);
 }
 
 function capabilities(r: Any): String {
@@ -1226,14 +1033,14 @@ function scopes(msg: Any): void {
     let fn: String = frameFunction["${frame}"] as String ?? "";
     let list: String[*] = [];
     if (hasFunction(fn)) {
-        list.push("{\"name\":\"Locals\",\"presentationHint\":\"locals\",\"variablesReference\":${lm_dap_handle(H_LOCALS, frame, 0, "", "")},\"expensive\":false}");
+        list.push("{\"name\":\"Locals\",\"presentationHint\":\"locals\",\"variablesReference\":${newHandle(H_LOCALS, frame, 0, "", "")},\"expensive\":false}");
         let gs: Any = tableOf(map.globals);
         if (gs.length > 0) {
-            list.push("{\"name\":\"Globals\",\"variablesReference\":${lm_dap_handle(H_GLOBALS, frame, 0, "", "")},\"expensive\":false}");
+            list.push("{\"name\":\"Globals\",\"variablesReference\":${newHandle(H_GLOBALS, frame, 0, "", "")},\"expensive\":false}");
         }
     }
     // the C view: everything lldb sees (the runtime's frames only have this one)
-    list.push("{\"name\":\"C\",\"variablesReference\":${lm_dap_handle(H_CSCOPE, frame, 0, "", "")},\"expensive\":true}");
+    list.push("{\"name\":\"C\",\"variablesReference\":${newHandle(H_CSCOPE, frame, 0, "", "")},\"expensive\":true}");
     respond(msg, "{\"scopes\":[${list.join(",")}]}");
 }
 
@@ -1241,8 +1048,9 @@ function variables(msg: Any): void {
     let id: int32 = (msg.arguments.variablesReference as int64 ?? 0) as int32;
     let start: int32 = (msg.arguments.start as int64 ?? 0) as int32;
     let count: int32 = (msg.arguments.count as int64 ?? 0) as int32;
-    let kind: int32 = lm_dap_h_kind(id);
-    let frame: int32 = lm_dap_h_frame(id);
+    let h: Handle? = handleAt(id);
+    let kind: int32 = h != null ? h!.kind : 0;
+    let frame: int32 = h != null ? h!.frame : 0;
     let vars: String[*] = [];
     if (kind == H_LOCALS) {
         vars = localVariables(frame);
@@ -1251,7 +1059,7 @@ function variables(msg: Any): void {
     } else if (kind == H_VALUE) {
         vars = children(id, start, count);
     } else if (kind == H_CSCOPE || kind == H_BACKEND) {
-        let ref: int32 = lm_dap_h_ref(id);
+        let ref: int32 = h != null ? h!.ref : 0;
         if (kind == H_CSCOPE) {
             let sc: Any = parse(call("scopes", "{\"frameId\":${frame}}"));
             let list: Any = tableOf(sc.body.scopes);
@@ -1270,7 +1078,7 @@ function backendVariables(frame: int32, ref: int32): String[*] {
     let list: Any = tableOf(r.body.variables);
     for (v in list) {
         let child: int32 = (v.variablesReference as int64 ?? 0) as int32;
-        let mine: int32 = child != 0 ? lm_dap_handle(H_BACKEND, frame, child, "", "") : 0;
+        let mine: int32 = child != 0 ? newHandle(H_BACKEND, frame, child, "", "") : 0;
         out.push("{\"name\":${Json.quote(v.name as String ?? "")},\"value\":${Json.quote(v.value as String ?? "")},\"type\":${Json.quote(v.type as String ?? "")},\"variablesReference\":${mine}}");
     }
     return out;
@@ -1302,7 +1110,7 @@ function evaluate(body: String, msg: Any): void {
         return;
     }
     let child: int32 = (r2.body.variablesReference as int64 ?? 0) as int32;
-    let mine: int32 = child != 0 ? lm_dap_handle(H_BACKEND, frame, child, "", "") : 0;
+    let mine: int32 = child != 0 ? newHandle(H_BACKEND, frame, child, "", "") : 0;
     respond(msg, "{\"result\":${Json.quote(r2.body.result as String ?? "")},\"type\":${Json.quote(r2.body.type as String ?? "")},\"variablesReference\":${mine}}");
 }
 
@@ -1347,7 +1155,7 @@ function fromBackend(body: String, msg: Any): void {
     if (type == "event") {
         let ev: String = msg.event as String ?? "";
         if (ev == "stopped" || ev == "continued") {
-            lm_dap_clear();                  // the handles of the last stop are no longer valid
+            handles.clear();                 // the handles of the last stop are no longer valid
             frameFunction = {} in default;
             frameLine = {} in default;
         }
@@ -1410,21 +1218,27 @@ public function serveDebugger(args: String[*]): int32 {
     }
     backendPath = findBackend(given).clone() in default;
     Console.binaryMode();
-    if (backendPath == "" || !lm_dap_spawn(backendPath)) {
-        // answer the editor's first request with the reason, then end
+    Console.unbufferInput();
+    let started: bool = false;
+    if (backendPath != "") {
+        backend.program = backendPath;
+        try {
+            backend.start();
+            started = true;
+        } catch (ProcessError e) {}
+    }
+    if (!started) {
+        // answer the editor's requests with the reason, then end
         let why: String = backendPath == ""
             ? "lldb-dap was not found. Install LLVM's lldb (macOS: Xcode command line tools, xcode-select --install; Linux: the lldb package; Windows: LLVM), or set larimar.lldbDap / LARIMAR_LLDB_DAP."
             : "lldb-dap (${backendPath}) could not be started.";
         log(why);
-        while (!lm_dap_eof(EDITOR)) {
-            let body: String = lm_dap_take(EDITOR);
-            if (lm_dap_took()) {
-                let msg: Any = parse(body);
-                if ((msg.type as String ?? "") == "request") { respondError(msg, why); }
-                if ((msg.command as String ?? "") == "disconnect") { return 1; }
-                continue;
-            }
-            lm_dap_fill(-1);
+        while (!editorEnded) {
+            let body: String? = editorMessage(-1);
+            if (body == null) { continue; }
+            let msg: Any = parse(body!);
+            if ((msg.type as String ?? "") == "request") { respondError(msg, why); }
+            if ((msg.command as String ?? "") == "disconnect") { return 1; }
         }
         return 1;
     }
@@ -1432,24 +1246,23 @@ public function serveDebugger(args: String[*]): int32 {
     let running: bool = true;
     let idle: int32 = 0;                      // after disconnect: quiet rounds before ending
     while (true) {
-        let fromEd: String = lm_dap_take(EDITOR);
-        if (lm_dap_took()) {
-            if (running && !fromEditor(fromEd)) { running = false; }
+        let fromEd: String? = editorMessage(0);
+        if (fromEd != null) {
+            if (running && !fromEditor(fromEd!)) { running = false; }
             continue;
         }
-        let fromBe: String = lm_dap_take(BACKEND);
-        if (lm_dap_took()) {
+        let fromBe: String? = backendMessage(running ? 10 : 250);
+        if (fromBe != null) {
             idle = 0;
-            fromBackend(fromBe, parse(fromBe));
+            fromBackend(fromBe!, parse(fromBe!));
             continue;
         }
-        if (lm_dap_eof(BACKEND) || lm_dap_eof(EDITOR)) { break; }
+        if (backendEnded || editorEnded) { break; }
         if (!running) {
             idle += 1;
             if (idle > 4) { break; }          // what the backend still had to say has been said
         }
-        lm_dap_fill(running ? -1 : 250);
     }
-    lm_dap_kill();
+    backend.kill();
     return 0;
 }

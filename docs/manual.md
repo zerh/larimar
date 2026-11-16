@@ -3599,16 +3599,15 @@ it through the standard input and output. It answers:
 
 How it works:
 
-- It keeps in memory the text of the open files (including what you have not saved yet), in C memory
-  that is freed when the text changes: the server can stay open for hours without growing.
-- Each question is answered by a new process (`fork()`): it links and analyzes the program with those
-  texts, answers and ends. That way no analysis leaves memory behind or sees the state of the previous
+- It keeps in memory the text of the open files (including what you have not saved yet), in a memory
+  it compacts as they change: the server can stay open for hours without growing.
+- Each question is answered by a new process, `larimarc lsp-worker`: it links and analyzes the program
+  with those texts, answers and ends. That way no analysis leaves memory behind or sees the state of the previous
   one, and if one fails only that answer is lost. On the compiler itself (some 16,000 lines) each answer
   takes about 0.2 s.
 - The program of a file is the `main` of the `larimar.toml` above it; if that program does not import
   it (or there is no `larimar.toml`), the file is analyzed as a program on its own.
-- Where there is no `fork()` (Windows), or with `LARIMAR_LSP_NO_FORK=1`, each question goes to a
-  `larimarc lsp-worker` through two temporary files.
+- It works the same on every system: the server is written in Larimar alone, without C.
 - The server's diagnostic messages go to the error output (the editor shows them in its output panel);
   the standard output is only for the protocol.
 
@@ -4301,7 +4300,7 @@ rejected. **Each failure that is found first goes in as a test**, and then it is
 Three test files start other programs with `std.os.process` and talk to them as an editor would, without
 Python. `tests/lsp/lsp_test.lar` tests `larimar check --json` and talks to `larimar lsp` over the project
 in `tests/lsp/project`: published errors, hover, definition, references, symbols, completion and
-signature help, with `fork()` and with `LARIMAR_LSP_NO_FORK=1`.
+signature help.
 `tests/debug/debug_test.lar` compiles `tests/debug/values.lar` with `--debug`, stops with lldb and with
 gdb (whichever there are) on a line of the `.lar` and checks how the values look; with `lldb-dap`, it
 talks to `larimar dap` like an editor (stack, variables, children, paths in evaluate, and a panic of

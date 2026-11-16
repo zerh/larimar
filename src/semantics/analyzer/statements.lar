@@ -151,7 +151,13 @@ public function livesHint(value: Region, storage: Region): String {
     } else if (storage.kind == RK.Caller && storage.param != null) {
         where = storage.param!.name;
     }
-    return where == "" ? "" : ", or declare the parameter as '${p.name}: ${p.type.text} in ${where}'";
+    if (where == "") { return ""; }
+    if (p.type.text.startsWith("byte[") && storage.kind == RK.Caller && storage.param != null) {
+        // a memory says where nothing lives: the one that stores says it lives in the memory
+        let s: Symbol = storage.param!;
+        return ", or declare the parameter as '${s.name}: ${s.type.text} in ${p.name}'";
+    }
+    return ", or declare the parameter as '${p.name}: ${p.type.text} in ${where}'";
 }
 
 public function checkReturns(body: Stmt[*] in default, ret: Type, line: int32, what: String): void {

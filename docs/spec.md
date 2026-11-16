@@ -1761,7 +1761,7 @@ library or a service, each one is a compile error: a program has no C of its own
   from: NAME*), and names the pointer types of those interfaces that nothing releases (no `released by`).
   What that C does is outside every guarantee of this document.
 
-`larimarc --unsafe-c` lifts the whole rule for the compiler's own sources and tests; a program built
+`larimarc --unsafe-c` lifts the whole rule, for tests that bring C of their own; a program built
 with it has none of the guarantees of this document.
 
 The modules of the standard library whose path has a part `posix`, `windows`, `macos`, `common` or

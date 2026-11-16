@@ -117,9 +117,10 @@ flowchart LR
 
 - La comprobación está en `link`, después de cargar todos los módulos, así que vale igual para un
   programa, una biblioteca, un servicio y el editor.
-- `--unsafe-c` se pasa en `bootstrap/build.sh` y `build.ps1` (el compilador tiene C propio en
-  `editor/lsp.lar`, `editor/dap.lar`, `editor/docstore.lar` y `gen_double_text`), en `tests/run-tests.sh`
-  y en los ayudantes de `tests/support/compiler.lar`. `larimar test --unsafe-c` lo pasa a cada
+- El compilador no tiene C propio: `bootstrap/build.sh` y `build.ps1` lo construyen sin `--unsafe-c`.
+  El servidor de lenguaje y el depurador arrancan sus procesos con `std.os.process` y esperan la
+  entrada con `Console.waitForInput`. `--unsafe-c` queda en `tests/run-tests.sh` y en los ayudantes
+  de `tests/support/compiler.lar`, para los casos de prueba que traen C propio. `larimar test --unsafe-c` lo pasa a cada
   `test-main` (`project/testing.lar`).
 
 ---
@@ -267,7 +268,5 @@ flowchart TB
   El de un servicio se puede leer en `build/<nombre>-service.lar`.
 - **Todo cruza por JSON**, también sobre memoria compartida: es simple y se puede leer, pero cada llamada
   serializa. Para datos grandes están los streams.
-- **El compilador necesita `--unsafe-c`** por su propio C (servidor de lenguaje, depurador, `docstore`,
-  `gen_double_text`). Mientras no pase a `std`, la regla tiene una excepción en casa.
 - **Solo se ha ejecutado en Linux.** Para Windows el C se compila (mingw), y para macOS no se ha compilado
   en este equipo: `waitid` y `shm_open` existen allí, pero nada de esto se ha corrido.

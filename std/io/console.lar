@@ -9,6 +9,7 @@
 import std.io { IoError, raise };
 import std.io { InputStream, OutputStream };
 import std.platform { Platform, OS };
+import std.io.console.posix { PosixConsole };
 import std.io.console.windows { WindowsConsole };
 
 /** What C's stdio.h gives the console. */
@@ -104,6 +105,25 @@ public function binaryMode(): void {
         let console: WindowsConsole = {};
         console.binaryMode();
     }
+}
+
+/**
+ * The standard input without a buffer of this program: call it before reading anything, when the program
+ * waits for input with waitForInput (so that what was read ahead is never hidden from it).
+ */
+public function unbufferInput(): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixConsole.unbufferInput();
+        case Windows -> WindowsConsole.unbufferInput();
+    }
+}
+
+/** Whether something arrives on the standard input within ms milliseconds (-1: as long as it takes). */
+public function waitForInput(ms: int32): bool {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixConsole.waitForInput(ms);
+        case Windows -> WindowsConsole.waitForInput(ms);
+    };
 }
 
 /** Writes a line to the standard error. */

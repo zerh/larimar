@@ -2,6 +2,15 @@
 
 Each version of the compiler (`larimar --version`) and the version of the language it implements.
 
+## 1.11.0 — unreleased
+
+- **The compiler has no C of its own** and builds without `--unsafe-c`. `larimar lsp` keeps the editor's
+  texts in a memory it compacts and answers each question with a `larimarc lsp-worker` started with
+  `Process`, the same on every system (no `fork()`; `LARIMAR_LSP_NO_FORK` is gone). `larimar dap` talks
+  to lldb-dap through a `Process` and keeps its variable handles in Larimar.
+- **`std.io.console`**: `unbufferInput()` and `waitForInput(ms)` (true when there is something to read).
+- The hint of a value that outlives its memory names the right parameter (`docs: Documents in kept`).
+
 ## 1.10.0 — 2026-11-15 (language 1.3)
 
 Processes are used like threads, `native` always means C, and the C of std goes through native

@@ -6,7 +6,7 @@ Cada módulo de `src/`, con su descripción y **todas** sus funciones, clases y 
 
 Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver la guía de mantenimiento. Aquí está el detalle.
 
-**49 módulos, 1082 funciones y métodos** (536 con comentario, 546 sin él).
+**49 módulos, 1057 funciones y métodos** (541 con comentario, 516 sin él).
 
 ## Módulos
 
@@ -38,7 +38,7 @@ Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver
 - [`src/semantics/linker.lar`](#semantics-linker) — 69 funciones
 - [`src/semantics/types.lar`](#semantics-types) — 84 funciones
 - [`src/codegen/debugmap.lar`](#codegen-debugmap) — 10 funciones
-- [`src/codegen/expressions.lar`](#codegen-expressions) — 52 funciones
+- [`src/codegen/expressions.lar`](#codegen-expressions) — 51 funciones
 - [`src/codegen/expressions/calls.lar`](#codegen-expressions-calls) — 17 funciones
 - [`src/codegen/expressions/clone.lar`](#codegen-expressions-clone) — 10 funciones
 - [`src/codegen/expressions/lambdas.lar`](#codegen-expressions-lambdas) — 10 funciones
@@ -54,10 +54,10 @@ Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver
 - [`src/project/libraries.lar`](#project-libraries) — 4 funciones
 - [`src/project/services.lar`](#project-services) — 12 funciones
 - [`src/project/testing.lar`](#project-testing) — 27 funciones
-- [`src/editor/dap.lar`](#editor-dap) — 69 funciones
-- [`src/editor/docstore.lar`](#editor-docstore) — 11 funciones
+- [`src/editor/dap.lar`](#editor-dap) — 62 funciones
+- [`src/editor/docstore.lar`](#editor-docstore) — 2 funciones
 - [`src/editor/ide.lar`](#editor-ide) — 74 funciones
-- [`src/editor/lsp.lar`](#editor-lsp) — 29 funciones
+- [`src/editor/lsp.lar`](#editor-lsp) — 21 funciones
 - [`src/editor/session.lar`](#editor-session) — 8 funciones
 
 ---
@@ -1473,7 +1473,7 @@ Types that t's C definition embeds by value.
 
 ## semantics.analyzer.statements
 
-`src/semantics/analyzer/statements.lar` · 477 líneas · 20 funciones
+`src/semantics/analyzer/statements.lar` · 483 líneas · 20 funciones
 semantics.analyzer.statements: the bodies of functions and methods, statement by statement.
 
 `public function analyzeFunction(f: FunctionInfo in default): void`
@@ -1497,48 +1497,48 @@ When a parameter is stored somewhere longer-lived, the parameter can say so: `k:
 <sub>línea 144</sub>
 
 `public function checkReturns(body: Stmt[*] in default, ret: Type, line: int32, what: String): void`
-<sub>línea 157</sub>
+<sub>línea 163</sub>
 
 `function isPanic(e: Expr): bool`  
 panic(...): the program stops there.  
-<sub>línea 163</sub>
-
-`public function alwaysExits(body: Stmt[*]): bool`
 <sub>línea 169</sub>
 
+`public function alwaysExits(body: Stmt[*]): bool`
+<sub>línea 175</sub>
+
 `function containsBreak(body: Stmt[*]): bool`
-<sub>línea 196</sub>
+<sub>línea 202</sub>
 
 `public function analyzeStmts(body: Stmt[*] in default): void`
-<sub>línea 226</sub>
+<sub>línea 232</sub>
 
 `public function analyzeBlock(body: Stmt[*] in default): void`
-<sub>línea 253</sub>
-
-`function analyzeStmt(s: Stmt in default): void`
 <sub>línea 259</sub>
 
+`function analyzeStmt(s: Stmt in default): void`
+<sub>línea 265</sub>
+
 `public function requireBool(cond: Expr in default, what: String): void`
-<sub>línea 293</sub>
+<sub>línea 299</sub>
 
 `public function analyzeVarDecl(v: VarDecl in default): void`
-<sub>línea 298</sub>
+<sub>línea 304</sub>
 
 `function declareHeapMemory(v: VarDecl in default, p: Placed in default, kind: SymK, global: bool): void`
-<sub>línea 345</sub>
+<sub>línea 351</sub>
 
 `function analyzeAssign(asg: AssignStmt in default): void`
-<sub>línea 370</sub>
+<sub>línea 376</sub>
 
 `public function cStructField(f: FieldInfo): bool`  
 A field of a C struct (extern type X = struct { ... }).  
-<sub>línea 461</sub>
+<sub>línea 467</sub>
 
 `function memberIsAnyKey(m: Member in default): bool`
-<sub>línea 466</sub>
+<sub>línea 472</sub>
 
 `function describeTarget(t: Expr): String`
-<sub>línea 472</sub>
+<sub>línea 478</sub>
 
 ---
 
@@ -2745,187 +2745,183 @@ Adds a named type to "types" (once).
 
 ## codegen.expressions
 
-`src/codegen/expressions.lar` · 694 líneas · 52 funciones
+`src/codegen/expressions.lar` · 683 líneas · 51 funciones
 codegen.expressions: C99 code generation (Gen.java), part 2: expressions.
 An expression becomes a C expression; what needs statements first writes them with line().
 
-`native function gen_double_text(d: float64): String`  
-The shortest decimal text that gives the same double back.  
-<sub>línea 27</sub>
-
 `public function tname(n: String): String`
-<sub>línea 41</sub>
+<sub>línea 30</sub>
 
 `public function mangle(t: Type): String`
-<sub>línea 46</sub>
+<sub>línea 35</sub>
 
 `public function cType(t: Type): String`
-<sub>línea 75</sub>
+<sub>línea 64</sub>
 
 `public function structName(t: Type): String`
-<sub>línea 113</sub>
+<sub>línea 102</sub>
 
 `public function paren(s: String): String`
-<sub>línea 122</sub>
+<sub>línea 111</sub>
 
 `public function hoist(ct: String, v: String): String`
-<sub>línea 124</sub>
+<sub>línea 113</sub>
 
 `function hoistAddr(ct: String, v: String): String`
-<sub>línea 130</sub>
+<sub>línea 119</sub>
 
 `public function hoistIfNeeded(ct: String, v: String, e: Expr?): String`
-<sub>línea 132</sub>
+<sub>línea 121</sub>
 
 `public function inOrder(parts: Expr[*] in default): Expr[*]`  
 Computes, in order, the parts before the last one with effects; returns them, for forget().  
-<sub>línea 144</sub>
+<sub>línea 133</sub>
 
 `public function forget(held: Expr[*]): void`  
 The C of these parts is written: they are computed again where they appear next.  
-<sub>línea 161</sub>
+<sub>línea 150</sub>
 
 `function hasEffects(e: Expr): bool`  
 Whether evaluating it can do something another part could see: a call, an index (a panic)...  
-<sub>línea 166</sub>
+<sub>línea 155</sub>
 
 `function anyEffects(es: Expr[*]): bool`
-<sub>línea 178</sub>
+<sub>línea 167</sub>
 
 `function unchangeable(e: Expr): bool`  
 Whether nothing evaluated after it can change its value: literals, locals, parameters, constants.  
-<sub>línea 186</sub>
+<sub>línea 175</sub>
 
 `function callParts(c: Call in default): Expr[*]`  
 The parts of a call, in the order they are written: the object (not a struct, which is passed by address), then the arguments.  
-<sub>línea 199</sub>
+<sub>línea 188</sub>
 
 `function orderedCall(c: Call in default): String`
-<sub>línea 212</sub>
+<sub>línea 201</sub>
 
 `function orderedIndex(x: Index in default): String`
-<sub>línea 219</sub>
+<sub>línea 208</sub>
 
 `function orderedBinary(b: Binary in default, t: Type): String`
-<sub>línea 226</sub>
+<sub>línea 215</sub>
 
 `public function writtenValues(o: ObjectLit in default): Expr[*]`  
 The values of a literal, in the order they are written.  
-<sub>línea 235</sub>
+<sub>línea 224</sub>
 
 `public function isPure(e: Expr): bool`
-<sub>línea 241</sub>
+<sub>línea 230</sub>
 
 `public function lazy(e: Expr in default): String`  
 Generates `e` (its value) into a separate buffer: its statements go to lazyPre.  
-<sub>línea 253</sub>
+<sub>línea 242</sub>
 
 `public function strip(s: String): String`  
 Removes the outer parentheses of a C expression when they enclose all of it.  
-<sub>línea 264</sub>
+<sub>línea 253</sub>
 
 `public function zero(t: Type): String`
-<sub>línea 290</sub>
+<sub>línea 279</sub>
 
 `public function discard(e: String): void`  
 A call whose result is not used.  
-<sub>línea 301</sub>
+<sub>línea 290</sub>
 
 `function isIdentifier(s: String): bool`
-<sub>línea 307</sub>
+<sub>línea 296</sub>
 
 `public function value(e: Expr in default): String`  
 An expression with its conversion applied: where a value is stored or passed.  
-<sub>línea 319</sub>
+<sub>línea 308</sub>
 
 `function convert(v: String, c: Conversion in default, e: Expr? in default): String`
-<sub>línea 326</sub>
+<sub>línea 315</sub>
 
 `function innerConversion(from: Type in default, to: Type in default, outer: Conversion in default): Conversion?`  
 The inner conversion of WRAP_OPTIONAL (upcast or interface), if any.  
-<sub>línea 371</sub>
+<sub>línea 360</sub>
 
 `public function boxType(t: Type in default): String`  
 The descriptor of a struct or enum stored in an Any (its name and how to clone it).  
-<sub>línea 383</sub>
+<sub>línea 372</sub>
 
 `public function boxDescriptors(): String`
-<sub>línea 391</sub>
+<sub>línea 380</sub>
 
 `public function anyKind(t: Type): String`  
 RT_ANY_I32 and so on: the kind an Any uses for a value of type t.  
-<sub>línea 406</sub>
+<sub>línea 395</sub>
 
 `public function anyPayload(t: Type, v: String): String`  
 The value inside an Any already known to hold kind t.  
-<sub>línea 425</sub>
+<sub>línea 414</sub>
 
 `function toAny(v: String, from: Type in default, e: Expr in default): String`
-<sub>línea 435</sub>
+<sub>línea 424</sub>
 
 `public function expr(e: Expr in default): String`
-<sub>línea 460</sub>
+<sub>línea 449</sub>
 
 `function unwrap(u: Unwrap in default): String`
-<sub>línea 489</sub>
+<sub>línea 478</sub>
 
 `function placed(inner: Expr in default): String`  
 `x in memory`: the value; a lambda that becomes an interface object is created there.  
-<sub>línea 497</sub>
+<sub>línea 486</sub>
 
 `public function intLiteral(v: int64, big: bool, t: Type?): String`  
 An integer literal of type t (value v, as uint64 when big).  
-<sub>línea 503</sub>
+<sub>línea 492</sub>
 
 `function identExpr(id: Ident in default): String`
-<sub>línea 520</sub>
+<sub>línea 509</sub>
 
 `function constValue(s: Symbol): String`
-<sub>línea 533</sub>
+<sub>línea 522</sub>
 
 `function selfExpr(se: Expr in default): String`
-<sub>línea 544</sub>
+<sub>línea 533</sub>
 
 `function member(m: Member in default): String`
-<sub>línea 551</sub>
+<sub>línea 540</sub>
 
 `function fieldAccess(obj: Expr in default, f: MemberInfo): String`
-<sub>línea 592</sub>
+<sub>línea 581</sub>
 
 `public function fieldC(f: FieldInfo): String`  
 A field's name in C: the exact one in a C struct, otherwise escaped.  
-<sub>línea 603</sub>
+<sub>línea 592</sub>
 
 `public function classFieldPath(cls: String, f: FieldInfo): String`
-<sub>línea 609</sub>
+<sub>línea 598</sub>
 
 `function index(ix: Index in default): String`
-<sub>línea 620</sub>
+<sub>línea 609</sub>
 
 `function isLvalueExpr(e: Expr): bool`
-<sub>línea 638</sub>
+<sub>línea 627</sub>
 
 `public function lvalue(target: Expr in default): String`  
 The C lvalue of an assignment target (no narrowing).  
-<sub>línea 652</sub>
+<sub>línea 641</sub>
 
 `public function addrOf(e: Expr in default): String`  
 A pointer to the value of `e` (a temporary if `e` is not a variable or field).  
-<sub>línea 657</sub>
+<sub>línea 646</sub>
 
 `public function memoryRef(mem: Symbol): String`
-<sub>línea 662</sub>
+<sub>línea 651</sub>
 
 `public function placeMem(e: Expr in default): String`  
 C expression of type RtMem* for an allocation.  
-<sub>línea 667</sub>
+<sub>línea 656</sub>
 
 `public function callMem(c: Expr in default): String`  
 The memory a call gives for its result: none (NULL) when the callee only returns data that already exists.  
-<sub>línea 670</sub>
+<sub>línea 659</sub>
 
 `public function placeMemOf(p: Place? in default): String`
-<sub>línea 672</sub>
+<sub>línea 661</sub>
 
 ---
 
@@ -3927,7 +3923,7 @@ A file of test functions: compiled once with a main, then each test runs alone.
 
 ## editor.dap
 
-`src/editor/dap.lar` · 1456 líneas · 69 funciones
+`src/editor/dap.lar` · 1269 líneas · 62 funciones
 editor.dap: larimar dap, the debugger for editors (Debug Adapter Protocol on stdin and stdout).
 
 It sits between the editor and lldb-dap (LLVM's debug adapter, which runs the program under lldb):
@@ -3948,295 +3944,249 @@ class, Any with what it holds. The values are read with C expressions lldb evalu
 - function breakpoints take Larimar names, "step into" skips the runtime, and "Panics" stops where
 a panic happens.
 
-### class `DapUnix implements UnixPlatform`
-Dap's C on Unix.
+`function contentLength(line: String): int32`  
+The value of a "Content-Length: N" header line, or -1.  
+<sub>línea 66</sub>
 
-### class `DapWindows implements WindowsPlatform`
-Dap's C on Windows.
+`function editorMessage(ms: int32): String?`  
+The body of the editor's next message, waiting up to ms for it (-1: until one comes); null when none came or it ended.  
+<sub>línea 73</sub>
 
-`native function lm_dap_spawn(path: String): bool`
-<sub>línea 327</sub>
+`function backendMessage(ms: int32): String?`  
+The body of the backend's next message, waiting up to ms for it to begin; null when none came or it ended.  
+<sub>línea 99</sub>
 
-`native function lm_dap_kill(): void`
-<sub>línea 328</sub>
+`function toBackendRaw(body: String): void`  
+Writes one message to the backend (nothing when it has ended).  
+<sub>línea 127</sub>
 
-`native function lm_dap_fill(ms: int32): void`
-<sub>línea 329</sub>
+### struct `Handle`
 
-`native function lm_dap_eof(which: int32): bool`
-<sub>línea 330</sub>
+`function keep(text: String): void`
+<sub>línea 151</sub>
 
-`native function lm_dap_take(m: byte[*], which: int32): String`
-<sub>línea 331</sub>
+`function newHandle(kind: int32, frame: int32, ref: int32, expr: String, type: String): int32`
+<sub>línea 158</sub>
 
-`native function lm_dap_took(): bool`
-<sub>línea 332</sub>
-
-`native function lm_dap_write(which: int32, body: String, length: int32): void`
-<sub>línea 333</sub>
-
-`native function lm_dap_handle(kind: int32, frame: int32, ref: int32, expr: String, type: String): int32`
-<sub>línea 334</sub>
-
-`native function lm_dap_clear(): void`
-<sub>línea 335</sub>
-
-`native function lm_dap_h_kind(id: int32): int32`
-<sub>línea 336</sub>
-
-`native function lm_dap_h_frame(id: int32): int32`
-<sub>línea 337</sub>
-
-`native function lm_dap_h_ref(id: int32): int32`
-<sub>línea 338</sub>
-
-`native function lm_dap_h_expr(id: int32): String`
-<sub>línea 339</sub>
-
-`native function lm_dap_h_type(id: int32): String`
-<sub>línea 340</sub>
+`function handleAt(id: int32): Handle?`
+<sub>línea 167</sub>
 
 `function log(text: String): void`
-<sub>línea 371</sub>
+<sub>línea 172</sub>
 
 `function withNumber(json: String, key: String, value: int32): String`  
 A JSON text with the top-level numeric field `key` set to `value` (added when missing).  
-<sub>línea 378</sub>
+<sub>línea 179</sub>
 
 `function toEditorRaw(body: String): void`
-<sub>línea 409</sub>
+<sub>línea 210</sub>
 
 `function emit(body: String): void`  
 A message to the editor with our sequence number.  
-<sub>línea 412</sub>
+<sub>línea 217</sub>
 
 `function respond(req: Any, body: String): void`
-<sub>línea 418</sub>
+<sub>línea 223</sub>
 
 `function respondError(req: Any, message: String): void`
-<sub>línea 424</sub>
+<sub>línea 229</sub>
 
 `function output(text: String): void`
-<sub>línea 430</sub>
+<sub>línea 235</sub>
 
 `function parse(text: String): Any`
-<sub>línea 434</sub>
+<sub>línea 239</sub>
 
 `function sendBackend(command: String, args: String): int32`  
 Sends a request of ours to the backend; returns its seq.  
-<sub>línea 443</sub>
+<sub>línea 248</sub>
 
 `function call(command: String, args: String): String`  
 A request of ours to the backend, and its response (as JSON text). What arrives meanwhile from the backend (events, answers to forwarded requests) goes on to the editor; the editor's messages wait.  
-<sub>línea 455</sub>
+<sub>línea 260</sub>
 
 `function eval(frame: int32, expr: String): String?`  
 A C expression's value in a frame, or null when lldb cannot evaluate it.  
-<sub>línea 474</sub>
+<sub>línea 279</sub>
 
 `function evalInt(frame: int32, expr: String): int64?`
-<sub>línea 480</sub>
+<sub>línea 285</sub>
 
 `function evalAddress(frame: int32, expr: String): int64?`
-<sub>línea 486</sub>
+<sub>línea 291</sub>
 
 `function command(frame: int32, text: String): String`  
 An lldb command in a frame; its output.  
-<sub>línea 498</sub>
+<sub>línea 303</sub>
 
 `function tableOf(v: Any): Any`  
 A table of the debug map (or an empty one when it is missing).  
-<sub>línea 504</sub>
+<sub>línea 309</sub>
 
 `function atMost(n: int64, limit: int32): int32`
-<sub>línea 511</sub>
+<sub>línea 316</sub>
 
 `function hexValue(s: String): int64`
-<sub>línea 513</sub>
+<sub>línea 318</sub>
 
 `function readBytes(frame: int32, address: int64, count: int32): String?`  
 `count` bytes at an address, as text (UTF-8).  
-<sub>línea 524</sub>
+<sub>línea 329</sub>
 
 `function readCString(frame: int32, expr: String): String?`  
 A C string (a class's name) at the address an expression gives.  
-<sub>línea 541</sub>
+<sub>línea 346</sub>
 
 ### class `Shown`
 What the editor shows for one value: its text, and its children (a handle) when it has them.
 
 `function typeEntry(name: String): Any`
-<sub>línea 562</sub>
+<sub>línea 367</sub>
 
 `function typeText(t: Any): String`
-<sub>línea 564</sub>
+<sub>línea 369</sub>
 
 `function quoteText(s: String): String`
-<sub>línea 581</sub>
+<sub>línea 386</sub>
 
 `function stringValue(frame: int32, expr: String): String?`  
 The text of a String value at expr (an RtString).  
-<sub>línea 584</sub>
+<sub>línea 389</sub>
 
 `function classOfObject(frame: int32, pointer: String): String`  
 The class (C name) of the object at a pointer expression, or "".  
-<sub>línea 597</sub>
+<sub>línea 402</sub>
 
 `function show(frame: int32, expr: String, t: Any, preview: bool): Shown?`  
 How the editor shows the value of `expr` (a C expression) of type `t`. preview: a short text only.  
-<sub>línea 602</sub>
+<sub>línea 407</sub>
 
 `function showAny(frame: int32, expr: String, preview: bool, s: Shown): Shown?`
-<sub>línea 758</sub>
+<sub>línea 563</sub>
 
 `function fieldsPreview(frame: int32, entry: Any, access: String, preview: bool, display: String): String`  
 Point {x=1, y=2}: the first scalar fields, read with `access` + their C path.  
-<sub>línea 787</sub>
+<sub>línea 592</sub>
 
 `function variableJson(name: String, s: Shown, evaluateName: String): String`  
 The JSON of one variable for the editor.  
-<sub>línea 810</sub>
+<sub>línea 615</sub>
 
 `function children(id: int32, start: int32, count: int32): String[*]`  
 The children of a value handle.  
-<sub>línea 817</sub>
+<sub>línea 622</sub>
 
 `function fieldVariables(frame: int32, fields: Any, access: String, out: String[*]): void`
-<sub>línea 870</sub>
+<sub>línea 677</sub>
 
 `function hasFunction(cName: String): bool`
-<sub>línea 885</sub>
+<sub>línea 692</sub>
 
 `function functionEntry(cName: String): Any`
-<sub>línea 886</sub>
+<sub>línea 693</sub>
 
 `function localVariables(frame: int32): String[*]`  
 The Larimar variables of a frame.  
-<sub>línea 889</sub>
+<sub>línea 696</sub>
 
 `function globalVariables(frame: int32): String[*]`
-<sub>línea 924</sub>
+<sub>línea 731</sub>
 
 ### class `Resolved`
 
 `function resolvePath(frame: int32, text: String): Resolved`
-<sub>línea 944</sub>
+<sub>línea 751</sub>
 
 `function splitPath(text: String): String[*]`  
 "a.b[2].c" -> ["a", ".b", "[2]", ".c"]; [] when it is not a path.  
-<sub>línea 986</sub>
+<sub>línea 793</sub>
 
 `function isNameByte(c: byte): bool`
-<sub>línea 1012</sub>
+<sub>línea 819</sub>
 
 `function step(frame: int32, r: Resolved, part: String): bool`  
 One step of a path: .field or [index].  
-<sub>línea 1017</sub>
+<sub>línea 824</sub>
 
 `function fromEditor(body: String): bool`
-<sub>línea 1065</sub>
+<sub>línea 872</sub>
 
 `function forward(body: String, msg: Any, args: String): void`  
 Passes a request on to the backend (with new arguments when `args` is not "").  
-<sub>línea 1102</sub>
+<sub>línea 909</sub>
 
 `function capabilities(r: Any): String`
-<sub>línea 1111</sub>
+<sub>línea 918</sub>
 
 `function launchArguments(msg: Any): String`  
 launch for lldb-dap: the program, and lldb set up for Larimar.  
-<sub>línea 1125</sub>
+<sub>línea 932</sub>
 
 `function loadMap(path: String): void`
-<sub>línea 1144</sub>
+<sub>línea 951</sub>
 
 `function functionBreakpoints(msg: Any): String`  
 Function breakpoints by Larimar name: main -> user_main, Dog.bark -> Dog_bark.  
-<sub>línea 1159</sub>
+<sub>línea 966</sub>
 
 `function exceptionBreakpoints(msg: Any): void`
-<sub>línea 1171</sub>
+<sub>línea 978</sub>
 
 `function stackTrace(msg: Any): void`  
 The call stack with Larimar names; the runtime's frames de-emphasized.  
-<sub>línea 1195</sub>
+<sub>línea 1002</sub>
 
 `function scopes(msg: Any): void`
-<sub>línea 1224</sub>
+<sub>línea 1031</sub>
 
 `function variables(msg: Any): void`
-<sub>línea 1240</sub>
+<sub>línea 1047</sub>
 
 `function backendVariables(frame: int32, ref: int32): String[*]`  
 lldb-dap's own variables (the C view), with our handles for their children.  
-<sub>línea 1266</sub>
+<sub>línea 1074</sub>
 
 `function evaluate(body: String, msg: Any): void`  
 The debug console, hovers and watches: Larimar paths here; the rest (C, lldb commands) to lldb.  
-<sub>línea 1280</sub>
+<sub>línea 1088</sub>
 
 `function isPanicStop(msg: Any): bool`
-<sub>línea 1313</sub>
+<sub>línea 1121</sub>
 
 `function exceptionInfo(msg: Any): void`  
 The panic's message: the msg argument of rt_panic, at the top of the thread's stack.  
-<sub>línea 1324</sub>
+<sub>línea 1132</sub>
 
 `function fromBackend(body: String, msg: Any): void`
-<sub>línea 1337</sub>
+<sub>línea 1145</sub>
 
 `function findBackend(given: String): String`  
 lldb-dap: the one given, $LARIMAR_LLDB_DAP, on the PATH, or Xcode's (xcrun).  
-<sub>línea 1376</sub>
+<sub>línea 1184</sub>
 
 `public function serveDebugger(args: String[*]): int32`
-<sub>línea 1401</sub>
+<sub>línea 1209</sub>
 
 ---
 
 ## editor.docstore
 
-`src/editor/docstore.lar` · 67 líneas · 11 funciones
-editor.docstore: the texts of the documents open in the editor, by file path (larimar lsp).
-They live in C memory (malloc), so a text can be freed when the editor sends a new one: the server
-runs for hours and its documents change on every key. The linker reads a file from here when it is
-open in the editor (with its changes not saved yet), and from the disk otherwise.
+`src/editor/docstore.lar` · 16 líneas · 2 funciones
+editor.docstore: the texts of the documents open in the editor, by file path, for the analysis of one
+question (larimar lsp-worker). The linker reads a file from here when it is open in the editor (with its
+changes not saved yet), and from the disk otherwise.
 
-`native function lm_doc_set(path: String, text: String): void`
-<sub>línea 25</sub>
-
-`native function lm_doc_remove(path: String): void`
-<sub>línea 41</sub>
-
-`native function lm_doc_has(path: String): bool`
-<sub>línea 48</sub>
-
-`native function lm_doc_text(path: String): String`
-<sub>línea 49</sub>
-
-`native function lm_doc_count(): int32`
-<sub>línea 50</sub>
-
-`native function lm_doc_path(i: int32): String`
-<sub>línea 51</sub>
+A worker answers one question and ends, so the texts live in the default memory: nothing is ever freed
+here. The server, which runs for hours while the texts change on every key, keeps its own copies in a
+memory it compacts (editor.lsp, Documents).
 
 `public function setDocument(path: String, text: String): void`  
 Keeps (a copy of) the editor's text of a file.  
-<sub>línea 54</sub>
-
-`public function removeDocument(path: String): void`  
-The editor closed the file: from now on it is read from the disk.  
-<sub>línea 57</sub>
+<sub>línea 12</sub>
 
 `public function document(path: String): String?`  
 The editor's text of a file, or null when it is not open.  
-<sub>línea 60</sub>
-
-`public function documentCount(): int32`
-<sub>línea 65</sub>
-
-`public function documentPath(i: int32): String`
-<sub>línea 66</sub>
+<sub>línea 15</sub>
 
 ---
 
@@ -4529,121 +4479,97 @@ The errors of the analysis, per file: one { uri, diagnostics } per line, for eve
 
 ## editor.lsp
 
-`src/editor/lsp.lar` · 499 líneas · 29 funciones
+`src/editor/lsp.lar` · 351 líneas · 21 funciones
 editor.lsp: larimar lsp, the language server editors start (Language Server Protocol, JSON-RPC on stdin and
 stdout, each message after a "Content-Length: N" header).
 
-The server keeps the texts of the open documents (docstore.lar, freed when they change) and nothing
-else. Each question (the errors of a file, hover, go to definition, ...) is answered by a new process:
-a fork() of the server that links and analyzes the program with the editor's texts, writes its answer
-to a pipe and ends. So an analysis never leaves memory behind, never sees the state of the one before,
-and a crash only loses one answer. Where fork() does not exist (Windows), or with
-LARIMAR_LSP_NO_FORK=1, the question goes to a new `larimarc lsp-worker` through two files.
+The server keeps the texts of the open documents (in a memory it compacts, as they change on every key)
+and nothing else. Each question (the errors of a file, hover, go to definition, ...) is answered by a
+new process, `larimarc lsp-worker`, which gets the question and the editor's texts in a file, links and
+analyzes the program, writes its answer to another file and ends. So an analysis never leaves memory
+behind, never sees the state of the one before, and a crash only loses one answer. The same on every
+system, without a line of C.
 
 The errors are computed when the editor stops typing (no message for a moment) for the file that
 changed last, and published for every file of its program.
 
-### class `LspUnix implements UnixPlatform`
-Lsp's C on Unix.
-
-### class `LspWindows implements WindowsPlatform`
-Lsp's C on Windows.
-
-`native function lm_lsp_fork(): int32`
-<sub>línea 199</sub>
-
-`native function lm_lsp_send(text: String, length: int32): void`
-<sub>línea 200</sub>
-
-`native function lm_lsp_quit(code: int32): void`
-<sub>línea 201</sub>
-
-`native function lm_lsp_receive(m: byte[*], pid: int32): String`
-<sub>línea 202</sub>
-
-`native function lm_lsp_attempt(): int32`
-<sub>línea 203</sub>
-
-`native function lm_lsp_waiting(ms: int32): bool`
-<sub>línea 204</sub>
-
-`native function lm_lsp_unbuffered(): void`
-<sub>línea 205</sub>
-
-`native function lm_lsp_set_pending(path: String): void`
-<sub>línea 206</sub>
-
-`native function lm_lsp_get_pending(): String`
-<sub>línea 207</sub>
-
-`native function lm_lsp_pid(): int32`
-<sub>línea 208</sub>
-
 `function readMessage(): String?`  
 The next message's body, or null when the editor closed the input.  
-<sub>línea 218</sub>
+<sub>línea 40</sub>
 
 `function send(body: String): void`
-<sub>línea 237</sub>
+<sub>línea 59</sub>
 
 `function respond(id: String, result: String): void`
-<sub>línea 243</sub>
+<sub>línea 65</sub>
 
 `function respondError(id: String, code: int32, message: String): void`
-<sub>línea 247</sub>
+<sub>línea 69</sub>
 
 `function notify(method: String, params: String): void`
-<sub>línea 251</sub>
+<sub>línea 73</sub>
 
 `function log(text: String): void`
-<sub>línea 255</sub>
+<sub>línea 77</sub>
 
 `function capabilities(): String`
-<sub>línea 257</sub>
+<sub>línea 79</sub>
 
 `function docPath(msg: Any): String`  
 The normalized path of a message's text document.  
-<sub>línea 266</sub>
+<sub>línea 88</sub>
+
+### class `Documents`
+The texts of the open documents (paths[i]: texts[i]), and the file whose errors are still to be published.
+
+- `function size(): int64`  
+  The bytes of the texts kept now (what a compaction keeps of them).  
+  <sub>línea 104</sub>
+
+- `function find(path: String): int32`  
+  Where a path is ("" finds a free slot), or -1.  
+  <sub>línea 111</sub>
 
 `public function serve(): int32`  
 larimar lsp  
-<sub>línea 278</sub>
+<sub>línea 120</sub>
 
-`function publish(path: String): void`  
+`function handle(body: String, kept: byte[*], docs: Documents in kept): int32`  
+A message of the editor: -1 to go on, or the exit code of the server.  
+<sub>línea 143</sub>
+
+`function keep(kept: byte[*], docs: Documents in kept, path: String, text: String): void`  
+The editor's new text of a file; its errors are published once the editor stops typing.  
+<sub>línea 188</sub>
+
+`function publish(path: String, docs: Documents): void`  
 Publishes the errors of the program a file belongs to.  
-<sub>línea 338</sub>
-
-`function ask(body: String): String`  
-The answer (JSON) to a message, from a new process.  
-<sub>línea 347</sub>
-
-`function answerInChild(body: String): String`  
-In the forked process: analyze and answer.  
-<sub>línea 365</sub>
+<sub>línea 202</sub>
 
 `function parsed(body: String): Any`
-<sub>línea 381</sub>
+<sub>línea 210</sub>
 
 `function pathOf(msg: Any): String`
-<sub>línea 389</sub>
+<sub>línea 218</sub>
 
 `function answer(msg: Any, path: String, main: String): String?`  
 The answer after analyzing `main`, or null when that program does not reach the file.  
-<sub>línea 396</sub>
+<sub>línea 225</sub>
 
 `function readFile(path: String): String?`
-<sub>línea 424</sub>
+<sub>línea 253</sub>
 
-`function askWorker(body: String): String`
-<sub>línea 438</sub>
+`function ask(body: String, docs: Documents): String`  
+The answer (JSON) to a message, from a new process: a worker gets it and the editor's texts.  
+<sub>línea 268</sub>
 
-`function quiet(): String`  
-The worker's standard output goes to the standard error: the standard output is the editor's.  
-<sub>línea 468</sub>
+`function runWorker(req: String, resp: String): int32`  
+Runs `larimarc lsp-worker req resp` and waits for it (at most WORKER_MS: then it is ended). What it writes is read and dropped: the standard output is the editor's, and a worker says nothing there.  
+<sub>línea 303</sub>
 
 `public function worker(reqPath: String, respPath: String): int32`  
 larimarc lsp-worker: answers one question written to a file by the server.  
-<sub>línea 471</sub>
+<sub>línea 323</sub>
 
 ---
 
