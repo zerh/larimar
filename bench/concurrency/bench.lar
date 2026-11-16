@@ -1,0 +1,189 @@
+// Threads and processes, measured: what each costs and how each scales, on this machine.
+//
+//   larimar run bench/concurrency/bench.lar            (or: larimarc bench.lar -o b.c, cc -O2, ./b)
+//
+// It prints Markdown tables. Every case does the same work both ways:
+//   1. starting and waiting for one (an empty Runnable / an empty Task), and many tiny tasks in a pool;
+//   2. computing without data (a loop of arithmetic, split in parts);
+//   3. the memory of the program with its workers up (RSS, from ps).
+// Summing data that main has is in data.lar: its lambdas carry 200 KB each, and in this program that
+// would make every lambda of the same type as big (see data.lar).
+
+import std.os;
+import std.os.process { Process, ProcessPool, Task, ProcessError, message };
+import std.thread { ThreadPool };
+import std.time as Time;
+import std.math as Math;
+
+const WORKERS: int32 = 4;
+
+// ---- the work ------------------------------------------------------------------------------------------
+
+/** A loop of arithmetic that the C compiler cannot fold away: `steps` turns of a random-number generator. */
+function crunch(seed: int64, steps: int64): int64 {
+    let x: int64 = seed;
+    let k: int64 = 0;
+    while (k < steps) {
+        x = (x * 6364136223846793005 + 1442695040888963407) % 1000000007;
+        k += 1;
+    }
+    return x;
+}
+
+class Empty implements Task {
+    let n: int32 = 0;
+    override function run(): Any { return self.n; }
+}
+
+class Crunch implements Task {
+    let seed: int64;
+    let steps: int64;
+    override function run(): Any { return crunch(self.seed, self.steps); }
+}
+
+class Pid implements Task {
+    let n: int32 = 0;
+    override function run(): Any {
+        Time.sleep(300);                         // long enough for every worker to be up at once
+        return os.processId();
+    }
+}
+
+synchronized class Total {
+    let sum: int64 = 0;
+    function add(n: int64): void { self.sum += n; }
+    function get(): int64 { return self.sum; }
+}
+
+// ---- measuring -------------------------------------------------------------------------------------------
+
+function row(what: String, threads: String, processes: String): void {
+    println("| ${what} | ${threads} | ${processes} |");
+}
+
+function ms(t: int64): String { return "${t} ms"; }
+
+function us(totalMs: int64, count: int32): String {
+    let each: float64 = (totalMs as float64) * 1000.0 / (count as float64);
+    return "${Math.round(each)} µs";
+}
+
+/** RSS of a process in KB, from ps (Linux and macOS). */
+function rssOf(pid: int64): int64 {
+    let ps: Process = { program: "ps", args: ["-o", "rss=", "-p", "${pid}"], quiet: true };
+    try {
+        ps.start();
+    } catch (ProcessError e) {
+        return 0;
+    }
+    let text: String = ps.readAll(5000).trim();
+    ps.wait(5000);
+    return text.toInt() ?? 0;
+}
+
+// ---- 1. starting and waiting ----------------------------------------------------------------------------
+
+function startCosts(): void throws ProcessError {
+    let n: int32 = 50;
+    let t0: int64 = Time.monotonic();
+    for (i in 0..n) {
+        let t: Thread = { run: () -> {} };
+        t.start();
+        t.join();
+    }
+    let threads: int64 = Time.monotonic() - t0;
+    let t1: int64 = Time.monotonic();
+    for (i in 0..n) {
+        let p: Process = { run: Empty { n: i } };
+        p.start();
+        p.join();
+    }
+    let processes: int64 = Time.monotonic() - t1;
+    row("start and join one (empty), each", us(threads, n), us(processes, n));
+
+    let tasks: int32 = 2000;
+    let t2: int64 = Time.monotonic();
+    let tpool: ThreadPool = { threads: WORKERS };
+    for (i in 0..tasks) { tpool.submit(() -> {}); }
+    tpool.wait();
+    let tp: int64 = Time.monotonic() - t2;
+    let t3: int64 = Time.monotonic();
+    let ppool: ProcessPool = { processes: WORKERS };
+    for (i in 0..tasks) { ppool.submit(Empty { n: i }); }
+    ppool.wait();
+    let pp: int64 = Time.monotonic() - t3;
+    row("${tasks} tiny tasks in a pool of ${WORKERS} (with starting it)", ms(tp), ms(pp));
+    let t4: int64 = Time.monotonic();
+    for (i in 0..tasks) { ppool.submit(Empty { n: i }); }
+    ppool.wait();
+    let pp2: int64 = Time.monotonic() - t4;
+    let t5: int64 = Time.monotonic();
+    for (i in 0..tasks) { tpool.submit(() -> {}); }
+    tpool.wait();
+    let tp2: int64 = Time.monotonic() - t5;
+    row("the same, the pool already up: each task", us(tp2, tasks), us(pp2, tasks));
+}
+
+// ---- 2. computing without data ---------------------------------------------------------------------------
+
+function computing(): void throws ProcessError {
+    let steps: int64 = 200000000;
+    let t0: int64 = Time.monotonic();
+    let one: int64 = crunch(7, steps);
+    let alone: int64 = Time.monotonic() - t0;
+
+    let part: int64 = steps / (WORKERS as int64);
+    let total: Total = {};
+    let t1: int64 = Time.monotonic();
+    let pool: ThreadPool = { threads: WORKERS };
+    for (w in 0..WORKERS) {
+        let seed: int64 = w as int64 + 7;
+        pool.submit(() -> { total.add(crunch(seed, part)); });
+    }
+    pool.wait();
+    let threads: int64 = Time.monotonic() - t1;
+
+    let t2: int64 = Time.monotonic();
+    let ppool: ProcessPool = { processes: WORKERS };
+    for (w in 0..WORKERS) { ppool.submit(Crunch { seed: w as int64 + 7, steps: part }); }
+    let results: Any = ppool.wait();
+    let processes: int64 = Time.monotonic() - t2;
+    if (one == 0 && total.get() == 0 && results.length == 0) { println("?"); }
+    row("${steps / 1000000}M steps of arithmetic, in one (no parallelism)", ms(alone), ms(alone));
+    row("the same in ${WORKERS} parts, in parallel (with starting the pool)", ms(threads), ms(processes));
+}
+
+// ---- 4. memory --------------------------------------------------------------------------------------------
+
+function memoryOf(): void throws ProcessError {
+    let me: int64 = os.processId();
+    let before: int64 = rssOf(me);
+
+    let pool: ThreadPool = { threads: WORKERS };
+    for (w in 0..WORKERS) { pool.submit(() -> { Time.sleep(300); }); }
+    let withThreads: int64 = rssOf(me);
+    pool.wait();
+
+    let ppool: ProcessPool = { processes: WORKERS };
+    for (w in 0..WORKERS) { ppool.submit(Pid {}); }
+    let pids: Any = ppool.wait();
+    // the copies stay up for the next tasks: measure them now
+    let children: int64 = 0;
+    for (i, pid in pids) { children += rssOf(pid as int64 ?? 0); }
+    let withProcesses: int64 = rssOf(me) + children;
+    row("memory (RSS) with ${WORKERS} workers up", "${withThreads / 1024} MB (the program alone: ${before / 1024} MB)", "${withProcesses / 1024} MB (${children / (WORKERS as int64) / 1024} MB each copy)");
+}
+
+function main(): int32 {
+    println("| case | threads | processes |");
+    println("|---|---|---|");
+    try {
+        memoryOf();                    // first: before the other cases leave memory behind
+        startCosts();
+        computing();
+    } catch (ProcessError e) {
+        println(message(e));
+        return 1;
+    }
+    return 0;
+}

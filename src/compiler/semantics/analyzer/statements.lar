@@ -1,0 +1,482 @@
+// semantics.analyzer.statements: the bodies of functions and methods, statement by statement.
+
+import syntax.ast {
+    ArrayLit, AssignStmt, BlockStmt, BoolLit, BreakStmt, Call, ContinueStmt, Expr, ExprStmt, ForStmt, Ident, IfStmt,
+    Index, Member, Param, PL_HEAP, Placed, ReturnStmt, Stmt, SwitchStmt, ThrowStmt, TypeRefKind, TryStmt, TypeRef, VarDecl,
+    WhileStmt, YieldStmt
+};
+import semantics.types {
+    arrayTypeOf, ArrayKind, BuiltinKind, CallInfo, CallK, ClassInfo, classOf, FieldInfo, FrameKind, FunctionInfo, globals, isArray,
+    isClass, isError, isInteger, isMemory, isMemParam, isPtr, MemberKind, meet, MemberInfo, MemoryKind, MethodInfo, newScope,
+    P_RESULT, P_TEMP, Place, PlaceKind, R_STATIC, rCaller, Region, RegionKind, rLocal, rMemory, rStaticMemory, variableRegion, Scope,
+    StructInfo, structOf, SwitchInfo, Symbol, SymbolKind, T_ANY, T_BOOL, T_BYTE, T_ERROR, T_INT64, T_STRING, T_VOID, TypeKind,
+    Type
+};
+import semantics.linker { target };
+import semantics.expressions { check, note, resolveTop, TC_LET };
+import semantics.expressions.conversions { coerce, hasRefs, regionOf, typeOf };
+import semantics.expressions.switches { analyzeSwitch };
+import semantics.analyzer {
+    block, declare, error, frame, frameTop, globalScope, lookup, Mutation, mutations, MutK, noteCapture, popFrame,
+    popScope, pushFrame, pushScope, scope, state, varSyms
+};
+import semantics.analyzer.compact {
+    analyzeIf, analyzeReturn, isLValue, isReference, placeFor, rootSymbol, storageRegion, throughReference
+};
+import semantics.analyzer.declarations { externValue, isByteArrayRef };
+import semantics.analyzer.flow {
+    blockRegion, mustLiveForever, requireOutlives, returnedNames, returnsArgs, valuePlace
+};
+import semantics.analyzer.narrowing {
+    analyzeFor, analyzeThrow, analyzeTry, analyzeYield, assigns, leaves, narrow, nonNull, reassignedNames, unnarrow
+};
+import semantics.analyzer.threads { useGlobal };
+
+/** The static function being analyzed ("" when none): for the message about self. */
+public let staticName: String = "";
+
+public function analyzeFunction(functionInfo: FunctionInfo in default): void {
+    if (functionInfo.decl!.isNative) { return; }         // the linker checked it is one the compiler writes
+    staticName = functionInfo.decl!.typeName != "" ? functionInfo.name : "";
+    let saved: Scope = scope;
+    let body: Stmt[*] = functionInfo.decl!.body;
+    pushFrame(FrameKind.Function, functionInfo.sig!.elem, functionInfo.throwsType, null, null, globalScope, functionInfo.owner).returnsArgs = functionInfo.returnsArgs;
+    state().reassigned = reassignedNames(body);
+    state().returned = returnedNames(body);
+    for (i, p in functionInfo.params) { functionInfo.paramSymbols.push(declareParam(p, functionInfo.sig!.params[i], isMemParam(functionInfo.memParams, i))); }
+    applyLives(functionInfo.params, functionInfo.paramSymbols, functionInfo.memParams, null);
+    if (functionInfo.cName == "user_main") {
+        for (p in functionInfo.paramSymbols) { p.region = R_STATIC; }    // the arguments live for the whole program
+    }
+    analyzeStmts(body);
+    checkReturns(body, functionInfo.sig!.elem!, functionInfo.line, "Function '${functionInfo.name}'");
+    popFrame(saved);
+}
+
+public function analyzeMethod(method: MethodInfo in default, selfType: Type in default): void {
+    let saved: Scope = scope;
+    pushFrame(FrameKind.Method, method.sig!.elem, method.throwsType, null, selfType, globalScope, method.own).returnsArgs = method.returnsArgs;
+    state().reassigned = reassignedNames(method.decl.body);
+    state().returned = returnedNames(method.decl.body);
+    let symbol: Symbol = declare("self", SymbolKind.Self, selfType, method.decl.line);
+    symbol.cName = "self";
+    symbol.immutable = true;
+    symbol.region = rCaller(symbol);
+    method.selfSymbol = symbol;
+    for (i, p in method.decl.params) { method.paramSymbols.push(declareParam(p, method.sig!.params[i], isMemParam(method.memParams, i))); }
+    applyLives(method.decl.params, method.paramSymbols, method.memParams, symbol);
+    analyzeStmts(method.decl.body);
+    checkReturns(method.decl.body, method.sig!.elem!, method.decl.line, "Method '${method.owner}.${method.name}'");
+    popFrame(saved);
+}
+
+public function declareParam(p: Param in default, type: Type in default, memory: bool): Symbol {
+    let symbol: Symbol = declare(p.name, SymbolKind.Param, type, p.line);
+    if (memory) {
+        symbol.memKind = MemoryKind.Param;
+        symbol.memRegion = rCaller(symbol);
+    } else if (hasRefs(type)) {
+        symbol.region = rCaller(symbol);
+    }
+    return symbol;
+}
+
+/**
+ * `k: Node in p`, `s: String in default`, `x: T in self`, `x: T in m` (a memory parameter):
+ * the parameter's data lives as long as that, so it can be stored there.
+ */
+function applyLives(params: Param[*] in default, syms: Symbol[*] in default, mem: bool[*] in default, selfSym: Symbol? in default): void {
+    for (i, p in params) {
+        if (p.lives == "" || i >= syms.length) { continue; }
+        let symbol: Symbol = syms[i];
+        if (isMemParam(mem, i)) {
+            error(p.line, "'${p.name}' is a memory: 'in' after a parameter type says where a value lives, not a memory.");
+            continue;
+        }
+        if (!hasRefs(symbol.type)) {
+            error(p.line, "Parameter '${p.name}' (${symbol.type.text}) does not point to memory, so 'in ${p.lives}' has nothing to say.");
+            continue;
+        }
+        let r: Region? = livesRegion(params, syms, mem, selfSym, i, p.line);
+        if (r != null) { symbol.region = r; }
+    }
+}
+
+function livesRegion(params: Param[*] in default, syms: Symbol[*] in default, mem: bool[*], selfSym: Symbol? in default, start: int32, line: int32): Region? {
+    let seen: int32[*] = [] in default;
+    let i: int32 = start;
+    while (!seen.contains(i)) {
+        seen.push(i);
+        let l: String = params[i].lives;
+        if (l == "default") { return R_STATIC; }
+        if (l == "self") {
+            if (selfSym == null) {
+                error(line, "'in self' can only be used in the parameters of a method.");
+                return null;
+            }
+            return selfSym.region;
+        }
+        let j: int32 = -1;
+        for (k, q in params) {
+            if (q.name == l) { j = k; }
+        }
+        if (j < 0) {
+            error(line, "'in ${l}': there is no parameter '${l}' (write another parameter, self or default).");
+            return null;
+        }
+        if (j == i) {
+            error(line, "Parameter '${l}' cannot live in itself.");
+            return null;
+        }
+        if (isMemParam(mem, j)) { return syms[j].memRegion; }
+        if (!hasRefs(syms[j].type)) {
+            error(line, "'in ${l}': parameter '${l}' (${syms[j].type.text}) does not point to memory.");
+            return null;
+        }
+        if (params[j].lives == "") { return rCaller(syms[j]); }
+        i = j;
+    }
+    error(line, "These parameters live in each other in a circle; one of them must say where it lives (default, self or a memory).");
+    return null;
+}
+
+/** When a parameter is stored somewhere longer-lived, the parameter can say so: `k: Node in p`. */
+public function livesHint(value: Region, storage: Region): String {
+    if (value.kind != RegionKind.Caller) { return ""; }
+    let p: Symbol? = value.param;
+    if (p == null || p.kind != SymbolKind.Param) { return ""; }
+    let where: String = "";
+    if (storage.kind == RegionKind.Static) {
+        where = "default";
+    } else if (storage.kind == RegionKind.Caller && storage.param != null) {
+        where = storage.param!.name;
+    }
+    if (where == "") { return ""; }
+    if (p.type.text.startsWith("byte[") && storage.kind == RegionKind.Caller && storage.param != null) {
+        // a memory says where nothing lives: the one that stores says it lives in the memory
+        let symbol: Symbol = storage.param!;
+        return ", or declare the parameter as '${symbol.name}: ${symbol.type.text} in ${p.name}'";
+    }
+    return ", or declare the parameter as '${p.name}: ${p.type.text} in ${where}'";
+}
+
+public function checkReturns(body: Stmt[*] in default, ret: Type, line: int32, what: String): void {
+    if (ret != T_VOID && !isError(ret) && !alwaysExits(body)) { error(line, "${what} must return a value of type ${ret.text} on every path."); }
+}
+
+/** Does the block always end with return or throw (or loop forever)? */
+/** panic(...): the program stops there. */
+function isPanic(e: Expr): bool {
+    if (!(e is Call c)) { return false; }
+    let callInfo: CallInfo? = c.call;
+    return callInfo != null && callInfo.kind == CallK.Builtin && callInfo.builtin == BuiltinKind.Panic;
+}
+
+public function alwaysExits(body: Stmt[*]): bool {
+    if (body.length == 0) { return false; }
+    return switch (body[body.length - 1]) {
+        case ReturnStmt, ThrowStmt -> true;
+        case ExprStmt e -> isPanic(e.expr);
+        case IfStmt i -> i.hasElse && alwaysExits(i.thenBody) && alwaysExits(i.elseBody);
+        case TryStmt t -> {
+            if (!alwaysExits(t.body)) { yield false; }
+            for (c in t.catches) {
+                if (!alwaysExits(c.body)) { yield false; }
+            }
+            yield true;
+        }
+        case WhileStmt w -> w.cond is BoolLit b && b.value && !containsBreak(w.body);
+        case BlockStmt b -> alwaysExits(b.body);
+        case SwitchStmt s -> {
+            let switchInfo: SwitchInfo? = s.switchExpr.sw;
+            if (switchInfo == null || !switchInfo.exhaustive) { yield false; }
+            for (c in s.switchExpr.cases) {
+                if (!(c.throwStmt != null || (c.hasBlock && alwaysExits(c.block)))) { yield false; }
+            }
+            yield true;
+        }
+        default -> false;
+    };
+}
+
+function containsBreak(body: Stmt[*]): bool {
+    for (s in body) {
+        let found: bool = switch (s) {
+            case BreakStmt -> true;
+            case IfStmt i -> containsBreak(i.thenBody) || containsBreak(i.elseBody);
+            case TryStmt t -> {
+                if (containsBreak(t.body)) { yield true; }
+                for (c in t.catches) {
+                    if (containsBreak(c.body)) { yield true; }
+                }
+                yield false;
+            }
+            case SwitchStmt sw -> {
+                for (c in sw.switchExpr.cases) {
+                    if (c.hasBlock && containsBreak(c.block)) { yield true; }
+                }
+                yield false;
+            }
+            case BlockStmt b -> containsBreak(b.body);
+            default -> false;
+        };
+        if (found) { return true; }
+    }
+    return false;
+}
+
+// =====================================================================================
+// Statements
+// =====================================================================================
+
+public function analyzeStmts(body: Stmt[*] in default): void {
+    if (scope.body == null) { scope.body = body; }
+    for (s in body) {
+        // A statement that assigns a narrowed variable ends the narrowing: before it, or after it
+        // for `x = value` (the value can still use x as not null).
+        let ends: Symbol[*] = [] in default;
+        let one: Stmt[*] = [s] in default;
+        for (n in scope.narrowSyms) {
+            if (assigns(one, n.name)) { ends.push(n); }
+        }
+        let direct: bool = s is AssignStmt a && a.target is Ident;
+        if (!direct) { unnarrow(ends); }
+        let blockScope: Scope = scope;
+        scope = newScope(blockScope, frame());          // the statement's temporaries live here
+        scope.statement = true;
+        analyzeStmt(s);
+        scope = blockScope;
+        if (direct) { unnarrow(ends); }
+        // if (x == null) { return; } -> x is not null in the rest of the block
+        if (s is IfStmt i) {
+            let thenLeaves: bool = leaves(i.thenBody);
+            let elseLeaves: bool = i.hasElse && leaves(i.elseBody);
+            if (thenLeaves != elseLeaves) { narrow(nonNull(i.cond, elseLeaves)); }
+        }
+    }
+}
+
+public function analyzeBlock(body: Stmt[*] in default): void {
+    pushScope();
+    analyzeStmts(body);
+    popScope();
+}
+
+function analyzeStmt(s: Stmt in default): void {
+    switch (s) {
+        case VarDecl v -> analyzeVarDecl(v);
+        case AssignStmt a -> analyzeAssign(a);
+        case ReturnStmt r -> analyzeReturn(r);
+        case ExprStmt e -> {
+            if (!(e.expr is Call)) { error(e.line, "Only calls can be used as statements."); }
+            check(e.expr, null, P_TEMP);
+        }
+        case IfStmt i -> analyzeIf(i);
+        case WhileStmt w -> {
+            requireBool(w.cond, "while");
+            let yes: Symbol[*] = nonNull(w.cond, true);
+            state().loopDepth += 1;
+            pushScope();
+            scope.loop = true;
+            narrow(yes);
+            analyzeStmts(w.body);
+            popScope();
+            state().loopDepth -= 1;
+        }
+        case ForStmt f -> analyzeFor(f);
+        case BreakStmt, ContinueStmt -> {
+            if (state().loopDepth == 0) { error(s.line, "'${s is BreakStmt ? "break" : "continue"}' outside a loop."); }
+        }
+        case ThrowStmt t -> analyzeThrow(t);
+        case YieldStmt y -> analyzeYield(y);
+        case TryStmt t -> analyzeTry(t);
+        case SwitchStmt sw -> analyzeSwitch(sw.switchExpr, false, null, P_TEMP);
+        case BlockStmt b -> analyzeBlock(b.body);
+        default -> {}
+    }
+}
+
+public function requireBool(cond: Expr in default, what: String): void {
+    let type: Type = check(cond, T_BOOL, P_TEMP);
+    if (!isError(type) && type != T_BOOL) { error(cond.line, "Condition of '${what}' must be bool, got ${type.text}."); }
+}
+
+public function analyzeVarDecl(v: VarDecl in default): void {
+    let global: bool = frame().kind == FrameKind.Global;
+    let kind: SymbolKind = global ? SymbolKind.Global : SymbolKind.Local;
+
+    // memories: let m: byte[N] = [] in heap;  let m: byte[*] = [] in heap;
+    let init: Expr? = v.init;
+    if (isByteArrayRef(v.type) && init is Placed p && p.mode == PL_HEAP) {
+        declareHeapMemory(v, p, kind, global);
+        return;
+    }
+
+    let t: Type = resolveTop(v.type, TC_LET, "Variable '${v.name}'");
+    if (init == null) {
+        error(v.line, "Variable '${v.name}' must be initialized.");
+        v.symbol = declare(v.name, kind, t, v.line);
+        return;
+    }
+    let place: Place = hasRefs(t) ? valuePlace(v.name, global) : P_TEMP;
+    if (t.kind == TypeKind.Array && t.arrayKind == ArrayKind.Fixed && t.size < 0) {
+        let it: Type = check(init, t, place);
+        if (it.kind == TypeKind.Array && it.arrayKind == ArrayKind.Fixed && it.elem! == t.elem!) {
+            t = it;
+        } else {
+            if (!isError(it)) { error(v.line, "The capacity of '${v.name}' cannot be taken from a value of type ${it.text}; write it explicitly, e.g. ${t.elem!.text}[16]."); }
+            t = T_ERROR;
+        }
+        note(t);
+    } else {
+        coerce(init, t, place, "Initializer of '${v.name}'");
+    }
+    let region: Region = regionOf(init);
+    if (!global && hasRefs(t)) { requireOutlives(init, blockRegion(block()), v.line, "'${v.name}'"); }
+    if (global && hasRefs(t)) {
+        mustLiveForever(region, v.line, "The value of global '${v.name}' lives in {v}, but globals live for the whole program. Use a global memory or the default memory.");
+    }
+    let s: Symbol = declare(v.name, kind, t, v.line);
+    s.region = hasRefs(t) ? region : R_STATIC;
+    if (!global && hasRefs(t) && state().reassigned[v.name] != null) {
+        // Its region is the shortest of everything it ever holds; known at the end.
+        s.varRegion = region;
+        varSyms.push(s);
+        s.region = variableRegion(s);
+    }
+    v.symbol = s;
+    if (t.kind == TypeKind.Array && t.elem! == T_BYTE && t.arrayKind == ArrayKind.Fixed && init is ArrayLit a && a.elems.length == 0) { s.memoryCandidate = true; }
+}
+
+function declareHeapMemory(v: VarDecl in default, p: Placed in default, kind: SymbolKind, global: bool): void {
+    if (!(p.expr is ArrayLit a) || a.elems.length > 0) { error(v.line, "A memory in the heap starts empty: let m: byte[*] = [] in heap;"); }
+    let tr: TypeRef = v.type;
+    let mk: MemoryKind = MemoryKind.None;
+    let t: Type = T_ERROR;
+    if (tr.kind == TypeRefKind.Growable) {
+        mk = MemoryKind.HeapGrowable;
+        t = arrayTypeOf(T_BYTE, ArrayKind.Growable, 0);
+    } else if (tr.kind == TypeRefKind.Fixed) {
+        mk = MemoryKind.HeapFixed;
+        // In the heap the size can be decided at run time.
+        let st: Type = check(tr.size!, T_INT64, P_TEMP);
+        if (!isError(st) && !isInteger(st)) { error(tr.line, "The size of a memory must be an integer."); }
+        t = arrayTypeOf(T_BYTE, ArrayKind.Fixed, 0);
+    } else {
+        error(v.line, "A memory in the heap needs a size (byte[1024]) or must grow (byte[*]).");
+        return;
+    }
+    let s: Symbol = declare(v.name, kind, t, v.line);
+    s.memKind = mk;
+    s.memRegion = global ? rStaticMemory(s) : rMemory(s);
+    s.immutable = true;
+    v.symbol = s;
+}
+
+function analyzeAssign(asg: AssignStmt in default): void {
+    let target: Expr = asg.target;
+    let tt: Type = T_ERROR;
+    let storage: Region = R_STATIC;
+    let place: Place = P_TEMP;
+    let root: Symbol? = null;
+    let mk: MutK = MutK.Field;
+    if (target is Ident id) {
+        let s: Symbol? = lookup(id.name);
+        if (s == null) {
+            error(id.line, "Use of undeclared variable '${id.name}'.");
+        } else {
+            id.symbol = s;
+            if (s.kind == SymbolKind.Function) {
+                error(asg.line, "Cannot assign to function '${s.name}'.");
+            } else if (s.kind == SymbolKind.Const) {
+                error(asg.line, "Cannot assign to constant '${s.name}'.");
+            } else if (isMemory(s)) {
+                error(asg.line, "Memory '${s.name}' cannot be reassigned.");
+            } else if (s.immutable) {
+                error(asg.line, "'${s.name}' cannot be reassigned.");
+            } else {
+                noteCapture(s, id.line);
+                if (s.kind == SymbolKind.Global && s.externValue == null) { useGlobal(s, id.line); }
+                tt = s.type;
+                storage = s.kind == SymbolKind.Global ? R_STATIC : s.region;
+                if (s.region.kind == RegionKind.Var) { storage = rLocal(s.scope, "variable '${s.name}'"); }
+                if ((s.kind == SymbolKind.Local || s.kind == SymbolKind.Param) && hasRefs(tt)) {
+                    place = s.frame == frame() && state().returned.contains(s.name) ? P_RESULT : (Place { kind: PlaceKind.Block, scope: s.scope } in default);
+                }
+                root = s;
+                mk = MutK.Reassign;
+                id.ty = tt;
+            }
+        }
+    } else if (target is Member m && memberIsAnyKey(m)) {
+        tt = T_ANY;
+        storage = regionOf(m.object);
+        place = Place { kind: PlaceKind.OfAny, expr: m.object } in default;
+        root = rootSymbol(m);
+    } else if (target is Member m) {
+        tt = typeOf(m);
+        let mi: MemberInfo? = m.member;
+        if (mi != null && mi.kind == MemberKind.Field && isClass(mi.objectType!)) {
+            let classInfo: ClassInfo? = classOf(mi.objectType!.name);
+            if (classInfo != null && classInfo.thread) { error(asg.line, "The fields of a Thread are set when it is created: Thread { run: ... } in memory."); }
+        }
+        if (mi != null && mi.kind == MemberKind.Field && tt == T_STRING && cStructField(mi.field!)) {
+            error(asg.line, "Field '${m.name}' is a C string: it is read (a view of C's text), not assigned.");
+            tt = T_ERROR;
+        } else if (mi == null || mi.kind != MemberKind.Field) {
+            if (!isError(tt)) { error(asg.line, "Only variables, fields and array elements can be assigned."); }
+            tt = T_ERROR;
+        } else {
+            storage = storageRegion(m.object);
+            place = placeFor(m.object);
+            root = rootSymbol(m);
+            if (!isLValue(m.object) && !isReference(typeOf(m.object)) && !isPtr(mi.objectType!)) {
+                error(asg.line, "Cannot assign to a field of a temporary value; store it in a variable first.");
+            }
+        }
+    } else if (target is Index x) {
+        tt = check(x, null, P_TEMP);
+        let ot: Type = typeOf(x.object);
+        storage = storageRegion(x.object);
+        if (ot == T_STRING) { error(asg.line, "A String cannot be changed; build a new one (replace, substring, a StringBuilder or interpolation)."); }
+        if (ot == T_ANY) {
+            place = Place { kind: PlaceKind.OfAny, expr: x.object } in default;
+        } else if (isArray(ot, ArrayKind.Growable)) {
+            place = Place { kind: PlaceKind.OfList, expr: x.object } in default;
+        } else {
+            place = placeFor(x.object);
+        }
+        root = rootSymbol(x);
+        if (!isLValue(x.object) && !isReference(ot)) { error(asg.line, "Cannot assign to an element of a temporary array; store it in a variable first."); }
+    } else {
+        error(asg.line, "Only variables, fields and array elements can be assigned.");
+    }
+    let value: Expr = asg.value;
+    coerce(value, tt, place, "Assignment");
+    if (!isError(tt) && hasRefs(tt)) { requireOutlives(value, storage, asg.line, describeTarget(target)); }
+    if (root != null && root.kind == SymbolKind.Global) { root.mutatedGlobal = true; }
+    if (root != null && target is Ident && root.region.kind == RegionKind.Var) { root.varRegion = meet(root.varRegion ?? R_STATIC, regionOf(value)); }
+    if (root != null && (root.kind == SymbolKind.Local || root.kind == SymbolKind.Param || root.kind == SymbolKind.Self)) {
+        // Fields of objects behind a reference are shared, not copied: only values count.
+        let viaReference: bool = mk != MutK.Reassign && throughReference(target);
+        if (!viaReference) { mutations.push(Mutation { line: asg.line, root, frame: frameTop - 1, kind: mk } in default); }
+    }
+}
+
+/** A field of a C struct (extern type X = struct { ... }). */
+public function cStructField(field: FieldInfo): bool {
+    let structInfo: StructInfo? = structOf(field.owner);
+    return structInfo != null && structInfo.decl.cName != "";
+}
+
+function memberIsAnyKey(m: Member in default): bool {
+    check(m, null, P_TEMP);
+    let mi: MemberInfo? = m.member;
+    return mi != null && mi.kind == MemberKind.AnyKey;
+}
+
+function describeTarget(t: Expr): String {
+    if (t is Ident id) { return "'${id.name}'"; }
+    if (t is Member m) { return m.member != null && m.member!.kind == MemberKind.AnyKey ? "entry '${m.name}'" : "field '${m.name}'"; }
+    return "this element";
+}

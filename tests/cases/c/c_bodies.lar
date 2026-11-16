@@ -11,10 +11,10 @@ class UnixGreeter implements Greeter, UnixPlatform {
     cinclude "<unistd.h>";
 
     ccode {
-        static int32_t lm_doubled(int32_t x) { return 2 * x; }
+        static int32_t lar_doubled(int32_t x) { return 2 * x; }
     }
 
-    override native function twice(x: int32): int32 { return lm_doubled(x); }
+    override native function twice(x: int32): int32 { return lar_doubled(x); }
 
     override native function label(name: String, items: byte[]): String {
         static char out[64];

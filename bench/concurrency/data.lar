@@ -1,0 +1,98 @@
+// Threads and processes, measured: summing numbers that the main program has.
+//
+// A thread cannot take a list out of a synchronized object (other threads could change it): it gets its
+// part as a value, int64[25000] (200 KB), copied under the lock, and sums it. A process gets its part as a
+// field of the Task (copied and sent to it as JSON through shared memory).
+//
+// Note: a lambda keeps what it captures inside it, and every lambda of the same type is as big as the
+// biggest of them in the program (a union). Here every () -> void is 200 KB: that is why this case is a
+// program of its own.
+
+import std.os.process { ProcessPool, Task, ProcessError, message };
+import std.thread { ThreadPool };
+import std.time as Time;
+
+const WORKERS: int32 = 4;
+const PART: int32 = 25000;
+
+class SumPart implements Task {
+    let values: int64[*];
+    override function run(): Any {
+        let s: int64 = 0;
+        for (v in self.values) { s += v; }
+        return s;
+    }
+}
+
+synchronized class Total {
+    let sum: int64 = 0;
+    function add(n: int64): void { self.sum += n; }
+    function get(): int64 { return self.sum; }
+}
+
+synchronized class Store {
+    let values: int64[*] = [];
+    function fill(count: int32): void {
+        for (i in 0..count) { self.values.push((i % 1000) as int64); }
+    }
+    function part(from: int32): int64[PART] {
+        let out: int64[PART] = [];
+        for (i in from..from + PART) { out.push(self.values[i]); }
+        return out;
+    }
+}
+
+function row(what: String, threads: String, processes: String): void {
+    println("| ${what} | ${threads} | ${processes} |");
+}
+
+function ms(t: int64): String { return "${t} ms"; }
+
+function summing(count: int32): void throws ProcessError {
+    let store: Store = {};
+    store.fill(count);
+    let parts: int32 = count / PART;
+
+    let total: Total = {};
+    let t1: int64 = Time.monotonic();
+    let pool: ThreadPool = { threads: WORKERS };
+    for (w in 0..parts) {
+        let mine: int64[PART] = store.part(w * PART);
+        pool.submit(() -> {
+            let s: int64 = 0;
+            for (v in mine) { s += v; }
+            total.add(s);
+        });
+    }
+    pool.wait();
+    let threads: int64 = Time.monotonic() - t1;
+
+    let t2: int64 = Time.monotonic();
+    let ppool: ProcessPool = { processes: WORKERS };
+    for (w in 0..parts) {
+        let mine: int64[PART] = store.part(w * PART);       // the same copy out of main's data
+        let values: int64[*] = [];
+        for (v in mine) { values.push(v); }
+        ppool.submit(SumPart { values });
+    }
+    let results: Any = ppool.wait();
+    let processes: int64 = Time.monotonic() - t2;
+    let sum: int64 = 0;
+    for (i, r in results) { sum += r as int64 ?? 0; }
+    if (sum != total.get()) { println("the sums differ: ${sum} ${total.get()}"); }
+    row("sum ${count / 1000}K numbers of main, in ${parts} parts of ${PART / 1000}K", ms(threads), ms(processes));
+}
+
+
+function main(): int32 {
+    println("| case | threads | processes |");
+    println("|---|---|---|");
+    try {
+        summing(100000);
+        summing(2000000);
+    } catch (ProcessError e) {
+        println(message(e));
+        return 1;
+    }
+    return 0;
+}

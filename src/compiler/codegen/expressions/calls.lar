@@ -1,0 +1,441 @@
+// codegen.expressions.calls: calls.
+
+import syntax.ast { Call, Expr, Member, NullLit, StringLit };
+import semantics.types {
+    ArrayKind, BuiltinKind, CallInfo, CallK, ClassInfo, classOf, EnumInfo, escapeName, externInfoOf, ExternTypeInfo, findMethod,
+    FunctionInfo, isClass, isEnumT, isOpt, isResource, MethodInfo, Place, PlaceKind, Symbol, syncField, T_FLOAT32,
+    T_STRING, T_VOID, TypeKind, Type, VariantInfo
+};
+import codegen.gen { counter, writing, internalError, line, tmp };
+import codegen.gen.classes { dispatchName, ifaceCallName, methodName, returnsData };
+import codegen.gen.statements { propagate, tempMem };
+import codegen.gen.types { externCType };
+import codegen.expressions {
+    addrOf, callMem, cType, expr, hoist, hoistIfNeeded, memoryRef, paren, placeMem, structName, typeCName, value
+};
+import codegen.expressions.clone { cloneCall, compactCall };
+import codegen.expressions.strings { appendPieces, printDirect };
+
+/** The object a method is called on: a in a.f(...). */
+public function receiver(call: Call): Expr {
+    return call.callee is Member m ? m.object : call.callee;
+}
+
+/** The name of the method called: f in a.f(...). */
+function calleeName(call: Call): String {
+    return call.callee is Member m ? m.name : "";
+}
+
+public function call(c: Call in default): String {
+    let callInfo: CallInfo = c.call!;
+    if (callInfo.kind == CallK.Builtin) { return builtin(c, callInfo); }
+    if (callInfo.kind == CallK.EnumCtor) {
+        let e: EnumInfo = callInfo.enumInfo!;
+        let v: VariantInfo = callInfo.variant!;
+        if (v.fields.length == 0) { return "((${typeCName(e.name)}){ .tag = ${e.name}_${v.name} })"; }
+        let inits: String[*] = [] in default;
+        for (i, a in c.args) { inits.push(".${escapeName(v.fields[i].name)} = ${value(a)}"); }
+        return "((${typeCName(e.name)}){ .tag = ${e.name}_${v.name}, .as.${v.name} = { ${inits.join(", ")} } })";
+    }
+    if (callInfo.kind == CallK.Closure) {
+        let callee: String = value(c.callee);
+        let none: bool[*] = [];
+        let xs: String[*] = args(c.args, none);
+        let all: String[*] = [callee];
+        if (returnsData(callInfo.type!.elem!)) { all.push(placeMem(c)); }
+        for (x in xs) { all.push(x); }
+        return "call_Closure_${callInfo.type!.funcId}(${all.join(", ")})";
+    }
+    if (callInfo.kind == CallK.Method && isBuilderAdd(c, callInfo)) {
+        // builder.add("... ${x}"): the parts go straight into the builder, no temporary text
+        let b: String = hoist("StringBuilder*", value(receiver(c)));
+        line("if (!${b}->_sb.buf) ${b}->_sb = lar_text_builder_mem(lar_object_mem(${b}), LINE(${c.line}));");
+        if (c.args[0] is StringLit s) { appendPieces(s, "&${b}->_sb"); }
+        if (callInfo.method!.name == "addLine") { line("lar_text_builder_add(&${b}->_sb, \"\\n\", 1);"); }
+        return "";
+    }
+    let callExpr: String = "";
+    let ret: Type = T_VOID;
+    let throwsErr: bool = false;
+    if (callInfo.kind == CallK.Direct) {
+        let functionInfo: FunctionInfo = callInfo.func!;
+        let asg: String[*] = functionInfo.isExtern ? externArgsAs(c.args, functionInfo.varargs, writtenParams(functionInfo)) : args(c.args, functionInfo.memParams);
+        if (!functionInfo.isExtern && functionInfo.creates && c.place == null) {
+            internalError(c.line, "'${functionInfo.name}' creates its result, but this call was given no memory for it.");
+        }
+        let fr: Type = functionInfo.sig!.elem!;
+        if (functionInfo.isExtern && isOpt(fr) && isResource(fr.elem!)) {     // C makes a resource: its cell, in the memory of the call
+            return "${fr.elem!.name}__new(${callMem(c)}, ${functionInfo.cName}(${asg.join(", ")}), LINE(${c.line}))";
+        }
+        if (functionInfo.isExtern && functionInfo.textReleaser != null) {     // a text C made: copied into the memory of the call, then released
+            let p: String = hoist("char*", "(char*)(${functionInfo.cName}(${asg.join(", ")}))");
+            let s: String = hoist("LarString", "lar_string_clone(lar_string_of_c(${p}), ${callMem(c)}, LINE(${c.line}))");
+            line("if (${p}) ${functionInfo.textReleaser!.cName}((void*)${p});");
+            if (fr == T_STRING) { return s; }
+            let o: String = cType(fr);
+            return "(${p} ? ((${o}){ .has = true, .value = ${s} }) : ((${o}){ .has = false }))";
+        }
+        if (c.place != null || !functionInfo.isExtern && returnsData(functionInfo.sig!.elem!)) { asg = first(callMem(c), asg); }   // the memory of the call
+        throwsErr = functionInfo.throwsType != null;
+        if (throwsErr) { asg.push("&err"); }
+        callExpr = "${functionInfo.cName}(${asg.join(", ")})";
+        ret = functionInfo.sig!.elem!;
+        if (functionInfo.isExtern && ret == T_STRING) { return "lar_string_of_c(${callExpr})"; }
+        if (functionInfo.isExtern && isOpt(ret) && ret.elem! == T_STRING) {      // a C string that may be NULL: null
+            let p: String = hoist("const char*", callExpr);
+            let o: String = cType(ret);
+            return "(${p} ? ((${o}){ .has = true, .value = lar_string_of_c(${p}) }) : ((${o}){ .has = false }))";
+        }
+    } else {
+        let mi: MethodInfo = callInfo.method!;
+        let recv: String = "";
+        if (callInfo.kind == CallK.NativeMethod) {
+            recv = value(receiver(c));
+        } else if (callInfo.kind == CallK.Method) {
+            recv = callInfo.isClass ? value(receiver(c)) : addrOf(receiver(c));
+        } else if (callInfo.kind == CallK.InterfaceMethod) {
+            recv = value(receiver(c));
+        }
+        let asg: String[*] = args(c.args, mi.memParams);
+        if (mi.creates && c.place == null && returnsData(mi.sig!.elem!)) {
+            internalError(c.line, "'${mi.name}' creates its result, but this call was given no memory for it.");
+        }
+        if (returnsData(mi.sig!.elem!)) { asg = first(callMem(c), asg); }
+        throwsErr = mi.throwsType != null;
+        if (throwsErr) { asg.push("&err"); }
+        let rest: String = asg.length > 0 ? ", ${asg.join(", ")}" : "";
+        if (callInfo.kind == CallK.NativeMethod) {
+            callExpr = "${methodName(mi)}(${recv}${rest})";
+        } else if (callInfo.kind == CallK.Method) {
+            callExpr = callInfo.isClass ? "${dispatchName(mi.introducer, mi)}((${mi.introducer}*)${recv}${rest})" : "${methodName(mi)}(${recv}${rest})";
+        } else if (callInfo.kind == CallK.InterfaceMethod) {
+            callExpr = "${ifaceCallName(callInfo.iface!, mi)}(${recv}${rest})";
+        } else {
+            let impl: MethodInfo = findMethod(callInfo.implOwner, mi.name, false, 0)!;
+            callExpr = "${methodName(impl)}((${impl.introducer}*)self${rest})";
+        }
+        ret = mi.sig!.elem!;
+    }
+    if (!throwsErr) { return callExpr; }
+    let result: String = "";
+    if (ret == T_VOID) { line("${callExpr};"); } else { result = hoist(cType(ret), callExpr); }
+    line("if (err.kind != 0) {");
+    writing.indent += 1;
+    propagate();
+    writing.indent -= 1;
+    line("}");
+    return result;
+}
+
+/** x, then the items of xs. */
+function first(x: String, xs: String[*]): String[*] {
+    let out: String[*] = [x];
+    for (y in xs) { out.push(y); }
+    return out;
+}
+
+function isBuilderAdd(call: Call, callInfo: CallInfo): bool {
+    let mi: MethodInfo = callInfo.method!;
+    let classInfo: ClassInfo? = classOf(mi.owner);
+    if (classInfo == null || !classInfo.builder || !(mi.name == "add" || mi.name == "addLine")) { return false; }
+    return call.args[0] is StringLit s && s.exprs.length > 0 && s.conversionOf == null;
+}
+
+public function args(asg: Expr[*] in default, memParams: bool[*]): String[*] {
+    let out: String[*] = [] in default;
+    for (a in asg) {
+        let m: Symbol? = a.memArg;
+        out.push(m != null ? memoryRef(m) : value(a));
+    }
+    return out;
+}
+
+/** The parameters of a C function that a call writes (not the memory of the call, when C takes it first). */
+function writtenParams(functionInfo: FunctionInfo): Type[*] {
+    let out: Type[*] = [];
+    for (i, p in functionInfo.sig!.params) {
+        if (!(i == 0 && functionInfo.memParams.length > 0 && functionInfo.memParams[0])) { out.push(p); }
+    }
+    return out;
+}
+
+/** The arguments as C takes them, for C parameters of these types (a T[] is two: its elements and their count). */
+function externArgsAs(asg: Expr[*] in default, varargs: bool, params: Type[*]?): String[*] {
+    let out: String[*] = [];
+    for (i, a in asg) {
+        let m: Symbol? = a.memArg;
+        if (m != null) {
+            out.push(memoryRef(m));
+            continue;
+        }
+        let type: Type = a.ty!;
+        let v: String = value(a);
+        let returnType: Type = isOpt(type) ? type.elem! : type;
+        let p: Type? = params != null && i < params!.length ? params![i] : null;
+        if (isResource(returnType)) {
+            out.push("${returnType.name}__get(${v}, LINE(${a.line}))");          // the C value (a panic if it was released)
+        } else if (p != null && isOpt(p!) && p!.elem! == T_STRING) {     // a String? to C: NULL when null
+            if (a is NullLit) {
+                out.push("NULL");
+            } else {
+                let h: String = hoist(cType(p!), v);
+                out.push("(${h}.has ? lar_text_to_c(${h}.value, ${tempMem()}, LINE(${a.line})) : NULL)");
+            }
+        } else if (type == T_STRING) {
+            out.push("lar_text_to_c(${v}, ${tempMem()}, LINE(${a.line}))");
+        } else if (p != null && p!.kind == TypeKind.Array && p!.arrayKind == ArrayKind.Slice) {
+            let s: String = hoist(cType(p!), v);   // T[] -> the elements and their count, as C takes them
+            out.push("(void*)${s}.items");           // (void*): it fits char*, unsigned char*, void*...
+            out.push("${s}.length");
+        } else if (type == T_FLOAT32 && varargs) {
+            out.push("(double)${paren(v)}");
+        } else {
+            out.push(v);
+        }
+    }
+    return out;
+}
+
+/** The elements of an array as C: items and length. */
+function itemsOf(at: Type, obj: Expr in default): String[*] {
+    if (at.arrayKind == ArrayKind.Fixed) {
+        let p: String = addrOf(obj);
+        return ["${paren(p)}->items", "${paren(p)}->length"] in default;
+    }
+    let v: String = hoist(cType(at), expr(obj));
+    let dot: String = at.arrayKind == ArrayKind.Slice ? "." : "->";
+    return ["${v}${dot}items", "${v}${dot}length"] in default;
+}
+
+function builtin(call: Call in default, b: CallInfo in default): String {
+    let k: BuiltinKind = b.builtin;
+    if (k == BuiltinKind.Print || k == BuiltinKind.Println) { return printCall(call, k == BuiltinKind.Println); }
+    if (k == BuiltinKind.Panic) { return call.args.length == 1 ? "lar_panic_str(${value(call.args[0])}, LINE(${call.line}))" : "lar_panic(\"panic\", LINE(${call.line}))"; }
+    if (k == BuiltinKind.Release) { return "lar_resource_release((void*)(${value(call.args[0])}))"; }   // now, not when its memory is freed
+    if (k == BuiltinKind.MemLimit) {
+        let ms: Symbol = b.memory!;
+        return "lar_memory_limit(${memoryRef(ms)}, (int64_t)(${value(call.args[1])}), \"${ms.name}\", LINE(${call.line}))";
+    }
+    if (k == BuiltinKind.MemCompact) { return compactCall(call, b); }
+    let obj: Expr = receiver(call);
+    let at: Type = b.receiverType ?? T_VOID;
+    return switch (k) {
+        case Push -> "${structName(at)}_push(${at.arrayKind == ArrayKind.Growable ? expr(obj) : addrOf(obj)}, ${value(call.args[0])})";
+        case Pop -> {      // the last element; the length goes down by one
+            let l: String = at.arrayKind == ArrayKind.Growable ? hoistIfNeeded(cType(at), expr(obj), obj) : hoist("${cType(at)}*", addrOf(obj));
+            yield "${l}->items[lar_pop(&${l}->length, LINE(${call.line}))]";
+        }
+        case Clear -> "((void)(${paren(at.arrayKind == ArrayKind.Growable ? expr(obj) : addrOf(obj))}->length = 0))";
+        case Map, Filter -> mapFilter(call, b);
+        case Sort -> sortList(call, at);
+        case AnyPush -> {
+            let o: String = hoist("LarAny", expr(obj));
+            yield "lar_any_push(${o}, ${value(call.args[0])}, LINE(${call.line}))";
+        }
+        case AnyLength -> "lar_any_length(${expr(obj)})";
+        case AnyRemove -> "lar_any_remove(${expr(obj)}, ${value(call.args[0])}, LINE(${call.line}))";
+        case AnyRemoveAt -> "lar_any_remove_at(${expr(obj)}, (int64_t)(${value(call.args[0])}), LINE(${call.line}))";
+        case AnyClear -> "lar_any_clear(${expr(obj)}, LINE(${call.line}))";
+        case AnyRemoveIf -> anyRemoveIf(call);
+        case StringMethod -> stringMethod(call);
+        case Join -> {
+            let il: String[*] = itemsOf(at, obj);
+            yield "lar_string_join(${il[0]}, ${il[1]}, ${value(call.args[0])}, ${placeMem(call)}, LINE(${call.line}))";
+        }
+        case Contains -> {      // a loop that stops at the first element equal to the value
+            let il: String[*] = itemsOf(at, obj);
+            let x: String = hoist(cType(at.elem!), value(call.args[0]));
+            let found: String = tmp("found");
+            let k: String = tmp("index");
+            let e: String = "${il[0]}[${k}]";
+            let eq: String = at.elem! == T_STRING ? "lar_string_eq(${e}, ${x})" : isEnumT(at.elem!) ? "${e}.tag == ${x}.tag" : "${e} == ${x}";
+            line("bool ${found} = false;");
+            line("for (int32_t ${k} = 0; ${k} < ${il[1]}; ${k}++) if (${eq}) { ${found} = true; break; }");
+            yield found;
+        }
+        case AnyContains -> "lar_any_contains(${expr(obj)}, ${value(call.args[0])})";
+        case AnyContainsKey -> "lar_any_contains_key(${expr(obj)}, ${value(call.args[0])})";
+        case Wait -> "lar_sync_wait(self->${syncField(classOf(b.receiverType!.name)!)})";
+        default -> cloneCall(call, b);
+    };
+}
+
+function printCall(call: Call in default, newline: bool): String {
+    let f: String = newline ? "lar_println" : "lar_print";
+    let arg: Expr = call.args[0];
+    let ap: Place? = arg.place;
+    if (arg is StringLit s && arg.conversionOf == null) {
+        let defaultPlace: bool = ap != null && ap.kind == PlaceKind.Temp;
+        if (s.exprs.length == 0 || defaultPlace) {
+            let direct: String? = printDirect(s, newline);
+            if (direct != null) { return direct; }
+        }
+    }
+    return "${f}(${value(arg)})";
+}
+
+function stringMethod(call: Call in default): String {
+    let name: String = calleeName(call);
+    let s: String = hoist("LarString", expr(receiver(call)));
+    let a: String[*] = [] in default;
+    for (x in call.args) { a.push(x.ty! == T_STRING ? value(x) : "(int64_t)(${value(x)})"); }
+    let ln: int32 = call.line;
+    return switch (name) {
+        case "length" -> "${s}.len";
+        case "substring" -> "lar_string_sub(${s}, ${a[0]}, ${a.length > 1 ? a[1] : "(int64_t)${s}.len"}, ${ln})";
+        case "bytes" -> "((Slice_u8){ (uint8_t*)${s}.ptr, ${s}.len })";
+        default -> splitText(call, s, name == "lines" ? "lar_string(\"\\n\", 1)" : a[0], name == "lines");
+    };
+}
+
+/** split, lines: views of the text in a new list. */
+function splitText(call: Call in default, s: String, sep: String, isLines: bool): String {
+    let ln: int32 = call.line;
+    let l: String = hoist("List_s*", "List_s_new(${placeMem(call)}, ${ln})");
+    let sp: String = hoist("LarString", sep);
+    let start: String = tmp("start");
+    let k: String = tmp("index");
+    lines("""
+        if (${sp}.len == 0) {
+            for (int32_t ${k} = 0; ${k} < ${s}.len; ${k}++) List_s_add(${l}, lar_string(${s}.ptr + ${k}, 1), ${ln});
+        } else if (${s}.len > 0 || !${isLines}) {
+            int32_t ${start} = 0;
+            for (;;) {
+                int32_t ${k} = lar_string_find(${s}, ${sp}, ${start});
+                int32_t end_${k} = ${k} < 0 ? ${s}.len : ${k};
+                LarString part_${k} = lar_string(${s}.ptr + ${start}, end_${k} - ${start});""");
+    if (isLines) {
+        lines("""
+                        if (part_${k}.len > 0 && part_${k}.ptr[part_${k}.len - 1] == '\\r') part_${k}.len--;
+                        if (${k} < 0 && end_${k} == ${start}) break;   /* no empty line after a final newline */
+                """);
+    }
+    lines("""
+                List_s_add(${l}, part_${k}, ${ln});
+                if (${k} < 0) break;
+                ${start} = ${k} + ${sp}.len;
+            }
+        }""");
+    return l;
+}
+
+/** Several lines of C, each written like line() does (a final newline adds no empty line). */
+public function lines(text: String in default): void {
+    let ls: String[*] = text.split("\n");
+    for (i, l in ls) {
+        if (i < ls.length - 1 || !l.isEmpty()) { line(l); }
+    }
+}
+
+/** Keeps the entries for which the lambda says false; returns how many were removed. */
+function anyRemoveIf(call: Call in default): String {
+    let f: Expr = call.args[0];
+    let functionType: Type = f.ty!;
+    let isNamed: bool = functionType.params.length == 2;
+    let table: String = tmp("table");
+    let fnv: String = tmp("predicate");
+    let removed: String = tmp("removed");
+    let w: String = tmp("kept");
+    let k: String = tmp("index");
+    line("LarTable* ${table} = lar_any_table(${expr(receiver(call))}, LINE(${call.line}));");
+    line("${cType(functionType)} ${fnv} = ${value(f)};");
+    line("int32_t ${removed} = 0;");
+    let callText: String = "call_Closure_${functionType.funcId}(${fnv}, ";
+    line("{");
+    writing.indent += 1;
+    line("int32_t ${w} = 0;");
+    if (!isNamed) {
+        lines("""
+            for (int32_t ${k} = 0; ${k} < ${table}->length; ${k}++) {
+                if (${callText}${table}->items[${k}])) ${removed}++;
+                else ${table}->items[${w}++] = ${table}->items[${k}];
+            }
+            ${table}->length = ${w};
+            ${w} = 0;
+            """);
+    }
+    let keyArg: String = isNamed ? "${table}->keys[${k}], " : "";
+    lines("""
+        for (int32_t ${k} = 0; ${k} < ${table}->count; ${k}++) {
+            if (${callText}${keyArg}${table}->values[${k}])) ${removed}++;
+            else { ${table}->keys[${w}] = ${table}->keys[${k}]; ${table}->values[${w}] = ${table}->values[${k}]; ${w}++; }
+        }
+        ${table}->count = ${w};
+        lar_table_rehash(${table});
+        """);
+    writing.indent -= 1;
+    line("}");
+    return removed;
+}
+
+/**
+ * list.sort(...): a merge sort, bottom up, in place (stable: of two equal elements the first stays first),
+ * with a buffer for one copy of the elements while it runs.
+ */
+function sortList(call: Call in default, at: Type in default): String {
+    let element: Type = at.elem!;
+    let elementC: String = cType(element);
+    let list: String[*] = itemsOf(at, receiver(call));
+    let items: String = tmp("items");
+    let count: String = tmp("count");
+    let spare: String = tmp("spare");
+    line("${elementC}* ${items} = ${list[0]};");
+    line("int64_t ${count} = ${list[1]};");
+    let compare: String = "";
+    if (call.args.length == 1) {
+        let f: Expr = call.args[0];
+        let comparator: String = hoist(cType(f.ty!), value(f));
+        compare = "call_Closure_${f.ty!.funcId}(${comparator}, @A, @B)";
+    } else if (element == T_STRING) {          // byte by byte, then the shorter first
+        compare = "(memcmp((@A).ptr, (@B).ptr, (size_t)((@A).len < (@B).len ? (@A).len : (@B).len)) != 0 ? memcmp((@A).ptr, (@B).ptr, (size_t)((@A).len < (@B).len ? (@A).len : (@B).len)) : (@A).len - (@B).len)";
+    } else {
+        compare = "((@A) < (@B) ? -1 : (@A) > (@B) ? 1 : 0)";
+    }
+    let before: String = compare.replace("@A", "${items}[right]").replace("@B", "${items}[left]");
+    line("if (${count} > 1) {");
+    line("    ${elementC}* ${spare} = (${elementC}*)malloc(sizeof(${elementC}) * (size_t)${count});");
+    line("    if (!${spare}) lar_panic(\"out of memory sorting a list\", LINE(${call.line}));");
+    line("    for (int64_t width = 1; width < ${count}; width *= 2) {");
+    line("        for (int64_t low = 0; low < ${count}; low += 2 * width) {");
+    line("            int64_t middle = low + width < ${count} ? low + width : ${count};");
+    line("            int64_t high = low + 2 * width < ${count} ? low + 2 * width : ${count};");
+    line("            int64_t left = low, right = middle, out = low;");
+    line("            while (left < middle && right < high) ${spare}[out++] = ${before} < 0 ? ${items}[right++] : ${items}[left++];");
+    line("            while (left < middle) ${spare}[out++] = ${items}[left++];");
+    line("            while (right < high) ${spare}[out++] = ${items}[right++];");
+    line("        }");
+    line("        memcpy(${items}, ${spare}, sizeof(${elementC}) * (size_t)${count});");
+    line("    }");
+    line("    free(${spare});");
+    line("}");
+    return "";
+}
+
+function mapFilter(call: Call in default, b: CallInfo): String {
+    let isMap: bool = b.builtin == BuiltinKind.Map;
+    let result: Type = call.ty!;
+    let il: String[*] = itemsOf(b.receiverType!, receiver(call));
+    let items: String = il[0];
+    let len: String = il[1];
+    let f: Expr = call.args[0];
+    let functionType: Type = f.ty!;
+    let fnv: String = hoist(cType(functionType), value(f));
+    let res: String = tmp("result");
+    let k: String = tmp("index");
+    // map's lambda creates its values where the result lives: the list's memory, or where the call says
+    let dest: String = !isMap || !returnsData(functionType.elem!) ? "" : result.arrayKind == ArrayKind.Fixed ? "${placeMem(call)}, " : "${res}->mem, ";
+    let callText: String = "call_Closure_${functionType.funcId}(${fnv}, ${dest}${items}[${k}])";
+    if (result.arrayKind == ArrayKind.Fixed) {
+        line("${cType(result)} ${res};");
+        line("memset(&${res}, 0, sizeof ${res});");
+        line("for (int32_t ${k} = 0; ${k} < ${len}; ${k}++) {");
+        line(isMap ? "    ${res}.items[${res}.length++] = ${callText};" : "    if (${callText}) ${res}.items[${res}.length++] = ${items}[${k}];");
+    } else {
+        let n: String = structName(result);
+        line("${cType(result)} ${res} = ${n}_new(${placeMem(call)}, LINE(${call.line}));");
+        line("for (int32_t ${k} = 0; ${k} < ${len}; ${k}++) {");
+        line(isMap ? "    ${n}_add(${res}, ${callText}, LINE(${call.line}));" : "    if (${callText}) ${n}_add(${res}, ${items}[${k}], LINE(${call.line}));");
+    }
+    line("}");
+    return res;
+}

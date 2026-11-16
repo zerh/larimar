@@ -1,0 +1,291 @@
+// std.os.process: processes. A Process runs another program, or a task of this one in a copy of it; a
+// ProcessPool runs many tasks in a few copies. They are used as threads are: start() and join(), submit()
+// and wait().
+//
+//   import std.os.process { Process, ProcessError };
+//
+//   let lsp: Process = { program: "larimarc", args: ["lsp"] };
+//   lsp.start();                              // throws ProcessError when it cannot start
+//   lsp.write("Content-Length: 2\r\n\r\n{}");
+//   let line: String? = lsp.readLine(5000);   // waits up to 5 s; null when nothing came (or it ended)
+//   lsp.kill();
+//
+// The literal says what to run (it cannot fail); start() runs it. Its output is read through a pipe,
+// and every read says how long it may wait, so a program that does not answer never hangs the caller.
+// Its error output goes where this program's goes, nowhere with `quiet: true`, or into its output (read
+// with the rest) with `mergeErrors: true`. A Process that is still running when its memory is freed is
+// killed.
+//
+// Work of the program itself runs in other processes too: a class that implements Task is work that goes
+// to a copy of this program with its fields, and what run() gives comes back; a panic there is a
+// ProcessError here.
+//
+//   class Resize implements Task {
+//       let file: String;
+//       let width: int32;
+//       override function run(): Any { return Images.resize(self.file, self.width); }
+//   }
+//
+//   let p: Process = { run: Resize { file: "casa.jpg", width: 800 } };
+//   p.start();
+//   let r: Any = p.join();                    // what run() gave there
+//
+//   let pool: ProcessPool = { processes: 4 };
+//   pool.submit(Resize { file: "1.jpg", width: 800 });
+//   pool.submit(Resize { file: "2.jpg", width: 800 });
+//   let all: Any = pool.wait();               // what each run() gave, in the order they were submitted
+
+import std.os;
+import std.os.process.internal { Child };
+import std.os.process.internal as Internal;
+import std.os.rpc { Rpc, RpcError, serve };
+import std.os.rpc as Calls;
+
+/** Why a process could not be used. */
+public enum ProcessError {
+    /** It could not start: not found, not allowed to run... */
+    CannotStart(program: String, why: String),
+    /** It is not running: never started, or it ended (or closed its input). */
+    NotRunning,
+    /** A task did not finish: its process ended, or it could not be sent there. */
+    Failed(why: String)
+}
+
+/** A message for the error, in English. */
+public function message(e: ProcessError): String {
+    return switch (e) {
+        case CannotStart { program, why } -> "cannot start ${program}: ${why}";
+        case NotRunning -> "the process is not running";
+        case Failed { why } -> "the task failed: ${why}";
+    };
+}
+
+/**
+ * Work that runs in another process: a copy of this program, so that a panic or a crash there is only an
+ * error here. The object goes there with its fields (numbers, bool, String, optionals and lists of them);
+ * what run() gives comes back the same way (a table, a number, a String...). A class that implements it
+ * says so itself (implements Task) and extends no other class.
+ */
+public interface Task {
+    function run(): Any;
+}
+
+/** The variable that makes a copy of this program run tasks instead of its main. */
+const TASKS_ENV: String = "LARIMAR_PROCESS=1";
+
+/** A copy of this program that runs tasks: started, and waiting for them. */
+function startCopy(): Rpc throws ProcessError {
+    try {
+        return Rpc.startShared(Child { program: os.programPath(), env: [TASKS_ENV] });
+    } catch (RpcError e) {
+        throw ProcessError.CannotStart { program: os.programPath().clone(), why: Calls.message(e).clone() };
+    }
+}
+
+// The compiler writes these two for a program with Task classes (they ask std.os.process.tasks, which it
+// writes too); without them there is no task to send.
+
+/** The class and fields of a task, as a table: { name, fields }; null when it is not a Task class of the program. */
+function encodeTask(task: Task): Any { return null; }
+
+/** The task of class `name` with these fields; null when the program has no such class. */
+function startTask(name: String, fields: Any): Task? { return null; }
+
+/** What goes to the copy for a task: { name, fields }. */
+function encoded(task: Task): Any throws ProcessError {
+    let params: Any = encodeTask(task);
+    if (params == null) { throw ProcessError.Failed("the task is not of a class of this program that implements Task".clone()); }
+    return params;
+}
+
+/**
+ * A process: another program (`program`, with `args`), or a task of this program (`run`) in a copy of it;
+ * one or the other. The literal says what to run; start() runs it, and join() waits for it to end.
+ */
+public class Process extends Child {
+    /** The task to run in a copy of this program (instead of a program). */
+    let run: Task? = null;
+
+    let copy: Rpc? = null;
+    let call: int64 = 0;
+    let joined: bool = false;
+
+    override function hasTask(): bool { return self.run != null; }
+
+    /** Starts it. Throws ProcessError.CannotStart when it cannot (not found, not allowed, nothing to run). */
+    function start(): void throws ProcessError {
+        if (self.run != null) {
+            if (self.program != "") { throw ProcessError.CannotStart { program: self.program.clone(), why: "a Process runs a program or a task, not both".clone() }; }
+            let params: Any = encoded(self.run!);
+            self.copy = startCopy();
+            try {
+                self.call = self.copy!.begin("run", params);
+            } catch (RpcError e) {
+                self.copy!.stop();
+                self.copy = null;
+                throw ProcessError.Failed(Calls.message(e).clone());
+            }
+            return;
+        }
+        if (self.program == "") { throw ProcessError.CannotStart { program: "".clone(), why: "it has no program and no task to run".clone() }; }
+        let why: String? = self.launch();
+        if (why != null) { throw ProcessError.CannotStart { program: self.program.clone(), why: why!.clone() }; }
+    }
+
+    /**
+     * Waits for it to end: what the task's run() gave, or the exit code of the program. Throws
+     * ProcessError.NotRunning when it was not started (or was joined already), Failed when the task did
+     * not finish.
+     */
+    function join(): Any throws ProcessError {
+        if (self.copy != null) {
+            if (self.joined) { throw ProcessError.NotRunning; }
+            self.joined = true;
+            try {
+                let result: Any = self.copy!.finish(self.call);
+                self.copy!.close();
+                return result;
+            } catch (RpcError e) {
+                self.copy!.stop();
+                throw ProcessError.Failed(Calls.message(e).clone());
+            }
+        }
+        if (!self.started()) { throw ProcessError.NotRunning; }
+        let code: int32? = self.wait(-1);
+        return code ?? -1;
+    }
+
+    /** Writes text to its input. Throws ProcessError.NotRunning when it does not read it any more. */
+    function write(text: String): void throws ProcessError {
+        if (!self.send(text)) { throw ProcessError.NotRunning; }
+    }
+
+    /** Ends it now (if it still runs). */
+    override function kill(): void {
+        super.kill();
+        if (self.copy != null) { self.copy!.stop(); }
+    }
+}
+
+/** Where a program is found in the PATH (with .exe on Windows), or null. A path with a folder is checked as it is. */
+public function findProgram(name: String): String? { return Internal.findProgram(name); }
+
+// ---- many tasks ---------------------------------------------------------------------------------------
+
+/**
+ * Runs tasks in up to `processes` copies of this program, each one a task at a time:
+ * let pool: ProcessPool = { processes: 8 }; pool.submit(task); ... let all: Any = pool.wait();
+ * The copies start as tasks arrive and stay for the next ones until the pool's memory goes.
+ */
+public class ProcessPool {
+    /** How many processes at most (they start when there is work for them). */
+    let processes: int32 = 4;
+    let workers: Rpc[*] = [];
+    /** For each worker, the task it runs (its place among the submitted ones), or -1. */
+    let busy: int32[*] = [];
+    let ids: int64[*] = [];
+    /** What goes for each task submitted and not sent yet. */
+    let queued: Any = {};
+    let sent: int32 = 0;
+    let results: Any = {};
+    let done: int32 = 0;
+
+    /** Runs the task in one of the processes, as soon as one is free (it does not wait for it). */
+    function submit(task: Task): void throws ProcessError {
+        let params: Any = encoded(task);
+        self.queued.push(params.clone());
+        self.results.push(null);
+        self.dispatch();
+    }
+
+    /**
+     * Waits until every task submitted so far has finished: what each run() gave, in the order they were
+     * submitted. Throws ProcessError.Failed when one did not finish (the others are dropped too).
+     */
+    function wait(): Any throws ProcessError {
+        while (self.done < self.results.length) {
+            self.dispatch();
+            for (k in 0..self.busy.length) {
+                if (self.busy[k] >= 0) {
+                    try {
+                        self.results[self.busy[k]] = self.workers[k].finish(self.ids[k]);
+                    } catch (RpcError e) {
+                        self.reset();
+                        throw ProcessError.Failed(Calls.message(e).clone());
+                    }
+                    self.busy[k] = -1;
+                    self.done += 1;
+                    break;
+                }
+            }
+        }
+        let all: Any = self.results.clone();
+        self.queued = {};
+        self.results = {};
+        self.sent = 0;
+        self.done = 0;
+        return all;
+    }
+
+    /** Sends queued tasks to free workers, starting workers up to `processes`. */
+    function dispatch(): void throws ProcessError {
+        let limit: int32 = self.processes > 0 ? self.processes : 1;
+        while (self.sent < self.queued.length) {
+            let k: int32 = -1;
+            for (i in 0..self.busy.length) {
+                if (self.busy[i] < 0) {
+                    k = i;
+                    break;
+                }
+            }
+            if (k < 0) {
+                if (self.workers.length >= limit) { return; }
+                try {
+                    self.workers.push(startCopy());
+                } catch (ProcessError e) {
+                    self.reset();
+                    throw e;
+                }
+                self.busy.push(-1);
+                self.ids.push(0);
+                k = self.workers.length - 1;
+            }
+            try {
+                self.ids[k] = self.workers[k].begin("run", self.queued[self.sent]);
+            } catch (RpcError e) {
+                self.reset();
+                throw ProcessError.Failed(Calls.message(e).clone());
+            }
+            self.busy[k] = self.sent;
+            self.sent += 1;
+        }
+    }
+
+    /** Drops the workers and the tasks: a new start for whatever comes next. */
+    function reset(): void {
+        for (w in self.workers) { w.stop(); }
+        self.workers.clear();
+        self.busy.clear();
+        self.ids.clear();
+        self.queued = {};
+        self.results = {};
+        self.sent = 0;
+        self.done = 0;
+    }
+}
+
+/**
+ * What a copy of this program started for tasks does instead of its main (the compiler calls it when
+ * LARIMAR_PROCESS is set): it runs the tasks it is sent until it is closed.
+ */
+public function serveTasks(): int32 {
+    serve((call) -> {
+        let task: Task? = startTask(call.params.name as String ?? "", call.params["fields"]);
+        if (task == null) {
+            call.fail(-32602, "this program has no Task class ${call.params.name}");
+            return null;
+        }
+        return task!.run();
+    });
+    return 0;
+}

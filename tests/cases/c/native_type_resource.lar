@@ -8,9 +8,9 @@ ccode {
     static Doc* doc_open(int id) { if (id < 0) return NULL; Doc* d = (Doc*)calloc(1, sizeof(Doc)); d->id = id; strcpy(d->title, "untitled"); return d; }
     static void doc_close(Doc* d) { closed++; free(d); }
     static const char* doc_title(Doc* d) { return d->title; }
-    static const char* doc_shout(RtMem* m, Doc* d, const char* suffix) {
+    static const char* doc_shout(LarMemory* m, Doc* d, const char* suffix) {
         size_t n = strlen(d->title), k = strlen(suffix);
-        char* out = (char*)rt_mem_alloc(m, n + k + 1, 0);
+        char* out = (char*)lar_memory_alloc(m, n + k + 1, 0);
         for (size_t i = 0; i < n; i++) out[i] = (char)toupper((unsigned char)d->title[i]);
         memcpy(out + n, suffix, k);
         return out;

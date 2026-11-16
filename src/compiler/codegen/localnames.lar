@@ -1,0 +1,88 @@
+// codegen.localnames: the names of the C variables the compiler makes in a function (its temporaries,
+// its memories, the result it returns). Each is asked for by what it is (`localName("result")`), and gets
+// that name, or `result_2`, `result_3`... when the name is taken in the function: by another temporary,
+// or by anything the function's C already names (a variable of the Larimar code, a global, a function).
+//
+// While a function is generated, a temporary is a mark in its text (its role and a number of its own);
+// when the function is done, nameLocals gives each mark its name. So a name never meets a name of the
+// code, whichever comes first in the text.
+
+/** The byte that starts and ends the parts of a mark (it never appears in the C: texts escape it). */
+function markByte(): String {
+    let b: byte[*] = [1];
+    return stringOf(b);
+}
+
+let MARK: String = markByte();
+let made: int32 = 0;
+
+/** The name of a temporary that is `role` (letters, digits and '_'): one of its own, decided by nameLocals. */
+public function localName(role: String): String {
+    made += 1;
+    return "${MARK}${role}${MARK}${made}${MARK}";
+}
+
+/** The same temporary for a key that names it already (a memory of a block of the analysis: mem_3). */
+public function localNameFor(role: String, key: String): String { return "${MARK}${role}${MARK}${key}${MARK}"; }
+
+function isNameStart(c: byte): bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
+
+function isNamePart(c: byte): bool { return isNameStart(c) || (c >= '0' && c <= '9'); }
+
+/** The text with each mark replaced by its name: the role, or the role and a number when it is taken. */
+public function nameLocals(text: String): String {
+    if (text.indexOf(MARK) == null) { return text; }
+    let taken: Any = {};
+    let i: int32 = 0;
+    while (i < text.length) {                      // what the text names already
+        let c: byte = text[i];
+        if (c == 1) {                              // a mark: role, key, end
+            let n: int32 = 0;
+            while (i < text.length && n < 3) {
+                if (text[i] == 1) { n += 1; }
+                i += 1;
+            }
+            continue;
+        }
+        if (isNameStart(c) && (i == 0 || !isNamePart(text[i - 1]))) {
+            let j: int32 = i + 1;
+            while (j < text.length && isNamePart(text[j])) { j += 1; }
+            taken[text.substring(i, j)] = true;
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    let names: Any = {};                           // key of each mark: its name
+    let out: StringBuilder = {};
+    let start: int32 = 0;
+    i = 0;
+    while (i < text.length) {
+        if (text[i] != 1) {
+            i += 1;
+            continue;
+        }
+        out.add(text.substring(start, i));
+        let roleEnd: int32 = text.indexOf(MARK, i + 1) ?? text.length;
+        let keyEnd: int32 = text.indexOf(MARK, roleEnd + 1) ?? text.length;
+        let role: String = text.substring(i + 1, roleEnd);
+        let key: String = text.substring(roleEnd + 1, keyEnd);
+        let name: String? = names[key] as String;
+        if (name == null) {
+            let candidate: String = role;
+            let n: int32 = 1;
+            while (taken[candidate] != null) {
+                n += 1;
+                candidate = "${role}_${n}";
+            }
+            taken[candidate] = true;
+            names[key] = candidate;
+            name = candidate;
+        }
+        out.add(name!);
+        i = keyEnd + 1;
+        start = i;
+    }
+    out.add(text.substring(start, text.length));
+    return out.toString();
+}

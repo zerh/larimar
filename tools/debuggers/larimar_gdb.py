@@ -48,8 +48,8 @@ def _is_class(t):
     names = _fields(t)
     if not names:
         return False
-    if names[0] == "_h":
-        return _name(t.fields()[0].type) == "RtObjHead"
+    if names[0] == "header":
+        return _name(t.fields()[0].type) == "LarObjectHeader"
     if names[0] == "_super":
         return _is_class(t.fields()[0].type)
     return False
@@ -61,8 +61,8 @@ def _real_object(obj):
     while _fields(head.type) and _fields(head.type)[0] == "_super":
         head = head["_super"]
     try:
-        vt = head["_h"]["vt"]
-        cls = vt.cast(gdb.lookup_type("RtVTableHead").pointer()).dereference()["cls"]
+        vt = head["header"]["vt"]
+        cls = vt.cast(gdb.lookup_type("LarMethodTable").pointer()).dereference()["cls"]
         name = cls.dereference()["name"].string()
         t = gdb.lookup_type("struct " + name)
         if t != obj.type.strip_typedefs():
@@ -74,7 +74,7 @@ def _real_object(obj):
 
 def _object_fields(obj, out):
     for f in obj.type.strip_typedefs().fields():
-        if f.name == "_h":
+        if f.name == "header":
             continue
         if f.name == "_super":
             _object_fields(obj["_super"], out)
@@ -174,8 +174,8 @@ class InterfacePrinter:
         try:
             p = v["obj"]
             if int(p) != 0:
-                head = p.cast(gdb.lookup_type("RtObjHead").pointer()).dereference()
-                cls = head["vt"].cast(gdb.lookup_type("RtVTableHead").pointer()).dereference()["cls"]
+                head = p.cast(gdb.lookup_type("LarObjectHeader").pointer()).dereference()
+                cls = head["vt"].cast(gdb.lookup_type("LarMethodTable").pointer()).dereference()["cls"]
                 t = gdb.lookup_type("struct " + cls.dereference()["name"].string())
                 self.inner = ObjectPrinter(p.cast(t.pointer()), True)
         except (gdb.error, gdb.MemoryError):
@@ -261,7 +261,7 @@ class AnyPrinter:
             return self._object().to_string()
         if k == 15:
             try:
-                return "%s value" % a["box"]["type"].cast(gdb.lookup_type("RtValType").pointer()).dereference()["name"].string()
+                return "%s value" % a["box"]["type"].cast(gdb.lookup_type("LarValueType").pointer()).dereference()["name"].string()
             except gdb.error:
                 return "value"
         return ANY_KINDS[k] if 0 <= k < len(ANY_KINDS) else "?"
@@ -269,7 +269,7 @@ class AnyPrinter:
     def _object(self):
         box = self.v["as"]["box"]
         try:
-            name = box["type"].cast(gdb.lookup_type("RtClass").pointer()).dereference()["name"].string()
+            name = box["type"].cast(gdb.lookup_type("LarClass").pointer()).dereference()["name"].string()
             t = gdb.lookup_type("struct " + name)
             return ObjectPrinter(box["ptr"].cast(t.pointer()), True)
         except gdb.error:
@@ -305,17 +305,17 @@ def lookup(v):
     if target.code != gdb.TYPE_CODE_STRUCT:
         return None
     name = _name(target)
-    if name == "RtString" and not pointer:
+    if name == "LarString" and not pointer:
         return StringPrinter(v)
     if LIST_NAME.match(name):
         return ListPrinter(v, pointer)
-    if name == "RtTable":
+    if name == "LarTable":
         return TablePrinter(v, pointer)
     if pointer:
         return ObjectPrinter(v, True) if _is_class(target) else None
     if OPT_NAME.match(name):
         return OptionalPrinter(v)
-    if name == "RtAny":
+    if name == "LarAny":
         return AnyPrinter(v)
     names = _fields(target)
     if names == ["tag", "as"] and target.fields()[0].type.strip_typedefs().code == gdb.TYPE_CODE_ENUM:

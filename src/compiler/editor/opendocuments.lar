@@ -1,0 +1,15 @@
+// editor.opendocuments: the texts of the documents open in the editor, by file path, for the analysis of one
+// question (larimar lsp-worker). The linker reads a file from here when it is open in the editor (with its
+// changes not saved yet), and from the disk otherwise.
+//
+// A worker answers one question and ends, so the texts live in the default memory: nothing is ever freed
+// here. The server, which runs for hours while the texts change on every key, keeps its own copies in a
+// memory it compacts (editor.lsp, Documents).
+
+let texts: Any = {} in default;
+
+/** Keeps (a copy of) the editor's text of a file. */
+public function setOpenDocument(path: String, text: String): void { texts[path] = text.clone() in default; }
+
+/** The editor's text of a file, or null when it is not open. */
+public function openDocument(path: String): String? { return texts[path] as String; }

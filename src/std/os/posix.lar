@@ -1,0 +1,40 @@
+// std.os.posix: the process, its folder and the shell on Unix.
+
+import std.platform { UnixPlatform };
+
+public class PosixSystem implements UnixPlatform {
+    cinclude "<unistd.h>";
+    cinclude "<signal.h>";
+    cinclude "<sys/wait.h>";
+
+    ccode {
+        static volatile sig_atomic_t lar_os_terminating = 0;
+        static void lar_os_on_signal(int s) { (void)s; lar_os_terminating = 1; }
+    }
+
+    static native function processId(): int64 { return (int64_t)getpid(); }
+
+    static native function cwd(into: byte[]): bool { return getcwd((char*)into, (size_t)into_length - 1) != NULL; }
+
+    static native function programPath(into: byte[]): void {
+        ssize_t n = readlink("/proc/self/exe", (char*)into, (size_t)into_length - 1);
+        into[n > 0 ? n : 0] = 0;                                  /* readlink does not end the text */
+    }
+
+    static native function shell(command: String): int32 {
+        int r = system(command);
+        if (r != -1 && WIFEXITED(r)) r = WEXITSTATUS(r);          /* the exit status, not the wait status */
+        return (int32_t)r;
+    }
+
+    static native function catchTermination(): void {
+        struct sigaction a;
+        memset(&a, 0, sizeof a);
+        a.sa_handler = lar_os_on_signal;
+        sigemptyset(&a.sa_mask);
+        sigaction(SIGINT, &a, NULL);
+        sigaction(SIGTERM, &a, NULL);
+    }
+
+    static native function terminating(): bool { return lar_os_terminating != 0; }
+}

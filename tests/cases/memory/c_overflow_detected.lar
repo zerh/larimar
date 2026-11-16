@@ -1,8 +1,8 @@
 // C que escribe un byte de más dentro de una memoria: las comprobaciones de memoria lo detectan.
 // (Sin ellas, el byte pisaba en silencio lo siguiente de la memoria.)
 ccode {
-    static const char* bad(RtMem* m) {
-        char* out = (char*)rt_mem_alloc(m, 4, 0);
+    static const char* bad(LarMemory* m) {
+        char* out = (char*)lar_memory_alloc(m, 4, 0);
         for (int i = 0; i <= 4; i++) out[i] = 'A';
         out[3] = 0;
         return out;

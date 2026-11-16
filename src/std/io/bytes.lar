@@ -1,0 +1,128 @@
+// std.io.bytes: binary messages. A ByteWriter puts numbers, texts and bytes one after another; a ByteReader
+// takes them back in the same order. For what goes over a stream or a segment of shared memory when JSON
+// would cost too much (frames, samples, commands of drawing).
+//
+//   import std.io.bytes { ByteWriter, ByteReader };
+//
+//   let out: ByteWriter = {};
+//   out.putInt32(7);
+//   out.putFloat64(2.5);
+//   out.putString("hola");
+//   stream.write(out.bytes);                  // or segment.putBytes(0, out.bytes)
+//
+//   let input: ByteReader = { data: received };
+//   let n: int32 = input.getInt32();          // 7, then 2.5, then "hola"
+//
+// Numbers are little-endian, the order of the processors Larimar runs on; a String is its length (an
+// int32) and its bytes. A ByteReader that runs out of bytes throws IoError.Failed: the message came cut,
+// or it is not what the reader thought.
+
+import std.io { IoError };
+
+native function bits_of_float64(v: float64): int64 {
+    int64_t bits;
+    memcpy(&bits, &v, 8);
+    return bits;
+}
+
+native function float64_of_bits(bits: int64): float64 {
+    double v;
+    memcpy(&v, &bits, 8);
+    return v;
+}
+
+/** Writes values one after another into `bytes`, which grows. */
+public class ByteWriter {
+    let bytes: byte[*] = [];
+
+    function putByte(value: byte): void { self.bytes.push(value); }
+
+    function putBool(value: bool): void { self.bytes.push(value ? 1 : 0); }
+
+    function putInt32(value: int32): void { self.putInteger(value as int64, 4); }
+
+    function putInt64(value: int64): void { self.putInteger(value, 8); }
+
+    function putFloat64(value: float64): void { self.putInteger(bits_of_float64(value), 8); }
+
+    /** Its length (an int32), then its bytes. */
+    function putString(value: String): void {
+        self.putInt32(value.length);
+        for (b in value) { self.bytes.push(b); }
+    }
+
+    /** The bytes as they are (the reader must know how many: write the count first). */
+    function putBytes(value: byte[]): void {
+        for (b in value) { self.bytes.push(b); }
+    }
+
+    /** How many bytes were written. */
+    function length(): int32 { return self.bytes.length; }
+
+    /** Empties it, to write the next message in the same memory. */
+    function clear(): void { self.bytes.clear(); }
+
+    function putInteger(value: int64, count: int32): void {
+        let v: int64 = value;
+        for (i in 0..count) {
+            self.bytes.push((v & 0xff) as byte);
+            v = v >> 8;
+        }
+    }
+}
+
+/** Reads values from `data` in the order a ByteWriter wrote them. */
+public class ByteReader {
+    let data: byte[*];
+    let position: int32 = 0;
+
+    function getByte(): byte throws IoError {
+        self.need(1);
+        let b: byte = self.data[self.position];
+        self.position += 1;
+        return b;
+    }
+
+    function getBool(): bool throws IoError { return self.getByte() != 0; }
+
+    function getInt32(): int32 throws IoError { return self.getInteger(4) as int32; }
+
+    function getInt64(): int64 throws IoError { return self.getInteger(8); }
+
+    function getFloat64(): float64 throws IoError { return float64_of_bits(self.getInteger(8)); }
+
+    /** A String that putString wrote. */
+    function getString(): String throws IoError {
+        let n: int32 = self.getInt32();
+        if (n < 0) { throw IoError.Failed("ByteReader: a text of ${n} bytes".clone()); }
+        self.need(n);
+        let text: String = stringOfRange(self.data, self.position, self.position + n);
+        self.position += n;
+        return text;
+    }
+
+    /** Fills `into` with the next bytes (as many as it has). */
+    function getBytes(into: byte[]): void throws IoError {
+        self.need(into.length);
+        for (i in 0..into.length) { into[i] = self.data[self.position + i]; }
+        self.position += into.length;
+    }
+
+    /** How many bytes are left to read. */
+    function remaining(): int32 { return self.data.length - self.position; }
+
+    function getInteger(count: int32): int64 throws IoError {
+        self.need(count);
+        let v: int64 = 0;
+        for (i in 0..count) { v = v | ((self.data[self.position + i] as int64) << (8 * i)); }
+        self.position += count;
+        if (count == 4 && v >= 0x80000000) { v -= 0x100000000; }      // an int32 below 0
+        return v;
+    }
+
+    function need(count: int32): void throws IoError {
+        if (count > self.data.length - self.position) {
+            throw IoError.Failed("ByteReader: ${count} byte(s) wanted at ${self.position}, ${self.data.length - self.position} left".clone());
+        }
+    }
+}

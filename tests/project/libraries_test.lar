@@ -418,7 +418,7 @@ test function theTestsOfALibraryUseItsRules(): void throws IoError {
         }
         """);
     let log: String = Paths.join(dir, "test-output.txt");
-    checkInt(0, os.run("cd '${dir}' && '${compiler()}' test > '${log}' 2>&1"));
+    checkInt(0, os.runCommand("cd '${dir}' && '${compiler()}' test > '${log}' 2>&1"));
     let text: String = Files.readString(log);
     check(text.contains("1 passed, 0 failed"), "the library's tests: ${text}");
 }

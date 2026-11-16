@@ -58,7 +58,7 @@ def _text(process, ptr, length):
 
 
 def _string_value(v):
-    """The text of an RtString value, or None."""
+    """The text of an LarString value, or None."""
     v = _deref(v)
     if v is None:
         return None
@@ -235,8 +235,8 @@ def _class_name_of(obj):
         names = _field_names(head.GetType().GetCanonicalType())
         if not names:
             return None
-        if names[0] == "_h":
-            head = _field(head, "_h")
+        if names[0] == "header":
+            head = _field(head, "header")
             break
         if names[0] == "_super":
             head = _field(head, "_super")
@@ -248,10 +248,10 @@ def _class_name_of(obj):
     process = obj.GetProcess()
     err = lldb.SBError()
     ptr_size = obj.GetTarget().GetAddressByteSize()
-    cls = process.ReadPointerFromMemory(vt.GetValueAsUnsigned(), err)            # RtVTableHead.cls
+    cls = process.ReadPointerFromMemory(vt.GetValueAsUnsigned(), err)            # LarMethodTable.cls
     if not err.Success() or cls == 0:
         return None
-    name_ptr = process.ReadPointerFromMemory(cls, err)                           # RtClass.name
+    name_ptr = process.ReadPointerFromMemory(cls, err)                           # LarClass.name
     if not err.Success() or name_ptr == 0:
         return None
     name = process.ReadCStringFromMemory(name_ptr, 256, err)
@@ -272,12 +272,12 @@ def _real_object(valobj):
 
 
 def _object_fields(obj, out):
-    """The fields of an object, the parents' first, without _h and _super."""
+    """The fields of an object, the parents' first, without header and _super."""
     obj = _raw(obj)
     for i in range(obj.GetNumChildren()):
         c = obj.GetChildAtIndex(i)
         n = c.GetName()
-        if n == "_h":
+        if n == "header":
             continue
         if n == "_super":
             _object_fields(c, out)
@@ -330,8 +330,8 @@ def is_class(sbtype, internal_dict):
     if t.GetTypeClass() != lldb.eTypeClassStruct or t.GetNumberOfFields() == 0:
         return False
     f = t.GetFieldAtIndex(0)
-    if f.GetName() == "_h":
-        return _type_name(f.GetType()) == "RtObjHead"
+    if f.GetName() == "header":
+        return _type_name(f.GetType()) == "LarObjectHeader"
     if f.GetName() == "_super":
         return is_class(f.GetType(), internal_dict)
     return False
@@ -345,7 +345,7 @@ def _interface_object(valobj):
     obj = _field(valobj, "obj")
     if obj is None or obj.GetValueAsUnsigned() == 0:
         return None
-    # the object's real class: read through RtObjHead.vt at the start of the object
+    # the object's real class: read through LarObjectHeader.vt at the start of the object
     process = valobj.GetProcess()
     err = lldb.SBError()
     addr = obj.GetValueAsUnsigned()
@@ -475,7 +475,7 @@ def _any_scalar(v, kind):
 
 
 class TableProvider:
-    """Children of a table (RtTable* or the table inside an Any): [0], [1]... then the named entries."""
+    """Children of a table (LarTable* or the table inside an Any): [0], [1]... then the named entries."""
 
     def __init__(self, valobj, internal_dict):
         self.valobj = valobj
@@ -483,7 +483,7 @@ class TableProvider:
 
     def _table(self):
         v = self.valobj
-        if _type_name(_struct_type(v.GetType())) == "RtAny":
+        if _type_name(_struct_type(v.GetType())) == "LarAny":
             kind = _any_kind(v)
             if kind == 13:
                 return _deref(_field(_field(v, "as"), "t"))
@@ -592,15 +592,15 @@ def __lldb_init_module(debugger, internal_dict):
     m = __name__
     run = debugger.HandleCommand
     run("type category define -e larimar")      # every language: Apple lldb takes "-l c" as C89 only, not the C99 of the program
-    run('type summary add -w larimar -F %s.string_summary RtString' % m)
+    run('type summary add -w larimar -F %s.string_summary LarString' % m)
     run('type summary add -w larimar -e -x -F %s.list_summary "^(List|Slice|Arr)_[A-Za-z0-9_]+$"' % m)
     run('type synthetic add -w larimar -x -l %s.ListProvider "^(List|Slice|Arr)_[A-Za-z0-9_]+$"' % m)
     run('type summary add -w larimar -e -x -F %s.optional_summary "^Opt_[A-Za-z0-9_]+$"' % m)
     run('type synthetic add -w larimar -x -l %s.OptionalProvider "^Opt_[A-Za-z0-9_]+$"' % m)
-    run('type summary add -w larimar -e -F %s.any_summary RtAny' % m)
-    run('type synthetic add -w larimar -l %s.TableProvider RtAny' % m)
-    run('type summary add -w larimar -e -F %s.table_summary RtTable' % m)
-    run('type synthetic add -w larimar -l %s.TableProvider RtTable' % m)
+    run('type summary add -w larimar -e -F %s.any_summary LarAny' % m)
+    run('type synthetic add -w larimar -l %s.TableProvider LarAny' % m)
+    run('type summary add -w larimar -e -F %s.table_summary LarTable' % m)
+    run('type synthetic add -w larimar -l %s.TableProvider LarTable' % m)
     # classes, interfaces and enums are recognized by their shape (lldb 16 and later)
     for kind, summary, provider in (("class", "object_summary", "ObjectProvider"),
                                     ("interface", "interface_summary", "InterfaceProvider"),

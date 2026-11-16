@@ -98,7 +98,7 @@ esac
 case "plugins" in *"$FILTER"*)
     T="$(mktemp -d)"
     mkdir -p "$T/home/bin" "$T/home/plugins"
-    ln -s "$ROOT/std" "$T/home/std"
+    ln -s "$ROOT/src/std" "$T/home/std"
     printf '#!/bin/sh\necho "mytool: $*"\nexit 7\n' > "$T/home/bin/mytool"
     chmod +x "$T/home/bin/mytool"
     printf '[plugin]\nname = "mytool"\nprogram = "mytool"\n\n[commands]\nadd = ["add"]\nbuild = ["x"]\n' > "$T/home/plugins/mytool.toml"
@@ -146,7 +146,7 @@ esac
 # every file of std, opened alone (as the editor does), has no errors
 case "std-check" in *"$FILTER"*)
     bad=""
-    for f in $(find std -name '*.lar' | sort); do
+    for f in $(find src/std -name '*.lar' | sort); do
         out="$("$LARIMARC" check "$f" 2>&1)"
         [ "$out" = "no errors" ] || bad="$bad\n$f: $out"
     done

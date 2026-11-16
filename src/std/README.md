@@ -1,0 +1,242 @@
+# std: the standard library
+
+Written in Larimar; its C (the system's calls) is the only C a program has. What a module gives is its
+public names, listed below; a module whose path has `posix`, `windows`, `macos`, `common` or `internal` is
+std's own, imported only from std (the rule `std-own-import`).
+
+- `std.lang` is the language: `String` and `Any` are `type String { }` and `type Any { }` there, and what
+  has no body there the compiler writes.
+- Each system's C is a class of that system (`PosixProcesses implements UnixPlatform`), chosen with a
+  `switch` on `Platform.current()`; the C reaches it through native interfaces.
+- The guide for whoever maintains it: [docs/std-c.md](../docs/std-c.md); every public name, with its doc:
+  [docs/std-reference.md](../docs/std-reference.md).
+
+## Its API
+
+<!-- api: written by tools/reference.py from the code; not edited by hand -->
+
+- **`std.crypto`**: hashes, HMAC and secure random bytes, written in Larimar (only the random bytes come from the system)
+  - `function randomBytes(n: int32): byte[*]`: n bytes from the system's secure random source (it panics if there is none: it never gives weak bytes)
+  - `function sha256(data: byte[]): byte[*]`: The SHA-256 of some bytes: 32 bytes
+  - `function sha1(data: byte[]): byte[*]`: The SHA-1 of some bytes: 20 bytes
+  - `function hmacSha256(key: byte[], data: byte[]): byte[*]`: HMAC-SHA256 (RFC 2104): a signature of `data` with `key`, 32 bytes
+  - `function sameBytes(a: byte[], b: byte[]): bool`: Whether two byte lists are equal, taking the same time wherever they differ (to compare signatures)
+- **`std.encoding.base64`**: bytes as base64 text (RFC 4648), and back
+  - `function encode(bytes: byte[]): String`: Base64 with + and /, padded with '='
+  - `function encodeUrl(bytes: byte[]): String`: Base64 for URLs, file names and cookies: - and _ instead of + and /, without '='
+  - `function decode(text: String): byte[*]?`: The bytes of base64 text (with + and /, the '=' optional), or null when it is not base64
+  - `function decodeUrl(text: String): byte[*]?`: The bytes of URL base64 text (with - and _, the '=' optional), or null when it is not base64
+- **`std.encoding.hex`**: bytes as hexadecimal text, and back
+  - `function encode(bytes: byte[]): String`: Two lowercase hex digits per byte
+  - `function decode(text: String): byte[*]?`: The bytes of hex text (upper or lower case), or null when it is not hex or has an odd length
+- **`std.encoding.json`**: JSON text to Any, and Any to JSON text
+  - `enum JsonError`: The text is not valid JSON: where (byte position) and why
+  - `function parse(text: String): Any throws JsonError`: The value of a JSON text
+  - `function stringify(v: Any): String`: The JSON text of a value
+  - `function quote(s: String): String`: A String as a JSON string, with its quotes
+- **`std.encoding.toml`**: TOML text to Any, and Any to TOML text
+  - `enum TomlError`: The text is not valid TOML: the line (from 1) and why
+  - `function message(e: TomlError): String`: A message for the error: "line 3: Expected key = value"
+  - `function parse(text: String): Any throws TomlError`: The tables of a TOML text: keys before any [section] go in the top table
+  - `function stringify(root: Any): String`: The TOML text of a table: its plain entries first, then one [section] for each table inside it
+- **`std.encoding.url`**: percent-encoding (RFC 3986) and query strings
+  - `function encode(text: String): String`: Everything but letters, digits and - _ 
+  - `function decode(text: String): String?`: %XX back to bytes (a '+' stays a '+'), or null when a % is not followed by two hex digits
+  - `function parseQuery(query: String): Any`: The entries of a query string (what follows '?', or a form sent as application/x-www-form-urlencoded): a table of names and texts, '+' read as a space
+  - `function query(entries: Any): String`: A query string from the named entries of a table: "a=1&b=two%20words" (numbers and bool as text)
+- **`std.io`**: what every input and output shares: the error (IoError), the streams (bytes from anywhere and to anywhere), text on top of them (Reader), and streams in memory
+  - `enum IoError`: What went wrong reading or writing: a file, a folder, a socket, the console
+  - `function message(e: IoError): String`: "not found: notes.txt", "denied: ...", "closed", "timed out" or "failed: ..."
+  - `function raise(code: int32, path: String): void throws IoError`: Throws the IoError of a result code: 1 not found, 2 denied, 3 failed, 4 closed, 5 timed out (0 is fine)
+  - `interface InputStream`: Where bytes are read from
+  - `interface OutputStream`: Where bytes are written
+  - `interface Closeable`: Something that holds a resource of the system and can let it go before its memory is freed
+  - `class BytesInputStream implements InputStream`: Reads bytes (or UTF-8 text) already in memory
+  - `class BytesOutputStream implements OutputStream`: BytesOutputStream: collects what is written, in its own memory (it must grow: collecting is its job)
+  - `class Reader implements InputStream`: Text from any InputStream
+  - `function buffer(n: int32): byte[*]`: n zero bytes, to give to read()
+  - `function copy(input: InputStream, output: OutputStream): void throws IoError`: Copies everything from input to output, then flushes output
+- **`std.io.bytes`**: binary messages
+  - `class ByteWriter`: Writes values one after another into `bytes`, which grows
+  - `class ByteReader`: Reads values from `data` in the order a ByteWriter wrote them
+- **`std.io.console`**: the standard input, output and error
+  - `function readLine(): String?`: The next line of the standard input, without its end, or null at its end
+  - `function read(count: int32): String`: Exactly `count` bytes of the standard input (fewer only if it ends; see lastCount())
+  - `function lastCount(): int32`: How many bytes the last read() got (also the length of what it gave)
+  - `function write(text: String): void`: Writes to the standard output, without a new line
+  - `function flush(): void`: Sends what was written to the standard output now
+  - `function binaryMode(): void`: Input and output byte by byte, as they are (on Windows, without turning \n into \r\n)
+  - `function unbufferInput(): void`: The standard input without a buffer of this program: call it before reading anything, when the program waits for input with waitForInput (so that what was read ahead is never hidden from it)
+  - `function waitForInput(ms: int32): bool`: Whether something arrives on the standard input within ms milliseconds (-1: as long as it takes)
+  - `function printError(text: String): void`: Writes a line to the standard error
+- **`std.io.files`**: files and folders: whole files in one call, like Java's Files, and an open File to read or write in parts
+  - `function message(e: IoError): String`: A message for the error (the same as std.io's): "not found: notes.txt"
+  - `function readString(path: String): String throws IoError`: The whole file as text
+  - `function writeString(path: String, text: String): void throws IoError`: Replaces the file with `text`, creating it if needed
+  - `function appendString(path: String, text: String): void throws IoError`: Adds `text` at the end of the file, creating it if needed
+  - `function exists(path: String): bool`: Is there a file or a folder with that path?
+  - `function isFile(path: String): bool`
+  - `function isDirectory(path: String): bool`
+  - `function modifiedTime(path: String): int64`: When the file was last changed: seconds since 1970 (UTC), or 0 when there is nothing at that path
+  - `function size(path: String): int64`: The size of a file in bytes, or -1 when there is nothing at that path
+  - `function list(path: String): String[*] throws IoError`: The names of what a folder holds (files and folders, in no particular order)
+  - `function createDirectories(path: String): void throws IoError`: Creates the folder, and the folders above it that are missing
+  - `function copy(from: String, to: String): void throws IoError`: Copies a file (replacing `to` if it exists, even a read-only one, like cp -f); on Unix an executable stays executable
+  - `function delete(path: String): void throws IoError`: Deletes a file, or an empty folder
+  - `class File implements InputStream, OutputStream`: An open file
+  - `function open(path: String): File throws IoError`: Opens a file to read it
+  - `function create(path: String): File throws IoError`: Creates a file to write it (replacing it if it exists)
+  - `function append(path: String): File throws IoError`: Opens a file to write at its end (creating it if needed)
+- **`std.io.path`**: paths as text, with / or \ between folders
+  - `function parent(path: String): String`: "a/b/c.lar" -> "a/b"; "" when there is no folder
+  - `function fileName(path: String): String`: "a/b/c.lar" -> "c.lar"
+  - `function stem(path: String): String`: "a/b/c.lar" -> "c" (a name that starts with a dot keeps it: ".config")
+  - `function extension(path: String): String`: "a/b/c.lar" -> "lar"; "" when there is none
+  - `function join(dir: String, file: String): String`: `file` inside the folder `dir`; an absolute `file` stays as it is
+  - `function isAbsolute(path: String): bool`: "/x", "\x" and "C:/x" are absolute
+  - `function absolute(path: String): String`: The absolute, normalized form (a relative path is taken from the current folder)
+  - `function normalize(path: String): String`: Without "." and "folder/.." parts, with / between folders; "." when nothing is left
+  - `function relative(base: String, file: String): String`: `file` relative to the folder `base` when it is inside it; absolute otherwise
+- **`std.lang`**: the part of the language written in Larimar
+  - `interface Runnable`: What a Thread runs
+  - `class Thread`: A thread of the operating system: Thread { run: 
+  - `class StringBuilder`
+  - `function stringOf(bytes: byte[]): String`: A String with a copy of these bytes (UTF-8 expected, not checked)
+  - `function stringOfRange(bytes: byte[], from: int32, to: int32): String`: A String with a copy of bytes[from..to) (UTF-8 expected, not checked): one allocation of the exact size, where the caller's result goes (`reader.readLine() in scratch` puts it in scratch)
+- **`std.math`**: the numbers every program ends up needing
+  - `function sqrt(x: float64): float64`
+  - `function pow(base: float64, exponent: float64): float64`
+  - `function exp(x: float64): float64`
+  - `function log(x: float64): float64`
+  - `function log10(x: float64): float64`
+  - `function floor(x: float64): float64`
+  - `function ceil(x: float64): float64`
+  - `function round(x: float64): float64`
+  - `function abs(x: float64): float64`
+  - `function sin(x: float64): float64`
+  - `function cos(x: float64): float64`
+  - `function tan(x: float64): float64`
+  - `function atan2(y: float64, x: float64): float64`
+  - `function min(a: float64, b: float64): float64`
+  - `function max(a: float64, b: float64): float64`
+  - `class Random`: A fast sequence of random numbers: the same for the same seed (xorshift64)
+- **`std.memory`**: a limit for a memory that grows, and compacting one that has been used for a long time
+  - `function limit(memory: byte[*], bytes: int64): void`: The most bytes `memory` may obtain from the system; past it the program stops with a message that names it
+  - `function compact(memory: byte[*]): void`: Copies what the variables of `memory` still reach to new blocks, points them at the copies, and frees the old blocks: the memory then holds only what is alive
+- **`std.net`**: TCP and UDP
+  - `interface Connection`: A connection both ways: a TcpSocket and a TlsSocket are one, and so is what a TlsProvider (std.net.tls) gives
+  - `enum NetError`: Why something of the network failed
+  - `function message(e: NetError): String`: "connection refused", "host not found: example.org"
+  - `class TcpSocket implements InputStream, OutputStream, Closeable, Connection`: A TCP connection
+  - `class TcpListener implements Closeable`: Waits for connections on a port
+  - `synchronized class StopSignal`: Tells a server to stop: give one to its literal (stop: quit) and call quit.stop() from anywhere, the handler included
+  - `class TcpServer`: A TCP server, plain or with TLS (https): it listens on host:port and gives each connection to onConnect, in one of its threads
+  - `class EventLoop`: Waits on many sockets at once, by their numbers (TcpSocket.number()): watch them, wait, and see which are ready to read (or were closed)
+  - `struct Address`: Where a datagram comes from or goes to: an IP (or a name, to send) and a port
+  - `struct Datagram`: What receive() got: how many bytes of the buffer, and from where
+  - `class UdpSocket implements Closeable`: A UDP socket: datagrams, each one whole, with no connection
+  - `class UdpServer`: A UDP server: it receives on host:port and gives each datagram to onReceive (the socket to answer with, the bytes, who sent them), in one of its threads
+  - `synchronized class OpenSslProvider`: The certificate and the key of a TLS server, loaded with OpenSSL
+  - `class TlsSocket implements InputStream, OutputStream, Closeable, Connection`: A connection of a TcpServer with tls, already decrypted: used like a TcpSocket (read, write, writeText, Reader, copy)
+- **`std.net.http`**: an HTTP/1.1 client over std.net, with https:// through a TlsProvider (std.net.tls)
+  - `enum HttpError`: Why there was no response
+  - `function message(e: HttpError): String`: "network: connection refused", "bad response: ...", 
+  - `class Header`: One header line: "Name: value"
+  - `class Request`: What to ask
+  - `class Client`: How to connect
+  - `class Body implements InputStream, Closeable`: The body of a response, as an InputStream: it ends where the body ends (Content-Length, the last chunk, or the server closing), whatever the server sends after
+  - `class Response implements Closeable`: What the server answered
+  - `function get(url: String): Response throws HttpError`: A GET with a Client {} (the system's TLS for https://)
+  - `function post(url: String, body: String, contentType: String): Response throws HttpError`: A POST with a Client {}
+  - `function send(req: Request): Response throws HttpError`: A request with a Client {}
+- **`std.net.openssl`**: the TLS servers on Unix, over OpenSSL loaded at run time (std.net.tls's client on Linux uses it too).
+  - `class LinuxOpenSslNames implements LinuxPlatform`: Where OpenSSL is on Linux, and what to say when it is not there
+  - `class MacOSOpenSslNames implements MacOSPlatform`: Where OpenSSL is on macOS (Homebrew), and what to say when it is not there
+  - `class OpenSslServers implements UnixPlatform`: The TLS servers on Unix: OpenSSL, loaded at run time (std.net.tls's client on Linux uses it too)
+- **`std.net.tls`**: encrypted connections, for https:// (and whatever else needs TLS)
+  - `interface TlsProvider`: What gives encrypted connections
+  - `class SystemTls implements TlsProvider`: The TLS of the system: Network.framework (macOS), SChannel (Windows), OpenSSL (Linux and others)
+- **`std.net.tls.openssl`**: the TLS client on Linux, over the OpenSSL of std.net's servers.
+  - `class OpenSslTls implements LinuxPlatform`: Linux: OpenSSL, loaded at run time (std.net's, shared with its TLS servers)
+- **`std.os`**: the environment the program runs in
+  - `function processId(): int64`: The number the system gives this running program (its process id)
+  - `function env(name: String): String?`: The value of an environment variable, or null if it is not set
+  - `function cwd(): String`: The folder the program runs in
+  - `function runCommand(command: String): int32`: Runs a command line with the system's shell (sh, or cmd.exe on Windows), waits for it, and gives its exit code
+  - `function programPath(): String`: This program's executable (its full path), or "" if it cannot be known
+  - `function programDir(): String`: The folder this program's executable is in, or "" if it cannot be known
+  - `function exit(code: int32): void`: Ends the program now with this exit code (memories are not freed first)
+  - `function catchTermination(): void`: From now on, Ctrl+C and SIGTERM (what systemd, docker stop and kill send) do not end the program at once: they only make terminating() true, so the program can finish what it is doing and end on its own
+  - `function terminating(): bool`: Whether Ctrl+C or SIGTERM arrived after catchTermination()
+- **`std.os.process`**: processes
+  - `enum ProcessError`: Why a process could not be used
+  - `function message(e: ProcessError): String`: A message for the error, in English
+  - `interface Task`: Work that runs in another process: a copy of this program, so that a panic or a crash there is only an error here
+  - `class Process extends Child`: A process: another program (`program`, with `args`), or a task of this program (`run`) in a copy of it; one or the other
+  - `function findProgram(name: String): String?`: Where a program is found in the PATH (with .exe on Windows), or null
+  - `class ProcessPool`: Runs tasks in up to `processes` copies of this program, each one a task at a time: let pool: ProcessPool = { processes: 8 }; pool.submit(task); 
+  - `function serveTasks(): int32`: What a copy of this program started for tasks does instead of its main (the compiler calls it when LARIMAR_PROCESS is set): it runs the tasks it is sent until it is closed
+- **`std.os.process.tasks`**: how the objects of a program's Task classes go to another process
+  - `function encode(task: Task): Any`: The class and fields of a task, as a table: { name, fields }; null when it is not a class of the program
+  - `function start(name: String, fields: Any): Task?`: The task of class `name` with these fields; null when the program has no such class
+- **`std.os.rpc`**: calls to another program, and a program that answers them (JSON-RPC 2.0)
+  - `enum RpcError`: What went wrong with a call
+  - `function message(e: RpcError): String`: A message for the error, in English
+  - `class RpcCall`: One call that came: what it asks for
+  - `class Rpc`: A connection to a program that answers calls
+  - `function serve(handler: (RpcCall) -> Any): void`: Answers the calls that come, one after another, with `handler`, until the caller closes: on the shared streams this program was started with (Rpc.startShared), or else on its standard input and output
+  - `function serveOver(input: InputStream, output: OutputStream, handler: (RpcCall) -> Any): void`: Answers the calls that come on two streams that already exist, until the input ends
+- **`std.os.sharedmemory`**: memory that several programs see
+  - `function uniqueName(prefix: String): String`: A name for a new stream that no other program uses: the prefix (at most 8 bytes), this program's id, a count
+  - `class SharedMemoryOutputStream implements OutputStream, Closeable`: The writing side of a stream between two programs
+  - `class SharedMemoryInputStream implements InputStream, Closeable`: The reading side of a stream between two programs
+  - `class SharedMemorySegment implements Closeable`: Memory that several programs see, by name: bytes at offsets, read and written with get and put
+- **`std.platform`**: the system the program is built for, and the marks of the classes that are for one
+  - `enum OS`: The systems Larimar runs on (Unix: another Unix, a BSD)
+  - `interface Platform`: What a class is for: a class that implements one of these is for that platform
+  - `interface UnixPlatform extends Platform`
+  - `interface LinuxPlatform extends UnixPlatform`
+  - `interface MacOSPlatform extends UnixPlatform`
+  - `interface WindowsPlatform extends Platform`
+- **`std.test`**: the checks that test functions use (larimar test runs them)
+  - `function check(condition: bool, message: String): void`: Fails when the condition is false, with this message
+  - `function checkText(expected: String, actual: String): void`: Fails when the two texts differ
+  - `function checkInt(expected: int32, actual: int32): void`: Fails when the two numbers differ
+  - `function checkInt64(expected: int64, actual: int64): void`: Fails when the two numbers differ (int64)
+  - `function checkFloat(expected: float64, actual: float64, tolerance: float64): void`: Fails when the two numbers are further apart than `tolerance`
+  - `function fail(message: String): void`: Fails, with this message
+  - `function skip(reason: String): void`: Skips the test: it cannot run here (a program it needs is not installed, another platform)
+  - `function skipReason(): String`: Why the running test was skipped, or "" (larimar test asks it when the test ends)
+  - `function failedChecks(): int32`: How many checks of the running test failed (larimar test asks it when the test ends)
+  - `interface TestSetup`: What a test needs ready before it runs, and cleaned after: `test function name(s: MySetup)`
+- **`std.text`**: helpers for reading text byte by byte (lexers, parsers)
+  - `function isDigit(b: byte): bool`
+  - `function isHexDigit(b: byte): bool`
+  - `function isLetter(b: byte): bool`
+  - `function isLetterOrDigit(b: byte): bool`
+  - `function isIdentifierPart(b: byte): bool`: A letter, a digit or _: a byte of a name in most languages
+  - `function isSpace(b: byte): bool`: Space, tab, newline, carriage return
+  - `function isUpper(b: byte): bool`
+  - `function isLower(b: byte): bool`
+  - `function digitValue(b: byte): int32?`: The value of a digit (0-9, a-f, A-F), or null
+  - `function isAscii(s: String): bool`: Is every byte ASCII (below 128)?
+  - `function fromCode(code: int32): String`: The text of one Unicode character (its UTF-8 bytes); a code that is not a character gives U+FFFD
+- **`std.text.regex`**: regular expressions, written in Larimar (no C library: the same on every system)
+  - `enum RegexError`: A pattern that cannot be compiled: why, and where (the byte of the pattern)
+  - `function message(e: RegexError): String`: "missing ')' at 7"
+  - `class Match`: A place where the pattern matched
+  - `class Regex`: A compiled pattern
+- **`std.thread`**: a pool of threads for a batch of tasks
+  - `class ThreadPool`: Runs tasks on up to `threads` threads: let pool: ThreadPool = { threads: 8 }; pool.submit(() -> { 
+- **`std.time`**: the clock, waiting, and dates as text
+  - `function now(): int64`: Milliseconds since 1970-01-01 00:00 UTC (the wall clock)
+  - `function monotonic(): int64`: Milliseconds from some fixed moment, only ever forward: for measuring time and for deadlines
+  - `function sleep(ms: int64): void`: Waits that many milliseconds (this thread only)
+  - `struct DateTime`: A moment split into its parts, in UTC
+  - `function fromMillis(ms: int64): DateTime`: The parts of a moment (milliseconds since 1970, as now() gives)
+  - `function toMillis(t: DateTime): int64`: Milliseconds since 1970 of these parts (UTC); weekday is not used
+  - `function httpDate(ms: int64): String`: The date of HTTP (Date, Last-Modified, the Expires of a cookie): "Mon, 02 Nov 2026 23:04:00 GMT"
+  - `function isoDate(ms: int64): String`: ISO 8601 in UTC: "2026-11-02T23:04:00Z"
+  - `function parseIsoDate(text: String): int64?`: An ISO 8601 date in UTC ("2026-11-02", "2026-11-02T23:04:00Z", "2026-11-02T23:04:00.250Z") in milliseconds, or null
+
+<!-- /api -->

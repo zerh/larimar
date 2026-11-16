@@ -4,6 +4,7 @@ import std.os;
 import std.platform { Platform, OS };
 import std.test { check, skip };
 import std.io.path as Paths;
+import std.io.files as Files;
 import tests.support.compiler { checked };
 
 test function aFileOfACopyOfStd(): void {
@@ -12,12 +13,13 @@ test function aFileOfACopyOfStd(): void {
         return;
     }
     let copy: String = Paths.absolute("build/test/cases/${os.processId()}-copy");
-    let std: String = Paths.join(os.env("LARIMAR_HOME") ?? ".", "std");
-    check(os.run("mkdir -p '${copy}' && cp -R '${std}' '${copy}/'") == 0, "the copy of std");
+    let home: String = os.env("LARIMAR_HOME") ?? ".";
+    let std: String = Files.isFile(Paths.join(home, "std/lang.lar")) ? Paths.join(home, "std") : Paths.join(home, "src/std");
+    check(os.runCommand("mkdir -p '${copy}' && cp -R '${std}' '${copy}/'") == 0, "the copy of std");
     let files: String[] = ["crypto.lar", "time.lar", "net.lar", "os/process.lar", "crypto/posix.lar"];
     for (file in files) {
         let errors: String = checked("${copy}/std/${file}");
         check(errors == "", "std/${file} of a copy: ${errors}");
     }
-    os.run("rm -rf '${copy}'");
+    os.runCommand("rm -rf '${copy}'");
 }

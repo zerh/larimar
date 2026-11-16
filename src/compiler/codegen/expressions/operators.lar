@@ -1,0 +1,217 @@
+// codegen.expressions.operators: operators.
+
+import syntax.ast { Binary, Cast, Expr, IntLit, IsExpr, NullLit, Ternary, Unary };
+import semantics.types {
+    bits, isClass, isEnumT, isFloat, isInteger, isInterface, isOpt, isPtr, isSigned, MethodInfo, optIsPointer,
+    structOf, Symbol, T_ANY, T_STRING, TypeKind, Type
+};
+import codegen.gen { writing, indent4, line, resizeHelpers, resizeSeen, tmp };
+import codegen.gen.classes { dispatchName, methodName, returnsData };
+import codegen.expressions {
+    addrOf, anyKind, anyPayload, boxType, callMem, cType, expr, hoist, hoistIfNeeded, intLiteral, lazy, lazyPre,
+    mangle, paren, strip, typeCName, value
+};
+
+public function wide(type: Type): String {
+    return bits(type) <= 32 ? "uint32_t" : "uint64_t";
+}
+
+public function unary(u: Unary in default, type: Type): String {
+    let op: MethodInfo? = u.opMethod;
+    if (op != null) { return operatorCall(op, u, u.operand, null); }
+    let v: String = expr(u.operand);
+    if (u.op == "&") { return "&${paren(v)}"; }               // a variable's address, for C (only in extern calls)
+    if (u.op == "!") { return "(!${paren(v)})"; }
+    if (u.op == "~") { return "((${cType(type)})~(${wide(type)})${paren(v)})"; }
+    if (u.operand is IntLit n && isInteger(type)) { return intLiteral(n.big ? n.num : 0 - n.num, false, type); }   // big: -9223372036854775808
+    return isFloat(type) ? "(-${paren(v)})" : "((${cType(type)})(0u - (${wide(type)})${paren(v)}))";
+}
+
+public function binary(b: Binary in default, type: Type): String {
+    let op: String = b.op;
+    let ov: MethodInfo? = b.opMethod;
+    if (ov != null) {
+        return switch (op) {
+            case "!=" -> "(!${operatorCall(ov, b, b.left, b.right)})";
+            case ">" -> operatorCallSwapped(ov, b);
+            case "<=" -> "(!${operatorCallSwapped(ov, b)})";
+            case ">=" -> "(!${operatorCall(ov, b, b.left, b.right)})";
+            default -> operatorCall(ov, b, b.left, b.right);
+        };
+    }
+    if (op == "&&" || op == "||") {
+        let l: String = expr(b.left);
+        let r: String = lazy(b.right);
+        let pre: String = lazyPre;
+        if (pre.isEmpty()) { return "(${l} ${op} ${r})"; }
+        let tv: String = tmp("condition");
+        line("bool ${tv} = ${l};");
+        line(op == "&&" ? "if (${tv}) {" : "if (!${tv}) {");
+        writing.out.add(indent4(pre));
+        line("    ${tv} = ${r};");
+        line("}");
+        return tv;
+    }
+    if (op == "??") { return coalesce(b, type); }
+    let leftType: Type = b.left.ty!;
+    if ((op == "==" || op == "!=") && (b.left is NullLit || b.right is NullLit)) {
+        let other: Expr = b.left is NullLit ? b.right : b.left;
+        let o: Type = other.ty!;
+        let v: String = expr(other);
+        let isNull: String = o == T_ANY ? "lar_any_is_null(${v})" : isPtr(o) || optIsPointer(o) ? "(${v} == NULL)" : "(!${paren(v)}.has)";
+        return op == "==" ? isNull : "(!${isNull})";
+    }
+    let l: String = value(b.left);
+    let r: String = value(b.right);
+    switch (op) {
+        case "==", "!=" -> {
+            let eq: String = "(${l} == ${r})";
+            if (leftType == T_STRING) {
+                eq = "lar_string_eq(${l}, ${r})";
+            } else if (isEnumT(leftType)) {
+                eq = "(${paren(l)}.tag == ${paren(r)}.tag)";
+            } else if (isClass(leftType) || (isOpt(leftType) && isClass(leftType.elem!))) {
+                eq = "((const void*)(${l}) == (const void*)(${r}))";
+            }
+            return op == "==" ? eq : "(!${eq})";
+        }
+        case "<", "<=", ">", ">=" -> { return leftType == T_STRING ? "(lar_string_cmp(${l}, ${r}) ${op} 0)" : "(${l} ${op} ${r})"; }
+        case "/", "%" -> { return isFloat(type) ? "(${l} / ${r})" : "lar_${op == "%" ? "mod" : "div"}_${mangle(type)}(${l}, ${r}, LINE(${b.line}))"; }
+        case "+", "-", "*" -> { return isFloat(type) ? "(${l} ${op} ${r})" : "((${cType(type)})((${wide(type)})${paren(l)} ${op} (${wide(type)})${paren(r)}))"; }
+        case "&", "|", "^" -> { return "((${cType(type)})(${paren(l)} ${op} ${paren(r)}))"; }
+        default -> {}
+    }
+    let n: int32 = bits(type) - 1;
+    if (op == "<<") { return "((${cType(type)})((${wide(type)})${paren(l)} << ((int)${paren(r)} & ${n})))"; }
+    return isSigned(type) ? "((${cType(type)})(${paren(l)} >> ((int)${paren(r)} & ${n})))" : "((${cType(type)})((${wide(type)})${paren(l)} >> ((int)${paren(r)} & ${n})))";
+}
+
+/** x is T [b]: lar_as_class gives the object when it is a T (NULL otherwise); the binding keeps it. */
+public function isTest(isExpr: IsExpr in default): String {
+    let st: Type = isExpr.expr.ty!;
+    let v: String = expr(isExpr.expr);
+    let obj: String = "(void*)(${v})";
+    if (isOpt(st) && !optIsPointer(st)) {             // an optional interface
+        let h: String = hoist(cType(st), v);
+        obj = "(${h}.has && ${h}.value.t->cls ? ${h}.value.obj : NULL)";
+    } else if (isInterface(st)) {                      // objects made from literals have no class
+        let h: String = hoistIfNeeded(cType(st), v, isExpr.expr);
+        obj = "(${h}.t->cls ? ${h}.obj : NULL)";
+    }
+    let test: String = "lar_as_class(${obj}, &lar_class_${isExpr.tested!.name})";
+    let b: Symbol? = isExpr.symbol;
+    return b == null ? "(${test} != NULL)" : "((${b.cName} = (${typeCName(isExpr.tested!.name)}*)${test}) != NULL)";
+}
+
+/** c ? a : b: a C conditional, or an if when a side needs statements of its own. */
+public function ternary(te: Ternary in default, type: Type): String {
+    let c: String = expr(te.cond);
+    let a: String = lazy(te.then);
+    let preA: String = lazyPre;
+    let b: String = lazy(te.otherwise);
+    let preB: String = lazyPre;
+    if (preA.isEmpty() && preB.isEmpty()) { return "(${c} ? ${a} : ${b})"; }
+    let res: String = tmp("value");
+    line("${cType(type)} ${res};");
+    line("if (${strip(c)}) {");
+    writing.out.add(indent4(preA));
+    line("    ${res} = ${a};");
+    line("} else {");
+    writing.out.add(indent4(preB));
+    line("    ${res} = ${b};");
+    line("}");
+    return res;
+}
+
+function coalesce(binary: Binary in default, type: Type): String {
+    let o: Type = binary.left.ty!;
+    let l: String = expr(binary.left);
+    let res: String = tmp("value");
+    if (optIsPointer(o)) {
+        line("${cType(type)} ${res} = ${l};");
+        let r: String = lazy(binary.right);
+        let pre: String = lazyPre;
+        line("if (${res} == NULL) {");
+        writing.out.add(indent4(pre));
+        line("    ${res} = ${r};");
+        line("}");
+    } else {
+        let ov: String = hoist(cType(o), l);
+        line("${cType(type)} ${res};");
+        let r: String = lazy(binary.right);
+        let pre: String = lazyPre;
+        line("if (${ov}.has) ${res} = ${ov}.value;");
+        line("else {");
+        writing.out.add(indent4(pre));
+        line("    ${res} = ${r};");
+        line("}");
+    }
+    return res;
+}
+
+/** a OP b, where the operator is a method of a's type; `op` is the expression (data it returns is created where it says). */
+function operatorCall(method: MethodInfo, op: Expr in default, left: Expr in default, right: Expr? in default): String {
+    let isStructOp: bool = structOf(method.owner) != null;
+    let recv: String = isStructOp ? addrOf(left) : value(left);
+    let arg: String = right != null ? ", ${value(right)}" : "";
+    if (returnsData(method.sig!.elem!)) { arg = ", ${callMem(op)}${arg}"; }
+    return isStructOp ? "${methodName(method)}(${recv}${arg})" : "${dispatchName(method.introducer, method)}((${method.introducer}*)${recv}${arg})";
+}
+
+/** b < a, keeping the evaluation order a then b. */
+function operatorCallSwapped(method: MethodInfo, binary: Binary in default): String {
+    let l: String = hoist(cType(binary.left.ty!), value(binary.left));
+    let r: String = hoist(cType(binary.right.ty!), value(binary.right));
+    return structOf(method.owner) != null ? "${methodName(method)}(&${r}, ${l})" : "${dispatchName(method.introducer, method)}((${method.introducer}*)${r}, ${l})";
+}
+
+function minMacro(p: Type): String { return "INT${bits(p)}_MIN"; }
+
+function maxMacro(p: Type): String {
+    return isSigned(p) ? "INT${bits(p)}_MAX" : "UINT${bits(p)}_MAX";
+}
+
+public function cast(c: Cast in default, to: Type in default): String {
+    let from: Type = c.expr.ty!;
+    let v: String = expr(c.expr);
+    if (from == T_ANY) { return anyAs(v, to.elem!, to); }
+    if (from == to) { return v; }
+    if (isFloat(from) && isInteger(to)) {
+        return isSigned(to) ? "((${cType(to)})lar_float_to_int((double)(${v}), ${minMacro(to)}, ${maxMacro(to)}))" : "((${cType(to)})lar_float_to_unsigned((double)(${v}), ${maxMacro(to)}))";
+    }
+    return "((${cType(to)})(${v}))";
+}
+
+/** `a as T`: T? holding the value if the Any has one of that kind (numbers convert when they fit). */
+function anyAs(v: String, type: Type in default, objectType: Type): String {
+    let name: String = "lar_any_as_${mangle(type)}";
+    let o: String = cType(objectType);
+    if (isClass(type)) {
+        let h: String = "static inline ${o} ${name}(LarAny a) { return lar_any_is_obj(a, &lar_class_${type.name}) ? (${o})a.as.box.ptr : NULL; }\n";
+        if (!resizeSeen.contains(h)) {
+            resizeSeen[h] = true;
+            resizeHelpers.push(h.clone());
+        }
+        return "${name}(${v})";
+    }
+    let h: StringBuilder = {} in default;
+    h.add("static inline ${o} ${name}(LarAny a) {\n    ${o} r;\n    memset(&r, 0, sizeof r);\n");
+    if (type.kind == TypeKind.Named) {
+        h.add("    if (lar_any_is_val(a, &${boxType(type)})) { r.has = true; r.value = ${anyPayload(type, "a")}; }\n");
+    } else if (isInteger(type)) {
+        let lo: String = isSigned(type) ? minMacro(type) : "0";
+        let cv: String = isSigned(type) ? "(int64_t)bits" : "bits";
+        h.add("    uint64_t bits;\n    if (lar_any_to_int(a, ${lo}, ${maxMacro(type)}, &bits)) { r.has = true; r.value = (${cType(type)})${cv}; }\n");
+    } else if (isFloat(type)) {
+        h.add("    double f;\n    if (lar_any_to_float(a, &f)) { r.has = true; r.value = (${cType(type)})f; }\n");
+    } else {
+        h.add("    if (a.kind == ${anyKind(type)}) { r.has = true; r.value = ${anyPayload(type, "a")}; }\n");
+    }
+    h.add("    return r;\n}\n");
+    let hs: String = h.toString();
+    if (!resizeSeen.contains(hs)) {
+        resizeSeen[hs] = true;
+        resizeHelpers.push(hs.clone());
+    }
+    return "${name}(${v})";
+}

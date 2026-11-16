@@ -1,7 +1,7 @@
 # Bibliotecas en Larimar: manual de desarrollo
 
-Versión descrita: Larimar 1.9.0 (lenguaje 1.2). La referencia breve está en el
-[manual, capítulo 27](manual.es.md#27-bibliotecas-y-servicios-escritos-en-larimar). Cómo está hecho esto dentro del
+Versión descrita: Larimar 1.11.0 (lenguaje 1.4). La referencia breve está en el
+[manual, capítulo 27](manual.es.md#27-bibliotecas-escritas-en-larimar). Cómo está hecho esto dentro del
 compilador, para quien vaya a tocarlo, está aparte: [compiler-libraries.es.md](compiler-libraries.es.md).
 
 Cada ejemplo de este manual se escribió en una carpeta, se construyó y se ejecutó con esa versión, y lo
@@ -26,11 +26,11 @@ de memoria (`-fsanitize=address`, con detección de fugas). Ninguno dio avisos.
 9. [Errores de `[dependencies]`](#9-errores-de-dependencies)
 10. [Sin C propio](#10-sin-c-propio)
 
-**Parte III. Servicios: bibliotecas en su propio proceso**
+**Parte III. Otro programa: código en su propio proceso**
 
-11. [El primer servicio](#11-el-primer-servicio)
+11. [Un programa que responde](#11-un-programa-que-responde)
 12. [Qué cruza, y qué pasa si falla](#12-qué-cruza-y-qué-pasa-si-falla)
-13. [El servicio por dentro, y desde otros lenguajes](#13-el-servicio-por-dentro-y-desde-otros-lenguajes)
+13. [Desde otros lenguajes](#13-desde-otros-lenguajes)
 
 **Parte IV. Seguridad y límites**
 
@@ -49,24 +49,23 @@ de memoria (`-fsanitize=address`, con detección de fugas). Ninguno dio avisos.
 
 ## 1. El modelo
 
-El código escrito en Larimar se comparte de dos formas, y un programa nombra las dos en su `[dependencies]`:
+El código escrito en Larimar se comparte como biblioteca, que un programa nombra en su `[dependencies]`;
+lo que debe ir aparte es otro programa, que el programa arranca y al que llama:
 
 ```mermaid
 flowchart LR
     lib["textkit/<br/>larimar.toml (kind = library)<br/>src/textkit.lar"]
-    svc["calc/<br/>larimar.toml (kind = service)<br/>src/calc.lar"]
-    prog["Un programa<br/>[dependencies] textkit, calc<br/>import textkit, import calc"]
-    exe["calc/build/calc<br/>su propio proceso"]
+    prog["Un programa<br/>[dependencies] textkit<br/>import textkit"]
+    exe["./calc<br/>otro programa (serve)"]
     lib -- "su código, compilado con el programa" --> prog
-    svc -- "larimar build" --> exe
-    prog -- "llamadas por memoria compartida" --> exe
+    prog -- "Process + Rpc.startShared:<br/>llamadas por memoria compartida" --> exe
 ```
 
 - **Una biblioteca** (`kind = "library"`): el programa compila su código junto con el suyo. No hay nada que
   construir antes, ni archivos intermedios: la biblioteca es código Larimar como el del programa.
-- **Un servicio** (`kind = "service"`): corre en un proceso propio. El programa importa una clase con sus
-  funciones, y cada llamada va al ejecutable del servicio. Lo que falle allí se queda allí: aquí es un
-  error de la llamada.
+- **Otro programa**: corre en un proceso propio y responde con `serve`. El programa lo arranca con un
+  `Process` y `Rpc.startShared`, y cada llamada va allí. Lo que falle allí se queda allí: aquí es un error
+  de la llamada ([Parte III](#parte-iii-otro-programa-código-en-su-propio-proceso)).
 
 ### 1.1 Una biblioteca: un solo programa
 
@@ -79,16 +78,16 @@ Compilada con el programa, la biblioteca no es un mundo aparte:
 - **Las mismas comprobaciones.** El análisis de regiones e hilos ve el programa entero, incluidas las
   bibliotecas. Lo que no compila dentro de un programa tampoco compila entre un programa y su biblioteca.
 
-### 1.2 Un servicio: otro proceso
+### 1.2 Otro programa: otro proceso
 
-Un servicio tiene su memoria, su runtime y su salida. Lo que cruza son valores (números, textos, listas,
-tablas), copiados en cada llamada; un panic, un bucle sin fin o un error de memoria del servicio no tocan al
+Otro programa tiene su memoria, su runtime y su salida. Lo que cruza son valores (números, textos, listas,
+tablas), copiados en cada llamada; un panic, un bucle sin fin o un error de memoria allí no tocan al
 programa. Es la forma de usar código que no debe compartir la memoria del programa, o que conviene poder
 reiniciar.
 
 ### 1.3 Sin C propio
 
-Ni un programa, ni una biblioteca, ni un servicio escritos en Larimar tienen C propio: `ccode`, `cinclude` y
+Ni un programa ni una biblioteca escritos en Larimar tienen C propio: `ccode`, `cinclude` y
 las declaraciones `native` son solo de la biblioteca estándar. Se usa lo que `std` da (archivos, red, hilos,
 cifrado). Así, una biblioteca de terceros no puede meter en tu programa código que el compilador no
 comprueba. El [capítulo 10](#10-sin-c-propio) muestra los errores.
@@ -99,8 +98,8 @@ comprueba. El [capítulo 10](#10-sin-c-propio) muestra los errores.
 resultado vive donde lo pone quien llama; un objeto vive en la memoria donde se crea; una función guardada
 exige que lo que usa viva lo bastante. El [capítulo 7](#7-estado-objetos-e-hilos) lo muestra con ejemplos.
 
-**Entre un programa y un servicio** no se comparte memoria: cada llamada copia los argumentos al servicio y
-el resultado al programa. El resultado vive donde lo pone quien llama, como el de cualquier función.
+**Entre un programa y otro programa** no se comparte memoria: cada llamada copia los argumentos allí y el
+resultado aquí. El resultado vive donde lo pone quien llama, como el de cualquier función.
 
 ---
 
@@ -671,7 +670,7 @@ se dice antes de compilar:
 | `[dependencies]` | Error |
 |---|---|
 | `textkit = "libs/textkit"` (no existe) | `library 'textkit': none/libs/textkit has no larimar.toml` |
-| `textkit = "../prog"` (un programa) | `library 'textkit': prog is a program, not a library or a service ([project] kind = "library" or "service")` |
+| `textkit = "../prog"` (un programa) | `library 'textkit': prog is a program, not a library ([project] kind = "library")` |
 | `textkit = "../other"` (otro nombre) | `library 'textkit': the library in other is called 'other'` |
 | `textkit = 3` | `textkit in [dependencies] is the folder of the library: textkit = "libs/textkit"` |
 
@@ -741,259 +740,100 @@ b221d9dbb083a7f3
 ```
 
 **Para lo que `std` no tiene** (una base de datos, imágenes), el camino de Larimar es otro proceso: un
-servicio escrito en Larimar (Parte III), o cualquier programa con el que se habla por llamadas
-(`std.os.rpc`) o por un stream de memoria compartida (`std.os.shared`). Si ese proceso falla, no corrompe
+programa que responde (Parte III), o cualquier programa con el que se habla por llamadas
+(`std.os.rpc`) o por un stream de memoria compartida (`std.os.sharedmemory`). Si ese proceso falla, no corrompe
 la memoria del tuyo. Lo cuenta el [capítulo 23 del manual](manual.es.md#23-otros-programas-llamadas-memoria-compartida-y-procesos).
 
 ---
 
-# Parte III. Servicios: bibliotecas en su propio proceso
+# Parte III. Otro programa: código en su propio proceso
 
-## 11. El primer servicio
+## 11. Un programa que responde
 
-Un servicio es un proyecto con `kind = "service"`:
-
-```toml
-[project]
-name = "calc"
-version = "1.0.0"
-kind = "service"
-main = "src/calc.lar"
-```
-
-Lo que da son las **funciones públicas** de su módulo principal, `src/calc.lar`:
+Lo que no debe compartir la memoria del programa (código que conviene poder reiniciar, o que puede
+caerse) va en **otro programa**. Un programa que responde llamadas es un programa cualquiera que usa
+`serve` de `std.os.rpc`; no hay un tipo de proyecto para eso:
 
 ```ts
-// El servicio calc: sus funciones públicas son lo que da.
-import std.os;
-
-/** La suma de dos números. */
-public function add(a: int64, b: int64): int64 { return a + b; }
-
-/** Las palabras, en mayúsculas. */
-public function upper(words: String[*]): String[*] {
-    let out: String[*] = [];
-    for (w in words) { out.push(w.toUpperCase()); }
-    return out;
-}
-
-/** Un nombre, si lo hay. */
-public function find(name: String?): String? { return name == null ? null : "encontré ${name!}"; }
-
-/** Datos libres: una tabla. */
-public function info(): Any { return { pid: os.processId(), name: "calc" }; }
-
-/** Escribe en su propia salida. */
-public function log(text: String): void { println("calc dice: ${text}"); }
-
-/** Un error de programación, en el servicio. */
-public function crash(): int32 {
-    let none: int32[*] = [];
-    return none[1];
-}
-
-function hidden(): int32 { return 1; }
-```
-
-`larimar new calc --service` crea uno así, con una prueba. Un programa lo nombra en `[dependencies]` como a una
-biblioteca:
-
-```toml
-[project]
-name = "app"
-
-[c]
-flags = ["-g", "-fsanitize=address"]
-
-[dependencies]
-calc = "../calc"
-```
-
-Y lo que importa es **una clase con las mismas funciones**, `Calc` (el nombre del servicio, con mayúscula;
-`image_tools` sería `ImageTools`). `Calc.start()` arranca el servicio, y cada función es una llamada a él:
-
-```ts
-import calc { Calc };
-import std.os.rpc { RpcError };
-import std.os.rpc as Calls;
-import std.os;
-
-function main(): int32 {
-    try {
-        let c: Calc = Calc.start();
-        println("${c.add(2, 40)}");
-        println(c.upper(["casa", "playa"]).join(","));
-        println("${c.find("x") ?? "-"} ${c.find(null) ?? "-"}");
-        let i: Any = c.info();
-        println("${i.name}, en otro proceso: ${(i.pid as int64 ?? 0) != os.processId()}");
-        c.log("hola");
-        try {
-            c.crash();
-        } catch (RpcError e) {
-            println(Calls.message(e));
-        }
-        c.close();
-    } catch (RpcError e) {
-        println("no se pudo hablar con calc: ${Calls.message(e)}");
-    }
-    return 0;
-}
-```
-
-```
-larimar run app
-```
-
-```
-calc dice: hola
-42
-CASA,PLAYA
-encontré x -
-calc, en otro proceso: true
-ended: the program ended (exit 101)
-```
-
-`larimar run app` (y `larimar build app`) **construye antes el servicio**, con su propio `larimar build`:
-
-```
-built build/calc
-built build/app
-```
-
-- `info()` se calculó en otro proceso: su `pid` no es el del programa.
-- `calc dice: hola` lo escribió el servicio en su salida, que es la misma consola. Sale cuando el servicio
-  la escribe; la del programa, al terminar (va a una tubería, con búfer).
-- Las llamadas van por memoria compartida: dos streams, uno en cada sentido. Una llamada y su respuesta
-  tardan unos microsegundos.
-- `Calc.start()` busca el ejecutable junto al del programa y, si no está, donde se construyó
-  (`calc/build/calc`). Para dar el programa a alguien, pon el ejecutable del servicio junto al suyo.
-  `Calc.startAt(ruta)` arranca otro.
-- El servicio termina con `close()`, o cuando se libera la memoria del objeto.
-
-Las pruebas del servicio llaman a sus funciones directamente, en el mismo proceso:
-
-```ts
-import calc;
-import std.test { checkInt, checkText };
-
-test function adds(): void { checkInt(42, calc.add(40, 2) as int32); }
-
-test function upper(): void { checkText("A,B", calc.upper(["a", "b"]).join(",")); }
-```
-
-```
-  ok    tests/calc_test.lar: adds
-  ok    tests/calc_test.lar: upper
-
-2 passed, 0 failed
-```
-
-## 12. Qué cruza, y qué pasa si falla
-
-**Lo que cruza** es lo que lleva JSON: números, `bool`, `String`, sus opcionales y listas de ellos, y `Any`.
-Una función pública con otra cosa no se puede llamar desde otro proceso, y el servicio no se construye:
-
-```ts
-public class Box { let n: int32 = 0; }
-public enum Problem { Broken }
-
-public function box(): Box { return Box {}; }
-public function risky(): int32 throws Problem { throw Problem.Broken; }
-public function sum(f: (int32) -> int32): int32 { return f(1); }
-```
-
-```
-Service Error [bad]: box returns Box: what comes back from a service is a number, a bool, a String, an optional or a list of one of them, or Any
-Service Error [bad]: function risky of the service throws: an error cannot cross to the program that calls it (give it as a value)
-Service Error [bad]: parameter f of sum: what crosses to a service is a number, a bool, a String, an optional or a list of one of them, or Any
-```
-
-Un error con `throws` tampoco cruza: el servicio lo trata dentro y devuelve un valor.
-
-**Si el servicio falla**, la llamada lanza `RpcError`. En el ejemplo, `crash()` tuvo un panic allí:
-
-```
-panic [src/calc.lar:26]: index 1 out of range (length 0)
-```
-
-y el programa siguió, con el error de la llamada (la última línea de 11):
-`ended: the program ended (exit 101)`. Las variantes son `Ended` (el servicio terminó), `Failed` (respondió
-con un error) y `TimedOut` (con `setTimeout(ms)`, si la respuesta no llega a tiempo).
-
-**Un programa solo importa el servicio**, no sus partes: están dentro del servicio.
-
-```
-Module Error [src/main.lar:1]: 'calc.inner' is a part of the service 'calc': a program uses what the service gives (import calc).
-```
-
-## 13. El servicio por dentro, y desde otros lenguajes
-
-`larimar build` del servicio escribe su main junto a su C, donde se puede leer:
-
-```
-app/build/app
-app/larimar.toml
-app/src/main.lar
-calc/build/calc
-calc/build/calc-service.lar
-calc/larimar.toml
-calc/src/calc.lar
-```
-
-```
-// Written by larimar build: the main of the service 'calc'.
-import calc;
+// calc.lar
 import std.os.rpc { RpcCall, serve };
+
+function add(a: int64, b: int64): int64 { return a + b; }
 
 function main(): int32 {
     serve((call) -> {
-        if (call.method == "add") {
-            let a_a: int64 = call.params["a"] as int64 ?? 0;
-            let a_b: int64 = call.params["b"] as int64 ?? 0;
-            let r: int64 = calc.add(a_a, a_b);
-            return r;
+        switch (call.method) {
+            case "add" -> { return add(call.params.a as int64 ?? 0, call.params.b as int64 ?? 0); }
+            case "upper" -> { return (call.params.text as String ?? "").toUpperCase(); }
+            case "crash" -> {
+                let none: int32[*] = [];
+                return none[1];
+            }
+            default -> {}
         }
-        if (call.method == "upper") {
-            let a_words: String[*] = [];
-            for (i, v in call.params["words"]) { a_words.push((v as String ?? "").clone()); }
-            let r: String[*] = calc.upper(a_words);
-            let l_result: Any = {};
-            for (x in r) { l_result.push(x); }
-            return l_result;
-        }
-        if (call.method == "find") {
-            let a_name: String? = null;
-            if (call.params["name"] != null) { a_name = (call.params["name"] as String ?? "").clone(); }
-            let r: String? = calc.find(a_name);
-            if (r == null) { return null; }
-            return r!;
-        }
-        if (call.method == "info") {
-            let r: Any = calc.info();
-            return r;
-        }
-        if (call.method == "log") {
-            let a_text: String = (call.params["text"] as String ?? "").clone();
-            calc.log(a_text);
-            return null;
-        }
-        if (call.method == "crash") {
-            let r: int32 = calc.crash();
-            return r;
-        }
-        call.fail(-32601, "the service calc has no function ${call.method}");
+        call.fail(-32601, "calc has no function ${call.method}");
         return null;
     });
     return 0;
 }
 ```
 
-Ese main es `serve` de `std.os.rpc`: responde llamadas JSON-RPC. Cuando nadie lo arrancó con memoria
-compartida, responde por su entrada y su salida estándar, así que **un programa en cualquier lenguaje puede
-usar el servicio**:
+Quien llama dice qué corre con un `Process` y lo arranca con `Rpc.startShared`:
+
+```ts
+// app.lar
+import std.os.rpc { Rpc, RpcError, message };
+import std.os.process { Process };
+
+function main(): int32 {
+    try {
+        let calc: Rpc = Rpc.startShared(Process { program: "./calc" });
+        println("${calc.call("add", { a: 2, b: 40 })}");
+        println("${calc.call("upper", { text: "playa" })}");
+        try {
+            calc.call("crash", null);
+        } catch (RpcError e) {
+            println(message(e));
+        }
+    } catch (RpcError e) {
+        println(message(e));
+        return 1;
+    }
+    return 0;
+}
+```
 
 ```
-printf 'Content-Length: 62\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"add","params":{"a":1,"b":2}}' | calc/build/calc
+panic [calc.lar:12]: index 1 out of range (length 0)
+42
+PLAYA
+ended: the program ended (exit 101)
+```
+
+- **Dónde está** lo decide quien llama: una ruta del sistema (`/usr/local/bin/calc`), junto a su
+  ejecutable, o lo que diga su configuración. Cada uno se construye con su propio `larimar build`.
+- **Cuándo corre** también: `close()` lo termina con orden, `stop()` en seguida, y si el `Rpc` se libera,
+  el programa que arrancó termina. Para reiniciarlo, otro `Rpc.startShared`.
+- El `Process` da también `args`, `env` y `quiet`. Rpc lo arranca él mismo: uno con una tarea
+  (`run`), sin programa o ya arrancado lo rechaza con `RpcError.Ended`.
+
+## 12. Qué cruza, y qué pasa si falla
+
+**Lo que cruza** es lo que lleva JSON: números, `bool`, `String`, `null` y tablas (`Any`). Un objeto o un
+error con `throws` no cruzan: quien responde los trata dentro y da un valor, o `call.fail(code, text)`.
+Para muchos números (frames, muestras), `std.io.bytes` sobre un stream de `std.os.sharedmemory`.
+
+**Si el otro programa falla**, la llamada lanza `RpcError`: `Ended` (terminó: arriba, el panic de
+`crash`), `Failed` (respondió con `call.fail`) y `TimedOut` (con `timeout` en ms, si la respuesta no llega
+a tiempo). El programa que llama sigue: su memoria no se tocó.
+
+## 13. Desde otros lenguajes
+
+`serve` responde por memoria compartida cuando lo arrancó `Rpc.startShared`, y si no por su entrada y su
+salida estándar, así que **un programa en cualquier lenguaje puede usarlo**:
+
+```
+printf 'Content-Length: 62\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"add","params":{"a":1,"b":2}}' | ./calc
 ```
 
 ```
@@ -1001,6 +841,9 @@ Content-Length: 35
 
 {"jsonrpc":"2.0","id":1,"result":3}
 ```
+
+Y al revés: `Rpc.start(Process { program: "herramienta.py" })` habla con cualquier programa que responda
+JSON-RPC por su entrada y su salida.
 
 ---
 
@@ -1017,10 +860,9 @@ Content-Length: 35
 
 **Entre un programa y su biblioteca**, nada queda fuera: es el mismo análisis que dentro de un programa.
 
-**Entre un programa y un servicio**, el compilador revisa los dos lados, pero no puede saber qué hace el
-servicio en cada llamada: puede tardar, fallar o devolver otra cosa si su ejecutable no es el que se
-construyó con el programa. Por eso cada llamada puede lanzar `RpcError`, y el programa decide qué hacer: un
-servicio que falla no deja al programa en un estado roto.
+**Entre un programa y otro programa**, el compilador revisa cada uno, pero no puede saber qué hace el otro
+en cada llamada: puede tardar, fallar o devolver otra cosa. Por eso cada llamada puede lanzar `RpcError`, y
+el programa decide qué hacer: otro programa que falla no deja a este en un estado roto.
 
 ## 16. Límites conocidos
 
@@ -1029,9 +871,9 @@ servicio que falla no deja al programa en un estado roto.
 - **No hay gestor de paquetes ni versiones.** `[dependencies]` nombra carpetas; cómo llegan ahí (una copia, un
   submódulo de git) lo decide el proyecto. Si dos bibliotecas necesitan versiones distintas de una tercera,
   hay que elegir una.
-- **Un servicio da valores**: sus objetos no cruzan todavía (un servicio que guarda estado lo guarda dentro,
-  y el programa lo nombra con números o textos). Cada llamada pasa por JSON, también sobre memoria
-  compartida: para mover muchos datos, `std.os.shared` tiene streams.
+- **Otro programa da valores**: los objetos no cruzan (el que guarda estado lo guarda dentro, y quien llama
+  lo nombra con números o textos). Cada llamada pasa por JSON, también sobre memoria compartida: para
+  mover muchos datos, `std.os.sharedmemory` tiene streams y segmentos, y `std.io.bytes` mensajes binarios.
 
 ---
 
@@ -1051,9 +893,8 @@ servicio que falla no deja al programa en un estado roto.
 | Las pruebas de una biblioteca | `theTestsOfALibraryUseItsRules` |
 | `larimar build` de una biblioteca la revisa | `aLibraryIsChecked` |
 | `[c]` solo elige el compilador | `cIsOnlyTheCompiler` |
-| Un programa que llama a un servicio; un panic allí | `tests/project/services_test.lar`: `aProgramCallsAService` |
-| El servicio por su entrada y su salida | `aServiceAnswersAnyProgram` |
-| Qué cruza, y las partes de un servicio | `whatCrossesIsChecked` |
+| Llamadas a otro programa, por memoria compartida y por pipes; un panic allí | `tests/std/rpc_test.lar` |
+| Rpc rechaza un Process con tarea, sin programa o ya arrancado | `rpcStartsOnlyAProgram` |
 | C solo en `std` | `tests/c/only_std_test.lar` |
 
 ## B. Chuleta
@@ -1070,29 +911,20 @@ tiny = "../tiny"
 ```
 
 ```toml
-# un servicio: calc/larimar.toml
-[project]
-name = "calc"
-kind = "service"
-main = "src/calc.lar"        # sus funciones públicas son lo que da
-```
-
-```toml
 # el programa
 [dependencies]
 textkit = "../textkit"
-calc = "../calc"
 ```
 
 ```ts
 import textkit;                       // la biblioteca
 import textkit.words as Words;        // una de sus partes
 import textkit { Counter };           // sus nombres
-import calc { Calc };                 // el servicio: let c: Calc = Calc.start(); c.add(1, 2)
+// otro programa: let calc: Rpc = Rpc.startShared(Process { program: "./calc" }); calc.call("add", {...})
 ```
 
 ```
-larimar run                 # el programa, con sus bibliotecas compiladas dentro y sus servicios construidos
-larimar test                # en la carpeta de la biblioteca o del servicio: sus pruebas
-larimar build               # en la carpeta de la biblioteca: la revisa; en la de un servicio: su ejecutable
+larimar run                 # el programa, con sus bibliotecas compiladas dentro
+larimar test                # en la carpeta de la biblioteca: sus pruebas
+larimar build               # en la carpeta de la biblioteca: la revisa
 ```

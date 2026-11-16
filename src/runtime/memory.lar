@@ -1,0 +1,306 @@
+// runtime.memory: memories (arenas), their limits and finalizers.
+// Part of the runtime: the compiler takes from here what a program uses (it is not imported).
+ccode {
+/* ---- runtime: memories ------------------------------------------------ */
+
+#define LAR_ALIGN 16
+
+/* Memory checks. With AddressSanitizer (-fsanitize=address) the unused part of every heap block is
+   poisoned, each allocation unpoisons exactly its bytes, and growable memories leave a poisoned gap
+   after each allocation: reading or writing past what was asked for stops at that line. LAR_DEBUG_MEMORY
+   adds the gaps without ASan and fills freed blocks with 0xDD, so a dangling value reads as garbage. */
+#if defined(__SANITIZE_ADDRESS__)
+#define LAR_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define LAR_ASAN 1
+#endif
+#endif
+#ifdef LAR_ASAN
+void __asan_poison_memory_region(void* addr, size_t size);      /* the ASan API (as void*: no false warning) */
+void __asan_unpoison_memory_region(void* addr, size_t size);
+#define LAR_POISON(p, n) __asan_poison_memory_region((p), (n))
+#define LAR_UNPOISON(p, n) __asan_unpoison_memory_region((p), (n))
+#else
+#define LAR_POISON(p, n) ((void)(p), (void)(n))
+#define LAR_UNPOISON(p, n) ((void)(p), (void)(n))
+#endif
+#if defined(LAR_ASAN) || defined(LAR_DEBUG_MEMORY)
+#define LAR_REDZONE 32
+#else
+#define LAR_REDZONE 0
+#endif
+
+typedef struct LarMemoryBlock { struct LarMemoryBlock* prev; size_t cap; } LarMemoryBlock;
+
+/* Work to do before a memory is freed: wait for its threads, release its synchronized objects. */
+typedef struct LarFinalizer { void (*fn)(void*); void* p; struct LarFinalizer* next; } LarFinalizer;
+
+typedef struct LarMemory {
+    uint8_t* base;      /* current block */
+    size_t cap;         /* size of the current block */
+    size_t used;        /* bytes used in the current block */
+    size_t total;       /* bytes in use across all blocks */
+    size_t peak;        /* highest value of total */
+    size_t reserved;    /* bytes obtained for the memory (capacity) */
+    LarMemoryBlock* chunks;    /* heap blocks owned by this memory */
+    void* last;         /* last allocation, can grow in place */
+    size_t lastSize;
+    bool growable;
+    LarFinalizer* finals;    /* run (newest first) before the memory is freed */
+    bool shared;        /* used by several threads: the default memory */
+    size_t limit;       /* Memory.limit: the most it may obtain from the system (0: no limit) */
+    const char* name;   /* its name, for the message when it passes its limit */
+} LarMemory;
+
+static inline size_t lar_align_up(size_t n) {
+    return (n + (LAR_ALIGN - 1)) & ~(size_t)(LAR_ALIGN - 1);
+}
+
+static inline LarMemory lar_memory_empty(void) {
+    LarMemory m;
+    memset(&m, 0, sizeof m);
+    return m;
+}
+
+/* A memory backed by a buffer that the caller owns (stack or static). */
+static inline LarMemory lar_memory_fixed(void* buf, size_t cap) {
+    LarMemory m = lar_memory_empty();
+    uintptr_t p = (uintptr_t)buf;
+    uintptr_t a = (p + (LAR_ALIGN - 1)) & ~(uintptr_t)(LAR_ALIGN - 1);
+    size_t skip = (size_t)(a - p);
+    m.base = (uint8_t*)a;
+    m.cap = cap > skip ? cap - skip : 0;
+    m.reserved = m.cap;
+    return m;
+}
+
+static inline LarMemoryBlock* lar_memory_block_new(size_t dataSize) {
+    size_t hdr = lar_align_up(sizeof(LarMemoryBlock));
+    LarMemoryBlock* c = (LarMemoryBlock*)malloc(hdr + dataSize);
+    if (!c) lar_panic("out of memory: the system refused the heap request", 0);
+    c->prev = NULL;
+    c->cap = dataSize;
+    LAR_POISON((uint8_t*)c + hdr, dataSize);       /* nothing allocated yet */
+    return c;
+}
+
+static inline uint8_t* lar_memory_block_data(LarMemoryBlock* c) {
+    return (uint8_t*)c + lar_align_up(sizeof(LarMemoryBlock));
+}
+
+/* byte[N] in heap: one block requested from the system. */
+static inline LarMemory lar_memory_heap(int64_t cap, int line) {
+    if (cap < 0) lar_panic("negative memory size", line);
+    LarMemory m = lar_memory_empty();
+    LarMemoryBlock* c = lar_memory_block_new((size_t)cap);
+    m.chunks = c;
+    m.base = lar_memory_block_data(c);
+    m.cap = (size_t)cap;
+    m.reserved = (size_t)cap;
+    return m;
+}
+
+/* byte[*] in heap: grows by requesting more blocks. */
+static inline LarMemory lar_memory_growable(void) {
+    LarMemory m = lar_memory_empty();
+    m.growable = true;
+    return m;
+}
+
+/* Runs the finalizers: threads living here are waited for, synchronized objects released. */
+static inline void lar_memory_finalize(LarMemory* m) {
+    for (;;) {
+#ifdef LAR_THREADS
+        if (m->shared) lar_shared_lock();
+#endif
+        LarFinalizer* f = m->finals;
+        if (f) m->finals = f->next;
+#ifdef LAR_THREADS
+        if (m->shared) lar_shared_unlock();
+#endif
+        if (!f) return;
+        f->fn(f->p);
+    }
+}
+
+static inline void lar_memory_free(LarMemory* m) {
+    lar_memory_finalize(m);
+    LarMemoryBlock* c = m->chunks;
+    while (c) {
+        LarMemoryBlock* prev = c->prev;
+#if defined(LAR_DEBUG_MEMORY) && !defined(LAR_ASAN)
+        memset(c, 0xDD, lar_align_up(sizeof(LarMemoryBlock)) + c->cap);     /* what lived here reads as garbage */
+#endif
+        free(c);
+        c = prev;
+    }
+    *m = lar_memory_empty();
+}
+
+/* Memory.limit: a memory that needs more than its limit stops the program, naming it. */
+static const char* lar_size_text(size_t n, char* out) {
+    if (n >= 1048576) snprintf(out, 32, "%.1f MB", (double)n / 1048576.0);
+    else snprintf(out, 32, "%.1f KB", (double)n / 1024.0);
+    return out;
+}
+
+static void lar_memory_over_limit(LarMemory* m, size_t need) {
+    static char text[256];
+    char a[32], b[32], c[32];
+    snprintf(text, sizeof text, "memory '%s' passed its limit of %s (it has %s and needs %s more)", m->name ? m->name : "?",
+        lar_size_text(m->limit, a), lar_size_text(m->reserved, b), lar_size_text(need, c));
+    lar_panic(text, 0);
+}
+
+static inline void lar_memory_limit(LarMemory* m, int64_t bytes, const char* name, int line) {
+    if (bytes < 0) lar_panic("a memory limit cannot be negative", line);
+    m->name = name;
+    m->limit = (size_t)bytes;
+    if (m->limit && m->reserved > m->limit) lar_memory_over_limit(m, 0);
+}
+
+/* Whether p points into one of these blocks (what Memory.compact moves). */
+static inline bool lar_owned(const LarMemoryBlock* c, const void* p) {
+    const uint8_t* q = (const uint8_t*)p;
+    for (; c; c = c->prev) {
+        const uint8_t* d = (const uint8_t*)c + lar_align_up(sizeof(LarMemoryBlock));
+        if (q >= d && q < d + c->cap) return true;
+    }
+    return false;
+}
+
+/* Memory.compact, first half: the memory keeps its name and limit, and starts again with no blocks; its
+   old blocks go to *old, from where the live data is copied back. */
+static inline void lar_memory_compact_begin(LarMemory* m, LarMemory* old, const char* name, int line) {
+    if (m->finals) {
+        static char text[256];
+        snprintf(text, sizeof text, "memory '%s' holds threads, synchronized objects or C resources; compact() cannot move them", name);
+        lar_panic(text, line);
+    }
+    *old = *m;
+    *m = lar_memory_growable();          /* empty again; it keeps its limit, its name and its peak */
+    m->limit = old->limit;
+    m->name = old->name;
+    m->peak = old->peak;
+}
+
+/* Memory.compact, second half: the old blocks are freed. */
+static inline void lar_memory_compact_end(LarMemory* old) { lar_memory_free(old); }
+
+static inline void lar_memory_track(LarMemory* m, size_t add) {
+    m->total += add;
+    if (m->total > m->peak) m->peak = m->total;
+}
+
+/* Returns NULL when a fixed memory is full. */
+static inline void* lar_memory_try_alloc_raw(LarMemory* m, size_t size) {
+    size_t need = lar_align_up(size ? size : 1);
+    size_t span = need + (m->growable ? LAR_REDZONE : 0);      /* with checks: a poisoned gap after it */
+    if (m->base == NULL || m->cap - m->used < span) {
+        if (!m->growable) return NULL;
+        size_t chunk = 64 * 1024;
+        if (m->cap * 2 > chunk && m->cap < ((size_t)64 << 20)) chunk = m->cap * 2;
+        while (chunk < span) chunk *= 2;
+        if (m->limit && m->reserved + chunk > m->limit) {        /* the last block fits what is left */
+            size_t room = m->limit > m->reserved ? m->limit - m->reserved : 0;
+            if (room < span) lar_memory_over_limit(m, span);
+            chunk = room;
+        }
+        LarMemoryBlock* c = lar_memory_block_new(chunk);
+        c->prev = m->chunks;
+        m->chunks = c;
+        m->base = lar_memory_block_data(c);
+        m->cap = chunk;
+        m->used = 0;
+        m->reserved += chunk;
+    }
+    void* p = m->base + m->used;
+    m->used += span;
+    m->last = p;
+    m->lastSize = need;
+    lar_memory_track(m, need);
+    LAR_UNPOISON(p, size ? size : 1);
+    return p;
+}
+
+static inline void* lar_memory_try_alloc(LarMemory* m, size_t size) {
+#ifdef LAR_THREADS
+    if (m->shared) {
+        lar_shared_lock();
+        void* p = lar_memory_try_alloc_raw(m, size);
+        lar_shared_unlock();
+        return p;
+    }
+#endif
+    return lar_memory_try_alloc_raw(m, size);
+}
+
+static inline void* lar_memory_alloc(LarMemory* m, size_t size, int line) {
+    if (!m) lar_panic("internal error: something was created without a memory (a bug of the compiler, please report it)", line);
+    void* p = lar_memory_try_alloc(m, size);
+    if (!p) lar_panic("memory is full", line);
+    memset(p, 0, size);
+    return p;
+}
+
+/* A copy of size bytes in m (a callback C keeps: its Context lives as long as the memory). */
+static inline void* lar_memory_copy(LarMemory* m, const void* p, size_t size, int line) {
+    void* q = lar_memory_alloc(m, size, line);
+    memcpy(q, p, size);
+    return q;
+}
+
+/* Grows the last allocation in place when possible, otherwise copies. */
+static inline void* lar_memory_try_realloc_raw(LarMemory* m, void* old, size_t oldSize, size_t newSize) {
+    if (old == NULL) return lar_memory_try_alloc_raw(m, newSize);
+    if (old == m->last) {
+        size_t need = lar_align_up(newSize);
+        size_t gap = m->growable ? LAR_REDZONE : 0;
+        size_t off = (size_t)((uint8_t*)old - m->base);
+        if (need >= m->lastSize && off + need + gap <= m->cap) {
+            lar_memory_track(m, need - m->lastSize);
+            m->used = off + need + gap;
+            m->lastSize = need;
+            LAR_UNPOISON(old, newSize);
+            return old;
+        }
+    }
+    void* p = lar_memory_try_alloc_raw(m, newSize);
+    if (!p) return NULL;
+    memcpy(p, old, oldSize < newSize ? oldSize : newSize);
+    return p;
+}
+
+static inline void* lar_memory_try_realloc(LarMemory* m, void* old, size_t oldSize, size_t newSize) {
+#ifdef LAR_THREADS
+    if (m->shared) {
+        lar_shared_lock();
+        void* p = lar_memory_try_realloc_raw(m, old, oldSize, newSize);
+        lar_shared_unlock();
+        return p;
+    }
+#endif
+    return lar_memory_try_realloc_raw(m, old, oldSize, newSize);
+}
+
+/* Registers work to do when the memory is freed. */
+static inline void lar_memory_on_free(LarMemory* m, void (*fn)(void*), void* p, int line) {
+    LarFinalizer* f = (LarFinalizer*)lar_memory_alloc(m, sizeof(LarFinalizer), line);
+    f->fn = fn;
+    f->p = p;
+#ifdef LAR_THREADS
+    if (m->shared) lar_shared_lock();
+#endif
+    f->next = m->finals;
+    m->finals = f;
+#ifdef LAR_THREADS
+    if (m->shared) lar_shared_unlock();
+#endif
+}
+
+/* The default memory: grows, lives for the whole program. */
+static LarMemory lar_default_memory = { NULL, 0, 0, 0, 0, 0, NULL, NULL, 0, true, NULL, true };
+
+#ifdef LAR_THREADS
+}

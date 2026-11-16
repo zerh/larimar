@@ -1,0 +1,6 @@
+// std.net.internal: what a socket of the system is, for std.net and its parts (the C of LarSocket and
+// lar_socket_close is in std/net/posix.lar and windows.lar, one for each system).
+
+/** A socket of the system: an int on Unix, a SOCKET on Windows (LarSocket). Closed when its memory is freed. */
+public native type Socket = c"LarSocket" released by lar_socket_close;
+native function lar_socket_close(s: Socket): int32;

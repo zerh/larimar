@@ -1,0 +1,207 @@
+// semantics.rules: the rules of the language that are checked on the linked modules, one object each,
+// listed by languageRules(). Each has an id, which its errors say (error[std-own-import]), and the part of
+// the spec that says it. The pass CheckRules (pipeline) asks each rule about each module, after Link and
+// before the modules are put together; tests/language/rules_test.lar has a case that breaks each one.
+//
+// The rules that need types (lifetimes, threads, what crosses to a process) are the analyzer's; these are
+// the ones about modules and what they declare: where C may be, which modules a module may import, and
+// what must have a body.
+
+import syntax.ast { CCodeDecl, CIncludeDecl, ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, FunctionDecl, NativeInterfaceDecl,
+    NativeTypeDecl, Node, StructDecl };
+import semantics.linker {
+    declarationsOf, importsOf, isLanguage, isStd, Module, ruleError, sourceOf, stdFileOpened, trusted, unsafeModule,
+    unsafeNotes, unsafeSources, linkedMainFile
+};
+
+/** A rule of the language. */
+public interface Rule {
+    /** Its id, as its errors say it: error[<id>]. */
+    function id(): String;
+    /** Where the spec says it (docs/spec.md). */
+    function spec(): String;
+    /** Says each place where the module breaks it (ruleError). */
+    function check(module: Module in default): void;
+}
+
+/** Every rule CheckRules asks, in this order. */
+public function languageRules(): Rule[*] {
+    return [StdOwnImport {}, InternalImport {}, NoCOutsideStd {}, BodyNeeded {}, LanguageTypeOnlyInLang {}];
+}
+
+/** The ids of every rule (for the test that each one has a case that breaks it). */
+public function ruleIds(): String[*] {
+    let out: String[*] = [];
+    for (r in languageRules()) { out.push(r.id()); }
+    return out;
+}
+
+// ---- which modules a module may import ---------------------------------------------------------
+
+/** A part of a module's path that makes a module of std std's own: the C of one system, what its parts share. */
+function stdOwnPart(part: String): bool {
+    return part == "posix" || part == "windows" || part == "macos" || part == "common" || part == "internal";
+}
+
+/** A module of std that only std imports (std.net.posix, std.os.process.internal). */
+public function stdOwn(path: String): bool {
+    if (!isStd(path)) { return false; }
+    for (part in path.split(".")) {
+        if (stdOwnPart(part)) { return true; }
+    }
+    return false;
+}
+
+/** std.net.posix -> std.net: where what it does is given. */
+public function stdPublicOf(path: String): String {
+    let kept: String[*] = [];
+    for (p in path.split(".")) {
+        if (stdOwnPart(p)) { break; }
+        kept.push(p);
+    }
+    return kept.join(".").clone();
+}
+
+/** A part of std for std itself is imported only from std. */
+class StdOwnImport implements Rule {
+    override function id(): String { return "std-own-import"; }
+    override function spec(): String { return "Appendix D: the modules of the standard library"; }
+    override function check(module: Module in default): void {
+        if (isStd(module.path) || stdFileOpened(module)) { return; }
+        for (imp in importsOf(module)) {
+            if (stdOwn(imp.path)) {
+                ruleError(imp.line, self.id(), "'${imp.path}' is a part of std for std itself (its C for one system, or what its modules share): use what std gives (${stdPublicOf(imp.path)}).");
+            }
+        }
+    }
+}
+
+/** What is inside an `internal` folder (a.b.internal.c) is imported only by the modules of its folder (a.b...). */
+public function internalOwner(path: String): String? {
+    let parts: String[*] = path.split(".");
+    for (i, p in parts) {
+        if (p == "internal") {
+            let kept: String[*] = [];
+            for (j in 0..i) { kept.push(parts[j]); }
+            return kept.join(".").clone();
+        }
+    }
+    return null;
+}
+
+class InternalImport implements Rule {
+    override function id(): String { return "internal-import"; }
+    override function spec(): String { return "§18: modules and imports"; }
+    override function check(module: Module in default): void {
+        if (isStd(module.path)) { return; }                    // std's own: the rule std-own-import
+        for (imp in importsOf(module)) {
+            if (isStd(imp.path)) { continue; }
+            let owner: String? = internalOwner(imp.path);
+            if (owner == null) { continue; }
+            let inside: bool = owner! == "" || module.path == owner! || module.path.startsWith("${owner!}.");
+            if (!inside) {
+                let folder: String = owner! == "" ? "the main folder" : owner!;
+                ruleError(imp.line, self.id(), "'${imp.path}' is internal to ${folder}: only its modules import it.");
+            }
+        }
+    }
+}
+
+// ---- where C may be ------------------------------------------------------------------------------
+
+/** The types and structs the native interfaces of a module declare (their names). */
+function interfaceTypes(module: Module in default): String[*] {
+    let names: String[*] = [];
+    for (d in declarationsOf(module)) {
+        if (d is NativeInterfaceDecl nativeInterface) {
+            for (t in nativeInterface.types) { names.push(t); }
+        }
+    }
+    return names;
+}
+
+/**
+ * C is only the standard library's: a program, and a library written in Larimar, use what std gives (and,
+ * for the rest, other programs). With [project] unsafe_c = true, native interfaces (and nothing else of
+ * C), which every build says (unsafeSources).
+ */
+class NoCOutsideStd implements Rule {
+    override function id(): String { return "no-c-outside-std"; }
+    override function spec(): String { return "Appendix D: the C of the standard library"; }
+    override function check(module: Module in default): void {
+        if (trusted(module, linkedMainFile())) { return; }
+        let interfaces: bool = unsafeModule(module);
+        let declared: String[*] = interfaceTypes(module);
+        let parts: Any = {};                     // what native interfaces declare: said once, at the interface
+        for (d in declarationsOf(module)) {
+            if (d is NativeInterfaceDecl nativeInterface) {
+                for (n in nativeInterface.members) { parts["${nativeInterface.name}__${n}"] = 1; }
+            }
+        }
+        for (d in declarationsOf(module)) {
+            if (interfaces && d is NativeInterfaceDecl) {          // unsafe_c: allowed, and said at build
+                let from: String = sourceOf(module);
+                if (!unsafeSources.contains(from)) { unsafeSources.push(from.clone() in default); }
+                continue;
+            }
+            if (interfaces && d is ExternTypeDecl et && et.cType.trim().endsWith("*") && et.cType.trim() != "void*" && et.releasedBy == "" && declared.contains(et.name)) {
+                unsafeNotes.push("${sourceOf(module)}: type ${et.name} (${et.cType}) has no 'released by': nothing frees it" in default);
+            }
+            let what: String = cKind(d, interfaces, declared, parts);
+            if (what != "") {
+                let open: String = what == "native interface" ? ", or for a project with [project] unsafe_c = true (its C has none of the language's guarantees)" : "";
+                ruleError(d.line, self.id(), "${what} is only for the standard library${open}: C is written there, and a program uses what std gives.");
+            }
+        }
+    }
+}
+
+/** What of C a declaration is ("" when it is not C, or is what a native interface allows). */
+function cKind(d: Node, interfaces: bool, declared: String[*], parts: Any): String {
+    return switch (d) {
+        case NativeInterfaceDecl n -> "native interface";
+        case CIncludeDecl c when c.gives != "" -> "";
+        case ExternTypeDecl t when interfaces && declared.contains(t.name) -> "";
+        case StructDecl st when interfaces && declared.contains(st.name) -> "";
+        case ExternFunctionDecl f when parts[f.name] != null -> "";
+        case ExternValueDecl v when parts[v.name] != null -> "";
+        case CIncludeDecl c -> "cinclude";
+        case CCodeDecl c -> "ccode";
+        case ExternTypeDecl t -> "native type";
+        case ExternFunctionDecl f -> f.cBody != "" ? "a function with a body of C" : "native function";
+        case ExternValueDecl v -> v.isConst ? "native const" : "native let";
+        case NativeTypeDecl n -> "native type";
+        case StructDecl st -> st.cName != "" ? "native struct" : "";
+        case FunctionDecl f -> f.isNative || f.cBodied ? "native function" : "";
+        default -> "";
+    };
+}
+
+// ---- what must have a body ---------------------------------------------------------------------
+
+/** A function has its body: only what the compiler writes, in std.lang (and std.memory), has none. */
+class BodyNeeded implements Rule {
+    override function id(): String { return "body-needed"; }
+    override function spec(): String { return "§9: functions"; }
+    override function check(module: Module in default): void {
+        for (d in declarationsOf(module)) {
+            if (d is FunctionDecl f && !f.hasBody && !f.isTest && !f.isNative) {
+                ruleError(f.line, self.id(), "Function '${f.name}' needs its body: function ${f.name}(...) { ... } (only the compiler's own, in std.lang, have none)");
+            }
+        }
+    }
+}
+
+/** `type X { }` (a type of the language, String and Any) is only in std.lang. */
+class LanguageTypeOnlyInLang implements Rule {
+    override function id(): String { return "language-type"; }
+    override function spec(): String { return "§4: the types of the language"; }
+    override function check(module: Module in default): void {
+        if (isLanguage(module)) { return; }
+        for (d in declarationsOf(module)) {
+            if (d is NativeTypeDecl t && t.language) {
+                ruleError(t.line, self.id(), "'type ${t.name} { }' is a type of the language: it is only in std.lang (C types are declared in a native interface of std)");
+            }
+        }
+    }
+}

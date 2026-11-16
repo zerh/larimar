@@ -1,0 +1,686 @@
+// codegen.expressions: C99 code generation (Gen.java), part 2: expressions.
+// An expression becomes a C expression; what needs statements first writes them with line().
+
+import std.text { isDigit, isIdentifierPart };
+import syntax.ast {
+    ArrayLit, Binary, BoolLit, Call, Cast, Expr, FloatLit, Ident, Index, IntLit, IsExpr, Lambda, Member, NullLit,
+    ObjectLit, Placed, SelfExpr, StringLit, SwitchExpr, Ternary, Unary, Unwrap
+};
+import semantics.types {
+    ArrayKind, ascii, bits, CallInfo, CallK, ClassInfo, classOf, ConstantKind, Conversion, ConversionKind, escapeName, FieldInfo,
+    FunctionInfo, hasCapture, isClass, isCReserved, isEnumT, isExternT, isFloat, isInteger, isInterface, isOpt,
+    isPtr, isResource, isSigned, isStruct, LambdaInfo, MemberInfo, MemoryKind, MethodInfo, NamedKind, optIsPointer, parentOf,
+    Place, PlaceKind, StructInfo, structOf, Symbol, SymbolKind, T_ANY, T_BOOL, T_FLOAT32, T_INT32, T_INT64, T_STRING,
+    T_UINT32, T_UINT64, TypeKind, Type
+};
+import codegen.gen { Block, writing, line, resizeHelpers, resizeSeen, tmp, topBlock };
+import codegen.localnames { localNameFor };
+import codegen.gen.classes { dispatchName, methodName, returnsData };
+import codegen.gen.statements { switchCode, tempMem };
+import codegen.gen.types { envField };
+import codegen.expressions.calls { args, call, receiver };
+import codegen.expressions.clone { cloneOf };
+import codegen.expressions.lambdas { arrayLit, lambdaValue, objectLit, singleMethodObject };
+import codegen.expressions.operators { binary, cast, isTest, ternary, unary };
+import codegen.expressions.strings { string, stringLiteral };
+
+// =====================================================================================
+// Names and C types
+// =====================================================================================
+
+public function typeCName(n: String): String {
+    let a: String = ascii(n);
+    return isCReserved(a) ? "${a}_" : a;
+}
+
+public function mangle(type: Type): String {
+    if (type.kind == TypeKind.Prim) {
+        return switch (type.name) {
+            case "int8" -> "i8";
+            case "int16" -> "i16";
+            case "int32" -> "i32";
+            case "int64" -> "i64";
+            case "byte" -> "u8";
+            case "uint16" -> "u16";
+            case "uint32" -> "u32";
+            case "uint64" -> "u64";
+            case "float32" -> "f32";
+            case "float64" -> "f64";
+            case "bool" -> "b";
+            case "String" -> "s";
+            case "Any" -> "any";
+            default -> "v";
+        };
+    }
+    if (type.kind == TypeKind.Named) { return type.name; }
+    if (type.kind == TypeKind.Func) { return "F${type.funcId}"; }
+    if (type.kind == TypeKind.Array) {
+        if (type.arrayKind == ArrayKind.Fixed) { return "A${mangle(type.elem!)}_${type.size}"; }
+        return type.arrayKind == ArrayKind.Slice ? "S${mangle(type.elem!)}" : "L${mangle(type.elem!)}";
+    }
+    if (type.kind == TypeKind.Ptr) { return "P${mangle(type.elem!)}"; }
+    return type.kind == TypeKind.Opt ? "O${mangle(type.elem!)}" : "x";
+}
+
+public function cType(type: Type): String {
+    if (type.kind == TypeKind.Prim) {
+        return switch (type.name) {
+            case "int8" -> "int8_t";
+            case "int16" -> "int16_t";
+            case "int32" -> "int32_t";
+            case "int64" -> "int64_t";
+            case "byte" -> "uint8_t";
+            case "uint16" -> "uint16_t";
+            case "uint32" -> "uint32_t";
+            case "uint64" -> "uint64_t";
+            case "float32" -> "float";
+            case "float64" -> "double";
+            case "bool" -> "bool";
+            case "String" -> "LarString";
+            case "Any" -> "LarAny";
+            default -> "void";
+        };
+    }
+    if (type.kind == TypeKind.Named) {
+        if (type.namedKind == NamedKind.Class) { return "${typeCName(type.name)}*"; }
+        if (type.namedKind == NamedKind.Struct) {
+            let structInfo: StructInfo? = structOf(type.name);
+            if (structInfo != null && structInfo.decl.cName != "") { return structInfo.decl.cName; }     // a C struct: its own name
+        }
+        if (type.namedKind == NamedKind.Extern && isResource(type)) { return "LarResource_${type.name}*"; }    // its cell in a memory
+        return type.namedKind == NamedKind.Extern ? "LarNative_${type.name}" : typeCName(type.name);
+    }
+    if (type.kind == TypeKind.Func) { return "Closure_${type.funcId}"; }
+    if (type.kind == TypeKind.Array) {
+        if (type.arrayKind == ArrayKind.Fixed) { return "Arr_${mangle(type.elem!)}_${type.size}"; }
+        return type.arrayKind == ArrayKind.Slice ? "Slice_${mangle(type.elem!)}" : "List_${mangle(type.elem!)}*";
+    }
+    if (type.kind == TypeKind.Opt) { return optIsPointer(type) ? cType(type.elem!) : "Opt_${mangle(type.elem!)}"; }
+    if (type.kind == TypeKind.Ptr) { return "${cType(type.elem!)}*"; }
+    return "void";
+}
+
+public function structName(type: Type): String {
+    let c: String = cType(type);
+    return c.endsWith("*") ? c.substring(0, c.length - 1) : c;
+}
+
+// =====================================================================================
+// Helpers
+// =====================================================================================
+
+public function paren(s: String): String { return "(${s})"; }
+
+public function hoist(cTypeText: String, v: String): String { return hoistAs(cTypeText, v, "value"); }
+
+/** A value kept in a temporary that says what it is. */
+public function hoistAs(cTypeText: String, v: String, role: String): String {
+    let t: String = tmp(role);
+    line("${cTypeText} ${t} = ${v};");
+    return t;
+}
+
+function hoistAddr(cTypeText: String, v: String): String { return "&${hoist(cTypeText, v)}"; }
+
+public function hoistIfNeeded(cTypeText: String, v: String, e: Expr?): String {
+    return e != null && isPure(e) ? paren(v) : hoist(cTypeText, v);
+}
+
+// ---- left to right ----------------------------------------------------------------------
+//
+// C evaluates the arguments of a call, the operands of an operator and the initializers of a literal in
+// any order; Larimar, from left to right (SPEC §10.1). When a later part has effects, the parts before it
+// that those effects could change are computed first, in order, into temporaries, and the C of the
+// expression uses them (Expr.computed). The parts are forgotten once the C of the expression is written.
+
+/** Computes, in order, the parts before the last one with effects; returns them, for forget(). */
+public function inOrder(parts: Expr[*] in default): Expr[*] {
+    let held: Expr[*] = [];
+    let last: int32 = -1;
+    for (i, p in parts) {
+        if (hasEffects(p)) { last = i; }
+    }
+    for (i in 0..last) {
+        let p: Expr = parts[i];
+        if (p.computed != "" || unchangeable(p) || p.memArg != null || p.ty == null) { continue; }
+        let v: String = expr(p);
+        p.computed = hoist(cType(p.ty!), v);
+        held.push(p);
+    }
+    return held;
+}
+
+/** The C of these parts is written: they are computed again where they appear next. */
+public function forget(held: Expr[*]): void {
+    for (p in held) { p.computed = ""; }
+}
+
+/** Whether evaluating it can do something another part could see: a call, an index (a panic)... */
+function hasEffects(e: Expr): bool {
+    return switch (e) {
+        case IntLit, FloatLit, BoolLit, NullLit, Ident, SelfExpr, Lambda -> false;
+        case StringLit s -> anyEffects(s.exprs);
+        case Member m -> hasEffects(m.object);
+        case Unary u -> hasEffects(u.operand);
+        case Cast c -> hasEffects(c.expr);
+        case Binary b -> b.op == "/" || b.op == "%" || b.opMethod != null || hasEffects(b.left) || hasEffects(b.right);
+        default -> true;
+    };
+}
+
+function anyEffects(es: Expr[*]): bool {
+    for (e in es) {
+        if (hasEffects(e)) { return true; }
+    }
+    return false;
+}
+
+/** Whether nothing evaluated after it can change its value: literals, locals, parameters, constants. */
+function unchangeable(e: Expr): bool {
+    return switch (e) {
+        case IntLit, FloatLit, BoolLit, NullLit, SelfExpr, Lambda -> true;
+        case StringLit s -> s.exprs.length == 0;
+        case Ident id -> id.symbol == null || id.symbol!.kind != SymbolKind.Global;
+        case Unary u -> unchangeable(u.operand);
+        case Cast c -> unchangeable(c.expr);
+        case Binary b -> b.opMethod == null && unchangeable(b.left) && unchangeable(b.right);
+        default -> false;
+    };
+}
+
+/** The parts of a call, in the order they are written: the object (not a struct, which is passed by address), then the arguments. */
+function callParts(c: Call in default): Expr[*] {
+    let parts: Expr[*] = [];
+    let callInfo: CallInfo = c.call!;
+    if (callInfo.kind == CallK.Builtin) { return parts; }
+    if (callInfo.kind == CallK.Closure) {
+        parts.push(c.callee);
+    } else if (callInfo.kind == CallK.NativeMethod || callInfo.kind == CallK.InterfaceMethod || callInfo.kind == CallK.Method && callInfo.isClass) {
+        parts.push(receiver(c));
+    }
+    for (a in c.args) { parts.push(a); }
+    return parts;
+}
+
+function orderedCall(c: Call in default): String {
+    let held: Expr[*] = inOrder(callParts(c));
+    let v: String = call(c);
+    forget(held);
+    return v;
+}
+
+function orderedIndex(x: Index in default): String {
+    let held: Expr[*] = inOrder([x.object, x.index]);
+    let v: String = index(x);
+    forget(held);
+    return v;
+}
+
+function orderedBinary(b: Binary in default, type: Type): String {
+    if (b.op == "&&" || b.op == "||" || b.op == "??") { return binary(b, type); }     // the right side only when needed
+    let held: Expr[*] = inOrder([b.left, b.right]);
+    let v: String = binary(b, type);
+    forget(held);
+    return v;
+}
+
+/** The values of a literal, in the order they are written. */
+public function writtenValues(literal: ObjectLit in default): Expr[*] {
+    let values: Expr[*] = [];
+    for (f in literal.fields) { values.push(f.value); }
+    return values;
+}
+
+public function isPure(e: Expr): bool {
+    return switch (e) {
+        case Ident, SelfExpr, IntLit, FloatLit, BoolLit -> true;
+        case Member m -> isPure(m.object);
+        default -> false;
+    };
+}
+
+/** The statements lazy() generated apart. */
+public let lazyPre: String = "";
+
+/** Generates `e` (its value) into a separate buffer: its statements go to lazyPre. */
+public function lazy(e: Expr in default): String {
+    let saved: StringBuilder = writing.out;
+    let buf: StringBuilder = {} in default;
+    writing.out = buf;
+    let v: String = value(e);
+    writing.out = saved;
+    lazyPre = buf.toString() in default;
+    return v;
+}
+
+/** Removes the outer parentheses of a C expression when they enclose all of it. */
+public function strip(s: String): String {
+    if (!s.startsWith("(") || !s.endsWith(")")) { return s; }
+    let depth: int32 = 0;
+    let i: int32 = 0;
+    while (i < s.length) {
+        let ch: byte = s[i];
+        if (ch == '"') {
+            i += 1;
+            while (i < s.length && s[i] != '"') {
+                if (s[i] == '\\') { i += 1; }
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+        if (ch == '(') {
+            depth += 1;
+        } else if (ch == ')') {
+            depth -= 1;
+            if (depth == 0 && i != s.length - 1) { return s; }
+        }
+        i += 1;
+    }
+    return s.substring(1, s.length - 1);
+}
+
+public function zero(type: Type): String {
+    let cTypeText: String = cType(type);
+    if (type.kind == TypeKind.Prim && type != T_STRING && type != T_ANY) { return "(${cTypeText})0"; }
+    if (cTypeText.endsWith("*")) { return "NULL"; }
+    let z: String = tmp("zero_value");
+    line("${cTypeText} ${z};");
+    line("memset(&${z}, 0, sizeof ${z});");
+    return z;
+}
+
+/** A call whose result is not used. */
+public function discard(e: String): void {
+    if (e.isEmpty()) { return; }
+    // an already hoisted result, or an element taken for its effect (pop)
+    line(isIdentifier(e) || e.endsWith("]") ? "(void)${e};" : "${e};");
+}
+
+function isIdentifier(s: String): bool {
+    for (i, b in s) {
+        if (!isIdentifierPart(b) || (i == 0 && isDigit(b))) { return false; }
+    }
+    return !s.isEmpty();
+}
+
+// =====================================================================================
+// Values and conversions
+// =====================================================================================
+
+/** An expression with its conversion applied: where a value is stored or passed. */
+public function value(e: Expr in default): String {
+    let conversion: Conversion? = e.conversionOf;
+    if (e is Lambda l && conversion != null && conversion.kind == ConversionKind.SamLambda) { return singleMethodObject(l, conversion); }
+    let v: String = expr(e);
+    return conversion == null ? v : convert(v, conversion, e);
+}
+
+function convert(v: String, conversion: Conversion in default, e: Expr? in default): String {
+    switch (conversion.kind) {
+        case None -> { return v; }
+        case Upcast -> { return "((${cType(conversion.to)})(${v}))"; }
+        case ClassToInterface -> { return "((${cType(conversion.to)}){ (void*)(${v}), &${conversion.implClass}__${conversion.to.name}_table })"; }
+        case NullToOptional -> { return optIsPointer(conversion.to) ? "NULL" : "((${cType(conversion.to)}){ .has = false })"; }
+        case ToPointer -> {                  // an array given to C as T*: its first element
+            let f: Type = conversion.from;           // (void*): it fits char*, unsigned char*, void*... without a warning
+            if (f.arrayKind == ArrayKind.Growable) { return "((void*)${paren(v)}->items)"; }
+            if (f.arrayKind == ArrayKind.Slice) { return "((void*)${paren(v)}.items)"; }
+            return e != null && isLvalueExpr(e) ? "((void*)${paren(v)}.items)" : "((void*)${hoistAddr(cType(f), v)}->items)";
+        }
+        case WrapOptional -> {
+            let o: Type = conversion.to;
+            let inner: Conversion? = innerConversion(conversion.from, o.elem!, conversion);
+            let iv: String = inner != null ? convert(v, inner, e) : v;
+            return optIsPointer(o) ? iv : "((${cType(o)}){ .has = true, .value = ${iv} })";
+        }
+        case ResizeFixed -> {
+            let from: Type = conversion.from;
+            let to: Type = conversion.to;
+            let name: String = "${structName(from)}_to_${to.size}";
+            let h: String = "static inline ${cType(to)} ${name}(${cType(from)} a) { ${cType(to)} r; memset(&r, 0, sizeof r); r.length = a.length; for (int32_t i = 0; i < a.length; i++) r.items[i] = a.items[i]; return r; }\n";
+            if (!resizeSeen.contains(h)) {
+                resizeSeen[h] = true;
+                resizeHelpers.push(h.clone());
+            }
+            return "${name}(${v})";
+        }
+        case ToSlice -> {
+            let from: Type = conversion.from;
+            let to: Type = conversion.to;
+            if (from.arrayKind == ArrayKind.Fixed) {
+                let p: String = e != null && isPure(e) ? "&${paren(v)}" : hoistAddr(cType(from), v);
+                return "((${cType(to)}){ (${p})->items, (${p})->length })";
+            }
+            let l: String = hoistIfNeeded(cType(from), v, e);
+            return "((${cType(to)}){ ${l}->items, ${l}->length })";
+        }
+        case ToAny -> { return toAny(v, conversion.from, e!); }
+        default -> { return v; }
+    }
+}
+
+/** The inner conversion of WRAP_OPTIONAL (upcast or interface), if any. */
+function innerConversion(from: Type in default, to: Type in default, outer: Conversion in default): Conversion? {
+    if (from == to) { return null; }
+    if (isClass(from) && isClass(to)) { return Conversion { kind: ConversionKind.Upcast, from, to } in default; }
+    if (isClass(from) && isInterface(to)) { return Conversion { kind: ConversionKind.ClassToInterface, from, to, implClass: outer.implClass, iface: outer.iface } in default; }
+    if (from.kind == TypeKind.Array && to.kind == TypeKind.Array) { return Conversion { kind: ConversionKind.ResizeFixed, from, to } in default; }
+    return null;
+}
+
+let boxTypes: Type[*] = [] in default;
+let boxSeen: Any = {} in default;
+
+/** The descriptor of a struct or enum stored in an Any (its name and how to clone it). */
+public function boxType(type: Type in default): String {
+    if (!boxSeen.contains(type.text)) {
+        boxSeen[type.text] = true;
+        boxTypes.push(type);
+    }
+    return "rttype_${mangle(type)}";
+}
+
+public function boxDescriptors(): String {
+    let builder: StringBuilder = {} in default;
+    for (t in boxTypes) {
+        let cTypeText: String = cType(t);
+        let m: String = mangle(t);
+        builder.add("static void* rtbox_clone_${m}(const void* v, LarMemory* mem, LarCloneMap* cm) {\n");
+        builder.add("    ${cTypeText}* n = (${cTypeText}*)lar_memory_alloc(mem, sizeof(${cTypeText}), 0);\n");
+        builder.add("    (void)cm;\n");
+        builder.add("    *n = ${cloneOf(t, "(*(const ${cTypeText}*)v)")};\n    return n;\n}\n");
+        builder.add("const LarValueType rttype_${m} = { \"${t.text}\", rtbox_clone_${m} };\n");
+    }
+    return builder.toString();
+}
+
+/** LAR_ANY_I32 and so on: the kind an Any uses for a value of type t. */
+public function anyKind(type: Type): String {
+    return switch (type.name) {
+        case "int8" -> "LAR_ANY_I8";
+        case "int16" -> "LAR_ANY_I16";
+        case "int32" -> "LAR_ANY_I32";
+        case "int64" -> "LAR_ANY_I64";
+        case "byte" -> "LAR_ANY_U8";
+        case "uint16" -> "LAR_ANY_U16";
+        case "uint32" -> "LAR_ANY_U32";
+        case "uint64" -> "LAR_ANY_U64";
+        case "float32" -> "LAR_ANY_F32";
+        case "float64" -> "LAR_ANY_F64";
+        case "bool" -> "LAR_ANY_BOOL";
+        case "String" -> "LAR_ANY_STR";
+        default -> "LAR_ANY_TABLE";
+    };
+}
+
+/** The value inside an Any already known to hold kind t. */
+public function anyPayload(type: Type, v: String): String {
+    if (type == T_ANY) { return v; }
+    if (isClass(type)) { return "((${cType(type)})${v}.as.box.ptr)"; }
+    if (type.kind == TypeKind.Named) { return "(*(${cType(type)}*)${v}.as.box.ptr)"; }
+    if (type == T_STRING) { return "${v}.as.s"; }
+    if (type == T_BOOL) { return "${v}.as.b"; }
+    if (isFloat(type)) { return "((${cType(type)})${v}.as.f)"; }
+    return isSigned(type) ? "((${cType(type)})${v}.as.i)" : "((${cType(type)})${v}.as.u)";
+}
+
+function toAny(v: String, from: Type in default, e: Expr in default): String {
+    if (from.kind == TypeKind.Null) { return "lar_any_null()"; }
+    if (isClass(from) || (isOpt(from) && isClass(from.elem!))) { return "lar_any_obj((void*)(${v}))"; }
+    if (isStruct(from) || isEnumT(from)) {      // a copy in a box, in the memory the analyzer chose
+        let mem: String = placeMemOf(e.boxPlace);
+        let bx: String = tmp("box");
+        line("${cType(from)}* ${bx} = (${cType(from)}*)lar_memory_alloc(${mem}, sizeof(${cType(from)}), LINE(${e.line}));");
+        line("*${bx} = ${v};");
+        return "lar_any_val(${bx}, &${boxType(from)})";
+    }
+    if (isOpt(from)) {
+        let h: String = hoist(cType(from), v);
+        let ptr: bool = optIsPointer(from);
+        return "(${ptr ? "${h} != NULL" : "${h}.has"} ? ${toAny(ptr ? h : "${h}.value", from.elem!, e)} : lar_any_null())";
+    }
+    if (from == T_STRING) { return "lar_any_s(${v})"; }
+    if (from == T_BOOL) { return "lar_any_b(${v})"; }
+    if (isFloat(from)) { return "lar_any_f((double)(${v}), ${anyKind(from)})"; }
+    return isSigned(from) ? "lar_any_i((int64_t)(${v}), ${anyKind(from)})" : "lar_any_u((uint64_t)(${v}), ${anyKind(from)})";
+}
+
+// =====================================================================================
+// Expressions
+// =====================================================================================
+
+public function expr(e: Expr in default): String {
+    if (e.computed != "") { return e.computed; }
+    let t: Type? = e.ty;
+    return switch (e) {
+        case IntLit n -> intLiteral(n.num, n.big, t);
+        case FloatLit f -> t != null && t == T_FLOAT32 ? "${f.text}f" : f.text;
+        case BoolLit b -> b.value ? "true" : "false";
+        case NullLit -> "NULL";
+        case StringLit s -> string(s, "");
+        case Ident id -> identExpr(id);
+        case SelfExpr -> selfExpr(e);
+        case Member m -> member(m);
+        case Index x -> orderedIndex(x);
+        case Call c -> orderedCall(c);
+        case Unary u -> unary(u, t!);
+        case Binary b -> orderedBinary(b, t!);
+        case Ternary te -> ternary(te, t!);
+        case IsExpr x -> isTest(x);
+        case Cast c -> cast(c, t!);
+        case Unwrap u -> unwrap(u);
+        case Lambda l -> lambdaValue(l);
+        case ObjectLit o -> objectLit(o, t!);
+        case ArrayLit a -> arrayLit(a, t!);
+        case Placed p -> placed(p.expr);
+        case SwitchExpr sw -> switchCode(sw, true);
+        default -> "/* ? */ 0";
+    };
+}
+
+function unwrap(u: Unwrap in default): String {
+    let o: Type = u.expr.ty!;
+    let v: String = expr(u.expr);
+    if (!isOpt(o)) { return v; }          // a variable already known not to be null
+    return optIsPointer(o) ? "((${cType(o.elem!)})lar_unwrap((void*)(${v}), LINE(${u.line})))" : "${structName(o)}_unwrap(${v}, LINE(${u.line}))";
+}
+
+/** `x in memory`: the value; a lambda that becomes an interface object is created there. */
+function placed(inner: Expr in default): String {
+    let conversion: Conversion? = inner.conversionOf;
+    return inner is Lambda l && conversion != null && conversion.kind == ConversionKind.SamLambda ? singleMethodObject(l, conversion) : expr(inner);
+}
+
+/** An integer literal of type t (value v, as uint64 when big). */
+public function intLiteral(v: int64, big: bool, t: Type?): String {
+    let text: String = "${v}";
+    if (big) { text = "${v as uint64}"; }
+    if (t != null && isFloat(t)) { return t == T_FLOAT32 ? "${text}.0f" : "${text}.0"; }
+    let p: Type = t != null && isInteger(t) ? t : T_INT32;
+    if (isSigned(p) && !big) {
+        if (bits(p) == 64 && v == -9223372036854775807 - 1) { return "INT64_MIN"; }
+        if (bits(p) == 32 && v == -2147483648) { return "INT32_MIN"; }
+    }
+    let suffix: String = p == T_INT64 ? "LL" : "";
+    if (p == T_UINT32) { suffix = "u"; }
+    if (p == T_UINT64) { suffix = "ULL"; }
+    let s: String = "${text}${suffix}";
+    if (bits(p) < 32) { s = "(${cType(p)})${s}"; }
+    return v < 0 && !big ? "(${s})" : s;
+}
+
+function identExpr(id: Ident in default): String {
+    let s: Symbol = id.symbol!;
+    if (s.kind == SymbolKind.Const) { return constValue(s); }
+    if (s.externValue != null) { return s.type == T_STRING ? "lar_string_of_c(${s.cName})" : s.cName; }   // a C name, as it is
+    if (s.kind == SymbolKind.Function) {               // given as a pointer to a C function
+        let functionInfo: FunctionInfo = s.func!;
+        return functionInfo.cName;
+    }
+    let lambdaInfo: LambdaInfo? = writing.lambda;
+    let base: String = lambdaInfo != null && hasCapture(lambdaInfo, s) ? "env->${envField(s)}" : s.cName;
+    return id.narrowed && isOpt(s.type) && !optIsPointer(s.type) ? "${base}.value" : base;
+}
+
+function constValue(symbol: Symbol): String {
+    if (symbol.constantKind == ConstantKind.Int) { return intLiteral(symbol.constantInt, symbol.constantIsBig, symbol.type); }
+    if (symbol.constantKind == ConstantKind.Float) {
+        let d: float64 = symbol.constantFloat;
+        let txt: String = d == d && d - d == 0.0 ? "${d}" : "0.0";      // the shortest text that reads back as d (2.0, 0.1, 1e+20): a C literal too
+        return symbol.type == T_FLOAT32 ? "${txt}f" : txt;
+    }
+    if (symbol.constantKind == ConstantKind.Bool) { return symbol.constantBool ? "true" : "false"; }
+    return stringLiteral(symbol.constantText);
+}
+
+function selfExpr(se: Expr in default): String {
+    let s: Symbol = se.symbol!;
+    let lambdaInfo: LambdaInfo? = writing.lambda;
+    if (lambdaInfo != null && hasCapture(lambdaInfo, s)) { return "env->${envField(s)}"; }
+    return isStruct(s.type) ? "(*self)" : "self";
+}
+
+function member(m: Member in default): String {
+    let mi: MemberInfo = m.member!;
+    switch (mi.kind) {
+        case EnumConst -> { return "((${typeCName(mi.enumInfo!.name)}){ .tag = ${mi.enumInfo!.name}_${mi.variant!.name} })"; }
+        case MemoryStat -> {
+            let field: String = switch (mi.stat) {
+                case "length" -> "total";
+                case "capacity" -> "reserved";
+                default -> "peak";
+            };
+            return "((int64_t)(${memoryRef(mi.memory!)})->${field})";
+        }
+        case AnyKey -> { return "lar_any_get(${expr(m.object)}, ${stringLiteral(mi.key)})"; }
+        case Property -> {           // native let: its method, with no arguments
+            let parentMethod: MethodInfo = mi.method!;
+            let o: String = value(m.object);
+            let dest: String = returnsData(parentMethod.sig!.elem!) ? ", ${callMem(m)}" : "";       // a text: in the memory of the value
+            if (isClass(mi.objectType!)) { return "${dispatchName(parentMethod.introducer, parentMethod)}((${parentMethod.introducer}*)${o}${dest})"; }
+            return isExternT(mi.objectType!) ? "${methodName(parentMethod)}(${o}${dest})" : "${methodName(parentMethod)}(&${paren(o)}${dest})";   // a native type takes self by value
+        }
+        case Length -> {
+            let ot: Type = mi.objectType!;
+            let o: String = expr(m.object);
+            if (ot == T_ANY) { return "lar_any_length(${o})"; }
+            if (ot == T_STRING) { return "${paren(o)}.len"; }
+            return ot.arrayKind == ArrayKind.Growable ? "${paren(o)}->length" : "${paren(o)}.length";
+        }
+        default -> {
+            let paramType: Type = mi.objectType!;
+            let ot: Type = m.object.ty!;
+            let p: String = isResource(ot) ? "${ot.name}__get(${expr(m.object)}, LINE(${m.line}))" : expr(m.object);   // a native type X = T* with fields
+            let acc: String = isPtr(paramType)       // through a C pointer: p->field, never through NULL
+                ? "((${cType(paramType)})lar_unwrap((void*)(${p}), LINE(${m.line})))->${fieldC(mi.field!)}"
+                : fieldAccess(m.object, mi);
+            let structInfo: StructInfo? = structOf(mi.field!.owner);
+            if (mi.field!.type == T_STRING && structInfo != null && structInfo.decl.cName != "") { return "lar_string_of_c(${acc})"; }   // a C string: a view
+            return acc;
+        }
+    }
+}
+
+function fieldAccess(obj: Expr in default, f: MemberInfo): String {
+    let ot: Type = f.objectType!;
+    if (isClass(ot)) { return "${paren(expr(obj))}->${classFieldPath(ot.name, f.field!)}"; }
+    if (obj is SelfExpr) {
+        let lambdaInfo: LambdaInfo? = writing.lambda;
+        if (!(lambdaInfo != null && hasCapture(lambdaInfo, obj.symbol!))) { return "self->${fieldC(f.field!)}"; }
+    }
+    return "${paren(expr(obj))}.${fieldC(f.field!)}";
+}
+
+/** A field's name in C: the exact one in a C struct, otherwise escaped. */
+public function fieldC(field: FieldInfo): String {
+    if (field.cName != "") { return field.cName; }
+    let structInfo: StructInfo? = structOf(field.owner);
+    return structInfo != null && structInfo.decl.cName != "" ? field.name : escapeName(field.name);
+}
+
+public function classFieldPath(cls: String, field: FieldInfo): String {
+    let builder: StringBuilder = {} in default;
+    let classInfo: ClassInfo = classOf(cls)!;
+    while (classInfo.name != field.owner) {
+        builder.add("_super.");
+        classInfo = parentOf(classInfo)!;
+    }
+    builder.add(escapeName(field.name));
+    return builder.toString();
+}
+
+function index(indexExpr: Index in default): String {
+    let objectType: Type = indexExpr.object.ty!;
+    if (objectType == T_STRING) { return "lar_string_byte(${expr(indexExpr.object)}, (int64_t)(${expr(indexExpr.index)}), LINE(${indexExpr.line}))"; }
+    if (objectType == T_ANY) {
+        let o: String = expr(indexExpr.object);
+        let k: String = expr(indexExpr.index);
+        return indexExpr.index.ty! == T_STRING ? "lar_any_get(${o}, ${k})" : "lar_any_at(${o}, (int64_t)(${k}))";
+    }
+    let idx: String = expr(indexExpr.index);
+    if (objectType.arrayKind == ArrayKind.Fixed) {
+        let p: String = isPure(indexExpr.object) || isLvalueExpr(indexExpr.object) ? "&${paren(expr(indexExpr.object))}" : hoistAddr(cType(objectType), expr(indexExpr.object));
+        return "${paren(p)}->items[lar_index((int64_t)(${idx}), ${paren(p)}->length, LINE(${indexExpr.line}))]";
+    }
+    let v: String = hoistIfNeeded(cType(objectType), expr(indexExpr.object), indexExpr.object);
+    let dot: String = objectType.arrayKind == ArrayKind.Slice ? "." : "->";
+    return "${v}${dot}items[lar_index((int64_t)(${idx}), ${v}${dot}length, LINE(${indexExpr.line}))]";
+}
+
+function isLvalueExpr(e: Expr): bool {
+    return switch (e) {
+        case Ident -> e.symbol != null && e.symbol!.kind != SymbolKind.Const;
+        case SelfExpr -> true;
+        case Member m -> isClass(m.object.ty!) || isPtr(m.object.ty!) || (m.member != null && m.member!.objectType != null && isPtr(m.member!.objectType!)) || isLvalueExpr(m.object);
+        case Index x -> {
+            let ot: Type = x.object.ty!;
+            yield (ot.kind == TypeKind.Array && ot.arrayKind != ArrayKind.Fixed) || isLvalueExpr(x.object);
+        }
+        default -> false;
+    };
+}
+
+/** The C lvalue of an assignment target (no narrowing). */
+public function lvalue(target: Expr in default): String {
+    return target is Ident ? target.symbol!.cName : expr(target);
+}
+
+/** A pointer to the value of `e` (a temporary if `e` is not a variable or field). */
+public function addrOf(e: Expr in default): String {
+    if (e is SelfExpr && isStruct(e.symbol!.type)) { return "self"; }
+    return isLvalueExpr(e) ? "&${paren(expr(e))}" : hoistAddr(cType(e.ty!), value(e));
+}
+
+public function memoryRef(mem: Symbol): String {
+    return mem.memKind == MemoryKind.Param ? mem.cName : "&${mem.cName}";
+}
+
+/** C expression of type LarMemory* for an allocation. */
+public function placeMem(e: Expr in default): String { return placeMemOf(e.place); }
+
+/** The memory a call gives for its result: none (NULL) when the callee only returns data that already exists. */
+public function callMem(c: Expr in default): String { return c.place != null ? placeMem(c) : "NULL"; }
+
+public function placeMemOf(p: Place? in default): String {
+    if (p == null || p.kind == PlaceKind.Temp) { return writing.placeOverride != "" ? writing.placeOverride : tempMem(); }
+    let place: Place = p;
+    if (place.kind == PlaceKind.Global) { return "&lar_default_memory"; }
+    if (place.kind == PlaceKind.Block) { return "&${localNameFor("memory", place.scope!.memory)}"; }
+    if (place.kind == PlaceKind.Result) {
+        writing.destUsed = true;
+        return "lar_result_memory";
+    }
+    if (place.kind == PlaceKind.Memory) { return memoryRef(place.memory!); }
+    if (place.kind == PlaceKind.Stack) {
+        let buf: String = tmp("stack_bytes");
+        let mem: String = tmp("stack_memory");
+        line("uint8_t ${buf}[${place.bytes + 64}];");
+        line("LarMemory ${mem} = lar_memory_fixed(${buf}, sizeof ${buf});");
+        topBlock().cleanups.push("lar_memory_finalize(&${mem});");    // what closes itself closes with the block
+        return "&${mem}";
+    }
+    if (place.kind == PlaceKind.OfObject) { return "lar_object_mem(${expr(place.expr!)})"; }
+    if (place.kind == PlaceKind.OfList) { return "${paren(expr(place.expr!))}->mem"; }
+    return place.kind == PlaceKind.OfAny ? "lar_any_mem(${expr(place.expr!)}, LINE(${place.expr!.line}))" : "&lar_default_memory";
+}

@@ -1,0 +1,66 @@
+// runtime.threads: threads and locks of the system (pthreads, Win32).
+// Part of the runtime: the compiler takes from here what a program uses (it is not imported).
+ccode {
+#ifdef LAR_THREADS
+/* ---- runtime: threads (POSIX or Windows) ------------------------------ */
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#if defined(__TINYC__) && !defined(CONDITION_VARIABLE_INIT)
+/* the windows.h of tcc predates Vista: what the runtime uses of it */
+typedef struct { void* Ptr; } CONDITION_VARIABLE, *PCONDITION_VARIABLE;
+typedef struct { void* Ptr; } SRWLOCK, *PSRWLOCK;
+#define CONDITION_VARIABLE_INIT {0}
+#define SRWLOCK_INIT {0}
+WINBASEAPI VOID WINAPI InitializeConditionVariable(PCONDITION_VARIABLE c);
+WINBASEAPI BOOL WINAPI SleepConditionVariableCS(PCONDITION_VARIABLE c, PCRITICAL_SECTION m, DWORD ms);
+WINBASEAPI VOID WINAPI WakeAllConditionVariable(PCONDITION_VARIABLE c);
+WINBASEAPI VOID WINAPI AcquireSRWLockExclusive(PSRWLOCK l);
+WINBASEAPI VOID WINAPI ReleaseSRWLockExclusive(PSRWLOCK l);
+#endif
+typedef CRITICAL_SECTION LarMutex;                 /* recursive */
+typedef CONDITION_VARIABLE LarCondition;
+typedef HANDLE LarThreadHandle;
+static inline void lar_mutex_init(LarMutex* m) { InitializeCriticalSection(m); }
+static inline void lar_mutex_destroy(LarMutex* m) { DeleteCriticalSection(m); }
+static inline void lar_mutex_lock(LarMutex* m) { EnterCriticalSection(m); }
+static inline void lar_mutex_unlock(LarMutex* m) { LeaveCriticalSection(m); }
+static inline void lar_condition_init(LarCondition* c) { InitializeConditionVariable(c); }
+static inline void lar_condition_destroy(LarCondition* c) { (void)c; }
+static inline void lar_condition_wait(LarCondition* c, LarMutex* m) { SleepConditionVariableCS(c, m, INFINITE); }
+static inline void lar_condition_broadcast(LarCondition* c) { WakeAllConditionVariable(c); }
+static SRWLOCK lar_shared_mutex = SRWLOCK_INIT;
+static inline void lar_shared_lock(void) { AcquireSRWLockExclusive(&lar_shared_mutex); }
+static inline void lar_shared_unlock(void) { ReleaseSRWLockExclusive(&lar_shared_mutex); }
+#else
+#include <pthread.h>
+typedef pthread_mutex_t LarMutex;                  /* recursive */
+typedef pthread_cond_t LarCondition;
+typedef pthread_t LarThreadHandle;
+static inline void lar_mutex_init(LarMutex* m) {
+    pthread_mutexattr_t a;
+    pthread_mutexattr_init(&a);
+    pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(m, &a);
+    pthread_mutexattr_destroy(&a);
+}
+static inline void lar_mutex_destroy(LarMutex* m) { pthread_mutex_destroy(m); }
+static inline void lar_mutex_lock(LarMutex* m) { pthread_mutex_lock(m); }
+static inline void lar_mutex_unlock(LarMutex* m) { pthread_mutex_unlock(m); }
+static inline void lar_condition_init(LarCondition* c) { pthread_cond_init(c, NULL); }
+static inline void lar_condition_destroy(LarCondition* c) { pthread_cond_destroy(c); }
+static inline void lar_condition_wait(LarCondition* c, LarMutex* m) { pthread_cond_wait(c, m); }
+static inline void lar_condition_broadcast(LarCondition* c) { pthread_cond_broadcast(c); }
+static pthread_mutex_t lar_shared_mutex = PTHREAD_MUTEX_INITIALIZER;
+static inline void lar_shared_lock(void) { pthread_mutex_lock(&lar_shared_mutex); }
+static inline void lar_shared_unlock(void) { pthread_mutex_unlock(&lar_shared_mutex); }
+#endif
+#endif
+
+}

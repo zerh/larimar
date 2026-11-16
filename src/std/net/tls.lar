@@ -1,0 +1,115 @@
+// std.net.tls: encrypted connections, for https:// (and whatever else needs TLS).
+//
+//   public interface TlsProvider {
+//       function connect(host: String, port: int32, timeout: int32): Connection throws NetError;
+//   }
+//
+// A Client (std.net.http) has one: SystemTls unless it is given another. Implement TlsProvider to use a
+// TLS library of your own (mbedTLS, wolfSSL...): it gives back a Connection (read, write, flush, close)
+// and std.net.http speaks HTTP over it without knowing what is underneath.
+//
+// SystemTls uses what the system has: Network.framework on macOS, SChannel on Windows, OpenSSL on Linux
+// (libssl, loaded the first time it is needed, so a program that never uses https:// needs nothing).
+// When there is none, connect throws NetError.TlsUnavailable saying what is missing.
+//
+// Everything blocks, like a TcpSocket: there are no threads inside. A connection closes itself when the
+// memory it lives in is freed.
+
+import std.net { Connection, TcpSocket, NetError };
+import std.net.internal { Socket };
+import std.io { IoError, InputStream, OutputStream };
+import std.net.tls.macos { MacOSTls };
+import std.net.tls.windows { WindowsTls };
+import std.net.tls.openssl { OpenSslTls };
+
+/** What gives encrypted connections. */
+public interface TlsProvider {
+    /**
+     * An encrypted connection to host:port, after the TLS handshake. It checks the server's certificate as
+     * the implementation decides (SystemTls: against the system's trusted certificates, for host). timeout:
+     * how long reads and writes may wait, in ms (0: no limit). A failure is a NetError: HostNotFound,
+     * Refused, Timeout..., Tls(reason) when the handshake or the certificate fails, TlsUnavailable(what)
+     * when there is no TLS to use.
+     */
+    function connect(host: String, port: int32, timeout: int32): Connection throws NetError;
+}
+
+native type TlsHandle = LarTls*;
+native function lar_tls_needs_socket(): bool;
+native function lar_tls_open_socket(m: byte[*], s: Socket, host: String, verify: bool): TlsHandle;
+native function lar_tls_open_host(m: byte[*], host: String, port: int32, verify: bool, timeoutMs: int32): TlsHandle;
+native function lar_tls_error(t: TlsHandle): int32 { return t->error; }
+native function lar_tls_error_text(t: TlsHandle): String { return t->text; }
+native function lar_tls_read(t: TlsHandle, buffer: byte[]): int32;
+native function lar_tls_write(t: TlsHandle, bytes: byte[]): int32;
+native function lar_tls_close(t: TlsHandle): void;
+
+/**
+ * The TLS of the system: Network.framework (macOS), SChannel (Windows), OpenSSL (Linux and others).
+ * verify: false accepts any certificate, for tests against a local server with one of its own.
+ */
+public class SystemTls implements TlsProvider {
+    let verify: bool = true;
+
+    override function connect(host: String, port: int32, timeout: int32): Connection throws NetError {
+        let c: SystemTlsConnection = {};
+        if (lar_tls_needs_socket()) {             // Linux, Windows: TLS over a TcpSocket
+            c.tcp = TcpSocket.connect(host, port);
+            c.tcp!.setTimeout(timeout);
+            c.tls = lar_tls_open_socket(c.tcp!.handle()!, host, self.verify);
+        } else {                                 // macOS: Network.framework makes the connection itself
+            c.tls = lar_tls_open_host(host, port, self.verify, timeout);
+        }
+        let code: int32 = lar_tls_error(c.tls!);
+        if (code != 0) {
+            let why: String = lar_tls_error_text(c.tls!);
+            switch (code) {
+                case 1 -> throw NetError.HostNotFound(host.clone());
+                case 2 -> throw NetError.Refused;
+                case 3 -> throw NetError.Timeout;
+                case 5 -> throw NetError.Reset;
+                case 51 -> throw NetError.TlsUnavailable(why.clone());
+                default -> throw NetError.Tls(why.clone());
+            }
+        }
+        return c;
+    }
+}
+
+/** A connection of SystemTls: the TLS session, over its TcpSocket (none on macOS: the system connects). */
+class SystemTlsConnection implements Connection, InputStream, OutputStream {
+    let tcp: TcpSocket? = null;
+    let tls: TlsHandle? = null;
+
+    override function read(buffer: byte[]): int32 throws IoError {
+        let n: int32 = lar_tls_read(self.tls!, buffer);
+        if (n < 0) { fail(self.tls!); }
+        return n;
+    }
+
+    override function write(bytes: byte[]): void throws IoError {
+        if (lar_tls_write(self.tls!, bytes) < 0) { fail(self.tls!); }
+    }
+
+    override function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+
+    override function input(): InputStream { return self; }
+    override function output(): OutputStream { return self; }
+
+    override function flush(): void throws IoError {}
+
+    override function close(): void throws IoError {
+        lar_tls_close(self.tls!);
+        if (self.tcp != null) { self.tcp!.close(); }
+    }
+}
+
+function fail(t: TlsHandle): void throws IoError {
+    let code: int32 = lar_tls_error(t);
+    switch (code) {
+        case 3 -> throw IoError.Failed("tls: timed out");
+        case 4 -> throw IoError.Failed("tls: closed");
+        case 5 -> throw IoError.Failed("tls: connection reset");
+        default -> throw IoError.Failed("tls: ${lar_tls_error_text(t)}");
+    }
+}

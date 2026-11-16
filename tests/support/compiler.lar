@@ -41,7 +41,7 @@ function rejects(source: String, wanted: String, unsafe: String): void {
     let file: String = place("fails.lar");
     if (!write(file, source)) { return; }
     let out: String = place("fails.json");
-    let code: int32 = os.run("${quote(compiler())} check --json ${quote(file)}${unsafe} > ${quote(out)} 2>&1");
+    let code: int32 = os.runCommand("${quote(compiler())} check --json ${quote(file)}${unsafe} > ${quote(out)} 2>&1");
     let text: String = read(out);
     if (code == 0) {
         fail("expected a compile error containing: ${wanted} (${file})");
@@ -122,7 +122,7 @@ public function built(file: String): String {
     let stem: String = Paths.stem(file);
     let exe: String = place(windows() ? "${stem}.exe" : stem);
     let log: String = place("${stem}.cc.txt");
-    if (os.run("${cCommand(c, place("${stem}.c"), exe)} > ${quote(log)} 2>&1") != 0) {
+    if (os.runCommand("${cCommand(c, place("${stem}.c"), exe)} > ${quote(log)} 2>&1") != 0) {
         fail("the C compiler failed:\n${head(read(log), 20)}");
         return "";
     }
@@ -137,7 +137,7 @@ public function generatedFor(file: String, target: String): String {
     let c: String = place("${Paths.stem(file)}${target}.c");
     let log: String = place("${Paths.stem(file)}.compile.txt");
     let only: String = target != "" ? " --target ${target}" : "";
-    if (os.run("${quote(compiler())} ${quote(file)} -o ${quote(c)}${only} --unsafe-c > ${quote(log)} 2>&1") != 0) {
+    if (os.runCommand("${quote(compiler())} ${quote(file)} -o ${quote(c)}${only} --unsafe-c > ${quote(log)} 2>&1") != 0) {
         fail("did not compile:\n${head(read(log), 20)}");
         return "";
     }
@@ -177,7 +177,7 @@ function run(file: String, args: String[]): Ran? {
     let exe: String = place(windows() ? "${stem}.exe" : stem);
     let log: String = place("${stem}.cc.txt");
     let cFile: String = place("${stem}.c");
-    if (os.run("${cCommand(c, cFile, exe)} > ${quote(log)} 2>&1") != 0) {
+    if (os.runCommand("${cCommand(c, cFile, exe)} > ${quote(log)} 2>&1") != 0) {
         fail("the C compiler failed:\n${head(read(log), 20)}");
         return null;
     }
@@ -185,7 +185,7 @@ function run(file: String, args: String[]): Ran? {
     let errFile: String = place("${stem}.err");
     let quoted: String[*] = [quote(exe)];
     for (a in args) { quoted.push(quote(a)); }
-    let code: int32 = os.run("${quoted.join(" ")} > ${quote(outFile)} 2> ${quote(errFile)}");
+    let code: int32 = os.runCommand("${quoted.join(" ")} > ${quote(outFile)} 2> ${quote(errFile)}");
     let err: String = read(errFile);
     return Ran { code, out: read(outFile), err, memory: err.contains("ERROR: AddressSanitizer") || err.contains("runtime error:") };
 }
@@ -203,10 +203,10 @@ function cCommand(c: String, cFile: String, exe: String): String {
     cmd.push(quote(exe));
     cmd.push(quote(cFile));
     if (!windows()) { cmd.push("-lm"); }
-    if (c.contains("#define RT_THREADS") && !windows()) { cmd.push("-pthread"); }
-    if (c.contains("#define LM_NET_SOCKETS") && windows()) { cmd.push("-lws2_32"); }
-    if (c.contains("#define LM_OS_SHARED") && !windows() && Platform.name() != "macos") { cmd.push("-lrt"); }
-    if (c.contains("#define LM_NET_TLS")) {
+    if (c.contains("#define LAR_THREADS") && !windows()) { cmd.push("-pthread"); }
+    if (c.contains("#define LAR_NET_SOCKETS") && windows()) { cmd.push("-lws2_32"); }
+    if (c.contains("#define LAR_SHARED_MEMORY") && !windows() && Platform.name() != "macos") { cmd.push("-lrt"); }
+    if (c.contains("#define LAR_NET_TLS")) {
         if (windows()) {
             cmd.push("-lsecur32");
         } else if (Platform.name() == "macos") {
@@ -276,7 +276,7 @@ function identifierPart(c: byte): bool {
 /** The errors larimar check gives for a file ("" when there are none). */
 public function checked(file: String): String {
     let log: String = place("check.txt");
-    let code: int32 = os.run("${quote(compiler())} check ${quote(file)} --unsafe-c > ${quote(log)} 2>&1");
+    let code: int32 = os.runCommand("${quote(compiler())} check ${quote(file)} --unsafe-c > ${quote(log)} 2>&1");
     try {
         return code == 0 ? "" : Files.readString(log).clone();
     } catch (IoError e) {

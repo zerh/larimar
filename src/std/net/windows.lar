@@ -1,0 +1,92 @@
+// std.net.windows: sockets on Windows (Winsock), and its TLS servers (not there yet).
+
+import std.net.internal { Socket };
+import std.platform { WindowsPlatform };
+
+public class WindowsNet implements WindowsPlatform {
+    cinclude "<winsock2.h>";
+    cinclude "<ws2tcpip.h>";
+
+    ccode {
+        typedef SOCKET LarSocket;
+        static int32_t lar_socket_close(LarSocket s) { return (int32_t)closesocket(s); }
+        static long long lar_net_dup(SOCKET s) {
+            WSAPROTOCOL_INFOW info;
+            SOCKET d;
+            if (WSADuplicateSocketW(s, GetCurrentProcessId(), &info) != 0) return -1;
+            d = WSASocketW(FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, &info, 0, 0);
+            return d == INVALID_SOCKET ? -1 : (long long)d;
+        }
+        static SOCKET lar_net_adopt(long long n) { return (SOCKET)n; }
+        static int lar_net_readable(SOCKET s, int ms) {
+            WSAPOLLFD p;
+            p.fd = s;
+            p.events = POLLRDNORM;
+            p.revents = 0;
+            return WSAPoll(&p, 1, ms) > 0;
+        }
+        static long long lar_net_number(SOCKET s) { return (long long)s; }
+        /* which of these sockets (numbers) can be read (or were closed) within ms: 1 in ready[i] */
+        static int lar_net_poll(long long* fds, int count, int* ready, int readyCount, int ms) {
+            WSAPOLLFD few[64];
+            WSAPOLLFD* p = count <= 64 ? few : (WSAPOLLFD*)malloc(sizeof(WSAPOLLFD) * (size_t)count);
+            int n = p ? count : 0;
+            for (int i = 0; i < n; i++) { p[i].fd = (SOCKET)fds[i]; p[i].events = POLLRDNORM; p[i].revents = 0; }
+            int r = n > 0 ? WSAPoll(p, (ULONG)n, ms) : -1;
+            for (int i = 0; i < readyCount; i++) ready[i] = i < n && r > 0 && p[i].revents != 0;
+            if (p != few) free(p);
+            return r;
+        }
+    }
+
+    static native function start(): void {
+        WSADATA data;
+        WSAStartup(MAKEWORD(2, 2), &data);
+    }
+
+    static native function lastError(): int32 {
+        int e = WSAGetLastError();
+        if (e == WSAECONNREFUSED) return 2;
+        if (e == WSAETIMEDOUT || e == WSAEWOULDBLOCK) return 3;
+        if (e == WSAECONNRESET || e == WSAECONNABORTED) return 5;
+        if (e == WSAEADDRINUSE) return 6;
+        return 100 + e;
+    }
+
+    static native function interrupted(): bool { return WSAGetLastError() == WSAEINTR; }
+
+    static native function finishWriting(s: Socket): void { shutdown(s, SD_SEND); }
+
+    static native function setTimeout(s: Socket, which: int32, ms: int32): void {
+        DWORD w = (DWORD)ms;
+        setsockopt(s, SOL_SOCKET, which, (const char*)&w, (int)sizeof w);
+    }
+}
+
+/** On Windows there is no TLS server yet: each call says so. */
+public class WindowsTlsServers implements WindowsPlatform {
+    ccode {
+        #define LAR_OPENSSL_TEXT 300
+        typedef struct { int32_t error; char text[LAR_OPENSSL_TEXT]; long long ctx; } LarTlsCtx;
+        typedef struct { int32_t error; char text[LAR_OPENSSL_TEXT]; bool open, eof; } LarOpenSslConn;
+        static LarTlsCtx* lar_tls_server_context(LarMemory* m, const char* cert, const char* key) {
+            LarTlsCtx* c = (LarTlsCtx*)lar_memory_alloc(m, sizeof(LarTlsCtx), 0);
+            memset(c, 0, sizeof *c);
+            (void)cert; (void)key;
+            c->error = 51;
+            snprintf(c->text, LAR_OPENSSL_TEXT, "a TLS server is not available on Windows yet");
+            return c;
+        }
+        static long long lar_tls_server_context_number(LarTlsCtx* c) { return c->ctx; }
+        static LarOpenSslConn* lar_tls_server_accept(LarMemory* m, long long ctx, SOCKET fd) {
+            LarOpenSslConn* t = (LarOpenSslConn*)lar_memory_alloc(m, sizeof(LarOpenSslConn), 0);
+            memset(t, 0, sizeof *t);
+            (void)ctx; (void)fd;
+            t->error = 51;
+            return t;
+        }
+        static int32_t lar_openssl_read(LarOpenSslConn* t, uint8_t* items, int32_t len) { (void)t; (void)items; (void)len; return -1; }
+        static int32_t lar_openssl_write(LarOpenSslConn* t, const uint8_t* items, int32_t len) { (void)t; (void)items; (void)len; return -1; }
+        static void lar_openssl_close(LarOpenSslConn* t) { t->open = false; }
+    }
+}

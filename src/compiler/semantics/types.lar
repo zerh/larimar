@@ -1,0 +1,1003 @@
+// semantics.types: what the analyzer knows. Types, regions (where data lives), scopes, symbols,
+// the information about declarations, and the per-node facts the generator reads.
+// It follows Types.java and Analysis.java of the Java version.
+
+import std.text { isAscii };
+import syntax.ast { Expr, Stmt, Param, FunctionDecl, ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, StructDecl, ClassDecl, Lambda, VarDecl };
+
+// =====================================================================================
+// Types. Each type exists once (they are interned by their text), so == compares them.
+// =====================================================================================
+
+public enum TypeKind { Prim, Named, Func, Array, Opt, Null, Err, Ptr }
+public enum NamedKind { Struct, Class, Interface, Enum, Extern }
+public enum ArrayKind { Fixed, Slice, Growable }
+
+public class Type {
+    let kind: TypeKind;
+    let name: String = "";            // Prim, Named
+    let namedKind: NamedKind = NamedKind.Struct;
+    let elem: Type? = null;           // Array: element; Opt: inner; Func: return type; Ptr: what it points to
+    let arrayKind: ArrayKind = ArrayKind.Fixed;
+    let size: int64 = 0;              // Fixed arrays (-1: taken from the value)
+    let params: Type[*] = [];         // Func
+    let text: String = "";            // as written in messages
+    let used: bool = false;           // in usedTypes (the generator emits it)
+    let funcId: int32 = -1;           // Func: the id of its closure type
+    let order: int32 = 0;             // computeTypeOrder: 0 new, 1 visiting, 2 done
+    let safe: bool = false;           // Func: `thread safe` (other threads may call it at the same time)
+    let plain: Type? = null;          // Func thread safe: the same type without it (the same C type)
+}
+
+let typeIndex: Any = {} in default;
+
+/** larimar build of a library ([project] kind = "library"): it has no main (the programs that use it do). */
+public let buildingLibrary: bool = false;
+public let allTypes: Type[*] = [] in default;
+
+function intern(type: Type in default): Type {
+    let i: int32 = (typeIndex[type.text] as int32 ?? -1);
+    if (i >= 0) { return allTypes[i]; }
+    allTypes.push(type);
+    typeIndex[type.text] = allTypes.length - 1;
+    return type;
+}
+
+function primitive(name: String in default): Type {
+    return intern(Type { kind: TypeKind.Prim, name, text: name } in default);
+}
+
+public let T_INT8: Type = primitive("int8");
+public let T_INT16: Type = primitive("int16");
+public let T_INT32: Type = primitive("int32");
+public let T_INT64: Type = primitive("int64");
+public let T_BYTE: Type = primitive("byte");
+public let T_UINT16: Type = primitive("uint16");
+public let T_UINT32: Type = primitive("uint32");
+public let T_UINT64: Type = primitive("uint64");
+public let T_FLOAT32: Type = primitive("float32");
+public let T_FLOAT64: Type = primitive("float64");
+public let T_BOOL: Type = primitive("bool");
+public let T_STRING: Type = primitive("String");
+public let T_VOID: Type = primitive("void");
+public let T_ANY: Type = primitive("Any");
+public let T_ERROR: Type = intern(Type { kind: TypeKind.Err, text: "<error>" } in default);
+public let T_NULL: Type = intern(Type { kind: TypeKind.Null, text: "null" } in default);
+
+/** A built-in type by name (uint8 is byte), or null. */
+public function primByName(name: String): Type? {
+    if (name == "uint8") { return T_BYTE; }
+    if (name == "Any" || name == "String" || name == "void" || name == "bool" || name == "int8" || name == "int16"
+        || name == "int32" || name == "int64" || name == "byte" || name == "uint16" || name == "uint32" || name == "uint64"
+        || name == "float32" || name == "float64") {
+        let i: int32 = (typeIndex[name] as int32 ?? -1);
+        return allTypes[i];
+    }
+    return null;
+}
+
+public function isPrimName(name: String): bool { return primByName(name) != null; }
+
+public function named(name: String in default, namedKind: NamedKind): Type {
+    return intern(Type { kind: TypeKind.Named, name, namedKind, text: name } in default);
+}
+
+public function functionTypeOf(params: Type[*] in default, ret: Type in default, safe: bool): Type {
+    let builder: StringBuilder = {} in default;
+    builder.add("(");
+    for (i, p in params) {
+        if (i > 0) { builder.add(", "); }
+        builder.add(p.text);
+    }
+    builder.add(") -> ${ret.text}");
+    let plain: Type = intern(Type { kind: TypeKind.Func, params, elem: ret, text: builder.toString() } in default);
+    if (!safe) { return plain; }
+    builder.add(" thread safe");
+    let type: Type = intern(Type { kind: TypeKind.Func, params, elem: ret, safe: true, text: builder.toString() } in default);
+    type.plain = plain;
+    return type;
+}
+
+/** Is there a `thread safe` function type in t (itself, or the element of an optional or an array)? */
+public function hasThreadSafe(type: Type in default): bool {
+    if (type.kind == TypeKind.Func) { return type.safe; }
+    if (type.kind == TypeKind.Opt || type.kind == TypeKind.Array) { return hasThreadSafe(type.elem!); }
+    return false;
+}
+
+/** The type C sees: t without `thread safe` (the same closure type), also inside optionals and arrays. */
+public function cTypeOf(type: Type in default): Type {
+    if (type.kind == TypeKind.Func && type.safe) { return type.plain!; }
+    if (type.kind == TypeKind.Opt && hasThreadSafe(type)) { return optionalOf(cTypeOf(type.elem!)); }
+    if (type.kind == TypeKind.Array && hasThreadSafe(type)) { return arrayTypeOf(cTypeOf(type.elem!), type.arrayKind, type.size); }
+    return type;
+}
+
+public function arrayTypeOf(elem: Type in default, arrayKind: ArrayKind, size: int64): Type {
+    let e: String = elem.text;
+    if (elem.kind == TypeKind.Func || elem.kind == TypeKind.Opt) { e = "(${e})"; }
+    let text: String = switch (arrayKind) {
+        case Fixed -> "${e}[${size}]";
+        case Slice -> "${e}[]";
+        case Growable -> "${e}[*]";
+    } in default;
+    return intern(Type { kind: TypeKind.Array, elem, arrayKind, size, text } in default);
+}
+
+public function optionalOf(inner: Type in default): Type {
+    let e: String = inner.text;
+    if (inner.kind == TypeKind.Func) { e = "(${e})"; }
+    return intern(Type { kind: TypeKind.Opt, elem: inner, text: "${e}?" } in default);
+}
+
+/** T*: a C pointer (only to numbers, C structs, extern types and other pointers). */
+public function pointerTo(inner: Type in default): Type {
+    return intern(Type { kind: TypeKind.Ptr, elem: inner, text: "${inner.text}*" } in default);
+}
+
+public function isPtr(type: Type): bool { return type.kind == TypeKind.Ptr; }
+
+public function bits(type: Type): int32 {
+    if (type.kind != TypeKind.Prim) { return 0; }
+    return switch (type.name) {
+        case "int8", "byte" -> 8;
+        case "int16", "uint16" -> 16;
+        case "int32", "uint32", "float32" -> 32;
+        case "int64", "uint64", "float64" -> 64;
+        default -> 0;
+    };
+}
+
+public function isFloat(type: Type): bool { return type == T_FLOAT32 || type == T_FLOAT64; }
+public function isInteger(type: Type): bool { return type.kind == TypeKind.Prim && bits(type) > 0 && !isFloat(type); }
+public function isNumeric(type: Type): bool { return isInteger(type) || isFloat(type); }
+public function isSigned(type: Type): bool { return type.kind == TypeKind.Prim && type.name.startsWith("int"); }
+public function isError(type: Type): bool { return type.kind == TypeKind.Err; }
+public function isClass(type: Type): bool { return type.kind == TypeKind.Named && type.namedKind == NamedKind.Class; }
+public function isStruct(type: Type): bool { return type.kind == TypeKind.Named && type.namedKind == NamedKind.Struct; }
+public function isInterface(type: Type): bool { return type.kind == TypeKind.Named && type.namedKind == NamedKind.Interface; }
+public function isEnumT(type: Type): bool { return type.kind == TypeKind.Named && type.namedKind == NamedKind.Enum; }
+public function isExternT(type: Type): bool { return type.kind == TypeKind.Named && type.namedKind == NamedKind.Extern; }
+public function isByteArray(type: Type): bool { return type.kind == TypeKind.Array && type.elem! == T_BYTE; }
+public function isOpt(type: Type): bool { return type.kind == TypeKind.Opt; }
+public function isArray(type: Type, arrayKind: ArrayKind): bool { return type.kind == TypeKind.Array && type.arrayKind == arrayKind; }
+
+/** An optional that is a pointer in C (null is NULL): classes, extern types, T[*]. */
+public function optIsPointer(o: Type): bool {
+    let type: Type = o.elem!;
+    return isClass(type) || isExternT(type) || isArray(type, ArrayKind.Growable);
+}
+
+/** The smallest and largest value of an integer type; for uint64 the largest is kept apart. */
+public function minOf(type: Type): int64 {
+    if (!isSigned(type)) { return 0; }
+    return switch (bits(type)) {
+        case 8 -> -128;
+        case 16 -> -32768;
+        case 32 -> -2147483648;
+        default -> -9223372036854775807 - 1;
+    };
+}
+
+public function maxOf(type: Type): int64 {
+    if (isSigned(type)) {
+        return switch (bits(type)) {
+            case 8 -> 127;
+            case 16 -> 32767;
+            case 32 -> 2147483647;
+            default -> 9223372036854775807;
+        };
+    }
+    return switch (bits(type)) {
+        case 8 -> 255;
+        case 16 -> 65535;
+        case 32 -> 4294967295;
+        default -> 9223372036854775807;   // uint64: its real maximum is checked with the big flag
+    };
+}
+
+/** "the largest value" as text, for messages. */
+public function maxText(type: Type): String {
+    return type == T_UINT64 ? "18446744073709551615" : "${maxOf(type)}";
+}
+
+// =====================================================================================
+// Regions: where the data a value references lives
+// =====================================================================================
+
+public enum RegionKind { Static, Caller, CallerAny, Local, Var, Meet }
+
+public class Region {
+    let kind: RegionKind;
+    let param: Symbol? = null;      // Caller: the parameter; Var: the variable
+    let scope: Scope? = null;       // Local
+    let label: String = "";         // Local: what it is
+    let parts: Region[*] = [];      // Meet
+    let memory: Symbol? = null;     // a memory with a name (global or local): which one
+}
+
+public let R_STATIC: Region = Region { kind: RegionKind.Static } in default;
+/** The region of a global memory: static like R_STATIC, but it keeps the memory's name for messages. */
+public function rStaticMemory(symbol: Symbol in default): Region { return Region { kind: RegionKind.Static, label: "memory '${symbol.name}'", memory: symbol } in default; }
+/** The region of a local memory with a name. */
+public function rMemory(symbol: Symbol in default): Region { return Region { kind: RegionKind.Local, scope: symbol.scope, label: "memory '${symbol.name}'", memory: symbol } in default; }
+public let R_CALLER_ANY: Region = Region { kind: RegionKind.CallerAny } in default;
+
+public function rCaller(p: Symbol in default): Region { return Region { kind: RegionKind.Caller, param: p } in default; }
+/** The memory a caller gives for the result of a function (or method, or lambda). */
+public function rResult(r: Symbol in default): Region {
+    return Region { kind: RegionKind.Caller, param: r, label: "the memory of the call (the caller decides where the result lives)" } in default;
+}
+public function rLocal(s: Scope in default, label: String in default): Region { return Region { kind: RegionKind.Local, scope: s, label } in default; }
+public function variableRegion(v: Symbol in default): Region { return Region { kind: RegionKind.Var, param: v } in default; }
+
+public function symbolic(region: Region): bool {
+    if (region.kind == RegionKind.Var) { return true; }
+    if (region.kind == RegionKind.Meet) {
+        for (p in region.parts) {
+            if (symbolic(p)) { return true; }
+        }
+    }
+    return false;
+}
+
+/** Replaces Var parts with the regions computed for those variables (Symbol.resolved). */
+public function resolveRegion(region: Region in default): Region {
+    if (region.kind == RegionKind.Var) {
+        let v: Region? = region.param!.resolved;
+        return v == null ? R_STATIC : v;
+    }
+    if (region.kind == RegionKind.Meet) {
+        let out: Region = R_STATIC;
+        for (p in region.parts) { out = meet(out, resolveRegion(p)); }
+        return out;
+    }
+    return region;
+}
+
+/** Does data in `a` live at least as long as data in `b`? (both concrete) */
+public function outlives(a: Region, b: Region): bool {
+    if (a.kind == RegionKind.Static) { return true; }
+    if (b.kind == RegionKind.Static) { return false; }
+    // the arguments of a call outlive its result when the result may point to them (the caller checks it)
+    let argsOutlive: bool = b.kind == RegionKind.Caller && b.param!.argsOutlive;
+    if (a.kind == RegionKind.Caller) {
+        return b.kind == RegionKind.Local || b.kind == RegionKind.CallerAny || (b.kind == RegionKind.Caller && b.param! == a.param!)
+            || (argsOutlive && b.param!.frame == a.param!.frame);
+    }
+    if (a.kind == RegionKind.CallerAny) { return b.kind == RegionKind.Local || b.kind == RegionKind.CallerAny || argsOutlive; }
+    return a.kind == RegionKind.Local ? b.kind == RegionKind.Local && isAncestorOrSelf(a.scope!, b.scope!) : false;
+}
+
+/** The shorter-lived of two regions. */
+public function meet(a: Region in default, b: Region in default): Region {
+    if (a.kind == RegionKind.Static) { return b; }
+    if (b.kind == RegionKind.Static) { return a; }
+    if (symbolic(a) || symbolic(b)) {
+        let ps: Region[*] = [] in default;
+        if (a.kind == RegionKind.Meet) { for (p in a.parts) { ps.push(p); } } else { ps.push(a); }
+        if (b.kind == RegionKind.Meet) { for (p in b.parts) { ps.push(p); } } else { ps.push(b); }
+        return Region { kind: RegionKind.Meet, parts: ps } in default;
+    }
+    // data of two memories of the same block (one with a name): what it is made of is not known, so it is
+    // the block's own memory (Memory.compact needs to know what lives in a memory with a name)
+    if (a.kind == RegionKind.Local && b.kind == RegionKind.Local && a.scope! == b.scope! && a.memory != b.memory) {
+        if (a.memory == null) { return a; }
+        if (b.memory == null) { return b; }
+        return rLocal(a.scope!, "the memory of this block");
+    }
+    if (outlives(a, b)) { return b; }
+    if (outlives(b, a)) { return a; }
+    if (a.kind == RegionKind.Local) { return a; }
+    return b.kind == RegionKind.Local ? b : R_CALLER_ANY;
+}
+
+public function sameRegion(a: Region, b: Region): bool {
+    if (a.kind != b.kind) { return false; }
+    let ap: Symbol? = a.param;
+    let bp: Symbol? = b.param;
+    if ((ap == null) != (bp == null)) { return false; }
+    if (ap != null && bp != null && ap != bp) { return false; }
+    let asc: Scope? = a.scope;
+    let bsc: Scope? = b.scope;
+    if ((asc == null) != (bsc == null)) { return false; }
+    return asc != null && bsc != null && asc != bsc ? false : true;
+}
+
+public function describe(region: Region): String {
+    return switch (region.kind) {
+        case Static -> "the whole program";
+        case Caller -> region.label != "" ? region.label : "'${region.param!.name}' (owned by the caller)";
+        case CallerAny -> "data owned by the caller";
+        case Local -> region.label;
+        case Var -> "variable '${region.param!.name}'";
+        case Meet -> "several places";
+    };
+}
+
+// =====================================================================================
+// Scopes, frames and symbols
+// =====================================================================================
+
+public class Scope {
+    let parent: Scope? = null;
+    let frame: Frame;
+    let depth: int32 = 0;
+    let names: Any;
+    let narrowSyms: Symbol[*] = [];
+    let narrowTypes: Type[*] = [];
+    let loop: bool = false;
+    /** The scope of a for over a list, a table or a text: it holds on to what it goes over. */
+    let iterating: bool = false;
+    /** The scope of one statement: its temporaries are freed when it ends; names go to the block. */
+    let statement: bool = false;
+    /** A block: its statements, and the C name of its memory once something lives there. */
+    let body: Stmt[*]? = null;
+    let memory: String = "";
+}
+
+public function newScope(parent: Scope? in default, frame: Frame in default): Scope {
+    let d: int32 = parent != null ? parent.depth + 1 : 0;
+    return Scope { parent, frame, depth: d, names: {} in default } in default;
+}
+
+public function isAncestorOrSelf(a: Scope, s: Scope): bool {
+    let c: Scope? = s;
+    while (c != null) {
+        if (c == a) { return true; }
+        c = c.parent;
+    }
+    return false;
+}
+
+public enum FrameKind { Global, Function, Method, Lambda }
+
+/** What a body can reach, for the thread checks: the globals it uses and what it calls. */
+public class Owner {
+    let edges: Owner[*] = [];
+    let uses: Symbol[*] = [];
+    let useLines: int32[*] = [];
+    let mark: int32 = 0;
+}
+
+public function newOwner(): Owner { return Owner {} in default; }
+
+public class Frame {
+    let kind: FrameKind;
+    let owner: Owner? = null;
+    let returnType: Type? = null;
+    let throwsType: Type? = null;
+    let lambda: LambdaInfo? = null;
+    let selfType: Type? = null;
+    let root: Scope? = null;
+    let index: int32 = 0;
+    /** Stands for the memory the caller gives for the result (see rResult). */
+    let result: Symbol? = null;
+    /** The body's result may point to its arguments (FunctionInfo.returnsArgs). */
+    let returnsArgs: bool = true;
+}
+
+public enum SymbolKind { Global, Local, Param, Self, Function, Const }
+public enum MemoryKind { None, FixedLocal, FixedStatic, HeapFixed, HeapGrowable, Param }
+public enum ConstantKind { None, Int, Float, Bool, Str }
+
+public class Symbol {
+    let name: String;
+    let kind: SymbolKind;
+    let type: Type;
+    let line: int32;
+    let frame: Frame;
+    let scope: Scope;
+    let id: int32;
+    let cName: String;
+    let region: Region;
+    let immutable: bool = false;
+    let binding: bool = false;      // a name bound by `x is T name`: visible where the test is true
+    let argsOutlive: bool = false;  // the memory of the call (Frame.result) of a function whose result may point to its arguments
+    let used: bool = false;
+    let memKind: MemoryKind = MemoryKind.None;
+    let memRegion: Region? = null;
+    let memoryCandidate: bool = false;
+    let dataUseLine: int32 = -1;
+    let func: FunctionInfo? = null;
+    // constants
+    let constantKind: ConstantKind = ConstantKind.None;
+    let constantInt: int64 = 0;
+    let constantIsBig: bool = false;      // constantInt is a uint64 above the int64 range
+    let constantFloat: float64 = 0.0;
+    let constantBool: bool = false;
+    let constantText: String = "";        // Str: the raw text (escapes included)
+    // bookkeeping of the analyzer
+    let capturedAt: int32 = -1;
+    let varRegion: Region? = null;   // reassigned locals: the meet of everything they receive
+    let resolved: Region? = null;
+    let mutatedGlobal: bool = false;
+    /** native const / native let: a C name, and the platform it exists on ("" every one). */
+    let externValue: ExternValueDecl? = null;
+}
+
+public function isMemory(symbol: Symbol): bool { return symbol.memKind != MemoryKind.None; }
+
+// =====================================================================================
+// Names in C
+// =====================================================================================
+
+// C keywords, the names the generated C uses, and the C library's (clang treats log, exp, index... as
+// built-in functions even without their header): a Larimar name like these gets a '_' in the C.
+const C_RESERVED: String = " header _super LINE auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while bool true false NULL main env env_ self_ err err_out errno stdin stdout stderr FILE fpos_t size_t ptrdiff_t wchar_t div_t ldiv_t lldiv_t time_t clock_t tm jmp_buf va_list sig_atomic_t intptr_t uintptr_t intmax_t uintmax_t ssize_t pid_t off_t int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t printf fprintf sprintf snprintf vprintf vfprintf vsprintf vsnprintf scanf fscanf sscanf puts fputs gets fgets putchar putc fputc getchar getc fgetc ungetc fopen freopen fclose fflush fread fwrite fseek ftell rewind fgetpos fsetpos feof ferror clearerr perror remove rename tmpfile tmpnam setbuf setvbuf malloc calloc realloc free abort exit atexit _Exit quick_exit getenv system abs labs llabs div ldiv lldiv atoi atol atoll atof strtol strtoll strtoul strtoull strtod strtof strtold rand srand qsort bsearch mblen mbtowc wctomb memcpy memmove memset memcmp memchr strcpy strncpy strcat strncat strcmp strncmp strcoll strxfrm strchr strrchr strstr strspn strcspn strpbrk strtok strlen strerror strdup strndup index rindex bzero bcopy isalnum isalpha isblank iscntrl isdigit isgraph islower isprint ispunct isspace isupper isxdigit tolower toupper acos asin atan atan2 cos sin tan acosh asinh atanh cosh sinh tanh exp exp2 expm1 frexp ldexp log log10 log1p log2 logb modf pow sqrt cbrt hypot ceil floor round lround llround trunc fmod remainder fabs fmin fmax fma nan isnan isinf isfinite signbit copysign nearbyint rint lrint erf erfc tgamma lgamma time clock difftime mktime asctime ctime gmtime localtime strftime setjmp longjmp signal raise assert read write open close fork pipe dup dup2 alarm sleep usleep poll select getpid getppid kill wait waitpid execv execvp unlink access chdir getcwd isatty _exit unix linux ";
+
+/** The words of C_RESERVED, as a table: asked for every name the generator writes. */
+let reserved: Any = {} in default;
+let reservedReady: bool = false;
+
+public function isCReserved(name: String): bool {
+    if (!reservedReady) {
+        for (w in C_RESERVED.split(" ")) {
+            if (w != "") { reserved[w] = true; }
+        }
+        reservedReady = true;
+    }
+    return reserved.containsKey(name);
+}
+
+/** C99 identifiers are ASCII: año -> a_u00f1o. */
+public function ascii(name: String): String {
+    if (isAscii(name)) { return name; }
+    let builder: StringBuilder = {} in default;
+    for (c in name.codePoints()) {
+        if (c < 128) { builder.add(asciiChar(c)); } else { builder.add("_u${hex4Digits(c)}"); }
+    }
+    return builder.toString();
+}
+
+const ASCII_TABLE: String = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+
+function asciiChar(c: int32): String {
+    return c < ' ' || c > '~' ? "_" : ASCII_TABLE.substring(c - 32, c - 31);
+}
+
+/** Lowercase hexadecimal, at least 4 digits (like %04x). */
+function hex4Digits(c: int32): String {
+    let digits: String = "0123456789abcdef";
+    let out: String = "";
+    let v: int32 = c;
+    while (v > 0) {
+        let d: int32 = v & 15;
+        out = "${digits.substring(d, d + 1)}${out}";
+        v = v >> 4;
+    }
+    while (out.length < 4) { out = "0${out}"; }
+    return out;
+}
+
+/** Lar and a capital (LarMemory): the names of the runtime's types. */
+function startsLar(n: String): bool { return n.length > 3 && n.startsWith("Lar") && n[3] >= 'A' && n[3] <= 'Z'; }
+
+public function escapeName(name: String): String {
+    let n: String = ascii(name);
+    return n.startsWith("lar_") || n.startsWith("LAR_") || startsLar(n) || isCReserved(n) ? "${n}_" : n;
+}
+
+// =====================================================================================
+// Declarations
+// =====================================================================================
+
+public class FieldInfo {
+    let name: String;
+    let type: Type;
+    let defaultValue: Expr? = null;
+    let owner: String;
+    let line: int32;
+    let cName: String = "";          // a field of a C struct with another name in C
+}
+
+public class FunctionInfo {
+    let name: String;
+    let params: Param[*];
+    let isExtern: bool;
+    let varargs: bool = false;
+    let decl: FunctionDecl? = null;          // functions written in Larimar
+    let ext: ExternFunctionDecl? = null;     // extern functions
+    let line: int32;
+    let prototype: bool = false;
+    let sig: Type? = null;
+    let throwsType: Type? = null;
+    let cName: String;
+    let paramSymbols: Symbol[*] = [];
+    let memParams: bool[*] = [];
+    let owner: Owner;
+    /** It may return data of its arguments: then they are created where the call's result goes. */
+    let returnsArgs: bool = false;
+    /** Which parameters the result may point to (functions written in Larimar). */
+    let flows: bool[*] = [];
+    /** Its result may be new data, created in the memory the caller gives. */
+    let creates: bool = false;
+    /** The resource type it releases (`released by` it): only release() may call it. "String": the texts of C. */
+    let releases: String = "";
+    /** native function f(): String = c_f released by r: the function that releases the text C gives. */
+    let textReleaser: FunctionInfo? = null;
+}
+
+/**
+ * A type that comes from C: opaque (void*), a C type (c "T") or a pointer to a C function (sig). With
+ * `released by`, a resource: it lives in a memory, and the releaser runs when that memory is freed.
+ */
+public class ExternTypeInfo {
+    let name: String;
+    let decl: ExternTypeDecl;
+    let releaser: FunctionInfo? = null;      // released by f: f
+}
+
+public class MethodInfo {
+    let name: String;
+    let owner: String;               // the struct, class or interface that declares it
+    let decl: FunctionDecl;
+    let isOperator: bool;
+    let sig: Type? = null;
+    let throwsType: Type? = null;
+    let introducer: String;          // classes: the class whose vtable has the slot
+    let paramSymbols: Symbol[*] = [];
+    let memParams: bool[*] = [];
+    let selfSymbol: Symbol? = null;
+    let own: Owner;
+    /** It may return data of its arguments or of self. */
+    let returnsArgs: bool = false;
+    /** The arguments its result may point to, one per parameter (empty: every one, when returnsArgs). */
+    let flows: bool[*] = [];
+    /** Its result may be new data, created in the memory the caller gives. */
+    let creates: bool = false;
+}
+
+public function isMemParam(flags: bool[*], i: int32): bool { return i < flags.length && flags[i]; }
+
+public function cSuffix(method: MethodInfo): String {
+    if (!method.isOperator) { return method.name; }
+    return switch (method.name) {
+        case "+" -> "op_add";
+        case "-" -> {
+            if (method.sig!.params.length == 0) { yield "op_neg"; }
+            yield "op_sub";
+        }
+        case "*" -> "op_mul";
+        case "/" -> "op_div";
+        case "%" -> "op_mod";
+        case "==" -> "op_eq";
+        case "<" -> "op_lt";
+        default -> "op";
+    };
+}
+
+public class StructInfo {
+    let name: String;
+    let line: int32;
+    let decl: StructDecl;
+    let fields: FieldInfo[*] = [];
+    let methods: MethodInfo[*] = [];
+}
+
+public class ClassInfo {
+    let name: String;
+    let superName: String;           // "" when none
+    let interfaces: String[*];
+    let line: int32;
+    let decl: ClassDecl;
+    let fields: FieldInfo[*] = [];
+    let methods: MethodInfo[*] = [];
+    let valid: bool = true;
+    let sync: bool = false;
+    let thread: bool = false;
+    let builder: bool = false;
+}
+
+public class InterfaceInfo {
+    let name: String;
+    let line: int32;
+    let methods: MethodInfo[*] = [];
+}
+
+public class VariantInfo {
+    let name: String;
+    let index: int32;
+    let line: int32;
+    let fields: FieldInfo[*] = [];
+    let hasPayload: bool;
+}
+
+public class EnumInfo {
+    let name: String;
+    let line: int32;
+    let errorId: int32;
+    let variants: VariantInfo[*] = [];
+    let thrown: bool = false;
+}
+
+public class LambdaInfo {
+    let id: int32;
+    let type: Type;
+    let node: Lambda;
+    let params: Symbol[*] = [];
+    let captures: Symbol[*] = [];
+    let frame: Frame? = null;
+    let owner: Owner;
+}
+
+/** Past this many bytes of captures, a lambda keeps them behind a pointer, in the memory where it lives. */
+public const BIG_CAPTURES: int64 = 64;
+
+/** How many bytes a value of the type takes in C, roughly (enough to tell a small value from a big one). */
+public function bytesOf(t: Type): int64 {
+    if (t.kind == TypeKind.Prim) {
+        switch (t.name) {
+            case "bool", "byte", "int8", "uint8" -> { return 1; }
+            case "int16", "uint16" -> { return 2; }
+            case "int32", "uint32", "float32" -> { return 4; }
+            default -> { return 8; }
+        }
+    }
+    if (t.kind == TypeKind.Array && t.arrayKind == ArrayKind.Fixed) { return 4 + (t.size > 0 ? t.size : 1) * bytesOf(t.elem!); }
+    if (t.kind == TypeKind.Named && t.namedKind == NamedKind.Struct) {
+        let info: StructInfo? = structOf(t.name);
+        if (info == null) { return 8; }
+        let total: int64 = 0;
+        for (f in info!.fields) { total += bytesOf(f.type); }
+        return total;
+    }
+    if (t.kind == TypeKind.Opt && !optIsPointer(t)) { return 8 + bytesOf(t.elem!); }
+    if (t.kind == TypeKind.Func) { return 16; }
+    return 8;
+}
+
+/** A lambda whose captures are too big to carry in every closure of its type. */
+public function hasBigCaptures(lambdaInfo: LambdaInfo): bool {
+    let total: int64 = 0;
+    for (c in lambdaInfo.captures) { total += bytesOf(c.type); }
+    return total > BIG_CAPTURES;
+}
+
+public function hasCapture(lambdaInfo: LambdaInfo, symbol: Symbol): bool {
+    for (c in lambdaInfo.captures) {
+        if (c == symbol) { return true; }
+    }
+    return false;
+}
+
+/**
+ * Where an allocating expression puts its data. Temp: nothing said, a temporary of the statement;
+ * Global: `in default`; Block: a variable's value, the memory of its block; Result: a returned value,
+ * the memory the caller gives; Memory, Stack: `in m`, `in byte[N]`; OfObject, OfList, OfAny: stored
+ * inside an object, a list or a table.
+ */
+public enum PlaceKind { Temp, Global, Block, Result, Memory, Stack, OfObject, OfList, OfAny }
+
+public class Place {
+    let kind: PlaceKind;
+    let memory: Symbol? = null;
+    let bytes: int64 = 0;
+    let expr: Expr? = null;
+    let scope: Scope? = null;          // Block
+}
+
+public let P_TEMP: Place = Place { kind: PlaceKind.Temp } in default;
+public let P_GLOBAL: Place = Place { kind: PlaceKind.Global } in default;
+public let P_RESULT: Place = Place { kind: PlaceKind.Result } in default;
+
+public function placeOf(kind: PlaceKind, expr: Expr? in default): Place { return Place { kind, expr } in default; }
+
+public enum ConversionKind { Upcast, ClassToInterface, SamLambda, WrapOptional, NullToOptional, ResizeFixed, ToSlice, ToAny, ToPointer, None }
+
+public class Conversion {
+    let kind: ConversionKind;
+    let from: Type;
+    let to: Type;
+    let implClass: String = "";
+    let iface: InterfaceInfo? = null;
+}
+
+public enum CallK { Direct, Closure, Method, InterfaceMethod, Super, EnumCtor, NativeMethod, Builtin, StaticMethod }
+public enum BuiltinKind { None, Print, Println, Panic, Release, Push, Pop, Clear, Map, Filter, Clone, AnyLength, AnyPush, AnyRemove, AnyRemoveAt, AnyClear, AnyRemoveIf, AnyContains, AnyContainsKey, Wait, StringMethod, Join, Contains, Sort, MemLimit, MemCompact }
+
+public class CallInfo {
+    let kind: CallK;
+    let func: FunctionInfo? = null;
+    let type: Type? = null;              // Closure
+    let method: MethodInfo? = null;
+    let isClass: bool = false;
+    let iface: InterfaceInfo? = null;
+    let implOwner: String = "";
+    let enumInfo: EnumInfo? = null;
+    let variant: VariantInfo? = null;
+    let builtin: BuiltinKind = BuiltinKind.None;
+    let receiverType: Type? = null;
+    /** Memory.limit and Memory.compact: the memory, and (compact) the variables moved with it. */
+    let memory: Symbol? = null;
+    let roots: Symbol[*] = [];
+}
+
+public enum MemberKind { Field, EnumConst, Length, MemoryStat, AnyKey, StaticMethod, Property }
+
+public class MemberInfo {
+    let kind: MemberKind;
+    let field: FieldInfo? = null;
+    let objectType: Type? = null;
+    let enumInfo: EnumInfo? = null;
+    let variant: VariantInfo? = null;
+    let memory: Symbol? = null;
+    let stat: String = "";
+    let key: String = "";
+    let method: MethodInfo? = null;      // for StaticMethod and Property
+    let typeName: String = "";            // for StaticMethod
+}
+
+public enum PatK { Variant, Class, Constant, Null, Default, AnyType }
+
+public class PatternInfo {
+    let kind: PatK;
+    let anyType: Type? = null;
+    let variant: VariantInfo? = null;
+    let cls: ClassInfo? = null;
+    let constant: Expr? = null;
+    let bindings: Symbol?[*] = [];
+    let whole: Symbol? = null;
+}
+
+public class SwitchInfo {
+    let subjectType: Type;
+    let resultType: Type? = null;
+    let isExpression: bool;
+    let exhaustive: bool = false;
+    let region: Region;
+    /** Where the value of an expression switch is created (its arms and yields create there). */
+    let place: Place;
+}
+
+public class ForInfo {
+    let range: bool = false;
+    let any: int32 = 0;                  // 1: positions of an Any; 2: its named entries
+    let elemType: Type? = null;
+    let index: Symbol? = null;
+    let value: Symbol? = null;
+}
+
+public class CatchInfo {
+    let error: EnumInfo? = null;
+    let variable: Symbol? = null;
+}
+
+// =====================================================================================
+// The analysis: everything the generator needs
+// =====================================================================================
+
+public let includes: String[*] = [] in default;
+public let includeWhens: String[*] = [] in default;     // per include: its platform ("" every one)
+public let includeGives: String[*] = [] in default;     // per include of a native interface: the C names it gives ("" for cinclude)
+public let usesAny: bool = false;
+public let usesThreads: bool = false;
+public let cCode: String[*] = [] in default;
+public let cCodeStd: bool[*] = [] in default;       // per cCode: from the standard library
+public let files: String[*] = [] in default;
+
+public let structs: StructInfo[*] = [] in default;
+public let nativeMethods: MethodInfo[*] = [] in default;
+public let structIndex: Any = {} in default;
+public let classes: ClassInfo[*] = [] in default;
+public let classIndex: Any = {} in default;
+public let interfaces: InterfaceInfo[*] = [] in default;
+public let interfaceIndex: Any = {} in default;
+public let enums: EnumInfo[*] = [] in default;
+public let enumIndex: Any = {} in default;
+public let externTypes: String[*] = [] in default;
+public let externTypeIndex: Any = {} in default;
+public let externInfos: ExternTypeInfo[*] = [] in default;     // in the order of externTypes
+public let functions: FunctionInfo[*] = [] in default;
+public let functionIndex: Any = {} in default;
+public let globals: VarDecl[*] = [] in default;
+public let lambdaList: LambdaInfo[*] = [] in default;
+public let funcTypes: Type[*] = [] in default;     // closure types, by id
+public let usedTypes: Type[*] = [] in default;
+public let typeOrder: Type[*] = [] in default;
+
+public function structOf(name: String): StructInfo? {
+    let i: int32 = (structIndex[name] as int32 ?? -1);
+    return i < 0 ? null : structs[i];
+}
+
+public function classOf(name: String): ClassInfo? {
+    let i: int32 = (classIndex[name] as int32 ?? -1);
+    return i < 0 ? null : classes[i];
+}
+
+public function interfaceOf(name: String): InterfaceInfo? {
+    let i: int32 = (interfaceIndex[name] as int32 ?? -1);
+    return i < 0 ? null : interfaces[i];
+}
+
+public function enumOf(name: String): EnumInfo? {
+    let i: int32 = (enumIndex[name] as int32 ?? -1);
+    return i < 0 ? null : enums[i];
+}
+
+public function functionOf(name: String): FunctionInfo? {
+    let i: int32 = (functionIndex[name] as int32 ?? -1);
+    return i < 0 ? null : functions[i];
+}
+
+public function isExternTypeName(name: String): bool { return externTypeIndex[name] != null; }
+
+/** An extern type declared `released by`: a resource that lives in a memory. */
+public function isResource(type: Type): bool {
+    if (!isExternT(type)) { return false; }
+    let e: ExternTypeInfo? = externInfoOf(type.name);
+    return e != null && e.decl.releasedBy != "";
+}
+
+/** The C condition of a platform, for #if. */
+public function platformCondition(p: String): String {
+    return switch (p) {
+        case "windows" -> "defined(_WIN32)";
+        case "macos" -> "defined(__APPLE__)";
+        case "linux" -> "defined(__linux__)";
+        default -> "!defined(_WIN32)";
+    };
+}
+
+/** Code that runs only on `inner` also runs where `outer` holds? (macos and linux are unix) */
+public function platformWithin(inner: String, outer: String): bool {
+    if (outer == "" || inner == outer) { return true; }
+    return outer == "unix" && (inner == "macos" || inner == "linux");
+}
+
+/** The type whose methods a native type declares: one the compiler knows (String), or one of C. */
+public function nativeOwner(owner: String): Type {
+    let p: Type? = primByName(owner);
+    if (p != null) { return p!; }
+    let i: int32 = (typeIndex[owner] as int32 ?? -1);
+    return i >= 0 ? allTypes[i] : named(owner.clone() in default, NamedKind.Extern);
+}
+
+public function externInfoOf(name: String): ExternTypeInfo? {
+    let i: int32 = (externTypeIndex[name] as int32 ?? -1);
+    return i < 0 ? null : externInfos[i];
+}
+
+/** The C struct a `native struct X { ... }` describes ("" for other types). */
+public function externStructC(type: Type): String {
+    if (!isStruct(type)) { return ""; }
+    let structInfo: StructInfo? = structOf(type.name);
+    return structInfo != null ? structInfo.decl.cName : "";
+}
+
+public function isExternStruct(type: Type): bool { return externStructC(type) != ""; }
+
+/** What can cross to C and back: numbers, bool, String (const char*), extern types, C structs and C pointers. */
+public function isCValue(type: Type): bool {
+    return (type.kind == TypeKind.Prim && type != T_ANY && type != T_VOID) || isExternT(type) || isExternStruct(type) || isPtr(type)
+        || (type.kind == TypeKind.Opt && isExternT(type.elem!));      // a C pointer that may be NULL
+}
+
+/** What a C pointer can point to: numbers, bool, C structs, extern types that are not resources, pointers. */
+public function pointable(type: Type): bool {
+    return (type.kind == TypeKind.Prim && type != T_ANY && type != T_VOID && type != T_STRING) || isExternStruct(type) || isPtr(type)
+        || (isExternT(type) && !isResource(type));
+}
+
+public function structMethod(structInfo: StructInfo, n: String, op: bool, arity: int32): MethodInfo? {
+    for (m in structInfo.methods) {
+        if (m.name == n && m.isOperator == op && (!op || m.sig == null || m.sig!.params.length == arity)) { return m; }
+    }
+    return null;
+}
+
+public function structField(structInfo: StructInfo, n: String): FieldInfo? {
+    for (f in structInfo.fields) {
+        if (f.name == n) { return f; }
+    }
+    return null;
+}
+
+public function interfaceMethod(interfaceInfo: InterfaceInfo, n: String): MethodInfo? {
+    for (m in interfaceInfo.methods) {
+        if (m.name == n) { return m; }
+    }
+    return null;
+}
+
+/** A variant by name; a module prefix never names a variant. */
+public function variantOf(enumInfo: EnumInfo, name: String): VariantInfo? {
+    let n: String = name;
+    let k: int32 = n.lastIndexOf("__") ?? -1;
+    if (k >= 0) { n = n.substring(k + 2); }
+    for (v in enumInfo.variants) {
+        if (v.name == n) { return v; }
+    }
+    return null;
+}
+
+public function enumSimple(enumInfo: EnumInfo): bool {
+    for (v in enumInfo.variants) {
+        if (v.hasPayload) { return false; }
+    }
+    return true;
+}
+
+public function parentOf(classInfo: ClassInfo): ClassInfo? {
+    return classInfo.superName == "" ? null : classOf(classInfo.superName);
+}
+
+/** Where the lock of a synchronized class is in its C struct: the first synchronized class of the chain has it. */
+public function syncField(classInfo: ClassInfo in default): String {
+    let p: ClassInfo? = parentOf(classInfo);
+    return p != null && p.sync ? "_super.${syncField(p!)}" : "_sync";
+}
+
+/** Root first; safe on broken hierarchies. */
+public function chain(name: String in default): ClassInfo[*] {
+    let rev: ClassInfo[*] = [] in default;
+    let seen: Any = {} in default;
+    let c: ClassInfo? = classOf(name);
+    while (c != null) {
+        let classInfo: ClassInfo = c;
+        if (seen[classInfo.name] != null) { break; }
+        seen[classInfo.name] = 1;
+        rev.push(classInfo);
+        c = parentOf(classInfo);
+    }
+    let out: ClassInfo[*] = [] in default;
+    let i: int32 = rev.length - 1;
+    while (i >= 0) {
+        out.push(rev[i]);
+        i -= 1;
+    }
+    return out;
+}
+
+public function findField(cls: String in default, field: String): FieldInfo? {
+    for (c in chain(cls)) {
+        for (f in c.fields) {
+            if (f.name == field) { return f; }
+        }
+    }
+    return null;
+}
+
+/** The most derived definition (operators match by arity). */
+public function findMethod(cls: String in default, name: String, op: bool, arity: int32): MethodInfo? {
+    let ch: ClassInfo[*] = chain(cls);
+    let i: int32 = ch.length - 1;
+    while (i >= 0) {
+        for (m in ch[i].methods) {
+            if (m.name == name && m.isOperator == op && (!op || m.sig!.params.length == arity)) { return m; }
+        }
+        i -= 1;
+    }
+    return null;
+}
+
+public function allFields(cls: String in default): FieldInfo[*] {
+    let out: FieldInfo[*] = [] in default;
+    for (c in chain(cls)) {
+        for (f in c.fields) { out.push(f); }
+    }
+    return out;
+}
+
+public function isSubclass(sub: String in default, sup: String): bool {
+    for (c in chain(sub)) {
+        if (c.name == sup) { return true; }
+    }
+    return false;
+}
+
+/** The ancestor (or the class itself) that declares `implements iface`, or "". */
+public function implementor(cls: String in default, iface: String): String {
+    let ch: ClassInfo[*] = chain(cls);
+    let i: int32 = ch.length - 1;
+    while (i >= 0) {
+        for (n in ch[i].interfaces) {
+            if (n == iface) { return ch[i].name; }
+        }
+        i -= 1;
+    }
+    return "";
+}
+
+public function classDepth(name: String in default): int32 { return chain(name).length; }

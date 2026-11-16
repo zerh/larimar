@@ -1,0 +1,350 @@
+// codegen.gen.classes: classes, interfaces and closures in C; globals and the entry point.
+
+import semantics.types {
+    allFields, ArrayKind, ClassInfo, cSuffix, findMethod, FunctionInfo, functions, globals, InterfaceInfo, interfaceOf,
+    interfaces, isArray, isMemory, isMemParam, LambdaInfo, MemoryKind, MethodInfo, nativeMethods, nativeOwner,
+    optIsPointer, parentOf, StructInfo, structOf, Symbol, T_VOID, TypeKind, Type, usesThreads
+};
+import semantics.expressions.conversions { hasRefs };
+import semantics.linker { taskClasses };
+import codegen.expressions { classFieldPath, cType, expr, structName, typeCName, value };
+import codegen.expressions.clone { cloneHeader, cloneOf, cloneTypeList, needsDeepClone };
+import codegen.gen { Block, classesByDepth, writing, hasInit, line, newFunctionCode, pushBlock };
+import codegen.gen.statements { body, ret };
+
+function errParam(throwsOut: bool): String {
+    return throwsOut ? ", LarError* err_out" : "";
+}
+
+/** Returning something that points to memory: the function creates it in the memory of the call. */
+public function returnsData(ret: Type): bool { return hasRefs(ret); }
+
+public function params(paramSymbols: Symbol[*], memParams: bool[*]): String {
+    let out: String[*] = [] in default;
+    for (i, s in paramSymbols) {
+        if (isMemParam(memParams, i)) { out.push("LarMemory* ${s.cName}"); } else { out.push("${cType(s.type)} ${s.cName}"); }
+    }
+    return out.join(", ");
+}
+
+public function functionHeader(functionInfo: FunctionInfo): String {
+    let ps: String = params(functionInfo.paramSymbols, functionInfo.memParams);
+    if (returnsData(functionInfo.sig!.elem!)) { ps = ps.isEmpty() ? "LarMemory* lar_result_memory" : "LarMemory* lar_result_memory, ${ps}"; }
+    let err: String = "";
+    if (functionInfo.throwsType != null) { err = ps.isEmpty() ? "LarError* err_out" : ", LarError* err_out"; }
+    let all: String = "${ps}${err}";
+    if (all.isEmpty()) { all = "void"; }
+    let st: String = functionInfo.cName == "user_main" ? "static " : "";
+    return "${st}${cType(functionInfo.sig!.elem!)} ${functionInfo.cName}(${all})";
+}
+
+public function methodName(method: MethodInfo): String {
+    // a native type may have two methods with the same name and a different number of parameters
+    for (o in nativeMethods) {
+        if (o != method && o.owner == method.owner && o.name == method.name && o.decl.hasBody && method.decl.hasBody && !method.isOperator
+            && o.sig != null && method.sig != null && o.sig!.params.length != method.sig!.params.length) {
+            return "${method.owner}_${cSuffix(method)}_${method.sig!.params.length}";
+        }
+    }
+    return "${method.owner}_${cSuffix(method)}";
+}
+
+public function methodHeader(method: MethodInfo, isStructMethod: bool): String {
+    let ps: String = params(method.paramSymbols, method.memParams);
+    if (returnsData(method.sig!.elem!)) { ps = ps.isEmpty() ? "LarMemory* lar_result_memory" : "LarMemory* lar_result_memory, ${ps}"; }
+    let recv: String = "${typeCName(method.introducer)}* self_";
+    if (isStructMethod) {
+        let structInfo: StructInfo? = structOf(method.owner);
+        recv = structInfo != null && structInfo!.decl.cName != "" ? "${structInfo!.decl.cName}* self" : "${typeCName(method.owner)}* self";   // a native struct: C's own
+    }
+    let st: String = isStructMethod ? "" : "static ";
+    let rest: String = !ps.isEmpty() ? ", ${ps}" : "";
+    return "${st}${cType(method.sig!.elem!)} ${methodName(method)}(${recv}${rest}${errParam(method.throwsType != null)})";
+}
+
+public function nativeMethodHeader(method: MethodInfo): String {
+    let ps: String = params(method.paramSymbols, method.memParams);
+    if (returnsData(method.sig!.elem!)) { ps = ps.isEmpty() ? "LarMemory* lar_result_memory" : "LarMemory* lar_result_memory, ${ps}"; }
+    let rest: String = !ps.isEmpty() ? ", ${ps}" : "";
+    return "${cType(method.sig!.elem!)} ${methodName(method)}(${cType(nativeOwner(method.owner))} self${rest}${errParam(method.throwsType != null)})";
+}
+
+public function lambdaHeader(lambdaInfo: LambdaInfo): String {
+    let paramTexts: String[*] = [];
+    if (returnsData(lambdaInfo.type.elem!)) { paramTexts.push("LarMemory* lar_result_memory"); }
+    for (s in lambdaInfo.params) { paramTexts.push("${cType(s.type)} ${s.cName}"); }
+    let rest: String = paramTexts.length > 0 ? ", ${paramTexts.join(", ")}" : "";
+    return "static ${cType(lambdaInfo.type.elem!)} lambda_${lambdaInfo.id}(void* env_${rest})";
+}
+
+/** The C parameters after self: the memory of the call first when it returns data. */
+public function paramCTypes(method: MethodInfo in default): String[*] {
+    let out: String[*] = [];
+    if (returnsData(method.sig!.elem!)) { out.push("LarMemory*"); }
+    for (i, p in method.sig!.params) {
+        if (isMemParam(method.memParams, i)) { out.push("LarMemory*"); } else { out.push(cType(p)); }
+    }
+    return out;
+}
+
+public function vtableStruct(out: StringBuilder, classInfo: ClassInfo in default): void {
+    out.add("struct ${classInfo.name}_VTable {\n");
+    if (classInfo.superName == "") {
+        out.add("    LarMethodTable header_;    /* with an underscore: a method may be called header */\n");
+    } else {
+        out.add("    ${classInfo.superName}_VTable _super;\n");
+    }
+    for (m in classInfo.methods) {
+        if (m.introducer != classInfo.name) { continue; }
+        out.add("    ${cType(m.sig!.elem!)} (*${cSuffix(m)})(${classInfo.name}*");
+        for (p in paramCTypes(m)) { out.add(", ${p}"); }
+        if (m.throwsType != null) { out.add(", LarError*"); }
+        out.add(");\n");
+    }
+    out.add("};\n\n");
+}
+
+public function vtableInit(concrete: ClassInfo in default, level: ClassInfo): String {
+    let parts: String[*] = [] in default;
+    if (level.superName == "") {
+        parts.push(".header_ = { &lar_class_${concrete.name}, ${concrete.name}__clone }");
+    } else {
+        parts.push("._super = { ${vtableInit(concrete, parentOf(level)!)} }");
+    }
+    for (m in level.methods) {
+        if (m.introducer != level.name) { continue; }
+        let impl: MethodInfo = findMethod(concrete.name, m.name, m.isOperator, m.sig!.params.length)!;
+        parts.push(".${cSuffix(m)} = ${methodName(impl)}");
+    }
+    return parts.join(", ");
+}
+
+public function dispatchName(intro: String, method: MethodInfo): String { return "${intro}_${cSuffix(method)}__dispatch"; }
+
+function argsDecl(paramTypes: String[*], throwsOut: bool): String {
+    let builder: StringBuilder = {} in default;
+    for (i, p in paramTypes) { builder.add(", ${p} a${i}"); }
+    if (throwsOut) { builder.add(", LarError* err_out"); }
+    return builder.toString();
+}
+
+function argsPass(n: int32, throwsOut: bool): String {
+    let builder: StringBuilder = {} in default;
+    let i: int32 = 0;
+    while (i < n) {
+        builder.add(", a${i}");
+        i += 1;
+    }
+    if (throwsOut) { builder.add(", err_out"); }
+    return builder.toString();
+}
+
+function retWord(type: Type): String {
+    return type == T_VOID ? "" : "return ";
+}
+
+public function dispatchHelper(out: StringBuilder, classInfo: ClassInfo, method: MethodInfo in default): void {
+    let paramTypes: String[*] = paramCTypes(method);
+    let th: bool = method.throwsType != null;
+    out.add("static inline ${cType(method.sig!.elem!)} ${dispatchName(classInfo.name, method)}(${classInfo.name}* self${argsDecl(paramTypes, th)}) {\n    ");
+    out.add("${retWord(method.sig!.elem!)}((const ${classInfo.name}_VTable*)lar_object_vt(self))->${cSuffix(method)}(self${argsPass(paramTypes.length, th)});\n}\n");
+}
+
+public function interfaceTableStruct(out: StringBuilder, interfaceInfo: InterfaceInfo in default): void {
+    out.add("struct ${interfaceInfo.name}_Table {\n    const LarClass* cls;\n");
+    for (m in interfaceInfo.methods) {
+        out.add("    ${cType(m.sig!.elem!)} (*${m.name})(void*");
+        for (p in paramCTypes(m)) { out.add(", ${p}"); }
+        if (m.throwsType != null) { out.add(", LarError*"); }
+        out.add(");\n");
+    }
+    if (interfaceInfo.methods.length == 0) { out.add("    char _none;\n"); }
+    out.add("};\n\n");
+}
+
+public function ifaceCallName(interfaceInfo: InterfaceInfo, method: MethodInfo): String { return "${interfaceInfo.name}_${method.name}__call"; }
+
+public function interfaceCallHelper(out: StringBuilder, interfaceInfo: InterfaceInfo, method: MethodInfo in default): void {
+    let paramTypes: String[*] = paramCTypes(method);
+    let th: bool = method.throwsType != null;
+    out.add("static inline ${cType(method.sig!.elem!)} ${ifaceCallName(interfaceInfo, method)}(${interfaceInfo.name} v${argsDecl(paramTypes, th)}) { ");
+    out.add("${retWord(method.sig!.elem!)}v.t->${method.name}(v.obj${argsPass(paramTypes.length, th)}); }\n");
+}
+
+/** For each class that declares `implements I`: thunks plus a table. */
+public function interfaceImplementations(out: StringBuilder): void {
+    for (c in classesByDepth()) {
+        for (iname in c.interfaces) {
+            let interfaceInfo: InterfaceInfo = interfaceOf(iname)!;
+            for (interfaceMethodInfo in interfaceInfo.methods) {
+                let method: MethodInfo = findMethod(c.name, interfaceMethodInfo.name, false, 0)!;
+                let paramTypes: String[*] = paramCTypes(interfaceMethodInfo);
+                let th: bool = interfaceMethodInfo.throwsType != null;
+                out.add("static ${cType(interfaceMethodInfo.sig!.elem!)} ${c.name}__${iname}__${interfaceMethodInfo.name}(void* self${argsDecl(paramTypes, th)}) { ");
+                out.add("${retWord(interfaceMethodInfo.sig!.elem!)}${dispatchName(method.introducer, method)}((${method.introducer}*)self${argsPass(paramTypes.length, th)}); }\n");
+            }
+            out.add("const ${iname}_Table ${c.name}__${iname}_table = { &lar_class_${c.name}");
+            for (interfaceMethodInfo in interfaceInfo.methods) { out.add(", ${c.name}__${iname}__${interfaceMethodInfo.name}"); }
+            out.add(" };\n");
+        }
+    }
+}
+
+public function samTable(out: StringBuilder, interfaceInfo: InterfaceInfo in default): void {
+    let method: MethodInfo = interfaceInfo.methods[0];
+    out.add("static ${cType(method.sig!.elem!)} ${interfaceInfo.name}__sam_${method.name}(void* self");
+    for (k, p in paramCTypes(method)) { out.add(", ${p} a${k}"); }
+    out.add(");\n");
+    out.add("const ${interfaceInfo.name}_Table ${interfaceInfo.name}__sam_table = { NULL, ${interfaceInfo.name}__sam_${method.name} };\n");
+}
+
+public function samThunk(out: StringBuilder, interfaceInfo: InterfaceInfo in default): void {
+    let method: MethodInfo = interfaceInfo.methods[0];
+    let paramTypes: String[*] = paramCTypes(method);
+    out.add("static ${cType(method.sig!.elem!)} ${interfaceInfo.name}__sam_${method.name}(void* self${argsDecl(paramTypes, false)}) { ");
+    out.add("${retWord(method.sig!.elem!)}call_Closure_${method.sig!.funcId}(((${interfaceInfo.name}__Sam*)self)->fn${argsPass(paramTypes.length, false)}); }\n");
+}
+
+public function closureCallHelper(out: StringBuilder, functionType: Type): void {
+    let id: int32 = functionType.funcId;
+    let parameterText: StringBuilder = {};
+    let args: StringBuilder = {};
+    if (returnsData(functionType.elem!)) {
+        parameterText.add(", LarMemory* lar_result_memory");
+        args.add(", lar_result_memory");
+    }
+    for (i, p in functionType.params) {
+        parameterText.add(", ${cType(p)} a${i}");
+        args.add(", a${i}");
+    }
+    out.add("static inline ${cType(functionType.elem!)} call_Closure_${id}(Closure_${id} c${parameterText.toString()}) { ");
+    out.add("${retWord(functionType.elem!)}c.fn(&c.env${args.toString()}); }\n");
+}
+
+public function collectionHelpers(out: StringBuilder, type: Type): void {
+    if (isArray(type, ArrayKind.Growable)) {
+        let n: String = structName(type);
+        let e: String = cType(type.elem!);
+        out.add("""
+            static inline ${n}* ${n}_new(LarMemory* mem, int line) { ${n}* l = (${n}*)lar_memory_alloc(mem, sizeof(${n}), line); l->mem = mem; return l; }
+            static inline bool ${n}_push(${n}* l, ${e} v) {
+                if (l->length == l->capacity) {
+                    int32_t nc = l->capacity ? (l->capacity < 0x3fffffff ? l->capacity * 2 : 0x7fffffff) : 8;
+                    if (nc == l->capacity) return false;
+                    ${e}* ni = (${e}*)lar_memory_try_realloc(l->mem, l->items, sizeof(${e}) * (size_t)l->capacity, sizeof(${e}) * (size_t)nc);
+                    if (!ni) return false;
+                    l->items = ni;
+                    l->capacity = nc;
+                }
+                l->items[l->length++] = v;
+                return true;
+            }
+            static inline void ${n}_add(${n}* l, ${e} v, int line) { if (!${n}_push(l, v)) lar_panic("memory is full", line); }
+            """);
+    } else if (isArray(type, ArrayKind.Fixed)) {
+        let n: String = structName(type);
+        let e: String = cType(type.elem!);
+        out.add("static inline bool ${n}_push(${n}* a, ${e} v) { if (a->length >= ${type.size}) return false; a->items[a->length++] = v; return true; }\n");
+    } else if (type.kind == TypeKind.Opt && !optIsPointer(type)) {
+        let n: String = structName(type);
+        out.add("static inline ${cType(type.elem!)} ${n}_unwrap(${n} o, int line) { if (!o.has) lar_panic(\"'!' used on a null value\", line); return o.value; }\n");
+    }
+}
+
+// =====================================================================================
+// Globals and entry point
+// =====================================================================================
+
+public function initGlobals(): String {
+    writing = newFunctionCode();
+    pushBlock(Block {} in default);
+    for (v in globals) {
+        let s: Symbol = v.symbol!;
+        if (s.memKind == MemoryKind.FixedStatic) {
+            line("${s.cName} = lar_memory_fixed(${s.cName}__buf, sizeof ${s.cName}__buf);");
+        } else if (s.memKind == MemoryKind.HeapGrowable) {
+            line("${s.cName} = lar_memory_growable();");
+        } else if (s.memKind == MemoryKind.HeapFixed) {
+            let size: String = expr(v.type.size!);
+            line("${s.cName} = lar_memory_heap((int64_t)(${size}), LINE(${v.line}));");
+        } else {
+            let val: String = value(v.init!);
+            line("${s.cName} = ${val};");
+        }
+    }
+    let body: String = writing.out.toString();
+    hasInit = !body.isEmpty();
+    return !hasInit ? "" : "static void init_globals(void) {\n${body}}\n\n";
+}
+
+public function mainWrapper(): String {
+    let mo: FunctionInfo? = null;
+    for (f in functions) {
+        if (f.name == "main") { mo = f; }
+    }
+    if (mo == null || mo.isExtern) { return ""; }
+    let main: FunctionInfo = mo;
+    let withArgs: bool = main.sig!.params.length > 0;
+    let builder: StringBuilder = {} in default;
+    if (withArgs) { builder.add("int main(int argc, char** argv) {\n"); } else { builder.add("int main(void) {\n"); }
+    if (hasInit) { builder.add("    init_globals();\n"); }
+    if (taskClasses) {      // a copy started for tasks runs them, not main
+        for (f in functions) {
+            if (f.name == "std__os__process__serveTasks") { builder.add("    if (getenv(\"LARIMAR_PROCESS\")) return (int)${f.cName}();\n"); }
+        }
+    }
+    if (withArgs) {     // the program's arguments, without its own name, as a String[]
+        builder.add("    LarString* args = (LarString*)lar_memory_alloc(&lar_default_memory, sizeof(LarString) * (size_t)(argc > 1 ? argc - 1 : 1), 0);\n");
+        builder.add("    for (int i = 1; i < argc; i++) args[i - 1] = lar_string_of_c(argv[i]);\n");
+        builder.add("    Slice_s arg_slice = { args, argc > 1 ? (int32_t)(argc - 1) : 0 };\n");
+    }
+    let throwsOut: bool = main.throwsType != null;
+    if (throwsOut) { builder.add("    LarError err;\n    err.kind = 0;\n"); }
+    let a: String = withArgs ? "arg_slice" : "";
+    if (withArgs && throwsOut) { a = "${a}, "; }
+    if (throwsOut) { a = "${a}&err"; }
+    let call: String = "user_main(${a})";
+    if (main.sig!.elem! == T_VOID) { builder.add("    ${call};\n"); } else { builder.add("    int32_t result = ${call};\n"); }
+    if (usesThreads) {
+        builder.add("    lar_memory_finalize(&lar_default_memory);\n");
+        for (v in globals) {
+            let g: Symbol = v.symbol!;
+            if (isMemory(g)) { builder.add("    lar_memory_finalize(&${g.cName});\n"); }
+        }
+    }
+    if (throwsOut) {
+        let en: String = main.throwsType!.name;
+        builder.add("    if (err.kind != 0) {\n        fflush(stdout);\n        fprintf(stderr, \"uncaught error: ${en}.%s\\n\", ${en}__names[err.as.e_${en}.tag]);\n        return 1;\n    }\n");
+    }
+    if (main.sig!.elem! == T_VOID) { builder.add("    return 0;\n"); } else { builder.add("    return (int)result;\n"); }
+    builder.add("}\n");
+    return builder.toString();
+}
+
+// =====================================================================================
+// Clone functions and class cloning (the type-level part)
+// =====================================================================================
+
+public function clonePrototypes(): String {
+    let builder: StringBuilder = {} in default;
+    for (t in cloneTypeList()) { builder.add("${cloneHeader(t)};\n"); }
+    return builder.toString();
+}
+
+public function classClone(out: StringBuilder, classInfo: ClassInfo in default): void {
+    out.add("static void* ${classInfo.name}__clone(void* self_, LarMemory* mem, LarCloneMap* cm) {\n");
+    if (classInfo.sync || classInfo.thread) {      // shared by reference: a copy would not share the lock or the thread
+        out.add("    (void)mem;\n    (void)cm;\n    return self_;\n}\n\n");
+        return;
+    }
+    out.add("    ${classInfo.name}* o = (${classInfo.name}*)self_;\n");
+    out.add("    void* done = lar_clone_get(cm, o);\n    if (done) return done;\n");
+    out.add("    ${classInfo.name}* n = (${classInfo.name}*)lar_memory_alloc(mem, sizeof(${classInfo.name}), 0);\n");
+    out.add("    *n = *o;\n    ((LarObjectHeader*)n)->mem = mem;\n    lar_clone_put(cm, o, n);\n");
+    for (f in allFields(classInfo.name)) {
+        if (!needsDeepClone(f.type)) { continue; }
+        let path: String = "n->${classFieldPath(classInfo.name, f)}";
+        out.add("    ${path} = ${cloneOf(f.type, path)};\n");
+    }
+    out.add("    return n;\n}\n\n");
+}

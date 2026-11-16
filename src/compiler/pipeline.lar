@@ -1,0 +1,195 @@
+// pipeline: one compilation, as passes over it. A Compilation says what goes in (the main file, where std
+// is) and keeps what the passes leave (the program, its problems, the C); a Pass does one thing to it and
+// reports what went wrong instead of throwing. The compiler runs them in order and stops after the first
+// that leaves problems:
+//
+//     Link -> CheckRules -> Assemble -> Analyze -> EmitC -> NameC -> Prune
+//
+//   Link        reads and parses the main file and every module it imports (semantics.linker)
+//   CheckRules  the rules of the language about modules (semantics.rules: each error says its rule)
+//   Assemble    every module's declarations, with their C names, in one Program
+//   Analyze     types, lifetimes, threads (semantics.analyzer)
+//   EmitC       the C of every function and type (codegen.gen)
+//   NameC       the names of the compiler's variables (codegen.localnames)
+//   Prune       only what main reaches, after the runtime it needs (codegen.prune)
+//
+// larimar check and the editor run the passes up to Analyze (analysisPasses); a build runs them all.
+// The state of the linker, the analyzer and the generator still lives in their modules; it moves into
+// Compilation one part at a time.
+
+import std.io.path as Paths;
+import std.io.files as Files;
+import std.encoding.toml as Toml;
+import std.encoding.toml { TomlError };
+import syntax.ast { Program };
+import semantics.linker {
+    assemble, flushRuleErrors, link, linkedModules, linkErrors, readSource, showFrom, libraryNames, libraryRoots, libraryUnsafe, projectUnsafe
+};
+import semantics.rules { languageRules };
+import semantics.analyzer { analysisErrors, analyze };
+import codegen.gen { emitC, generatorErrors, nameC, pruneC };
+import project.libraries { larimarLibraries };
+
+/** One compilation: what goes in, and what each pass leaves. */
+public class Compilation {
+    /** The main file, and the folder its messages name files from. */
+    let main: String;
+    let shownFrom: String;
+    /** The folder of the standard library. */
+    let std: String;
+    /** Where `import a.b` looks for a/b.lar ("": next to the main file). */
+    let sourceRoot: String = "";
+    /** Assemble put the program together (assembledProgram()). */
+    let assembled: bool = false;
+    /** The C, once Prune cut it. */
+    let c: String = "";
+    /** What went wrong, as the compiler says it (each with its line, which also says the file). */
+    let problems: String[*] = [];
+    /** A main file that cannot be read: said apart, it has no line. */
+    let unread: String = "";
+
+    function failed(): bool { return self.problems.length > 0 || self.unread != ""; }
+}
+
+/** A step of the compilation. It reports problems in the Compilation instead of throwing. */
+public interface Pass {
+    function name(): String;
+    function run(unit: Compilation): void;
+}
+
+/** The passes of larimar check and of the editor: up to Analyze. */
+public function analysisPasses(): Pass[*] {
+    return [LinkPass {}, CheckRulesPass {}, AssemblePass {}, AnalyzePass {}];
+}
+
+/** The passes of a build: all of them. */
+public function compilerPasses(): Pass[*] {
+    return [LinkPass {}, CheckRulesPass {}, AssemblePass {}, AnalyzePass {}, EmitCPass {}, NameCPass {}, PrunePass {}];
+}
+
+/** The program of the last Assemble: it lives as long as the compiler (the analysis points into it). */
+let program: Program = Program { line: 1 } in default;
+
+public function assembledProgram(): Program { return program; }
+
+/** Runs the passes in order, until one leaves problems. true: none did. */
+public function run(unit: Compilation, passes: Pass[*]): bool {
+    for (p in passes) {
+        p.run(unit);
+        if (unit.failed()) { return false; }
+    }
+    return true;
+}
+
+/** The problems a list got since it had `from`, into the compilation. */
+function gather(unit: Compilation, from: String[*], start: int32): void {
+    for (i in start..from.length) { unit.problems.push(from[i].clone()); }
+}
+
+class LinkPass implements Pass {
+    override function name(): String { return "Link"; }
+    override function run(unit: Compilation): void {
+        let mainName: String = Paths.relative(unit.shownFrom, unit.main);
+        let source: String? = readSource(unit.main);
+        if (source == null) {
+            unit.unread = "Cannot read ${mainName}: no such file".clone();
+            return;
+        }
+        showFrom = Paths.absolute(unit.shownFrom).clone() in default;
+        let mainPath: String = Paths.normalize(Paths.absolute(unit.main));
+        let root: String = unit.sourceRoot != "" ? unit.sourceRoot : Paths.parent(Paths.absolute(unit.main));
+        findLibraryRoots(mainPath);
+        let start: int32 = linkErrors.length;
+        link(mainName.clone() in default, source!, root.clone() in default, unit.std.clone() in default, mainPath.clone() in default);
+        gather(unit, linkErrors, start);
+    }
+}
+
+class CheckRulesPass implements Pass {
+    override function name(): String { return "CheckRules"; }
+    override function run(unit: Compilation): void {
+        let start: int32 = linkErrors.length;
+        for (module in linkedModules()) {
+            for (rule in languageRules()) { rule.check(module); }
+        }
+        flushRuleErrors();
+        gather(unit, linkErrors, start);
+    }
+}
+
+class AssemblePass implements Pass {
+    override function name(): String { return "Assemble"; }
+    override function run(unit: Compilation): void {
+        let start: int32 = linkErrors.length;
+        program = assemble();
+        unit.assembled = true;
+        gather(unit, linkErrors, start);
+    }
+}
+
+class AnalyzePass implements Pass {
+    override function name(): String { return "Analyze"; }
+    override function run(unit: Compilation): void {
+        let start: int32 = analysisErrors.length;
+        analyze(program);
+        gather(unit, analysisErrors, start);
+    }
+}
+
+/** The C of the passes between EmitC and Prune. */
+let emitted: String = "";
+
+class EmitCPass implements Pass {
+    override function name(): String { return "EmitC"; }
+    override function run(unit: Compilation): void {
+        let start: int32 = generatorErrors.length;
+        emitted = emitC().clone() in default;
+        gather(unit, generatorErrors, start);
+    }
+}
+
+class NameCPass implements Pass {
+    override function name(): String { return "NameC"; }
+    override function run(unit: Compilation): void { emitted = nameC(emitted).clone() in default; }
+}
+
+class PrunePass implements Pass {
+    override function name(): String { return "Prune"; }
+    override function run(unit: Compilation): void {
+        unit.c = pruneC(emitted).clone();
+        emitted = "";
+    }
+}
+
+/**
+ * The libraries the project of a file uses ([dependencies] of its larimar.toml, and theirs): `import textkit`
+ * finds textkit.lar in the folder of its modules. A problem with them is larimar build's to say.
+ */
+function findLibraryRoots(main: String): void {
+    libraryNames.clear();
+    libraryRoots.clear();
+    libraryUnsafe.clear();
+    projectUnsafe = false;
+    let dir: String = Paths.parent(main);
+    while (dir != "") {
+        let toml: String = Paths.join(dir, "larimar.toml");
+        if (Files.isFile(toml)) {
+            let source: String? = readSource(toml);
+            if (source == null) { return; }
+            try {
+                let config: Any = Toml.parse(source!);
+                projectUnsafe = config.project.unsafe_c as bool ?? false;
+                let ignored: String[*] = [];
+                for (l in larimarLibraries(dir, config, ignored)) {
+                    libraryNames.push(l.name.clone() in default);
+                    libraryRoots.push(l.dir.clone() in default);
+                    libraryUnsafe.push(l.unsafeC);
+                }
+            } catch (TomlError e) {}
+            return;
+        }
+        let up: String = Paths.parent(dir);
+        if (up == dir) { break; }
+        dir = up;
+    }
+}

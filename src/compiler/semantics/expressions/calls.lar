@@ -1,0 +1,792 @@
+// semantics.expressions.calls: calls: functions, methods, constructors and what the language has built in.
+
+import syntax.ast {
+    Call, Cast, Expr, ExternFunctionDecl, Ident, Lambda, Member, NullLit, Param, SelfExpr, SuperMember, Unary
+};
+import semantics.types {
+    allFields, arrayTypeOf, ArrayKind, BuiltinKind, CallInfo, CallK, ClassInfo, classOf, ConversionKind, EnumInfo, enumOf,
+    enumSimple, FieldInfo, findMethod, Frame, FrameKind, functionTypeOf, FunctionInfo, functionOf, interfaceOf,
+    isArray, isClass, isEnumT, isError, isExternT, isInteger, isInterface, isMemParam, isNumeric, isOpt, isPtr,
+    isResource, isStruct, MemberKind, meet, MemberInfo, MemoryKind, MethodInfo, named, NamedKind, nativeMethods, P_GLOBAL, P_TEMP,
+    parentOf, Place, PlaceKind, platformWithin, R_STATIC, Region, structOf, Symbol, SymbolKind, T_ANY, T_BOOL, T_BYTE,
+    T_ERROR, T_INT32, T_INT64, T_STRING, T_VOID, TypeKind, Type, VariantInfo, variantOf
+};
+import semantics.analyzer { error, frame, frameTop, lookup, Mutation, mutations, MutK, noteCapture, wrong };
+import semantics.analyzer.compact {
+    isLValue, isReference, noteCompact, objectOf, placeFor, platformCtx, rootSymbol, storageRegion
+};
+import semantics.analyzer.flow { callMemory, creatingMethod, lifetime, mustLiveForever, requireOutlives, viewMethod };
+import semantics.analyzer.narrowing { requireHandled };
+import semantics.analyzer.threads { callTargets, currentOwner, edge };
+import semantics.expressions {
+    check, describeExpr, enumNamed, fieldOf, isProperty, lookupIn, memoryNamed, methodOf, noted, resolveMemory,
+    selfInLambda, typeNamed
+};
+import semantics.expressions.conversions { coerce, conversionOf, hasRefs, placeRegion, regionOf, setRegion, typeOf };
+import semantics.expressions.literals { calledReference };
+import semantics.expressions.operators { externArg };
+
+public function checkAllArgs(call: Call in default): Type {
+    for (a in call.args) { check(a, null, P_TEMP); }
+    return T_ERROR;
+}
+
+function builtinCall(c: Call in default, kind: BuiltinKind, receiver: Type? in default): void {
+    c.call = CallInfo { kind: CallK.Builtin, builtin: kind, receiverType: receiver } in default;
+}
+
+/** A call to something that can throw: it must be handled. */
+function throwing(call: Call in default, tt: Type?, what: String): void {
+    if (tt == null) { return; }
+    requireHandled(enumOf(tt.name)!, call.line, what);
+    call.throwing = true;
+}
+
+public function checkCall(call: Call in default, expected: Type? in default, place: Place in default): Type {
+    return switch (call.callee) {
+        case Ident id -> {
+            let s: Symbol? = lookup(id.name);
+            if (s == null && (id.name == "print" || id.name == "println")) {
+                if (call.args.length != 1) { error(call.line, "'${id.name}' takes one String."); }
+                for (a in call.args) { coerce(a, T_STRING, P_TEMP, "Argument of '${id.name}'"); }
+                builtinCall(call, id.name == "print" ? BuiltinKind.Print : BuiltinKind.Println, null);
+                yield T_VOID;
+            }
+            if (s == null && id.name == "release") {        // release(x): a resource released now, not when its memory is freed
+                if (call.args.length != 1) { error(call.line, "'release' takes one resource: release(file)."); }
+                for (a in call.args) {
+                    let type: Type = check(a, null, P_TEMP);
+                    let inner: Type = isOpt(type) ? type.elem! : type;
+                    if (!isError(type) && !isResource(inner)) {
+                        error(a.line, "release() is for resources (native types declared 'released by'), got ${type.text}.");
+                    }
+                }
+                builtinCall(call, BuiltinKind.Release, null);
+                yield T_VOID;
+            }
+            if (s == null && id.name == "panic") {          // panic("message"): stops the program
+                if (call.args.length != 1) { error(call.line, "'panic' takes one String: panic(\"what went wrong\")."); }
+                for (a in call.args) { coerce(a, T_STRING, P_TEMP, "Argument of 'panic'"); }
+                builtinCall(call, BuiltinKind.Panic, null);
+                yield T_VOID;
+            }
+            if (s != null && s.kind == SymbolKind.Function && s.func!.decl != null && s.func!.decl!.isNative) {
+                id.symbol = s;
+                yield checkMemoryCall(call, s.func!.name.endsWith("compact"));
+            }
+            if (s != null && s.kind == SymbolKind.Function) {
+                id.symbol = s;
+                yield checkFunctionCall(call, s.func!, place);
+            }
+            yield closureCall(call, check(id, null, P_TEMP), regionOf(id), place);
+        }
+        case SuperMember sm -> checkSuperCall(call, sm, place);
+        case Member m -> checkMethodCall(call, m, expected, place);
+        case Lambda l -> l.ref != null ? calledReference(call, l.ref!) : closureCall(call, check(call.callee, null, P_TEMP), regionOf(call.callee), place);
+        default -> closureCall(call, check(call.callee, null, P_TEMP), regionOf(call.callee), place);
+    };
+}
+
+/**
+ * Memory.limit(m, bytes) and Memory.compact(m): they work on the memory itself, so m must be its name.
+ * compact() is checked again at the end (checkCompacts), once the memory of every variable is known.
+ */
+function checkMemoryCall(c: Call in default, compact: bool): Type {
+    let what: String = compact ? "Memory.compact(m)" : "Memory.limit(m, bytes)";
+    if (c.args.length != (compact ? 1 : 2)) { return wrong(c.line, "${what} takes ${compact ? "the memory" : "the memory and the most bytes it may hold"}."); }
+    if (!compact) { coerce(c.args[1], T_INT64, P_TEMP, "The limit"); }
+    let arg: Expr = c.args[0];
+    let ms: Symbol? = memoryNamed(arg);
+    if (ms == null) {
+        if (arg is Ident id && id.name == "default") { return wrong(arg.line, "${what}: the default memory holds a bit of everything and is never compacted or limited; give the data a memory of its own (let data: byte[*] = [] in heap;)."); }
+        check(arg, null, P_TEMP);
+        return wrong(arg.line, "${what} takes the name of a memory, like ${compact ? "Memory.compact(world)" : "Memory.limit(cache, 64 * 1024 * 1024)"}.");
+    }
+    let m: Symbol = ms;
+    arg.symbol = m;
+    m.used = true;
+    noteCapture(m, arg.line);
+    if (m.memKind == MemoryKind.Param) {
+        return wrong(arg.line, "${what} needs the memory's own name: '${m.name}' is a parameter, and could be any memory.");
+    }
+    if (m.memKind != MemoryKind.HeapGrowable) {
+        return wrong(arg.line, compact
+            ? "'${m.name}' is a fixed memory (byte[N]); compact() works on memories that grow (let ${m.name}: byte[*] = [] in heap;)."
+            : "'${m.name}' is a fixed memory (byte[N]): its size is already its limit.");
+    }
+    builtinCall(c, compact ? BuiltinKind.MemCompact : BuiltinKind.MemLimit, null);
+    c.call!.memory = m;
+    if (compact) { noteCompact(c, m); }
+    return T_VOID;
+}
+
+function checkFunctionCall(c: Call in default, functionInfo: FunctionInfo in default, place: Place in default): Type {
+    if (!functionInfo.isExtern) { edge(currentOwner(), functionInfo.owner); }
+    let ext: ExternFunctionDecl? = functionInfo.ext;
+    if (ext != null && ext.platform != "" && !platformWithin(platformCtx, ext.platform)) {
+        error(c.line, "'${functionInfo.name}' exists only on ${ext.platform}: call it from a class for that platform.");
+    }
+    if (functionInfo.releases == "String") {
+        error(c.line, "'${functionInfo.name}' releases the texts that C gives: the compiler calls it once it has copied them.");
+    } else if (functionInfo.releases != "") {
+        error(c.line, "'${functionInfo.name}' releases ${functionInfo.releases}: call release(x) instead (and if nobody does, the memory calls it when it is freed).");
+    }
+    let makes: bool = functionInfo.isExtern && (isOpt(functionInfo.sig!.elem!) && isResource(functionInfo.sig!.elem!.elem!) || ext != null && ext.releasedBy != "");    // C makes a resource, or a text to copy
+    let given: bool = callMemory(functionInfo);           // C that creates in the memory of the call
+    let paramTypes: Type[*] = [] in default;
+    let mps: bool[*] = [] in default;
+    for (i, t in functionInfo.sig!.params) {
+        if (given && i == 0) { continue; }        // given by the compiler, not written
+        paramTypes.push(t);
+        mps.push(i < functionInfo.memParams.length && functionInfo.memParams[i]);
+    }
+    let outer: bool = toC;
+    toC = functionInfo.isExtern;
+    let region: Region = checkArgsLives(c, paramTypes, functionInfo.varargs, mps, "'${functionInfo.name}'", !functionInfo.isExtern ? functionInfo.params : null, null,
+        functionInfo.isExtern ? P_TEMP : place, null, functionInfo.isExtern ? all(c.args.length, !given && !makes) : functionInfo.flows);
+    toC = outer;
+    throwing(c, functionInfo.throwsType, "'${functionInfo.name}'");
+    c.call = CallInfo { kind: CallK.Direct, func: functionInfo } in default;
+    // A String from C is static, unless C made it in a memory it received.
+    let anyMem: bool = false;
+    for (mp in functionInfo.memParams) {
+        if (mp) { anyMem = true; }
+    }
+    if (given || makes) { c.place = place; }
+    if (makes) {                             // the resource lives where the call's result goes, and is released with it
+        if (place.kind == PlaceKind.Stack && (ext == null || ext!.releasedBy == "")) { error(c.line, "A resource lives in a memory: not in a temporary buffer (in byte[N])."); }
+        setRegion(c, placeRegion(place));
+        return functionInfo.sig!.elem!;
+    }
+    let made: Region = given || functionInfo.creates ? placedResult(c, functionInfo.sig!.elem!, place) : R_STATIC;
+    setRegion(c, !hasRefs(functionInfo.sig!.elem!) || (functionInfo.isExtern && !anyMem) ? R_STATIC : meet(region, made));
+    return functionInfo.sig!.elem!;
+}
+
+/** The arguments the result of a method call may point to. */
+function flowsOf(call: Call, method: MethodInfo): bool[*] {
+    return method.flows.length == method.decl.params.length && method.flows.length > 0 ? method.flows : all(call.args.length, method.returnsArgs);
+}
+
+/** n times b. */
+public function all(n: int32, b: bool): bool[*] {
+    let out: bool[*] = [];
+    for (_ in 0..n) { out.push(b); }
+    return out;
+}
+
+/** What a method call creates (only if some method of that name may create its result). */
+public function madeBy(e: Expr in default, method: MethodInfo in default, place: Place in default): Region {
+    return creatingMethod(method.name) ? placedResult(e, method.sig!.elem!, place) : R_STATIC;
+}
+
+/** A result with data, created where the expression says (like a call's). */
+public function placedResult(e: Expr in default, ret: Type in default, place: Place in default): Region {
+    if (!hasRefs(ret)) { return R_STATIC; }
+    e.place = place;
+    return placeRegion(place);
+}
+
+function checkSuperCall(c: Call in default, sm: SuperMember in default, place: Place in default): Type {
+    let frameOf: Frame = frame();
+    let st: Type? = frameOf.selfType;
+    let classInfo: ClassInfo? = frameOf.kind == FrameKind.Method && st != null && isClass(st) ? classOf(st.name) : null;
+    if (classInfo == null) {
+        error(sm.line, frameOf.kind == FrameKind.Lambda ? "'super' cannot be used inside a lambda." : "'super' can only be used inside a class method.");
+        return checkAllArgs(c);
+    }
+    let parent: ClassInfo? = parentOf(classInfo);
+    let m: MethodInfo? = parent != null ? findMethod(parent.name, sm.name, false, 0) : null;
+    if (m == null) {
+        error(sm.line, classInfo.superName == "" ? "Class '${classInfo.name}' has no superclass." : "Superclass '${classInfo.superName}' has no method '${sm.name}'.");
+        return checkAllArgs(c);
+    }
+    edge(currentOwner(), m.own);
+    let selfSym: Symbol = lookupIn(frameOf.root!, "self")!;
+    let r: Region = checkArgsLives(c, m.sig!.params, false, m.memParams, "'super.${sm.name}'", m.decl.params, selfSym.region,
+        place, null, flowsOf(c, m));
+    throwing(c, m.throwsType, "'super.${m.name}'");
+    c.call = CallInfo { kind: CallK.Super, implOwner: m.owner, method: m } in default;
+    setRegion(c, hasRefs(m.sig!.elem!) ? meet(m.returnsArgs ? meet(r, selfSym.region) : r, madeBy(c, m, place)) : R_STATIC);
+    return m.sig!.elem!;
+}
+
+function checkMethodCall(c: Call in default, callee: Member in default, expected: Type? in default, place: Place in default): Type {
+    let obj: Expr = callee.object;
+    let name: String = callee.name;
+    // Static function: Order.parse(line), String.fromBytes(bytes)
+    let owner: String = typeNamed(obj);
+    if (owner != "") {
+        let sf: FunctionInfo? = functionOf("${owner}.${name}");
+        if (sf != null) { return checkFunctionCall(c, sf, place); }
+        if (enumOf(owner) == null) {
+            error(callee.line, "'${owner}' has no static function '${name}'.");
+            return checkAllArgs(c);
+        }
+    }
+    // Enum constructor: Shape.Circle(2.0)
+    let e: EnumInfo? = enumNamed(obj);
+    if (e != null) {
+        let v: VariantInfo? = variantOf(e, name);
+        if (v == null) { return wrong(callee.line, "Enum '${e.name}' has no variant '${name}'."); }
+        if (!v.hasPayload) { return wrong(c.line, "${e.name}.${v.name} carries no data: write it without parentheses."); }
+        let paramTypes: Type[*] = [] in default;
+        for (f in v.fields) { paramTypes.push(f.type); }
+        let none: bool[*] = [] in default;
+        let region: Region = checkArgs(c, paramTypes, false, none, "${e.name}.${v.name}", same(c, place), all(c.args.length, true));
+        c.call = CallInfo { kind: CallK.EnumCtor, enumInfo: e, variant: v } in default;
+        setRegion(c, region);
+        return named(e.name, NamedKind.Enum);
+    }
+    if (memoryNamed(obj) != null) { return wrong(c.line, "Memory '${describeExpr(obj)}' has no methods; it only has .length, .capacity and .peak."); }
+    // When the result may point to the receiver, a receiver that is created here lives where the result goes.
+    let ot: Type = check(obj, null, viewMethod(name) ? place : P_TEMP);
+    if (isError(ot)) { return checkAllArgs(c); }
+    if (isOpt(ot)) {
+        error(callee.line, "'${describeExpr(obj)}' may be null: check it with != null first, or use ! or ??.");
+        return checkAllArgs(c);
+    }
+    if (isProperty(ot, name)) {
+        error(callee.line, "'${name}' is read without parentheses: ${describeExpr(obj)}.${name}");
+        return checkAllArgs(c);
+    }
+    for (mi in nativeMethods) {
+        if (mi.owner == ot.text && mi.name == name && mi.sig!.params.length == c.args.length && !mi.isOperator && mi.decl.hasBody) {
+            return checkNativeMethodCall(c, callee, mi, place);
+        }
+    }
+    if (name == "clone") { return checkClone(c, ot, place); }
+    if (ot == T_STRING) { return checkStringMethod(c, callee, place); }
+    if (obj is SelfExpr && isClass(ot) && classOf(ot.name)!.sync && name == "__wait") {   // from wait until (the parser)
+        builtinCall(c, BuiltinKind.Wait, ot);
+        return T_VOID;
+    }
+    if (isClass(ot) && classOf(ot.name)!.sync && (name == "wait" || name == "notifyAll") && findMethod(ot.name, name, false, 0) == null) {
+        error(c.line, "There is no ${name}(): put 'wait until (condition)' on the method that must wait; when any method of the object ends, the waiters look at their condition again.");
+        return checkAllArgs(c);
+    }
+    if (ot == T_ANY && name != "push") { return checkAnyMethod(c, callee); }
+    if (ot == T_ANY) {
+        if (c.args.length != 1) {
+            error(c.line, "push() takes one value.");
+            return checkAllArgs(c);
+        }
+        let arg: Expr = c.args[0];
+        coerce(arg, T_ANY, Place { kind: PlaceKind.OfAny, expr: obj } in default, "Element");
+        requireOutlives(arg, regionOf(obj), c.line, "the table");
+        markGlobalMutation(obj);
+        builtinCall(c, BuiltinKind.AnyPush, ot);
+        return T_VOID;
+    }
+    if (ot.kind == TypeKind.Array) { return checkArrayMethod(c, callee, ot, expected, place); }
+    let mi: MethodInfo? = ot.kind == TypeKind.Named ? methodOf(ot, name) : null;
+    if (mi != null) {
+        for (t in callTargets(ot, mi)) { edge(currentOwner(), t.own); }
+        let region: Region = checkArgsLives(c, mi.sig!.params, false, mi.memParams, "'${name}'", mi.decl.params, regionOf(obj),
+            place, obj, flowsOf(c, mi));
+        throwing(c, mi.throwsType, "'${mi.name}'");
+        if (ot.namedKind == NamedKind.Interface) {
+            c.call = CallInfo { kind: CallK.InterfaceMethod, iface: interfaceOf(ot.name), method: mi } in default;
+        } else {
+            c.call = CallInfo { kind: CallK.Method, method: mi, isClass: ot.namedKind == NamedKind.Class } in default;
+        }
+        setRegion(c, hasRefs(mi.sig!.elem!) ? meet(mi.returnsArgs ? meet(region, regionOf(obj)) : region, madeBy(c, mi, place)) : R_STATIC);
+        return mi.sig!.elem!;
+    }
+    let f: FieldInfo? = fieldOf(ot, name);
+    if (f == null) {
+        if (ot.kind == TypeKind.Named && functionOf("${ot.name}.${name}") != null) {
+            error(callee.line, "'${name}' is a static function of '${ot.name}': call it as ${ot.name}.${name}(...).");
+        } else {
+            error(callee.line, "'${ot.text}' has no method or field '${name}'.");
+        }
+        return checkAllArgs(c);
+    }
+    if (obj is SelfExpr && selfInLambda && isClass(ot) && classOf(ot.name)!.sync) {
+        error(callee.line, "'self.${name}' of a synchronized class cannot be used inside a lambda: the lambda could run later, without the lock. Call a method instead, which takes the lock: self::method, or () -> { self.method(); }");
+    }
+    callee.member = MemberInfo { kind: MemberKind.Field, field: f, objectType: ot } in default;
+    callee.ty = f.type;
+    setRegion(callee, regionOf(obj));
+    return closureCall(c, f.type, regionOf(callee), place);
+}
+
+function checkNativeMethodCall(c: Call in default, callee: Member in default, mi: MethodInfo in default, place: Place in default): Type {
+    let obj: Expr = callee.object;
+    let region: Region = checkArgsLives(c, mi.sig!.params, false, mi.memParams, "'${mi.name}()'", mi.decl.params,
+        regionOf(obj), place, obj, flowsOf(c, mi));
+    c.call = CallInfo { kind: CallK.NativeMethod, method: mi } in default;
+    let ret: Type = mi.sig!.elem!;
+    let made: Region = mi.creates ? placedResult(c, ret, place) : R_STATIC;
+    setRegion(c, hasRefs(ret) ? meet(meet(region, mi.returnsArgs ? regionOf(obj) : R_STATIC), made) : R_STATIC);
+    return ret;
+}
+
+function closureCall(c: Call in default, t: Type in default, calleeRegion: Region in default, place: Place in default): Type {
+    if (isError(t)) { return checkAllArgs(c); }
+    if (t.kind != TypeKind.Func) {
+        error(c.line, "A value of type ${t.text} cannot be called.");
+        return checkAllArgs(c);
+    }
+    let none: bool[*] = [] in default;
+    let region: Region = checkArgs(c, t.params, false, none, "this function value", same(c, place), all(c.args.length, true));
+    c.call = CallInfo { kind: CallK.Closure, type: t } in default;
+    setRegion(c, hasRefs(t.elem!) ? meet(meet(region, calleeRegion), placedResult(c, t.elem!, place)) : R_STATIC);
+    return t.elem!;
+}
+
+/** The same place for every argument. */
+public function same(call: Call in default, place: Place in default): Place[*] {
+    let out: Place[*] = [] in default;
+    for (_ in call.args) { out.push(place); }
+    return out;
+}
+
+/**
+ * Checks arguments, and the `in` of the parameters; returns the meet of the regions of the arguments that reference memory.
+ * argPlace: where arguments with data are created (the call's place when the result may point to them).
+ * A parameter that says where it lives gets its argument created there: `in default`, `in self`.
+ */
+function checkArgsLives(call: Call in default, params: Type[*] in default, varargs: bool, memParams: bool[*], name: String,
+                        decls: Param[*]? in default, selfRegion: Region? in default, argPlace: Place in default, receiver: Expr? in default,
+                        flows: bool[*]?): Region {
+    let places: Place[*] = [] in default;
+    let flowing: bool[*] = [];
+    for (i, _ in call.args) {
+        let l: String = decls != null && i < decls.length ? decls[i].lives : "";
+        flowing.push(flows == null || i < flows.length && flows[i]);
+        if (l == "default") {
+            places.push(P_GLOBAL);
+        } else if (l == "self" && receiver != null && isClass(typeOf(receiver))) {
+            places.push(Place { kind: PlaceKind.OfObject, expr: receiver } in default);
+        } else {
+            places.push(flowing[i] ? argPlace : P_TEMP);
+        }
+    }
+    let region: Region = checkArgs(call, params, varargs, memParams, name, places, flowing);
+    if (decls == null) { return region; }
+    let ds: Param[*] = decls;
+    let args: Expr[*] = call.args;
+    if (args.length != ds.length) { return region; }
+    for (i, a in args) {
+        let l: String = ds[i].lives;
+        if (l == "" || isMemParam(memParams, i) || !hasRefs(params[i])) { continue; }
+        let what: String = "Argument ${i + 1} of ${name} ('${ds[i].name}: ${params[i].text} in ${l}')";
+        let target: Region = R_STATIC;
+        let where: String = "";
+        if (l == "default") {
+            where = "the whole program";
+        } else if (l == "self") {
+            if (selfRegion == null) { continue; }
+            target = selfRegion;
+            where = "the object";
+        } else {
+            let j: int32 = -1;
+            for (k, d in ds) {
+                if (d.name == l) { j = k; }
+            }
+            if (j < 0 || j == i) { continue; }
+            if (isMemParam(memParams, j)) {
+                let m: Symbol? = args[j].memArg;
+                if (m == null) { continue; }
+                target = m.memRegion!;
+            } else {
+                target = regionOf(args[j]);
+            }
+            where = "argument ${j + 1}";
+        }
+        let shown: String = where == "the whole program" ? where : "${where} ({st})";
+        let fix: String = params[i].kind == TypeKind.Func
+            ? "A function cannot be copied with clone(): create what it captures there"
+            : "Use .clone() to copy it there";
+        lifetime(regionOf(a), target, a.line, "${what} must live as long as ${shown}, but it lives in {v}. ${fix}.");
+    }
+    return region;
+}
+
+/** The arguments being checked go to C (an extern function or a pointer to a C function). */
+let toC: bool = false;
+
+function checkArgs(call: Call in default, params: Type[*] in default, varargs: bool, memParams: bool[*], name: String, places: Place[*] in default,
+                   flows: bool[*]): Region {
+    let args: Expr[*] = call.args;
+    if (varargs ? args.length < params.length : args.length != params.length) {
+        error(call.line, "${name} expects ${varargs ? "at least " : ""}${params.length} argument(s) but got ${args.length}.");
+    }
+    let region: Region = R_STATIC;
+    for (i, a in args) {
+        if (i >= params.length) {
+            let type: Type = check(a, null, P_TEMP);
+            if (varargs && !isError(type) && !(type.kind == TypeKind.Prim && type != T_VOID && type != T_ANY) && !isExternT(type)) {
+                error(a.line, "Variadic arguments must be numbers, bool, String or native types.");
+            }
+            continue;
+        }
+        if (isMemParam(memParams, i)) {
+            if (!(a is Ident)) {
+                error(a.line, "Argument ${i + 1} of ${name} must be a memory.");
+                continue;
+            }
+            let m: Symbol? = resolveMemory(a);
+            if (m != null) {
+                a.memArg = m;
+                a.ty = params[i];
+                region = meet(region, m.memRegion!);     // what the callee creates there lives as long as the memory
+            }
+            continue;
+        }
+        let p: Type = params[i];
+        externArg = toC && ((a is Unary au && au.op == "&") || (a is Cast ac && ac.expr is Unary acu && acu.op == "&"));
+        if (toC && isPtr(p) && !externArg && !(a is NullLit)) {      // an array where C takes T*: its elements, as in C
+            let at: Type = check(a, null, P_TEMP);
+            if (at.kind == TypeKind.Array && at.elem! == p.elem!) {
+                a.conversionOf = conversionOf(ConversionKind.ToPointer, at, p);
+            } else if (!isError(at) && at != p) {
+                error(a.line, "Argument ${i + 1} of ${name}: expected ${p.text} (or an array of ${p.elem!.text}) but got ${at.text}.");
+            }
+            continue;
+        }
+        coerce(a, p, places[i], "Argument ${i + 1} of ${name}");
+        externArg = false;
+        if (hasRefs(p) && flows[i]) { region = meet(region, regionOf(a)); }
+    }
+    return region;
+}
+
+function checkClone(call: Call in default, objectType: Type in default, place: Place in default): Type {
+    if (call.args.length > 0) { error(call.line, "clone() takes no arguments."); }
+    if (isArray(objectType, ArrayKind.Slice)) { return wrong(call.line, "A borrowed array (T[]) cannot be cloned; copy it into a T[N] or a T[*] first."); }
+    if (isInterface(objectType) || objectType.kind == TypeKind.Func) { return wrong(call.line, "Values of type ${objectType.text} cannot be cloned yet."); }
+    let classInfo: ClassInfo? = isClass(objectType) ? classOf(objectType.name) : null;
+    if (classInfo != null && !classInfo.valid) { return T_ERROR; }
+    if (classInfo != null && (classInfo.sync || classInfo.thread)) { return wrong(call.line, "Objects of ${classInfo.thread ? "Thread" : "a synchronized class"} cannot be cloned."); }
+    let res: String = heldResource(objectType, {});
+    if (res != "") { return wrong(call.line, "${objectType.text} holds a ${res} (a resource, released when its memory is freed): it cannot be cloned, or it would be released twice."); }
+    builtinCall(call, BuiltinKind.Clone, objectType);
+    if (hasRefs(objectType)) {
+        if (place.kind == PlaceKind.Stack && objectType != T_STRING && objectType.kind != TypeKind.Array) { error(call.line, "Cloned objects live in a memory; use 'in' with a memory."); }
+        call.place = place;
+        setRegion(call, placeRegion(place));
+    }
+    return objectType;
+}
+
+/** The resource type a value holds (directly or in a field, an element...), or "". */
+function heldResource(t: Type, visiting: Any): String {
+    if (isError(t)) { return ""; }
+    if (isResource(t)) { return t.text; }
+    if (t.kind == TypeKind.Opt || t.kind == TypeKind.Array) { return heldResource(t.elem!, visiting); }
+    if (t.kind != TypeKind.Named || visiting.contains(t.name)) { return ""; }
+    visiting[t.name] = true;
+    let fields: FieldInfo[*] = [];
+    if (isClass(t)) { fields = allFields(t.name.clone() in default); }
+    if (isStruct(t)) { fields = structOf(t.name)!.fields; }
+    for (f in fields) {
+        let r: String = heldResource(f.type, visiting);
+        if (r != "") { return r; }
+    }
+    if (isEnumT(t)) {
+        for (v in enumOf(t.name)!.variants) {
+            for (f in v.fields) {
+                let r: String = heldResource(f.type, visiting);
+                if (r != "") { return r; }
+            }
+        }
+    }
+    return "";
+}
+
+/** push, pop and clear change a fixed array in place: it must be a variable or a field. */
+function changesArray(call: Call in default, obj: Expr in default, at: Type in default, kind: BuiltinKind): void {
+    recordValueMutation(obj, call.line);
+    markGlobalMutation(obj);
+    builtinCall(call, kind, at);
+}
+
+function checkArrayMethod(call: Call in default, member: Member in default, at: Type in default, expected: Type? in default, place: Place in default): Type {
+    let name: String = member.name;
+    let obj: Expr = member.object;
+    switch (name) {
+        case "push" -> {
+            if (at.arrayKind == ArrayKind.Slice) { return wrong(call.line, "A borrowed array (T[]) cannot grow."); }
+            if (call.args.length != 1) {
+                error(call.line, "push() takes one element.");
+                return T_BOOL;
+            }
+            if (at.arrayKind == ArrayKind.Fixed && !isLValue(obj)) { error(call.line, "push() needs a variable or a field, not a temporary array."); }
+            let p: Place = at.arrayKind == ArrayKind.Growable ? (Place { kind: PlaceKind.OfList, expr: obj } in default) : placeFor(obj);
+            coerce(call.args[0], at.elem!, p, "Element");
+            if (hasRefs(at.elem!)) { requireOutlives(call.args[0], storageRegion(obj), call.line, "the array"); }
+            changesArray(call, obj, at, BuiltinKind.Push);
+            return T_BOOL;
+        }
+        case "pop" -> {
+            if (at.arrayKind == ArrayKind.Slice) { return wrong(call.line, "A borrowed array (T[]) cannot shrink."); }
+            if (call.args.length != 0) { error(call.line, "pop() takes no arguments."); }
+            if (at.arrayKind == ArrayKind.Fixed && !isLValue(obj)) { error(call.line, "pop() needs a variable or a field, not a temporary array."); }
+            changesArray(call, obj, at, BuiltinKind.Pop);
+            setRegion(call, regionOf(obj));
+            return at.elem!;
+        }
+        case "contains" -> {
+            if (call.args.length != 1) { return wrong(call.line, "contains() takes one element."); }
+            if (!isError(at.elem!) && !comparable(at.elem!)) {
+                error(call.line, "contains() compares elements with ==, which ${at.elem!.text} does not have.");
+                check(call.args[0], null, P_TEMP);
+                return T_ERROR;
+            }
+            coerce(call.args[0], at.elem!, P_TEMP, "Argument of contains()");
+            builtinCall(call, BuiltinKind.Contains, at);
+            return T_BOOL;
+        }
+        case "join" -> {
+            if (at.elem! != T_STRING) { return wrong(call.line, "join() is for lists of String, not ${at.text}."); }
+            if (call.args.length != 1) { return wrong(call.line, "join() takes the separator."); }
+            coerce(call.args[0], T_STRING, P_TEMP, "Separator of join()");
+            builtinCall(call, BuiltinKind.Join, at);
+            call.place = place;
+            setRegion(call, placeRegion(place));
+            return T_STRING;
+        }
+        case "clear" -> {
+            if (at.arrayKind == ArrayKind.Slice) { return wrong(call.line, "A borrowed array (T[]) cannot be cleared."); }
+            if (call.args.length > 0) { error(call.line, "clear() takes no arguments."); }
+            if (at.arrayKind == ArrayKind.Fixed && !isLValue(obj)) { error(call.line, "clear() needs a variable or a field."); }
+            changesArray(call, obj, at, BuiltinKind.Clear);
+            return T_VOID;
+        }
+        case "map", "filter" -> { return checkMapFilter(call, obj, name == "map", at, expected, place); }
+        case "sort" -> { return checkSort(call, obj, at); }
+        default -> {}
+    }
+    error(member.line, "Arrays have length, push, pop, clear, contains, sort, map, filter, join and clone (got '${name}').");
+    return checkAllArgs(call);
+}
+
+/**
+ * list.sort(): numbers and Strings in their natural order. list.sort(compare): any elements, in the order
+ * that compare(a, b) says (negative: a goes first; zero: equal; positive: b goes first). Stable, in place.
+ */
+function checkSort(call: Call in default, obj: Expr in default, at: Type in default): Type {
+    if (at.arrayKind == ArrayKind.Fixed && !isLValue(obj)) { error(call.line, "sort() needs a variable or a field, not a temporary array."); }
+    let element: Type = at.elem!;
+    if (call.args.length == 0) {
+        if (!isError(element) && !isNumeric(element) && element != T_STRING) {
+            return wrong(call.line, "${element.text} has no natural order: give sort() a comparator, list.sort((a: ${element.text}, b: ${element.text}) -> ...) that gives a negative number, zero or a positive one.");
+        }
+    } else if (call.args.length == 1) {
+        let parameters: Type[*] = [element, element] in default;
+        coerce(call.args[0], noted(functionTypeOf(parameters, T_INT32, false)), P_TEMP, "Comparator of sort()");
+    } else {
+        return wrong(call.line, "sort() takes nothing, or one comparator: (a, b) -> int32.");
+    }
+    changesArray(call, obj, at, BuiltinKind.Sort);
+    return T_VOID;
+}
+
+function checkMapFilter(call: Call in default, obj: Expr in default, isMap: bool, at: Type in default, expected: Type? in default, place: Place in default): Type {
+    if (call.args.length != 1) { return wrong(call.line, "${isMap ? "map" : "filter"}() takes one lambda."); }
+    let resultElem: Type = at.elem!;
+    if (isMap) {
+        let exp: Type? = expected;
+        if (exp != null && isOpt(exp)) { exp = exp.elem; }
+        if (exp == null || exp.kind != TypeKind.Array) {
+            error(call.line, "map() needs to know the result type; give the variable a type, e.g. let xs: int32[*] = lista.map(...);");
+            check(call.args[0], null, P_TEMP);
+            return T_ERROR;
+        }
+        resultElem = exp.elem!;
+    }
+    let paramTypes: Type[*] = [at.elem!] in default;
+    let functionType: Type = noted(functionTypeOf(paramTypes, isMap ? resultElem : T_BOOL, false));
+    coerce(call.args[0], functionType, P_TEMP, "Argument of ${isMap ? "map" : "filter"}()");
+    let dataRegion: Region = meet(regionOf(obj), regionOf(call.args[0]));
+    builtinCall(call, isMap ? BuiltinKind.Map : BuiltinKind.Filter, at);
+    if (at.arrayKind == ArrayKind.Fixed) {          // what map's lambda creates lives where the call says
+        setRegion(call, isMap ? meet(dataRegion, placedResult(call, resultElem, place)) : dataRegion);
+        return arrayTypeOf(resultElem, ArrayKind.Fixed, at.size);
+    }
+    let p: Place = place;
+    call.place = p;
+    let placed: Region = placeRegion(p);
+    if (hasRefs(resultElem)) {
+        lifetime(dataRegion, placed, call.line, "The result is stored in {st} but its elements reference data in {v}. Use .clone() inside the lambda.");
+    }
+    setRegion(call, placed);
+    return arrayTypeOf(resultElem, ArrayKind.Growable, 0);
+}
+
+/** The forms of a String method: "-" no arguments, "s" a String, "i" an integer, "si"...; "|" separates forms. */
+/** The String methods the compiler writes itself (the rest are written in Larimar in std/lang.lar). */
+function stringForms(name: String): String {
+    return switch (name) {
+        case "length", "bytes", "lines" -> "-";
+        case "split" -> "s";
+        case "substring" -> "i|ii";
+        default -> "";
+    };
+}
+
+/** The core methods of String: its length, views of it (substring, bytes) and lists of views (split, lines). */
+function checkStringMethod(call: Call in default, member: Member in default, place: Place in default): Type {
+    let args: Expr[*] = call.args;
+    let name: String = member.name;
+    let forms: String = stringForms(name);
+    if (forms == "") {
+        let counts: String[*] = [] in default;          // written in std, but with another number of arguments
+        for (mi in nativeMethods) {
+            if (mi.owner == "String" && mi.name == name && mi.sig != null) { counts.push("${mi.sig!.params.length}"); }
+        }
+        if (counts.length > 0) {
+            error(call.line, "${name}() takes ${counts.join(" or ")} argument(s).");
+        } else {
+            error(member.line, "String has no method '${name}'.");
+        }
+        return checkAllArgs(call);
+    }
+    let form: String = "?";
+    let counts: String[*] = [] in default;
+    let shapes: String[*] = forms.split("|");
+    for (f in shapes) {
+        let shape: String = f == "-" ? "" : f;
+        counts.push("${shape.length}");
+        if (shape.length == args.length && form == "?") { form = shape; }
+    }
+    if (form == "?") {
+        error(call.line, "${name}() takes ${counts.join(" or ")} argument(s).");
+        return checkAllArgs(call);
+    }
+    for (i, a in args) {
+        if (form[i] == 'i') {
+            let type: Type = check(a, T_INT32, P_TEMP);
+            if (!isError(type) && !isInteger(type)) { error(a.line, "Argument ${i + 1} of ${name}() must be an integer, got ${type.text}."); }
+        } else {
+            coerce(a, T_STRING, P_TEMP, "Argument ${i + 1} of ${name}()");
+        }
+    }
+    builtinCall(call, BuiltinKind.StringMethod, T_STRING);
+    let original: Region = regionOf(member.object);
+    return switch (name) {
+        case "length" -> T_INT32;
+        case "substring" -> {      // a view of the text
+            setRegion(call, original);
+            yield T_STRING;
+        }
+        case "bytes" -> {
+            setRegion(call, original);
+            yield noted(arrayTypeOf(T_BYTE, ArrayKind.Slice, 0));
+        }
+        default -> {               // split, lines: views of the text in a new list
+            let type: Type = noted(arrayTypeOf(T_STRING, ArrayKind.Growable, 0));
+            call.place = place;
+            let placed: Region = placeRegion(place);
+            lifetime(original, placed, call.line, "The parts are views of a text in {v}, but the list lives in {st}, which lives longer. Clone the text first.");
+            setRegion(call, meet(placed, original));
+            yield type;
+        }
+    };
+}
+
+/** remove(name), removeAt(i), clear(), removeIf((value) -> ...) or removeIf((name, value) -> ...). */
+function checkAnyMethod(call: Call in default, member: Member in default): Type {
+    let n: int32 = call.args.length;
+    if (member.name == "length") {
+        if (n != 0) { error(call.line, "length() takes no arguments."); }
+        builtinCall(call, BuiltinKind.AnyLength, T_ANY);
+        return T_INT32;
+    }
+    if (member.name == "contains" || member.name == "containsKey") {      // they only read
+        let key: bool = member.name == "containsKey";
+        if (n != 1) {
+            error(call.line, key ? "containsKey() takes the name of an entry." : "contains() takes one value.");
+            return checkAllArgs(call);
+        }
+        let a: Expr = call.args[0];
+        if (key) {
+            coerce(a, T_STRING, P_TEMP, "Argument of containsKey()");
+        } else {
+            let type: Type = check(a, null, P_TEMP);
+            if (!isError(type) && !comparableInAny(type)) {
+                error(call.line, "contains() looks for numbers, bool, String, objects or null in an Any (got ${type.text}).");
+            } else if (!isError(type)) {
+                coerce(a, T_ANY, P_TEMP, "Argument of contains()");
+            }
+        }
+        builtinCall(call, key ? BuiltinKind.AnyContainsKey : BuiltinKind.AnyContains, T_ANY);
+        return T_BOOL;
+    }
+    markGlobalMutation(member.object);
+    switch (member.name) {
+        case "remove" -> {
+            if (n == 1) {
+                coerce(call.args[0], T_STRING, P_TEMP, "Argument of remove()");
+                builtinCall(call, BuiltinKind.AnyRemove, T_ANY);
+                return T_BOOL;
+            }
+            error(call.line, "remove() takes the name of the entry.");
+        }
+        case "removeAt" -> {
+            if (n == 1) {
+                let type: Type = check(call.args[0], T_INT64, P_TEMP);
+                if (!isError(type) && !isInteger(type)) { error(call.line, "removeAt() takes an integer position."); }
+                builtinCall(call, BuiltinKind.AnyRemoveAt, T_ANY);
+                return T_VOID;
+            }
+            error(call.line, "removeAt() takes a position.");
+        }
+        case "clear" -> {
+            if (n != 0) { error(call.line, "clear() takes no arguments."); }
+            builtinCall(call, BuiltinKind.AnyClear, T_ANY);
+            return T_VOID;
+        }
+        case "removeIf" -> {
+            if (n == 1) {
+                let a: Expr = call.args[0];
+                let paramTypes: Type[*] = [] in default;
+                if (a is Lambda l && l.params.length == 2) { paramTypes.push(T_STRING); }
+                paramTypes.push(T_ANY);
+                coerce(a, noted(functionTypeOf(paramTypes, T_BOOL, false)), P_TEMP, "Argument of removeIf()");
+                builtinCall(call, BuiltinKind.AnyRemoveIf, T_ANY);
+                return T_INT32;
+            }
+            error(call.line, "removeIf() takes a lambda: (value) -> bool, or (name, value) -> bool for the named entries.");
+        }
+        default -> error(call.line, "An Any table has push, remove, removeAt, clear, removeIf, contains, containsKey, length and fields (got '${member.name}'); entries are read with table.name or table[\"name\"].");
+    }
+    for (a in call.args) {
+        if (a.ty == null) { check(a, null, P_TEMP); }
+    }
+    return T_ERROR;
+}
+
+/** Values contains() can find in an Any: compared by value (numbers, bool, String) or identity (objects). */
+function comparableInAny(type: Type): bool {
+    let inner: Type = isOpt(type) ? type.elem! : type;
+    return type.kind == TypeKind.Null || isNumeric(inner) || inner == T_BOOL || inner == T_STRING || isClass(inner);
+}
+
+/** Elements contains() can compare with ==. */
+function comparable(type: Type): bool {
+    return isNumeric(type) || type == T_BOOL || type == T_STRING || isClass(type) || (isEnumT(type) && enumSimple(enumOf(type.name)!));
+}
+
+function markGlobalMutation(obj: Expr in default): void {
+    let root: Symbol? = rootSymbol(obj);
+    if (root != null && root.kind == SymbolKind.Global) { root.mutatedGlobal = true; }
+}
+
+function recordValueMutation(obj: Expr in default, line: int32): void {
+    let root: Symbol? = rootSymbol(obj);
+    if (root == null || !(root.kind == SymbolKind.Local || root.kind == SymbolKind.Param || root.kind == SymbolKind.Self)) { return; }
+    if (isReference(typeOf(obj)) || throughRef(obj)) { return; }
+    mutations.push(Mutation { line, root, frame: frameTop - 1, kind: MutK.Push } in default);
+}
+
+function throughRef(target: Expr): bool {
+    let o: Expr? = objectOf(target);
+    while (o != null) {
+        if (isReference(typeOf(o))) { return true; }
+        o = objectOf(o);
+    }
+    return false;
+}

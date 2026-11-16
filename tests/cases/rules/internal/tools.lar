@@ -1,0 +1,4 @@
+// tools may import its internal parts.
+import tools.internal.secret as Secret;
+
+public function shown(): int32 { return Secret.secret(); }

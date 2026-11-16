@@ -1,0 +1,57 @@
+// The rules of semantics.rules: each one has a case here that breaks it, and its error says its id.
+import std.io.files as Files;
+import std.io { IoError };
+import std.test { check, checkText };
+import tests.support.compiler { checked, failsInAProgram, failsWith };
+
+/** The rules these tests break: one case each, below. */
+const TESTED: String = "std-own-import internal-import no-c-outside-std body-needed language-type";
+
+// Every rule in rules.lar has its case.
+test function everyRuleHasACase(): void throws IoError {
+    let source: String = Files.readString("src/compiler/semantics/rules.lar");
+    let mark: String = "override function id(): String { return \"";
+    let ids: String[*] = [];
+    let at: int32? = source.indexOf(mark);
+    while (at != null) {
+        let start: int32 = at! + mark.length;
+        let end: int32 = source.indexOf("\"", start) ?? start;
+        ids.push(source.substring(start, end).clone());
+        at = source.indexOf(mark, end);
+    }
+    checkText(TESTED, ids.join(" "));
+}
+
+test function stdOwnImport(): void {
+    failsWith("""
+        import std.os.process.internal { Child };
+        function main(): int32 { return 0; }
+        """, "error[std-own-import] 'std.os.process.internal' is a part of std for std itself");
+}
+
+test function internalImport(): void {
+    let errors: String = checked("tests/cases/rules/internal/main.lar");
+    check(errors.contains("error[internal-import] 'tools.internal.secret' is internal to tools: only its modules import it."), errors);
+    check(!errors.contains("tools.lar"), "tools itself imports its internal part");
+}
+
+test function noCOutsideStd(): void {
+    failsInAProgram("""
+        ccode { int x; }
+        function main(): int32 { return 0; }
+        """, "error[no-c-outside-std] ccode is only for the standard library");
+}
+
+test function bodyNeeded(): void {
+    failsWith("""
+        function later(): int32;
+        function main(): int32 { return later(); }
+        """, "error[body-needed] Function 'later' needs its body");
+}
+
+test function languageType(): void {
+    failsWith("""
+        type Mine { }
+        function main(): int32 { return 0; }
+        """, "error[language-type] 'type Mine { }' is a type of the language");
+}

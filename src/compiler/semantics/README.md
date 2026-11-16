@@ -1,0 +1,349 @@
+# semantics: what the program means
+
+What goes in: the `Program` of the main file. What comes out: every module linked into one `Program`,
+the rules of the language checked, and every expression with its type, its region (where its data lives)
+and its symbol; or the errors that say why not.
+
+- `linker.lar` (the pass Link, and Assemble): reads the modules the program imports (`import a.b` is
+  `a/b.lar`, `std.x` is std's), in an order where each comes after the ones it uses, and gives each
+  module the names it sees. Assemble puts their declarations together with their C names
+  (`geo.shapes.area` is `geo__shapes__area`).
+- `rules.lar` (the pass CheckRules): the rules about modules and what they declare, one object each, with
+  an id that its errors say (`error[std-own-import]`). Each has a case that breaks it in
+  `tests/language/rules_test.lar`.
+- `analyzer.lar` and `analyzer/`, `expressions.lar` and `expressions/` (the pass Analyze): types, then
+  regions, then threads. The ideas the code does not show at once:
+  - A value lives in a **region**: a memory of a block, of a statement, of the caller (what a function
+    returns), or a named memory. A value may point only to what lives as long as it (`flow.lar`).
+  - A function's result: does it create it (then the caller says where), or does it return something
+    that already existed (`flow.lar`, `returnsData`).
+  - What a thread may share: values, and `synchronized` objects (`threads.lar`).
+- `types.lar` is what all of them share: `Type`, `Region`, `Symbol`, `Scope`, and the tables of what a
+  program declares.
+- The state of a compilation still lives in variables of these modules; it moves into
+  `pipeline.Compilation` one part at a time.
+
+## Its API
+
+<!-- api: written by tools/reference.py from the code; not edited by hand -->
+
+- **`semantics.analyzer`**: semantic analysis (Analyzer.java), part 1: declarations, statements, regions and the final passes
+  - `class Diag`
+  - `function error(line: int32, msg: String): void`
+  - `function wrong(line: int32, msg: String): Type`: Reports an error where a type is expected: the result is the error type
+  - `function bindingSymbol(name: String in default, type: Type in default, line: int32, region: Region in default): Symbol`: A symbol for the name after `is`, declared later where the test is true (see narrow)
+  - `class HandledSet`
+  - `class FrameState`
+  - `enum MutK`
+  - `class Mutation`
+  - `enum DefK`
+  - `class Deferred`
+  - `class ThreadRun`
+  - `function frame(): Frame`
+  - `function state(): FrameState`
+  - `function analyze(program: Program in default): void`
+  - `function pushFrame(kind: FrameKind, ret: Type? in default, throwsType: Type? in default, lambda: LambdaInfo? in default,`
+  - `function popFrame(restore: Scope in default): void`
+  - `function pushScope(): void`
+  - `function popScope(): void`
+  - `function block(): Scope`: The block the current statement is in (names are declared there, not in the statement)
+  - `function declare(name: String in default, kind: SymbolKind, type: Type in default, line: int32): Symbol`
+  - `function lookup(name: String): Symbol?`
+  - `function narrowedType(symbol: Symbol): Type?`
+  - `function noteCapture(symbol: Symbol in default, line: int32): void`: Records that the current lambda (and every lambda in between) captures `s`
+- **`semantics.analyzer.classes`**: classes and interfaces: fields, methods, what a class inherits and what it implements.
+  - `function validateClasses(): void`
+  - `function validateInterfaces(): void`
+  - `function checkFieldDefaults(): void`
+  - `function checkMain(): void`
+- **`semantics.analyzer.compact`**: Memory.compact: where a memory may be compacted.
+  - `class CompactCall`: A call to Memory.compact(m): its memory, and the variables that could be seen where it is
+  - `class Mixing`: Where data of another memory of the same block was stored in a memory with a name
+  - `function noteCompact(c: Call in default, m: Symbol in default): void`: Memory.compact(m) here: m must belong to this function, and the call cannot be inside a for over data
+  - `function resolveRegions(): void`
+  - `function objectOf(e: Expr): Expr?`: The object of a field or element access: a.b and a[i] give a
+  - `function throughReference(target: Expr): bool`: Is the target reached through a class object or list (shared, not a captured copy)?
+  - `function isReference(type: Type): bool`
+  - `function storageRegion(obj: Expr in default): Region`: Where the fields or elements of `obj` are stored
+  - `function placeFor(obj: Expr in default): Place`: The memory new data should go to when stored inside `obj`
+  - `function rootSymbol(e: Expr in default): Symbol?`
+  - `function isLValue(e: Expr): bool`
+  - `function analyzeReturn(r: ReturnStmt in default): void`
+  - `function analyzeIf(ifStmt: IfStmt in default): void`
+- **`semantics.analyzer.declarations`**: what a program declares: the system of each class, C declarations, constants and signatures.
+  - `function collect(program: Program in default): void`
+  - `function constants(program: Program in default): void`
+  - `function constIntText(v: ConstVal): String`
+  - `function signatures(program: Program in default): void`
+  - `function externValue(v: ExternValueDecl in default): void`: extern const NAME: T; extern let NAME: T; a name C has (a constant, a macro, a global)
+  - `function isByteArrayRef(typeRef: TypeRef): bool`: byte[N], byte[], byte[*] as written
+- **`semantics.analyzer.flow`**: what a function's result may point to, and whether the function creates it.
+  - `function flowSummaries(): void`
+  - `function builtinFresh(name: String): bool`: Built-in methods whose result is new data, or a plain value: their receiver can be a temporary
+  - `function viewMethod(name: String): bool`: May a method call's result point to its receiver?
+  - `function creatingMethod(name: String): bool`: Some method of that name may create its result
+  - `function callMemory(functionInfo: FunctionInfo): bool`: An extern whose first parameter is a memory: it creates in the memory of the call, which is not written
+  - `function returnsArgs(params: Param[*] in default, body: Stmt[*], method: bool): bool`: May the result point to data of a parameter (or of self)? On the safe side: the regions still check every return
+  - `function valuePlace(name: String, global: bool): Place`: Where a variable's value is created: the caller's memory if it is returned, else its block's (globals: forever)
+  - `function blockRegion(b: Scope in default): Region`: The memory of a block (created the first time something lives in it)
+  - `function returnedNames(body: Stmt[*]): Any`: The locals whose data may end up in the result: they are created where the caller says
+  - `function requireOutlives(value: Expr in default, storage: Region in default, line: int32, target: String): void`
+  - `function lifetime(value: Region in default, storage: Region in default, line: int32, msg: String in default): void`: value must live at least as long as storage; checked now, or at the end if a variable is involved
+  - `function lifetimeOf(value: Expr in default, storage: Region in default, line: int32, msg: String in default, role: String): void`: The same, knowing the expression and what it is for (a field of a literal, a thrown error), to name the culprit
+  - `function mustLiveForever(value: Region in default, line: int32, msg: String in default): void`
+  - `function runCheck(deferred: Deferred in default, resolve: bool): void`
+- **`semantics.analyzer.narrowing`**: where a T? variable is known not to be null.
+  - `function nonNull(c: Expr in default, onTrue: bool): Symbol[*]`: The optional locals that are not null when `c` evaluates to `onTrue` (and the names after `is`)
+  - `function hasSymbol(list: Symbol[*], symbol: Symbol): bool`
+  - `function narrow(syms: Symbol[*] in default): void`: Narrows in the current scope; an assignment to the variable ends it (see analyzeStmts)
+  - `function unnarrow(syms: Symbol[*]): void`
+  - `function leaves(body: Stmt[*]): bool`: Does the block always leave (return, throw, break, continue)?
+  - `function reassignedNames(body: Stmt[*] in default): Any`: The variables a body assigns somewhere (not inside lambdas)
+  - `function assigns(body: Stmt[*] in default, name: String): bool`
+  - `function analyzeFor(f: ForStmt in default): void`
+  - `function analyzeThrow(t: ThrowStmt in default): void`
+  - `function requireHandled(enumInfo: EnumInfo, line: int32, what: String): void`
+  - `function analyzeYield(yieldStmt: YieldStmt in default): void`
+  - `function analyzeTry(t: TryStmt in default): void`
+- **`semantics.analyzer.order`**: orders that must exist: globals get their values in order, C structs are defined before they are embedded.
+  - `function checkGlobalOrder(initializers: Owner[*] in default): void`: The initial value of a global, and every function it calls however deep, cannot use a global that is initialized after it (or itself): it would find it without its value
+  - `function computeTypeOrder(): void`
+- **`semantics.analyzer.statements`**: the bodies of functions and methods, statement by statement.
+  - `function analyzeFunction(functionInfo: FunctionInfo in default): void`
+  - `function analyzeMethod(method: MethodInfo in default, selfType: Type in default): void`
+  - `function declareParam(p: Param in default, type: Type in default, memory: bool): Symbol`
+  - `function livesHint(value: Region, storage: Region): String`: When a parameter is stored somewhere longer-lived, the parameter can say so: `k: Node in p`
+  - `function checkReturns(body: Stmt[*] in default, ret: Type, line: int32, what: String): void`
+  - `function alwaysExits(body: Stmt[*]): bool`
+  - `function analyzeStmts(body: Stmt[*] in default): void`
+  - `function analyzeBlock(body: Stmt[*] in default): void`
+  - `function requireBool(cond: Expr in default, what: String): void`
+  - `function analyzeVarDecl(v: VarDecl in default): void`
+  - `function cStructField(field: FieldInfo): bool`: A field of a C struct (extern type X = struct { 
+- **`semantics.analyzer.threads`**: what a thread can share.
+  - `function currentOwner(): Owner?`
+  - `function edge(from: Owner? in default, to: Owner? in default): void`
+  - `function useGlobal(symbol: Symbol in default, line: int32): void`
+  - `function callTargets(receiver: Type, method: MethodInfo in default): MethodInfo[*]`: Every method a call can reach: overrides in subclasses, or the implementations of an interface method
+  - `function sendable(type: Type in default): bool`: Can a value of this type be used by two threads at once without a lock?
+  - `function stateFields(name: String in default): String`: The fields that make objects of class `name` changeable, as text ('a', 'b'), or "" when they have none: an object with no fields, in its class or in any class that extends it, has no state that two threads could change, so it is shared like a value (a set of routes, a strategy)
+  - `function checkSynchronizedClasses(): void`
+  - `function checkThreadSafeLambda(lambdaInfo: LambdaInfo in default, line: int32): void`: A lambda given where a `thread safe` function is expected: checked like the run of a Thread
+  - `function checkThreadRun(literal: ObjectLit in default): void`: Thread { run: 
+  - `function checkThreads(): void`
+- **`semantics.expressions`**: semantic analysis (Analyzer.java), part 2: types as written, constants, expressions, conversions, calls, switch and patterns.
+  - `function resolveTop(typeRef: TypeRef in default, ctx: int32, what: String): Type`
+  - `function resolveValue(typeRef: TypeRef in default, what: String): Type`
+  - `function resolveType(typeRef: TypeRef in default): Type`
+  - `function note(type: Type in default): void`: Registers a type (and its parts) so the generator emits it
+  - `function noted(type: Type in default): Type`: Notes that the generated C needs the type, and returns it
+  - `function check(e: Expr in default, expected: Type? in default, place: Place in default): Type`
+  - `function checkIntValue(v: ConstVal, line: int32, expected: Type? in default): Type`: An integer literal where `expected` is wanted
+  - `function lookupIn(sc: Scope in default, name: String): Symbol?`
+  - `function variantFieldNames(variant: VariantInfo in default): String`
+  - `function typeNamed(e: Expr): String`: The type an expression names (Order, String, a type of another module), or ""
+  - `function enumNamed(e: Expr): EnumInfo?`
+  - `function memoryNamed(e: Expr): Symbol?`: The memory a name refers to, if it is one
+  - `function isProperty(type: Type in default, name: String): bool`: A value read without parentheses: the length of a String, an array, a list or an Any, or a native let
+  - `function fieldOf(type: Type in default, name: String): FieldInfo?`
+  - `function methodOf(type: Type in default, name: String): MethodInfo?`: A method of a struct, class or interface (not an operator)
+  - `function describeExpr(e: Expr): String`
+  - `function resolvePlacement(p: Placed in default): Place?`: The Place written after `in`, or null after reporting an error
+  - `function resolveMemory(e: Expr in default): Symbol?`: `in m`: m must be a memory (a heap memory, or an empty byte[N] that becomes one)
+- **`semantics.expressions.calls`**: calls: functions, methods, constructors and what the language has built in.
+  - `function checkAllArgs(call: Call in default): Type`
+  - `function checkCall(call: Call in default, expected: Type? in default, place: Place in default): Type`
+  - `function all(n: int32, b: bool): bool[*]`: n times b
+  - `function madeBy(e: Expr in default, method: MethodInfo in default, place: Place in default): Region`: What a method call creates (only if some method of that name may create its result)
+  - `function placedResult(e: Expr in default, ret: Type in default, place: Place in default): Region`: A result with data, created where the expression says (like a call's)
+  - `function same(call: Call in default, place: Place in default): Place[*]`: The same place for every argument
+- **`semantics.expressions.constants`**: the values known when compiling.
+  - `class ConstVal`
+  - `function literalValue(n: IntLit in default, negate: bool): ConstVal`: The value of an integer literal, negated or not
+  - `function intFits(i: int64, big: bool, huge: bool, type: Type): bool`: Integer values: does it fit in t?
+  - `function evalConst(e: Expr in default): ConstVal?`: int64, float64, bool or String (raw text), or null after reporting an error
+  - `function evalSize(e: Expr in default): int64`
+- **`semantics.expressions.conversions`**: when a value of one type can be used as another: coercion and conversions.
+  - `function typeOf(e: Node): Type`
+  - `function regionOf(e: Node): Region`
+  - `function setRegion(e: Node in default, r: Region in default): void`
+  - `function placeRegion(p: Place in default): Region`
+  - `function hasRefs(type: Type): bool`
+  - `function namedHasRefs(name: String, namedKind: NamedKind): bool`: Has a struct or an enum (by name) references to memory?
+  - `function conversionOf(kind: ConversionKind, from: Type in default, to: Type in default): Conversion`
+  - `function coerce(e: Expr in default, target: Type in default, place: Place in default, ctx: String in default): Type`: Checks `e` where a value of type `target` is needed, applying implicit conversions
+  - `function conversion(from: Type in default, to: Type in default): Conversion?`
+- **`semantics.expressions.literals`**: lambdas, objects, lists, tables and casts.
+  - `function checkLambda(l: Lambda in default, expected: Type? in default, place: Place in default): Type`
+  - `function calledReference(c: Call in default, ref: Call in default): Type`: pepito::run(): the parentheses call it; the reference is written without them
+  - `function refText(call: Call): String`: How a method reference was written: Pages::show
+  - `function checkObjectLit(literal: ObjectLit in default, expected: Type? in default, place: Place in default): Type`
+  - `function checkArrayLit(a: ArrayLit in default, expected: Type? in default, place: Place in default): Type`
+  - `function checkCast(c: Cast in default): Type`
+  - `function checkWith(facts: Symbol[*] in default, e: Expr in default, expected: Type? in default, place: Place in default): Type`: Checks e where the facts hold (the right side of && and ||, a side of ?:)
+  - `function coerceWith(facts: Symbol[*] in default, e: Expr in default, target: Type in default, place: Place in default, ctx: String in default): Type`
+- **`semantics.expressions.operators`**: ? :, is, and the unary and binary operators.
+  - `function checkTernary(t: Ternary in default, expected: Type? in default, place: Place in default): Type`: c ? a : b
+  - `function checkIs(isExpr: IsExpr in default): Type`: x is Dog [d]: the binding is declared where the test is known to be true (see facts)
+  - `function related(classInfo: ClassInfo in default, type: Type in default): bool`: Can a value of class or interface type `t` be a `cls`?
+  - `function withoutThreadSafe(type: Type in default): Type`: A type without `thread safe` (also inside an optional), or the type itself
+  - `function optional(type: Type in default): Type`
+  - `function checkUnary(unary: Unary in default, expected: Type? in default, place: Place in default): Type`
+  - `function checkBinary(binary: Binary in default, expected: Type? in default, place: Place in default): Type`
+- **`semantics.expressions.switches`**: switch: its patterns and what they cover.
+  - `function analyzeSwitch(switchExpr: SwitchExpr in default, isExpr: bool, expected: Type? in default, place: Place in default): Type`
+- **`semantics.linker`**: modules (Linker.java)
+  - `class Module`
+  - `function inTarget(platform: String): bool`: Whether what is for `platform` ("": every one) is for the target
+  - `function link(mainShown: String in default, mainSource: String in default, sourceDir: String in default, std: String in default, mainPath: String in default): void`: Link: reads the main file and every module it imports (parsing each), in an order where a module comes after the ones it uses, and gives each the names it sees
+  - `function flushRuleErrors(): void`: The errors said so far, into linkErrors (each once)
+  - `function linkedModules(): Module[*]`: The modules linked, each after the ones it imports
+  - `function declarationsOf(module: Module in default): Node[*]`: The declarations of a module, as written (before assemble gives them their C names)
+  - `function linkedMainFile(): String`: The main file linked
+  - `function importsOf(module: Module in default): ImportDecl[*]`: The imports of a module
+  - `function ruleError(line: int32, rule: String, msg: String): void`: A broken rule of the language: its message, with the rule's id (semantics.rules)
+  - `function assemble(): Program`: Assemble: every module's declarations, with their C names, in one Program; the errors go to linkErrors
+  - `function readSource(path: String): String?`: The text of a file, or null if it cannot be read
+  - `function isStd(path: String): bool`
+  - `function unsafeModule(module: Module in default): bool`: Whether the module may have native interfaces of its own (unsafe_c of its project or library)
+  - `function sourceOf(module: Module in default): String`: Who a module's C is from: its library, or the project
+  - `function trusted(module: Module in default, mainPath: String): bool`: Whether a module may have C: the standard library's (the installed one, or the copy being edited), and the language's
+  - `function libraryOf(path: String): int32`: The library a module belongs to (its name, or <name>.<part>): its index, or -1
+  - `function stdFileOpened(module: Module in default): bool`: A file of std opened alone (the editor, larimar check std/x.lar): it is std, whatever its module path
+  - `function isLanguage(module: Module in default): bool`: std.lang (or std/lang.lar opened alone): what has no body there the compiler writes
+  - `function decode(msg: String): String`: "[Line 2000005]" -> "[src/geo.lar:5]", "line 7" -> "main.lar:7", and geo__Shape -> geo.Shape
+  - `function namesOfFile(index: int32): Any`: What a file can name: name -> its name after linking (its own, imported and the language's)
+  - `function isLangHelper(name: String): bool`: A name std.lang keeps to itself (its helpers): every file sees it, but the editor does not offer it
+  - `function aliasesOfFile(index: int32): Any`: The modules a file imports with a name: alias -> module path ("geo.shapes")
+  - `function publicsOfModule(path: String): Any`: The public names of a module, each with its name after linking
+  - `function fileOfModule(path: String): String`: The file of a module, from its path ("geo.shapes"), or ""
+- **`semantics.rules`**: the rules of the language that are checked on the linked modules, one object each, listed by languageRules()
+  - `interface Rule`: A rule of the language
+  - `function languageRules(): Rule[*]`: Every rule CheckRules asks, in this order
+  - `function ruleIds(): String[*]`: The ids of every rule (for the test that each one has a case that breaks it)
+  - `function stdOwn(path: String): bool`: A module of std that only std imports (std.net.posix, std.os.process.internal)
+  - `function stdPublicOf(path: String): String`: std.net.posix -> std.net: where what it does is given
+  - `function internalOwner(path: String): String?`: What is inside an `internal` folder (a.b.internal.c) is imported only by the modules of its folder (a.b...)
+- **`semantics.types`**: what the analyzer knows
+  - `enum TypeKind`
+  - `enum NamedKind`
+  - `enum ArrayKind`
+  - `class Type`
+  - `function primByName(name: String): Type?`: A built-in type by name (uint8 is byte), or null
+  - `function isPrimName(name: String): bool`
+  - `function named(name: String in default, namedKind: NamedKind): Type`
+  - `function functionTypeOf(params: Type[*] in default, ret: Type in default, safe: bool): Type`
+  - `function hasThreadSafe(type: Type in default): bool`: Is there a `thread safe` function type in t (itself, or the element of an optional or an array)?
+  - `function cTypeOf(type: Type in default): Type`: The type C sees: t without `thread safe` (the same closure type), also inside optionals and arrays
+  - `function arrayTypeOf(elem: Type in default, arrayKind: ArrayKind, size: int64): Type`
+  - `function optionalOf(inner: Type in default): Type`
+  - `function pointerTo(inner: Type in default): Type`: T*: a C pointer (only to numbers, C structs, extern types and other pointers)
+  - `function isPtr(type: Type): bool`
+  - `function bits(type: Type): int32`
+  - `function isFloat(type: Type): bool`
+  - `function isInteger(type: Type): bool`
+  - `function isNumeric(type: Type): bool`
+  - `function isSigned(type: Type): bool`
+  - `function isError(type: Type): bool`
+  - `function isClass(type: Type): bool`
+  - `function isStruct(type: Type): bool`
+  - `function isInterface(type: Type): bool`
+  - `function isEnumT(type: Type): bool`
+  - `function isExternT(type: Type): bool`
+  - `function isByteArray(type: Type): bool`
+  - `function isOpt(type: Type): bool`
+  - `function isArray(type: Type, arrayKind: ArrayKind): bool`
+  - `function optIsPointer(o: Type): bool`: An optional that is a pointer in C (null is NULL): classes, extern types, T[*]
+  - `function minOf(type: Type): int64`: The smallest and largest value of an integer type; for uint64 the largest is kept apart
+  - `function maxOf(type: Type): int64`
+  - `function maxText(type: Type): String`: "the largest value" as text, for messages
+  - `enum RegionKind`
+  - `class Region`
+  - `function rStaticMemory(symbol: Symbol in default): Region`: The region of a global memory: static like R_STATIC, but it keeps the memory's name for messages
+  - `function rMemory(symbol: Symbol in default): Region`: The region of a local memory with a name
+  - `function rCaller(p: Symbol in default): Region`
+  - `function rResult(r: Symbol in default): Region`: The memory a caller gives for the result of a function (or method, or lambda)
+  - `function rLocal(s: Scope in default, label: String in default): Region`
+  - `function variableRegion(v: Symbol in default): Region`
+  - `function symbolic(region: Region): bool`
+  - `function resolveRegion(region: Region in default): Region`: Replaces Var parts with the regions computed for those variables (Symbol.resolved)
+  - `function outlives(a: Region, b: Region): bool`: Does data in `a` live at least as long as data in `b`? (both concrete)
+  - `function meet(a: Region in default, b: Region in default): Region`: The shorter-lived of two regions
+  - `function sameRegion(a: Region, b: Region): bool`
+  - `function describe(region: Region): String`
+  - `class Scope`
+  - `function newScope(parent: Scope? in default, frame: Frame in default): Scope`
+  - `function isAncestorOrSelf(a: Scope, s: Scope): bool`
+  - `enum FrameKind`
+  - `class Owner`: What a body can reach, for the thread checks: the globals it uses and what it calls
+  - `function newOwner(): Owner`
+  - `class Frame`
+  - `enum SymbolKind`
+  - `enum MemoryKind`
+  - `enum ConstantKind`
+  - `class Symbol`
+  - `function isMemory(symbol: Symbol): bool`
+  - `function isCReserved(name: String): bool`
+  - `function ascii(name: String): String`: C99 identifiers are ASCII: año -> a_u00f1o
+  - `function escapeName(name: String): String`
+  - `class FieldInfo`
+  - `class FunctionInfo`
+  - `class ExternTypeInfo`: A type that comes from C: opaque (void*), a C type (c "T") or a pointer to a C function (sig)
+  - `class MethodInfo`
+  - `function isMemParam(flags: bool[*], i: int32): bool`
+  - `function cSuffix(method: MethodInfo): String`
+  - `class StructInfo`
+  - `class ClassInfo`
+  - `class InterfaceInfo`
+  - `class VariantInfo`
+  - `class EnumInfo`
+  - `class LambdaInfo`
+  - `function bytesOf(t: Type): int64`: How many bytes a value of the type takes in C, roughly (enough to tell a small value from a big one)
+  - `function hasBigCaptures(lambdaInfo: LambdaInfo): bool`: A lambda whose captures are too big to carry in every closure of its type
+  - `function hasCapture(lambdaInfo: LambdaInfo, symbol: Symbol): bool`
+  - `enum PlaceKind`: Where an allocating expression puts its data
+  - `class Place`
+  - `function placeOf(kind: PlaceKind, expr: Expr? in default): Place`
+  - `enum ConversionKind`
+  - `class Conversion`
+  - `enum CallK`
+  - `enum BuiltinKind`
+  - `class CallInfo`
+  - `enum MemberKind`
+  - `class MemberInfo`
+  - `enum PatK`
+  - `class PatternInfo`
+  - `class SwitchInfo`
+  - `class ForInfo`
+  - `class CatchInfo`
+  - `function structOf(name: String): StructInfo?`
+  - `function classOf(name: String): ClassInfo?`
+  - `function interfaceOf(name: String): InterfaceInfo?`
+  - `function enumOf(name: String): EnumInfo?`
+  - `function functionOf(name: String): FunctionInfo?`
+  - `function isExternTypeName(name: String): bool`
+  - `function isResource(type: Type): bool`: An extern type declared `released by`: a resource that lives in a memory
+  - `function platformCondition(p: String): String`: The C condition of a platform, for #if
+  - `function platformWithin(inner: String, outer: String): bool`: Code that runs only on `inner` also runs where `outer` holds? (macos and linux are unix)
+  - `function nativeOwner(owner: String): Type`: The type whose methods a native type declares: one the compiler knows (String), or one of C
+  - `function externInfoOf(name: String): ExternTypeInfo?`
+  - `function externStructC(type: Type): String`: The C struct a `native struct X { 
+  - `function isExternStruct(type: Type): bool`
+  - `function isCValue(type: Type): bool`: What can cross to C and back: numbers, bool, String (const char*), extern types, C structs and C pointers
+  - `function pointable(type: Type): bool`: What a C pointer can point to: numbers, bool, C structs, extern types that are not resources, pointers
+  - `function structMethod(structInfo: StructInfo, n: String, op: bool, arity: int32): MethodInfo?`
+  - `function structField(structInfo: StructInfo, n: String): FieldInfo?`
+  - `function interfaceMethod(interfaceInfo: InterfaceInfo, n: String): MethodInfo?`
+  - `function variantOf(enumInfo: EnumInfo, name: String): VariantInfo?`: A variant by name; a module prefix never names a variant
+  - `function enumSimple(enumInfo: EnumInfo): bool`
+  - `function parentOf(classInfo: ClassInfo): ClassInfo?`
+  - `function syncField(classInfo: ClassInfo in default): String`: Where the lock of a synchronized class is in its C struct: the first synchronized class of the chain has it
+  - `function chain(name: String in default): ClassInfo[*]`: Root first; safe on broken hierarchies
+  - `function findField(cls: String in default, field: String): FieldInfo?`
+  - `function findMethod(cls: String in default, name: String, op: bool, arity: int32): MethodInfo?`: The most derived definition (operators match by arity)
+  - `function allFields(cls: String in default): FieldInfo[*]`
+  - `function isSubclass(sub: String in default, sup: String): bool`
+  - `function implementor(cls: String in default, iface: String): String`: The ancestor (or the class itself) that declares `implements iface`, or ""
+  - `function classDepth(name: String in default): int32`
+
+<!-- /api -->

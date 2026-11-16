@@ -6,65 +6,67 @@ Cada módulo de `src/`, con su descripción y **todas** sus funciones, clases y 
 
 Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver la guía de mantenimiento. Aquí está el detalle.
 
-**49 módulos, 1057 funciones y métodos** (541 con comentario, 516 sin él).
+**51 módulos, 1108 funciones y métodos** (563 con comentario, 545 sin él).
 
 ## Módulos
 
-- [`src/main.lar`](#main) — 41 funciones
-- [`src/syntax/ast.lar`](#syntax-ast) — 6 funciones
-- [`src/syntax/lexer.lar`](#syntax-lexer) — 26 funciones
-- [`src/syntax/parser.lar`](#syntax-parser) — 21 funciones
-- [`src/syntax/parser/declarations.lar`](#syntax-parser-declarations) — 15 funciones
-- [`src/syntax/parser/expressions.lar`](#syntax-parser-expressions) — 22 funciones
-- [`src/syntax/parser/natives.lar`](#syntax-parser-natives) — 17 funciones
-- [`src/syntax/parser/statements.lar`](#syntax-parser-statements) — 8 funciones
-- [`src/syntax/parser/types.lar`](#syntax-parser-types) — 2 funciones
-- [`src/semantics/analyzer.lar`](#semantics-analyzer) — 17 funciones
-- [`src/semantics/analyzer/classes.lar`](#semantics-analyzer-classes) — 11 funciones
-- [`src/semantics/analyzer/compact.lar`](#semantics-analyzer-compact) — 15 funciones
-- [`src/semantics/analyzer/declarations.lar`](#semantics-analyzer-declarations) — 28 funciones
-- [`src/semantics/analyzer/flow.lar`](#semantics-analyzer-flow) — 42 funciones
-- [`src/semantics/analyzer/narrowing.lar`](#semantics-analyzer-narrowing) — 15 funciones
-- [`src/semantics/analyzer/order.lar`](#semantics-analyzer-order) — 8 funciones
-- [`src/semantics/analyzer/statements.lar`](#semantics-analyzer-statements) — 20 funciones
-- [`src/semantics/analyzer/threads.lar`](#semantics-analyzer-threads) — 13 funciones
-- [`src/semantics/expressions.lar`](#semantics-expressions) — 28 funciones
-- [`src/semantics/expressions/calls.lar`](#semantics-expressions-calls) — 31 funciones
-- [`src/semantics/expressions/constants.lar`](#semantics-expressions-constants) — 9 funciones
-- [`src/semantics/expressions/conversions.lar`](#semantics-expressions-conversions) — 13 funciones
-- [`src/semantics/expressions/literals.lar`](#semantics-expressions-literals) — 15 funciones
-- [`src/semantics/expressions/operators.lar`](#semantics-expressions-operators) — 16 funciones
-- [`src/semantics/expressions/switches.lar`](#semantics-expressions-switches) — 10 funciones
-- [`src/semantics/linker.lar`](#semantics-linker) — 69 funciones
-- [`src/semantics/types.lar`](#semantics-types) — 84 funciones
-- [`src/codegen/debugmap.lar`](#codegen-debugmap) — 10 funciones
-- [`src/codegen/expressions.lar`](#codegen-expressions) — 51 funciones
-- [`src/codegen/expressions/calls.lar`](#codegen-expressions-calls) — 17 funciones
-- [`src/codegen/expressions/clone.lar`](#codegen-expressions-clone) — 10 funciones
-- [`src/codegen/expressions/lambdas.lar`](#codegen-expressions-lambdas) — 10 funciones
-- [`src/codegen/expressions/operators.lar`](#codegen-expressions-operators) — 12 funciones
-- [`src/codegen/expressions/patterns.lar`](#codegen-expressions-patterns) — 2 funciones
-- [`src/codegen/expressions/strings.lar`](#codegen-expressions-strings) — 8 funciones
-- [`src/codegen/gen.lar`](#codegen-gen) — 21 funciones
-- [`src/codegen/gen/classes.lar`](#codegen-gen-classes) — 28 funciones
-- [`src/codegen/gen/statements.lar`](#codegen-gen-statements) — 31 funciones
-- [`src/codegen/gen/types.lar`](#codegen-gen-types) — 12 funciones
-- [`src/codegen/prune.lar`](#codegen-prune) — 22 funciones
-- [`src/project/cc.lar`](#project-cc) — 11 funciones
-- [`src/project/libraries.lar`](#project-libraries) — 4 funciones
-- [`src/project/services.lar`](#project-services) — 12 funciones
-- [`src/project/testing.lar`](#project-testing) — 27 funciones
-- [`src/editor/dap.lar`](#editor-dap) — 62 funciones
-- [`src/editor/docstore.lar`](#editor-docstore) — 2 funciones
-- [`src/editor/ide.lar`](#editor-ide) — 74 funciones
-- [`src/editor/lsp.lar`](#editor-lsp) — 21 funciones
-- [`src/editor/session.lar`](#editor-session) — 8 funciones
+- [`src/compiler/main.lar`](#main) — 38 funciones
+- [`src/compiler/pipeline.lar`](#pipeline) — 23 funciones
+- [`src/compiler/syntax/ast.lar`](#syntax-ast) — 6 funciones
+- [`src/compiler/syntax/lexer.lar`](#syntax-lexer) — 26 funciones
+- [`src/compiler/syntax/parser.lar`](#syntax-parser) — 21 funciones
+- [`src/compiler/syntax/parser/declarations.lar`](#syntax-parser-declarations) — 15 funciones
+- [`src/compiler/syntax/parser/expressions.lar`](#syntax-parser-expressions) — 22 funciones
+- [`src/compiler/syntax/parser/natives.lar`](#syntax-parser-natives) — 17 funciones
+- [`src/compiler/syntax/parser/statements.lar`](#syntax-parser-statements) — 8 funciones
+- [`src/compiler/syntax/parser/types.lar`](#syntax-parser-types) — 2 funciones
+- [`src/compiler/semantics/analyzer.lar`](#semantics-analyzer) — 17 funciones
+- [`src/compiler/semantics/analyzer/classes.lar`](#semantics-analyzer-classes) — 11 funciones
+- [`src/compiler/semantics/analyzer/compact.lar`](#semantics-analyzer-compact) — 15 funciones
+- [`src/compiler/semantics/analyzer/declarations.lar`](#semantics-analyzer-declarations) — 28 funciones
+- [`src/compiler/semantics/analyzer/flow.lar`](#semantics-analyzer-flow) — 42 funciones
+- [`src/compiler/semantics/analyzer/narrowing.lar`](#semantics-analyzer-narrowing) — 15 funciones
+- [`src/compiler/semantics/analyzer/order.lar`](#semantics-analyzer-order) — 8 funciones
+- [`src/compiler/semantics/analyzer/statements.lar`](#semantics-analyzer-statements) — 20 funciones
+- [`src/compiler/semantics/analyzer/threads.lar`](#semantics-analyzer-threads) — 13 funciones
+- [`src/compiler/semantics/expressions.lar`](#semantics-expressions) — 28 funciones
+- [`src/compiler/semantics/expressions/calls.lar`](#semantics-expressions-calls) — 31 funciones
+- [`src/compiler/semantics/expressions/constants.lar`](#semantics-expressions-constants) — 9 funciones
+- [`src/compiler/semantics/expressions/conversions.lar`](#semantics-expressions-conversions) — 13 funciones
+- [`src/compiler/semantics/expressions/literals.lar`](#semantics-expressions-literals) — 15 funciones
+- [`src/compiler/semantics/expressions/operators.lar`](#semantics-expressions-operators) — 16 funciones
+- [`src/compiler/semantics/expressions/switches.lar`](#semantics-expressions-switches) — 10 funciones
+- [`src/compiler/semantics/linker.lar`](#semantics-linker) — 72 funciones
+- [`src/compiler/semantics/rules.lar`](#semantics-rules) — 26 funciones
+- [`src/compiler/semantics/types.lar`](#semantics-types) — 87 funciones
+- [`src/compiler/codegen/debugmap.lar`](#codegen-debugmap) — 10 funciones
+- [`src/compiler/codegen/expressions.lar`](#codegen-expressions) — 52 funciones
+- [`src/compiler/codegen/expressions/calls.lar`](#codegen-expressions-calls) — 17 funciones
+- [`src/compiler/codegen/expressions/clone.lar`](#codegen-expressions-clone) — 10 funciones
+- [`src/compiler/codegen/expressions/lambdas.lar`](#codegen-expressions-lambdas) — 10 funciones
+- [`src/compiler/codegen/expressions/operators.lar`](#codegen-expressions-operators) — 12 funciones
+- [`src/compiler/codegen/expressions/patterns.lar`](#codegen-expressions-patterns) — 2 funciones
+- [`src/compiler/codegen/expressions/strings.lar`](#codegen-expressions-strings) — 8 funciones
+- [`src/compiler/codegen/gen.lar`](#codegen-gen) — 24 funciones
+- [`src/compiler/codegen/gen/classes.lar`](#codegen-gen-classes) — 28 funciones
+- [`src/compiler/codegen/gen/statements.lar`](#codegen-gen-statements) — 31 funciones
+- [`src/compiler/codegen/gen/types.lar`](#codegen-gen-types) — 12 funciones
+- [`src/compiler/codegen/localnames.lar`](#codegen-localnames) — 6 funciones
+- [`src/compiler/codegen/prune.lar`](#codegen-prune) — 22 funciones
+- [`src/compiler/project/cc.lar`](#project-cc) — 11 funciones
+- [`src/compiler/project/libraries.lar`](#project-libraries) — 4 funciones
+- [`src/compiler/project/testing.lar`](#project-testing) — 27 funciones
+- [`src/compiler/editor/dap.lar`](#editor-dap) — 62 funciones
+- [`src/compiler/editor/ide.lar`](#editor-ide) — 74 funciones
+- [`src/compiler/editor/lsp.lar`](#editor-lsp) — 21 funciones
+- [`src/compiler/editor/opendocuments.lar`](#editor-opendocuments) — 2 funciones
+- [`src/compiler/editor/session.lar`](#editor-session) — 9 funciones
 
 ---
 
 ## main
 
-`src/main.lar` · 956 líneas · 41 funciones
+`src/compiler/main.lar` · 855 líneas · 38 funciones
 larimar: the Larimar tool and compiler, written in Larimar (Larimar.java + Transpiler.java).
 
 larimar new <name>              creates a project
@@ -93,151 +95,257 @@ The options of larimar itself, taken out of the arguments; what follows `--` is 
 <sub>línea 84</sub>
 
 `function newProject(rest: String[*]): int32`  
-larimar new <name> [--library | --service]  
+larimar new <name> [--library]  
 <sub>línea 132</sub>
 
 `function buildProject(run: bool, rest: String[*], programArgs: String[*]): int32`  
 larimar build [folder], larimar run [folder] [-- args]  
-<sub>línea 143</sub>
+<sub>línea 142</sub>
 
 `function test(rest: String[*]): int32`  
 larimar test [file|folder]...  
-<sub>línea 162</sub>
+<sub>línea 156</sub>
 
 `function file(main: String, rest: String[*], programArgs: String[*]): int32`  
 larimar file.lar -o out.c: its C; larimar file.lar [args]: build it and run it  
-<sub>línea 168</sub>
+<sub>línea 162</sub>
 
 `function writeC(main: String, output: String): int32`  
 The C of a file, into `output` ("": printed).  
-<sub>línea 181</sub>
+<sub>línea 175</sub>
 
 `function plugin(cmd: String, args: String[]): int32`  
 A command that is not larimar's: a plugin's, or an error.  
-<sub>línea 199</sub>
+<sub>línea 193</sub>
 
 `function version(): int32`
-<sub>línea 209</sub>
+<sub>línea 203</sub>
 
 `function usage(): int32`
-<sub>línea 214</sub>
+<sub>línea 208</sub>
 
 ### class `Plugin`
 A command of a plugin: `larimar <command> x` runs `bin/<program> <args> x`.
 
 `function larimarHome(): String`  
-$LARIMAR_HOME: the folder of bin/, std/ and plugins/.  
-<sub>línea 266</sub>
+$LARIMAR_HOME, or the installation the tool is in (the folder of std/).  
+<sub>línea 260</sub>
 
 `function plugins(problems: String[*]): Plugin[*]`  
 The commands that plugins declare, one file each in $LARIMAR_HOME/plugins: [plugin] name = "mytool" program = "mytool" # a program of $LARIMAR_HOME/bin, nowhere else version = "1.0.0" [commands] hello = ["hello"] # larimar hello x -> bin/mytool hello x A plugin cannot take a command of larimar itself, and two plugins cannot take the same one: both are problems (and that command is not taken).  
-<sub>línea 282</sub>
+<sub>línea 279</sub>
 
-`function runPlugin(pl: Plugin, args: String[]): int32`  
+`function runPlugin(plugin: Plugin, args: String[]): int32`  
 Runs the program of a plugin with its arguments and the user's, on this console; its exit code is larimar's.  
-<sub>línea 329</sub>
+<sub>línea 326</sub>
 
 `function compileFile(main: String, shownFrom: String): String`  
-The C of a main file; `import a.b` reads a/b.lar next to it. Messages name files relative to `shownFrom`.  
-<sub>línea 356</sub>
+The C of a main file (pipeline.compilerPasses), or "" with the problems in compileErrors.  
+<sub>línea 354</sub>
 
 `function testCompiler(wanted: String): CCompiler?`  
 The C compiler for the tests (a test file that uses TLS needs the system's: compileC says so).  
-<sub>línea 379</sub>
+<sub>línea 373</sub>
 
 `function testSettings(): TestSettings?`  
 The project's [c] settings for the tests, or the defaults when there is no larimar.toml here.  
-<sub>línea 387</sub>
+<sub>línea 381</sub>
 
 `function testMain(rest: String[*]): int32`  
 larimarc test-main <file.lar> -o <out.c> [--root <folder>]: the C of a file of test functions with a main added (testing.lar). Next to out.c it writes the file with its main (.lar) and the tests' names (.tests, one per line).  
-<sub>línea 412</sub>
+<sub>línea 406</sub>
 
 ### class `Project`
 
 `function load(dir: String): Project?`
-<sub>línea 476</sub>
+<sub>línea 470</sub>
 
 `function keysOf(section: String): String`
-<sub>línea 497</sub>
+<sub>línea 491</sub>
 
 `function allowedKey(section: String, key: String): bool`
-<sub>línea 501</sub>
+<sub>línea 495</sub>
 
 `function project(dir: String, config: Any): Project?`
-<sub>línea 505</sub>
+<sub>línea 499</sub>
 
 `function moduleName(name: String): bool`  
 A name of a module: letters, digits and '_', not starting with a digit.  
-<sub>línea 576</sub>
+<sub>línea 570</sub>
 
 `function isPlatform(name: String): bool`  
 The platforms: of [c.<platform>] and of --target.  
-<sub>línea 585</sub>
+<sub>línea 579</sub>
 
 `function hasNames(value: Any): bool`  
 Whether a table has entries with a name (a section does; a list does not).  
-<sub>línea 591</sub>
+<sub>línea 585</sub>
 
 `function isSection(value: Any): bool`
-<sub>línea 596</sub>
+<sub>línea 590</sub>
 
 `function text(section: Any, key: String, def: String): String`
-<sub>línea 603</sub>
+<sub>línea 597</sub>
 
 `function list(section: Any, key: String, def: String[*]): String[*]`
-<sub>línea 612</sub>
+<sub>línea 606</sub>
 
 `function validName(name: String): bool`
-<sub>línea 635</sub>
+<sub>línea 629</sub>
 
 `function resolve(dir: String, p: String): String`  
 A path of the project: relative to its folder, or absolute.  
-<sub>línea 648</sub>
+<sub>línea 642</sub>
 
 `function build(p: Project, debug: bool): String`  
 Builds the project; returns the executable, or "" on failure.  
-<sub>línea 651</sub>
-
-`function buildServices(p: Project): bool`  
-The services of [dependencies] are built first, each by its own larimar build: the program calls their executables (it finds them next to its own, or where they were built).  
-<sub>línea 665</sub>
-
-`function buildService(p: Project, debug: bool): String`  
-larimar build of a service: its executable answers the calls of other programs (std.os.rpc.serve) with its public functions. Its main is written in the build folder (<name>-service.lar), next to its C.  
-<sub>línea 681</sub>
+<sub>línea 645</sub>
 
 `function buildFrom(p: Project, main: String, debug: bool): String`  
 Compiles `main` (and what it imports) to the project's executable.  
-<sub>línea 709</sub>
+<sub>línea 655</sub>
 
 `function checkLibrary(p: Project): bool`  
 larimar build of a library: its code is checked (its main file and every part it imports). A program uses it from its [dependencies], compiling its source with its own; nothing is built for the library alone.  
-<sub>línea 767</sub>
+<sub>línea 713</sub>
 
 `function runScript(file: String, args: String[*]): int32`  
 larimar file.lar [args]: the file is built in a folder of the system's temporary files (the bundled tcc first: it starts fast) and run with the arguments; its exit code is larimar's. Nothing is printed but what the program prints, so scripts can be piped.  
-<sub>línea 788</sub>
+<sub>línea 734</sub>
 
 `function execute(exe: String, args: String[*]): int32`
-<sub>línea 830</sub>
+<sub>línea 776</sub>
 
 `function create(path: String, library: bool): int32`
-<sub>línea 840</sub>
+<sub>línea 786</sub>
 
 `function createLibrary(path: String, name: String): int32`  
 larimar new <name> --library: a library with one function and a test of it.  
-<sub>línea 872</sub>
+<sub>línea 818</sub>
 
-`function createService(path: String): int32`  
-larimar new <name> --service: a service with one function, a test of it, and a program that calls it.  
-<sub>línea 911</sub>
+---
+
+## pipeline
+
+`src/compiler/pipeline.lar` · 196 líneas · 23 funciones
+pipeline: one compilation, as passes over it. A Compilation says what goes in (the main file, where std
+is) and keeps what the passes leave (the program, its problems, the C); a Pass does one thing to it and
+reports what went wrong instead of throwing. The compiler runs them in order and stops after the first
+that leaves problems:
+
+Link -> CheckRules -> Assemble -> Analyze -> EmitC -> NameC -> Prune
+
+Link        reads and parses the main file and every module it imports (semantics.linker)
+CheckRules  the rules of the language about modules (semantics.rules: each error says its rule)
+Assemble    every module's declarations, with their C names, in one Program
+Analyze     types, lifetimes, threads (semantics.analyzer)
+EmitC       the C of every function and type (codegen.gen)
+NameC       the names of the compiler's variables (codegen.localnames)
+Prune       only what main reaches, after the runtime it needs (codegen.prune)
+
+larimar check and the editor run the passes up to Analyze (analysisPasses); a build runs them all.
+The state of the linker, the analyzer and the generator still lives in their modules; it moves into
+Compilation one part at a time.
+
+### class `Compilation`
+One compilation: what goes in, and what each pass leaves.
+
+- `function failed(): bool`
+  <sub>línea 51</sub>
+
+### interface `Pass`
+A step of the compilation. It reports problems in the Compilation instead of throwing.
+
+- `function name(): String`
+  <sub>línea 56</sub>
+
+- `function run(unit: Compilation): void`
+  <sub>línea 57</sub>
+
+`public function analysisPasses(): Pass[*]`  
+The passes of larimar check and of the editor: up to Analyze.  
+<sub>línea 61</sub>
+
+`public function compilerPasses(): Pass[*]`  
+The passes of a build: all of them.  
+<sub>línea 66</sub>
+
+`public function assembledProgram(): Program`
+<sub>línea 73</sub>
+
+`public function run(unit: Compilation, passes: Pass[*]): bool`  
+Runs the passes in order, until one leaves problems. true: none did.  
+<sub>línea 76</sub>
+
+`function gather(unit: Compilation, from: String[*], start: int32): void`  
+The problems a list got since it had `from`, into the compilation.  
+<sub>línea 85</sub>
+
+### class `LinkPass implements Pass`
+
+- `override function name(): String`
+  <sub>línea 90</sub>
+
+- `override function run(unit: Compilation): void`
+  <sub>línea 91</sub>
+
+### class `CheckRulesPass implements Pass`
+
+- `override function name(): String`
+  <sub>línea 109</sub>
+
+- `override function run(unit: Compilation): void`
+  <sub>línea 110</sub>
+
+### class `AssemblePass implements Pass`
+
+- `override function name(): String`
+  <sub>línea 121</sub>
+
+- `override function run(unit: Compilation): void`
+  <sub>línea 122</sub>
+
+### class `AnalyzePass implements Pass`
+
+- `override function name(): String`
+  <sub>línea 131</sub>
+
+- `override function run(unit: Compilation): void`
+  <sub>línea 132</sub>
+
+### class `EmitCPass implements Pass`
+
+- `override function name(): String`
+  <sub>línea 143</sub>
+
+- `override function run(unit: Compilation): void`
+  <sub>línea 144</sub>
+
+### class `NameCPass implements Pass`
+
+- `override function name(): String`
+  <sub>línea 152</sub>
+
+- `override function run(unit: Compilation): void`
+  <sub>línea 153</sub>
+
+### class `PrunePass implements Pass`
+
+- `override function name(): String`
+  <sub>línea 157</sub>
+
+- `override function run(unit: Compilation): void`
+  <sub>línea 158</sub>
+
+`function findLibraryRoots(main: String): void`  
+The libraries the project of a file uses ([dependencies] of its larimar.toml, and theirs): `import textkit` finds textkit.lar in the folder of its modules. A problem with them is larimar build's to say.  
+<sub>línea 168</sub>
 
 ---
 
 ## syntax.ast
 
-`src/syntax/ast.lar` · 565 líneas · 6 funciones
+`src/compiler/syntax/ast.lar` · 565 líneas · 6 funciones
 syntax.ast: the syntax tree (Ast.java). One class per kind of node; the analyzer writes what it
 finds into the fields of Node, and the generator reads them from there.
 
@@ -247,7 +355,7 @@ finds into the fields of Node, and the generator reads them from there.
 
 ### class `Stmt extends Node`
 
-### enum `TK`
+### enum `TypeRefKind`
 
 ### class `TypeRef extends Node`
 
@@ -410,13 +518,13 @@ Every expression of a body (into lambda bodies when `lambdas`).
 
 ## syntax.lexer
 
-`src/syntax/lexer.lar` · 630 líneas · 26 funciones
+`src/compiler/syntax/lexer.lar` · 630 líneas · 26 funciones
 syntax.lexer: source text -> tokens (Lexer.java).
 
 String literals keep their raw text (escapes and ${...} included); the parser splits
 them and lexes each ${...} again with a Lexer of its own.
 
-### enum `TT`
+### enum `TokenType`
 
 ### class `Token`
 
@@ -438,7 +546,7 @@ Reads a source text into tokens: Lexer { src, line }, run(), then its toks. `lin
 - `function peek(k: int32): byte`
   <sub>línea 98</sub>
 
-- `function add(kind: TT, text: String in self, length: int32): void`
+- `function add(kind: TokenType, text: String in self, length: int32): void`
   <sub>línea 102</sub>
 
 - `function blockComment(): void`
@@ -501,7 +609,7 @@ ASCII letters, and the bytes of any non-ASCII character (names can use any lette
 A byte of a name: letters (any), digits and _.  
 <sub>línea 543</sub>
 
-`function keyword(w: String): TT`
+`function keyword(w: String): TokenType`
 <sub>línea 545</sub>
 
 `function digitValue(b: byte): int32`
@@ -520,7 +628,7 @@ A byte of a name: letters (any), digits and _.
 
 ## syntax.parser
 
-`src/syntax/parser.lar` · 201 líneas · 21 funciones
+`src/compiler/syntax/parser.lar` · 201 líneas · 21 funciones
 syntax.parser: tokens -> syntax tree.
 
 A recursive descent parser. Parser holds what is being read (the tokens, where it is, the first
@@ -563,7 +671,7 @@ The tokens of a source text, read one by one.
 - `function atEnd(): bool`
   <sub>línea 63</sub>
 
-- `function at(kind: TT): bool`  
+- `function at(kind: TokenType): bool`  
   Is the current token of this kind?  
   <sub>línea 66</sub>
 
@@ -579,7 +687,7 @@ The tokens of a source text, read one by one.
   Reads the current token and gives it.  
   <sub>línea 77</sub>
 
-- `function optional(kind: TT): bool`  
+- `function optional(kind: TokenType): bool`  
   [ kind ]: reads the token when it is of this kind, and says whether it was.  
   <sub>línea 83</sub>
 
@@ -587,35 +695,35 @@ The tokens of a source text, read one by one.
   [ first second ]: reads the two words when they come, and says whether they did.  
   <sub>línea 90</sub>
 
-- `function expect(kind: TT, message: String): Token`  
+- `function expect(kind: TokenType, message: String): Token`  
   kind: reads the token, which must be of this kind (else the error says what came instead).  
   <sub>línea 98</sub>
 
-`public function endedBySemicolon(p: Parser in default, node: Node, what: String): Node`  
+`public function endedBySemicolon(parser: Parser in default, node: Node, what: String): Node`  
 The node, after its ';'.  
 <sub>línea 108</sub>
 
-`public function qualifiedName(p: Parser in default, message: String): String`  
+`public function qualifiedName(parser: Parser in default, message: String): String`  
 NAME ( . NAME )*  
 <sub>línea 114</sub>
 
-`public function strictList(p: Parser in default, close: TT, readItem: () -> void): void`  
+`public function strictList(parser: Parser in default, close: TokenType, readItem: () -> void): void`  
 [ item ( , item )* ] before `close` (which is not read).  
 <sub>línea 124</sub>
 
-`public function looseList(p: Parser in default, close: TT, readItem: () -> void): void`  
+`public function looseList(parser: Parser in default, close: TokenType, readItem: () -> void): void`  
 Like strictList, but a comma may also end the list.  
 <sub>línea 133</sub>
 
-`public function lives(p: Parser in default): String`  
+`public function lives(parser: Parser in default): String`  
 in ( default | self | NAME ): where a parameter or a result lives.  
 <sub>línea 141</sub>
 
-`function program(p: Parser in default, startLine: int32): Program`  
+`function program(parser: Parser in default, startLine: int32): Program`  
 import* ( [public] declaration )*  
 <sub>línea 148</sub>
 
-`function importDeclaration(p: Parser in default): ImportDecl`  
+`function importDeclaration(parser: Parser in default): ImportDecl`  
 import NAME ( . NAME )* [ as NAME | { NAME ( , NAME )* } ] ;  
 <sub>línea 181</sub>
 
@@ -623,42 +731,42 @@ import NAME ( . NAME )* [ as NAME | { NAME ( , NAME )* } ] ;
 
 ## syntax.parser.declarations
 
-`src/syntax/parser/declarations.lar` · 363 líneas · 15 funciones
+`src/compiler/syntax/parser/declarations.lar` · 363 líneas · 15 funciones
 syntax.parser.declarations: what a file declares (functions, structs, classes, interfaces, enums, constants).
 Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
 
-`public function topLevelDeclaration(p: Parser in default): Node`  
+`public function topLevelDeclaration(parser: Parser in default): Node`  
 ccode { C } | ccode "FILE" ; | cinclude "HEADER" ; | native ... | test function ... | const ... | let ... | function ... | struct ... | [synchronized] class ... | interface ... | enum ... | native type ...  
 <sub>línea 20</sub>
 
-`function testFunction(p: Parser in default): FunctionDecl`  
+`function testFunction(parser: Parser in default): FunctionDecl`  
 (after `test`) function NAME ( [ NAME : Type ] ) : void block  
 <sub>línea 65</sub>
 
-`function constant(p: Parser in default): Node`  
+`function constant(parser: Parser in default): Node`  
 (after `const`) NAME : Type = expression ;  
 <sub>línea 81</sub>
 
-`public function parameter(p: Parser in default, typeRequired: bool): Param`  
+`public function parameter(parser: Parser in default, typeRequired: bool): Param`  
 NAME : Type [ in lives ] (in a lambda: NAME [ : Type ])  
 <sub>línea 90</sub>
 
-`public function parameters(p: Parser in default): Param[*]`  
+`public function parameters(parser: Parser in default): Param[*]`  
 ( [ parameter ( , parameter )* ] )  
 <sub>línea 104</sub>
 
-`public function functionDeclaration(p: Parser in default, isOverride: bool, withBody: bool): FunctionDecl`
+`public function functionDeclaration(parser: Parser in default, isOverride: bool, withBody: bool): FunctionDecl`
 <sub>línea 112</sub>
 
-`function operatorDeclaration(p: Parser in default): FunctionDecl`  
+`function operatorDeclaration(parser: Parser in default): FunctionDecl`  
 operator ( + | - | | / | % | == | < ) parameters : Type block  
 <sub>línea 156</sub>
 
-`function structDeclaration(p: Parser in default): StructDecl`  
+`function structDeclaration(parser: Parser in default): StructDecl`  
 (after `struct`) NAME { ( field | static ... | function ... | operator ... )* }  
 <sub>línea 170</sub>
 
-`function classDeclaration(p: Parser in default, isSynchronized: bool): ClassDecl`  
+`function classDeclaration(parser: Parser in default, isSynchronized: bool): ClassDecl`  
 (after `class`) NAME [ extends NAME ] [ implements NAME ( , NAME )* ] { ( field | static ... | [override] function ... | native function ... | native let ... | operator ... )* }  
 <sub>línea 198</sub>
 
@@ -666,23 +774,23 @@ operator ( + | - | | / | % | == | < ) parameters : Type block
 native function f(params): T { C } (a method, a static function): the body is C. It becomes a C function the compiler writes (its parameters with their C types and names), and f calls it. In a class for one system (it implements UnixPlatform...), f calls it only there (elsewhere it panics; the C of that system reaches no other).  
 <sub>línea 263</sub>
 
-`function method(p: Parser in default, ofSynchronizedClass: bool, isOverride: bool): FunctionDecl`  
+`function method(parser: Parser in default, ofSynchronizedClass: bool, isOverride: bool): FunctionDecl`  
 A method of a class: in a synchronized class it may say `wait until`.  
 <sub>línea 282</sub>
 
-`function interfaceDeclaration(p: Parser in default): InterfaceDecl`  
+`function interfaceDeclaration(parser: Parser in default): InterfaceDecl`  
 (after `interface`) NAME [ extends NAME ( , NAME )* ] { ( function NAME parameters [ : Type ] ... ; | static function ... )* }  
 <sub>línea 290</sub>
 
-`public function staticFunction(p: Parser in default, owner: String in default): void`  
+`public function staticFunction(parser: Parser in default, owner: String in default): void`  
 (after `static`, inside the type `owner`) function ... | native function ... = C ;  
 <sub>línea 315</sub>
 
-`function enumDeclaration(p: Parser in default): EnumDecl`  
+`function enumDeclaration(parser: Parser in default): EnumDecl`  
 (after `enum`) NAME { [ variant ( , variant )* [ , ] ] } variant: NAME [ parameters ]  
 <sub>línea 335</sub>
 
-`public function field(p: Parser in default): FieldDecl`  
+`public function field(parser: Parser in default): FieldDecl`  
 let NAME : Type [ = expression ] ;  
 <sub>línea 354</sub>
 
@@ -690,43 +798,43 @@ let NAME : Type [ = expression ] ;
 
 ## syntax.parser.expressions
 
-`src/syntax/parser/expressions.lar` · 443 líneas · 22 funciones
+`src/compiler/syntax/parser/expressions.lar` · 443 líneas · 22 funciones
 syntax.parser.expressions: expressions, from the lowest precedence to the highest.
 Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
 
-`public function expression(p: Parser in default): Expr`  
+`public function expression(parser: Parser in default): Expr`  
 ternary [ in ( heap | default | byte[N] | expression ) ]: where a created value lives  
 <sub>línea 17</sub>
 
-`function ternary(p: Parser in default): Expr`  
+`function ternary(parser: Parser in default): Expr`  
 coalesce [ ? ternary : ternary ] (right to left)  
 <sub>línea 30</sub>
 
-`public function coalesce(p: Parser in default): Expr`  
+`public function coalesce(parser: Parser in default): Expr`  
 binary operators [ ?? coalesce ]  
 <sub>línea 40</sub>
 
-`public function level(kind: TT): int32`  
+`public function level(kind: TokenType): int32`  
 The level of a binary operator, from the loosest (1) to the tightest; 0: not one. || && == != < <= > >= (and `is`) | ^ & << >> + - / %  
 <sub>línea 51</sub>
 
-`function binaryFrom(p: Parser in default, minimum: int32): Expr`  
+`function binaryFrom(parser: Parser in default, minimum: int32): Expr`  
 cast ( OPERATOR cast ... | is qualified NAME [ NAME ] )*: the operators of level `minimum` or tighter, each one left-associative (precedence climbing: the right side takes only tighter operators).  
 <sub>línea 70</sub>
 
-`function cast(p: Parser in default): Expr`  
+`function cast(parser: Parser in default): Expr`  
 unary ( as Type )*  
 <sub>línea 89</sub>
 
-`function unary(p: Parser in default): Expr`  
+`function unary(parser: Parser in default): Expr`  
 ( - | ! | ~ | & ) unary | postfix  
 <sub>línea 103</sub>
 
-`function postfix(p: Parser in default): Expr`  
+`function postfix(parser: Parser in default): Expr`  
 primary ( ( arguments ) | . NAME | . NAME { fields } | [ expression ] | ! )*  
 <sub>línea 110</sub>
 
-`function methodReference(p: Parser in default, target: Expr in default): Expr`  
+`function methodReference(parser: Parser in default, target: Expr in default): Expr`  
 Module::function, variable::method, self::method: a lambda that calls it with its own parameters. The parameters come from the function type expected there (the analyzer adds them).  
 <sub>línea 145</sub>
 
@@ -734,35 +842,35 @@ Module::function, variable::method, self::method: a lambda that calls it with it
 The lambda of a reference: its body calls `callee` (the analyzer adds the parameters).  
 <sub>línea 154</sub>
 
-`function primary(p: Parser in default): Expr`  
+`function primary(parser: Parser in default): Expr`  
 NUMBER | "TEXT" | true | false | null | self | super . NAME | { fields } | [ expressions ] | switch ... | NAME [ { fields } ] | lambda | ( expression )  
 <sub>línea 163</sub>
 
-`function objectLiteral(p: Parser in default, typeName: String in default, line: int32): ObjectLit`  
+`function objectLiteral(parser: Parser in default, typeName: String in default, line: int32): ObjectLit`  
 { [ field ( , field )* [ , ] ] } field: NAME : expression | NAME | expression  
 <sub>línea 210</sub>
 
-`function lambdaAhead(p: Parser in default): bool`  
+`function lambdaAhead(parser: Parser in default): bool`  
 Is a lambda next: ( ... ) followed by -> ?  
 <sub>línea 231</sub>
 
-`function lambda(p: Parser in default): Lambda`  
+`function lambda(parser: Parser in default): Lambda`  
 ( [ parameter ( , parameter )* ] ) -> block  
 <sub>línea 250</sub>
 
-`public function switchExpression(p: Parser in default, line: int32): SwitchExpr`  
+`public function switchExpression(parser: Parser in default, line: int32): SwitchExpr`  
 (after `switch`) ( expression ) { case* } case: ( case pattern ( , pattern )* | default ) [ when expression ] -> ( block | throw expression ; | expression ; )  
 <sub>línea 263</sub>
 
-`function pattern(p: Parser in default): Pattern`  
+`function pattern(parser: Parser in default): Pattern`  
 null | constant | qualified NAME [ NAME ] | qualified NAME { [ NAME [ : NAME ] ( , ... )* ] } [ NAME ] (a value, a type with its binding, or an enum variant with its fields)  
 <sub>línea 306</sub>
 
-`function string(p: Parser in default, token: Token in default): StringLit`  
+`function string(parser: Parser in default, token: Token in default): StringLit`  
 "Hello ${name}": the texts, and the parsed expressions between them.  
 <sub>línea 334</sub>
 
-`function interpolation(p: Parser in default, inner: String in default, line: int32): Expr`  
+`function interpolation(parser: Parser in default, inner: String in default, line: int32): Expr`  
 The expression inside ${...}: its own tokens, read with this parser, then back to the string's.  
 <sub>línea 370</sub>
 
@@ -773,7 +881,7 @@ The expression inside ${...}: its own tokens, read with this parser, then back t
 wait until (cond): the body starts with `while (!(cond)) { self.__wait(); }`. The lock is held when the body starts; __wait (a name no program can write) lets it go while waiting, and every method of the object that ends wakes the waiters to look at their condition again.  
 <sub>línea 392</sub>
 
-`public function optionalFollows(next: TT): bool`  
+`public function optionalFollows(next: TokenType): bool`  
 After `as T`, a '?' makes T optional only when what follows can come after a type (x as int64? ?? 0, (x as T?), x as T?;). Followed by the start of an expression it is a ternary: x as int64 ? a : b.  
 <sub>línea 404</sub>
 
@@ -785,15 +893,15 @@ a, a.b, a.b.c (only names), or "".
 
 ## syntax.parser.natives
 
-`src/syntax/parser/natives.lar` · 497 líneas · 17 funciones
+`src/compiler/syntax/parser/natives.lar` · 497 líneas · 17 funciones
 syntax.parser.natives: what comes from C (native functions, types, structs and values; cinclude and ccode).
 Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
 
-`public function nativeDeclaration(p: Parser in default, line: int32): Node`  
+`public function nativeDeclaration(parser: Parser in default, line: int32): Node`  
 (after `native`) function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ; a C function const NAME : Type [ = C ] ; let NAME : Type [ = NAME ] ; a C constant, macro or global struct NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static ... )* } a C struct, by value type NAME [ = CTYPE | = ( Type, ... ) -> Type ] [ released by NAME ] ( ; | { member* } ) a C type type NAME { ... } (std) a type the compiler knows  
 <sub>línea 22</sub>
 
-`public function nativeInterface(p: Parser in default, owner: String in default): NativeInterfaceDecl`  
+`public function nativeInterface(parser: Parser in default, owner: String in default): NativeInterfaceDecl`  
 (after `native interface`) NAME STRING ( , STRING )* [ extends NAME ( , NAME )* ] { ( function ... ; | type NAME ... ; | const ... ; | let ... ; | struct ... )* } What C headers give, under one name: Name.f(...) calls the C function f. In a class (`owner`) it is its own, static: only on the class's system.  
 <sub>línea 43</sub>
 
@@ -801,35 +909,35 @@ Each function reads one construction; the comment above it shows its form (the n
 The C names in C text (struct tm*: struct, tm), added to `into`.  
 <sub>línea 116</sub>
 
-`function atCText(p: Parser in default): bool`  
+`function atCText(parser: Parser in default): bool`  
 At C text: c"...".  
 <sub>línea 130</sub>
 
-`function cTarget(p: Parser in default, what: String): String`  
+`function cTarget(parser: Parser in default, what: String): String`  
 [ = NAME | = struct NAME | = c"C" ]: what a native declaration is in C; "" without '='.  
 <sub>línea 133</sub>
 
-`function nativeFunctionOfC(p: Parser in default): ExternFunctionDecl`  
+`function nativeFunctionOfC(parser: Parser in default): ExternFunctionDecl`  
 (after `native function`) NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;  
 <sub>línea 147</sub>
 
-`function nativeValue(p: Parser in default): Node`  
+`function nativeValue(parser: Parser in default): Node`  
 (after `native`) ( const NAME : Type [ = C ] | let NAME : Type [ = NAME ] ) ;  
 <sub>línea 185</sub>
 
-`function nativeStruct(p: Parser in default): StructDecl`  
+`function nativeStruct(parser: Parser in default): StructDecl`  
 (after `native struct`) NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static ... )* }  
 <sub>línea 204</sub>
 
-`function cField(p: Parser in default): FieldDecl`  
+`function cField(parser: Parser in default): FieldDecl`  
 let NAME : Type [ = NAME ] ; a field of a C struct (after '=': its name in C)  
 <sub>línea 227</sub>
 
-`function nativeCType(p: Parser in default, name: Token in default): Node`  
+`function nativeCType(parser: Parser in default, name: Token in default): Node`  
 (after `native type NAME`) [ = CTYPE ] [ released by NAME ] ( ; | { member* } ) CTYPE: [ struct ] NAME *... or c"C TYPE"; without '=' it is opaque (void*)  
 <sub>línea 243</sub>
 
-`function nativeMembers(p: Parser in default, declaration: ExternTypeDecl in default): void`  
+`function nativeMembers(parser: Parser in default, declaration: ExternTypeDecl in default): void`  
 { ( let NAME : Type [ = NAME ] ; | native function ... | native let ... | function ... | static ... )* } The members of a C type: its fields (when it is a pointer to a C struct), functions of C that take it first (self), and functions written in Larimar.  
 <sub>línea 277</sub>
 
@@ -837,23 +945,23 @@ let NAME : Type [ = NAME ] ; a field of a C struct (after '=': its name in C)
 (after `native function` or `native let`, in a native type) NAME parameters [ : Type ] [ in lives ] [ throws Type ] = ( C | expression ) ; (let: NAME : Type = ...) With `= C` (a name, or "C text"), the method calls that C function with self first: before it only the memory of the call, when the first parameter is one (m: byte[*]). Any other expression is Larimar.  
 <sub>línea 329</sub>
 
-`public function languageType(p: Parser in default, line: int32): NativeTypeDecl`  
+`public function languageType(parser: Parser in default, line: int32): NativeTypeDecl`  
 (after `type`) NAME { ( static ... | let NAME : Type [ = expression ] ; | operator ... ; | function ... ( ; | block ) )* } A type of the language (String, Any), in std.lang: what has no body the compiler writes.  
 <sub>línea 396</sub>
 
-`function nativeType(p: Parser in default, line: int32, name: Token in default): NativeTypeDecl`  
+`function nativeType(parser: Parser in default, line: int32, name: Token in default): NativeTypeDecl`  
 (after `native type NAME`) { ( static ... | native function ... | native let ... | native operator ... | function ... )* } The methods of a type the compiler knows (String, Any): only in the standard library.  
 <sub>línea 407</sub>
 
-`public function nativeFunction(p: Parser in default, line: int32): FunctionDecl`  
+`public function nativeFunction(parser: Parser in default, line: int32): FunctionDecl`  
 (after `native function`) NAME parameters [ : Type ] [ in lives ] [ throws Type ] [ = expression ] ;  
 <sub>línea 440</sub>
 
-`public function nativeProperty(p: Parser in default, line: int32): FunctionDecl`  
+`public function nativeProperty(parser: Parser in default, line: int32): FunctionDecl`  
 (after `native let`) NAME : Type [ = expression ] ; A value read without parentheses and never assigned (s.length). Without `= expression` the compiler gives it; with it, it is that expression.  
 <sub>línea 470</sub>
 
-`function nativeOperator(p: Parser in default, line: int32): FunctionDecl`  
+`function nativeOperator(parser: Parser in default, line: int32): FunctionDecl`  
 (after `native operator`) ( [ ] | SYMBOL ) parameters : Type ;  
 <sub>línea 483</sub>
 
@@ -861,39 +969,39 @@ let NAME : Type [ = NAME ] ; a field of a C struct (after '=': its name in C)
 
 ## syntax.parser.statements
 
-`src/syntax/parser/statements.lar` · 172 líneas · 8 funciones
+`src/compiler/syntax/parser/statements.lar` · 172 líneas · 8 funciones
 syntax.parser.statements: statements and blocks.
 Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
 
-`public function variable(p: Parser in default): VarDecl`  
+`public function variable(parser: Parser in default): VarDecl`  
 let NAME : Type [ = expression ] ;  
 <sub>línea 14</sub>
 
-`public function block(p: Parser in default, what: String): Stmt[*]`  
+`public function block(parser: Parser in default, what: String): Stmt[*]`  
 { statement* }  
 <sub>línea 25</sub>
 
-`function statement(p: Parser in default): Stmt`  
+`function statement(parser: Parser in default): Stmt`  
 let ... | return [ expression ] ; | if ... | while ( expression ) block | for ... | break ; | continue ; | throw expression ; | yield expression ; | try ... | block | switch ... | assignment or call  
 <sub>línea 37</sub>
 
-`function assignmentOrCall(p: Parser in default, line: int32): Stmt`  
+`function assignmentOrCall(parser: Parser in default, line: int32): Stmt`  
 expression [ ( = | += | -= | ... ) expression ] ; (a += b is a = a + b)  
 <sub>línea 99</sub>
 
-`function misplaced(p: Parser in default, token: Token, message: String): Stmt`  
+`function misplaced(parser: Parser in default, token: Token, message: String): Stmt`  
 Something that does not go here: the error, and an empty statement.  
 <sub>línea 117</sub>
 
-`function ifStatement(p: Parser in default, line: int32): IfStmt`  
+`function ifStatement(parser: Parser in default, line: int32): IfStmt`  
 (after `if`) ( expression ) block [ else ( if ... | block ) ]  
 <sub>línea 123</sub>
 
-`function forStatement(p: Parser in default, line: int32): ForStmt`  
+`function forStatement(parser: Parser in default, line: int32): ForStmt`  
 (after `for`) ( [ NAME , ] NAME in expression [ .. expression ] ) block  
 <sub>línea 140</sub>
 
-`function tryStatement(p: Parser in default, line: int32): TryStmt`  
+`function tryStatement(parser: Parser in default, line: int32): TryStmt`  
 (after `try`) block ( catch ( qualified NAME NAME ) block )+  
 <sub>línea 159</sub>
 
@@ -901,15 +1009,15 @@ Something that does not go here: the error, and an empty statement.
 
 ## syntax.parser.types
 
-`src/syntax/parser/types.lar` · 73 líneas · 2 funciones
+`src/compiler/syntax/parser/types.lar` · 73 líneas · 2 funciones
 syntax.parser.types: types as they are written (int32, String?, T[*], (A) -> R thread safe).
 Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
 
-`public function type(p: Parser in default): TypeRef`  
+`public function type(parser: Parser in default): TypeRef`  
 ( qualified NAME | ( Type ) | ( [ Type ( , Type )* ] ) -> Type ) suffix* suffix: [ ] | [ ] | [ expression ] | ? | and after a function type: [ thread safe ]  
 <sub>línea 13</sub>
 
-`function threadSafe(p: Parser in default, functionType: TypeRef in default): TypeRef`  
+`function threadSafe(parser: Parser in default, functionType: TypeRef in default): TypeRef`  
 [ thread safe ] after a function type: other threads may call it at the same time. Two words, like `wait until`; neither is reserved. With function types inside function types it goes to the nearest one on its left; parentheses choose another: ((A) -> (B) -> C) thread safe.  
 <sub>línea 63</sub>
 
@@ -917,7 +1025,7 @@ Each function reads one construction; the comment above it shows its form (the n
 
 ## semantics.analyzer
 
-`src/semantics/analyzer.lar` · 325 líneas · 17 funciones
+`src/compiler/semantics/analyzer.lar` · 325 líneas · 17 funciones
 semantics.analyzer: semantic analysis (Analyzer.java), part 1: declarations, statements, regions
 and the final passes. Expressions are in checkexpr.lar.
 
@@ -964,7 +1072,7 @@ A symbol for the name after `is`, declared later where the test is true (see nar
 `public function analyze(program: Program in default): void`
 <sub>línea 132</sub>
 
-`public function pushFrame(kind: FrameK, ret: Type? in default, throwsType: Type? in default, lambda: LambdaInfo? in default,`
+`public function pushFrame(kind: FrameKind, ret: Type? in default, throwsType: Type? in default, lambda: LambdaInfo? in default,`
 <sub>línea 208</sub>
 
 `public function popFrame(restore: Scope in default): void`
@@ -980,16 +1088,16 @@ A symbol for the name after `is`, declared later where the test is true (see nar
 The block the current statement is in (names are declared there, not in the statement).  
 <sub>línea 233</sub>
 
-`public function declare(name: String in default, kind: SymK, type: Type in default, line: int32): Symbol`
+`public function declare(name: String in default, kind: SymbolKind, type: Type in default, line: int32): Symbol`
 <sub>línea 235</sub>
 
 `public function lookup(name: String): Symbol?`
 <sub>línea 256</sub>
 
-`public function narrowedType(s: Symbol): Type?`
+`public function narrowedType(symbol: Symbol): Type?`
 <sub>línea 266</sub>
 
-`public function noteCapture(s: Symbol in default, line: int32): void`  
+`public function noteCapture(symbol: Symbol in default, line: int32): void`  
 Records that the current lambda (and every lambda in between) captures `s`.  
 <sub>línea 279</sub>
 
@@ -1003,16 +1111,16 @@ Records that the current lambda (and every lambda in between) captures `s`.
 
 ## semantics.analyzer.classes
 
-`src/semantics/analyzer/classes.lar` · 252 líneas · 11 funciones
+`src/compiler/semantics/analyzer/classes.lar` · 252 líneas · 11 funciones
 semantics.analyzer.classes: classes and interfaces: fields, methods, what a class inherits and what it implements.
 
 `public function validateClasses(): void`
 <sub>línea 14</sub>
 
-`function processClass(c: ClassInfo in default, done: Any): void`
+`function processClass(classInfo: ClassInfo in default, done: Any): void`
 <sub>línea 65</sub>
 
-`function implementedOf(c: ClassInfo, name: String): String`  
+`function implementedOf(classInfo: ClassInfo, name: String): String`  
 The interface, of those a class implements, that has a method of this name ("" when none does).  
 <sub>línea 132</sub>
 
@@ -1025,7 +1133,7 @@ The interface, of those a class implements, that has a method of this name ("" w
 `function throwsText(t: Type?): String`
 <sub>línea 150</sub>
 
-`function checkSameSig(c: ClassInfo, m: MethodInfo, pm: MethodInfo, line: int32): void`
+`function checkSameSig(classInfo: ClassInfo, method: MethodInfo, parentMethod: MethodInfo, line: int32): void`
 <sub>línea 152</sub>
 
 `public function validateInterfaces(): void`
@@ -1044,7 +1152,7 @@ The interface, of those a class implements, that has a method of this name ("" w
 
 ## semantics.analyzer.compact
 
-`src/semantics/analyzer/compact.lar` · 352 líneas · 15 funciones
+`src/compiler/semantics/analyzer/compact.lar` · 352 líneas · 15 funciones
 semantics.analyzer.compact: Memory.compact: where a memory may be compacted.
 
 ### class `CompactCall`
@@ -1076,7 +1184,7 @@ The object of a field or element access: a.b and a[i] give a.
 Is the target reached through a class object or list (shared, not a captured copy)?  
 <sub>línea 172</sub>
 
-`public function isReference(t: Type): bool`
+`public function isReference(type: Type): bool`
 <sub>línea 181</sub>
 
 `public function storageRegion(obj: Expr in default): Region`  
@@ -1096,22 +1204,22 @@ The memory new data should go to when stored inside `obj`.
 `public function analyzeReturn(r: ReturnStmt in default): void`
 <sub>línea 222</sub>
 
-`function analyzeWhen(i: IfStmt in default): void`  
+`function analyzeWhen(ifStmt: IfStmt in default): void`  
 An if for platforms (IfStmt.platform): a ... b ... else. Every branch is checked, each for its platform, in the block around (there is no block of its own). A name every branch declares, with the same type, stays for the code after it (one C name for all of them); what only some declare belongs to its branch.  
 <sub>línea 254</sub>
 
-`function whenBranch(body: Stmt[*] in default, platform: String in default, branch: int32, syms: int32[*] in default, branchOf: int32[*] in default, blk: Scope in default): void`  
+`function whenBranch(body: Stmt[*] in default, platform: String in default, branch: int32, syms: int32[*] in default, branchOf: int32[*] in default, blockScope: Scope in default): void`  
 One branch of an if for platforms, checked for `platform`; what it declares is hidden until every branch is seen.  
 <sub>línea 313</sub>
 
-`public function analyzeIf(i: IfStmt in default): void`
+`public function analyzeIf(ifStmt: IfStmt in default): void`
 <sub>línea 333</sub>
 
 ---
 
 ## semantics.analyzer.declarations
 
-`src/semantics/analyzer/declarations.lar` · 686 líneas · 28 funciones
+`src/compiler/semantics/analyzer/declarations.lar` · 686 líneas · 28 funciones
 semantics.analyzer.declarations: what a program declares: the system of each class, C declarations, constants and signatures.
 
 `function requireAscii(name: String, line: int32, what: String): void`
@@ -1185,28 +1293,28 @@ extern const NAME: T; extern let NAME: T; a name C has (a constant, a macro, a g
 released by f: f takes exactly one X and returns nothing useful; only release() calls it.  
 <sub>línea 568</sub>
 
-`function textReleaser(f: FunctionInfo in default): void`  
+`function textReleaser(functionInfo: FunctionInfo in default): void`  
 ...: String = c_f released by r: r is a native function that takes the text (one String); only the compiler calls it.  
 <sub>línea 587</sub>
 
-`function externResourceRules(f: FunctionInfo in default): void`  
+`function externResourceRules(functionInfo: FunctionInfo in default): void`  
 A C function that makes a resource returns X? (C fails: null). A resource goes to C as X, not X?.  
 <sub>línea 609</sub>
 
-`function resolveMethodSig(mi: MethodInfo in default, m: FunctionDecl in default): void`
+`function resolveMethodSig(method: MethodInfo in default, m: FunctionDecl in default): void`
 <sub>línea 621</sub>
 
 `function resolveSig(params: Param[*] in default, ret: TypeRef in default): Type`
 <sub>línea 634</sub>
 
-`function isPlainNumber(t: Type): bool`  
+`function isPlainNumber(type: Type): bool`  
 A number or bool: what a T[] given to C may hold (C sees an array of them).  
 <sub>línea 651</sub>
 
 `function resolveThrows(t: TypeRef? in default): Type?`
 <sub>línea 655</sub>
 
-`public function isByteArrayRef(t: TypeRef): bool`  
+`public function isByteArrayRef(typeRef: TypeRef): bool`  
 byte[N], byte[], byte[*] as written.  
 <sub>línea 668</sub>
 
@@ -1218,13 +1326,13 @@ byte-array parameters used after `in` inside the body are memory parameters.
 
 ## semantics.analyzer.flow
 
-`src/semantics/analyzer/flow.lar` · 740 líneas · 42 funciones
+`src/compiler/semantics/analyzer/flow.lar` · 740 líneas · 42 funciones
 semantics.analyzer.flow: what a function's result may point to, and whether the function creates it.
 
 `public function flowSummaries(): void`
 <sub>línea 29</sub>
 
-`function overridden(m: MethodInfo): MethodInfo[*]`  
+`function overridden(method: MethodInfo): MethodInfo[*]`  
 The methods that `m` writes again: those of its name in the classes above its own.  
 <sub>línea 148</sub>
 
@@ -1244,11 +1352,11 @@ Some method of that name may create its result.
 module.name, after linking, is the name itself.  
 <sub>línea 181</sub>
 
-`public function callMemory(f: FunctionInfo): bool`  
+`public function callMemory(functionInfo: FunctionInfo): bool`  
 An extern whose first parameter is a memory: it creates in the memory of the call, which is not written.  
 <sub>línea 184</sub>
 
-`function makesResource(f: FunctionInfo): bool`  
+`function makesResource(functionInfo: FunctionInfo): bool`  
 A C function that makes a resource (returns X?, X released by f): the resource lives where its result goes.  
 <sub>línea 187</sub>
 
@@ -1282,7 +1390,7 @@ The names whose data may flow into what the body returns: used in a return, or i
 How many named entries a table has.  
 <sub>línea 366</sub>
 
-`function bindsFlow(sw: SwitchExpr, flow: Any): bool`
+`function bindsFlow(switchExpr: SwitchExpr, flow: Any): bool`
 <sub>línea 372</sub>
 
 ### class `Declared`
@@ -1306,21 +1414,21 @@ Has a written type references to memory? (unknown: yes)
 May this expression create data where it is placed? `any`: the result is an Any (a struct put in it is copied).  
 <sub>línea 452</sub>
 
-`function switchCreates(sw: SwitchExpr, any: bool, declared: Declared): bool`
+`function switchCreates(switchExpr: SwitchExpr, any: bool, declared: Declared): bool`
 <sub>línea 485</sub>
 
 `function yieldsCreate(block: Stmt[*], any: bool, declared: Declared): bool`  
 Does a block arm of a switch yield a value it creates? (a local it yields lives in the block: an error, not a result)  
 <sub>línea 494</sub>
 
-`function staticCallee(c: Call): FunctionInfo?`  
+`function staticCallee(call: Call): FunctionInfo?`  
 Type.name(...) when it calls a static function.  
 <sub>línea 504</sub>
 
-`function callCreates(c: Call, any: bool, declared: Declared): bool`
+`function callCreates(call: Call, any: bool, declared: Declared): bool`
 <sub>línea 509</sub>
 
-`function methodCreates(m: Member, c: Call, coarse: bool, any: bool, declared: Declared): bool`
+`function methodCreates(member: Member, call: Call, coarse: bool, any: bool, declared: Declared): bool`
 <sub>línea 536</sub>
 
 `public function valuePlace(name: String, global: bool): Place`  
@@ -1349,17 +1457,17 @@ The same, knowing the expression and what it is for (a field of a literal, a thr
 `public function mustLiveForever(value: Region in default, line: int32, msg: String in default): void`
 <sub>línea 596</sub>
 
-`function fill(msg: String, v: Region, st: Region): String`
+`function fill(msg: String, v: Region, storage: Region): String`
 <sub>línea 600</sub>
 
-`public function runCheck(d: Deferred in default, resolve: bool): void`
+`public function runCheck(deferred: Deferred in default, resolve: bool): void`
 <sub>línea 617</sub>
 
-`function placementFor(r: Region): String`  
+`function placementFor(region: Region): String`  
 The `in` that puts a copy where a region lives, when the code can say it: " in default", " in m", or "".  
 <sub>línea 643</sub>
 
-`function culprit(d: Deferred in default, v: Region, st: Region, resolve: bool): String`  
+`function culprit(deferred: Deferred in default, v: Region, storage: Region, resolve: bool): String`  
 A message that names what lives too little, and the code that fixes it, when the value is something the programmer wrote: a lambda (its capture), a view (its text), a variable. "" when there is none.  
 <sub>línea 652</sub>
 
@@ -1367,7 +1475,7 @@ A message that names what lives too little, and the code that fixes it, when the
 A lambda or a function value (it has no clone()).  
 <sub>línea 714</sub>
 
-`function parameterHint(name: String, st: Region): String`  
+`function parameterHint(name: String, storage: Region): String`  
 For a parameter that must live where it is kept: its declaration with `in`.  
 <sub>línea 717</sub>
 
@@ -1375,7 +1483,7 @@ For a parameter that must live where it is kept: its declaration with `in`.
 x.trim(), x.substring(...)...: the result shares the bytes of x.  
 <sub>línea 724</sub>
 
-`function clonesInside(l: Lambda, name: String): bool`  
+`function clonesInside(lambda: Lambda, name: String): bool`  
 Does the body of the lambda call name.clone()? (It runs when the lambda is called, not when it is made.)  
 <sub>línea 732</sub>
 
@@ -1383,7 +1491,7 @@ Does the body of the lambda call name.clone()? (It runs when the lambda is calle
 
 ## semantics.analyzer.narrowing
 
-`src/semantics/analyzer/narrowing.lar` · 275 líneas · 15 funciones
+`src/compiler/semantics/analyzer/narrowing.lar` · 275 líneas · 15 funciones
 semantics.analyzer.narrowing: where a T? variable is known not to be null.
 
 `public function nonNull(c: Expr in default, onTrue: bool): Symbol[*]`  
@@ -1393,7 +1501,7 @@ The optional locals that are not null when `c` evaluates to `onTrue` (and the na
 `function facts(c: Expr in default, onTrue: bool, out: Symbol[*] in default): void`
 <sub>línea 28</sub>
 
-`public function hasSymbol(list: Symbol[*], s: Symbol): bool`
+`public function hasSymbol(list: Symbol[*], symbol: Symbol): bool`
 <sub>línea 54</sub>
 
 `public function narrow(syms: Symbol[*] in default): void`  
@@ -1423,23 +1531,23 @@ The variables a body assigns somewhere (not inside lambdas).
 `public function analyzeThrow(t: ThrowStmt in default): void`
 <sub>línea 198</sub>
 
-`public function requireHandled(e: EnumInfo, line: int32, what: String): void`
+`public function requireHandled(enumInfo: EnumInfo, line: int32, what: String): void`
 <sub>línea 211</sub>
 
-`public function analyzeYield(y: YieldStmt in default): void`
+`public function analyzeYield(yieldStmt: YieldStmt in default): void`
 <sub>línea 227</sub>
 
 `public function analyzeTry(t: TryStmt in default): void`
 <sub>línea 239</sub>
 
-`function hasEnum(list: EnumInfo[*], e: EnumInfo): bool`
+`function hasEnum(list: EnumInfo[*], enumInfo: EnumInfo): bool`
 <sub>línea 269</sub>
 
 ---
 
 ## semantics.analyzer.order
 
-`src/semantics/analyzer/order.lar` · 145 líneas · 8 funciones
+`src/compiler/semantics/analyzer/order.lar` · 145 líneas · 8 funciones
 semantics.analyzer.order: orders that must exist: globals get their values in order, C structs are defined before they are embedded.
 
 `public function checkGlobalOrder(initializers: Owner[*] in default): void`  
@@ -1453,10 +1561,10 @@ Whether global `g` is the k-th one or one initialized after it.
 `public function computeTypeOrder(): void`
 <sub>línea 53</sub>
 
-`function visitType(t: Type in default, path: Type[*] in default): void`
+`function visitType(type: Type in default, path: Type[*] in default): void`
 <sub>línea 68</sub>
 
-`function display(t: Type): String`
+`function display(type: Type): String`
 <sub>línea 93</sub>
 
 `function typeLine(t: Type): int32`
@@ -1466,30 +1574,30 @@ Whether global `g` is the k-th one or one initialized after it.
 Types that t's C definition embeds by value.  
 <sub>línea 110</sub>
 
-`function addValueDep(out: Type[*] in default, t: Type in default): void`
+`function addValueDep(out: Type[*] in default, type: Type in default): void`
 <sub>línea 138</sub>
 
 ---
 
 ## semantics.analyzer.statements
 
-`src/semantics/analyzer/statements.lar` · 483 líneas · 20 funciones
+`src/compiler/semantics/analyzer/statements.lar` · 483 líneas · 20 funciones
 semantics.analyzer.statements: the bodies of functions and methods, statement by statement.
 
-`public function analyzeFunction(f: FunctionInfo in default): void`
+`public function analyzeFunction(functionInfo: FunctionInfo in default): void`
 <sub>línea 38</sub>
 
-`public function analyzeMethod(m: MethodInfo in default, selfType: Type in default): void`
+`public function analyzeMethod(method: MethodInfo in default, selfType: Type in default): void`
 <sub>línea 56</sub>
 
-`public function declareParam(p: Param in default, t: Type in default, memory: bool): Symbol`
+`public function declareParam(p: Param in default, type: Type in default, memory: bool): Symbol`
 <sub>línea 73</sub>
 
-`function applyLives(ps: Param[*] in default, syms: Symbol[*] in default, mem: bool[*] in default, selfSym: Symbol? in default): void`  
+`function applyLives(params: Param[*] in default, syms: Symbol[*] in default, mem: bool[*] in default, selfSym: Symbol? in default): void`  
 `k: Node in p`, `s: String in default`, `x: T in self`, `x: T in m` (a memory parameter): the parameter's data lives as long as that, so it can be stored there.  
 <sub>línea 88</sub>
 
-`function livesRegion(ps: Param[*] in default, syms: Symbol[*] in default, mem: bool[*], selfSym: Symbol? in default, start: int32, line: int32): Region?`
+`function livesRegion(params: Param[*] in default, syms: Symbol[*] in default, mem: bool[*], selfSym: Symbol? in default, start: int32, line: int32): Region?`
 <sub>línea 105</sub>
 
 `public function livesHint(value: Region, storage: Region): String`  
@@ -1524,13 +1632,13 @@ panic(...): the program stops there.
 `public function analyzeVarDecl(v: VarDecl in default): void`
 <sub>línea 304</sub>
 
-`function declareHeapMemory(v: VarDecl in default, p: Placed in default, kind: SymK, global: bool): void`
+`function declareHeapMemory(v: VarDecl in default, p: Placed in default, kind: SymbolKind, global: bool): void`
 <sub>línea 351</sub>
 
 `function analyzeAssign(asg: AssignStmt in default): void`
 <sub>línea 376</sub>
 
-`public function cStructField(f: FieldInfo): bool`  
+`public function cStructField(field: FieldInfo): bool`  
 A field of a C struct (extern type X = struct { ... }).  
 <sub>línea 467</sub>
 
@@ -1544,7 +1652,7 @@ A field of a C struct (extern type X = struct { ... }).
 
 ## semantics.analyzer.threads
 
-`src/semantics/analyzer/threads.lar` · 214 líneas · 13 funciones
+`src/compiler/semantics/analyzer/threads.lar` · 214 líneas · 13 funciones
 semantics.analyzer.threads: what a thread can share.
 
 `public function currentOwner(): Owner?`
@@ -1553,21 +1661,21 @@ semantics.analyzer.threads: what a thread can share.
 `public function edge(from: Owner? in default, to: Owner? in default): void`
 <sub>línea 23</sub>
 
-`public function useGlobal(s: Symbol in default, line: int32): void`
+`public function useGlobal(symbol: Symbol in default, line: int32): void`
 <sub>línea 27</sub>
 
-`public function callTargets(receiver: Type, m: MethodInfo in default): MethodInfo[*]`  
+`public function callTargets(receiver: Type, method: MethodInfo in default): MethodInfo[*]`  
 Every method a call can reach: overrides in subclasses, or the implementations of an interface method.  
 <sub>línea 36</sub>
 
-`public function sendable(t: Type in default): bool`  
+`public function sendable(type: Type in default): bool`  
 Can a value of this type be used by two threads at once without a lock?  
 <sub>línea 50</sub>
 
 `function sendableIn(t: Type in default, visiting: Any): bool`
 <sub>línea 55</sub>
 
-`function implementsInterface(c: ClassInfo in default, i: String): bool`  
+`function implementsInterface(classInfo: ClassInfo in default, i: String): bool`  
 Class c implements interface i (itself, or a class it extends).  
 <sub>línea 89</sub>
 
@@ -1575,18 +1683,18 @@ Class c implements interface i (itself, or a class it extends).
 The fields that make objects of class `name` changeable, as text ('a', 'b'), or "" when they have none: an object with no fields, in its class or in any class that extends it, has no state that two threads could change, so it is shared like a value (a set of routes, a strategy). A Thread or a StringBuilder keeps state of its own.  
 <sub>línea 104</sub>
 
-`function changeable(t: Type in default): String`  
+`function changeable(type: Type in default): String`  
 For the message of a value that cannot be shared: what an ordinary object has that could change.  
 <sub>línea 118</sub>
 
 `public function checkSynchronizedClasses(): void`
 <sub>línea 124</sub>
 
-`public function checkThreadSafeLambda(l: LambdaInfo in default, line: int32): void`  
+`public function checkThreadSafeLambda(lambdaInfo: LambdaInfo in default, line: int32): void`  
 A lambda given where a `thread safe` function is expected: checked like the run of a Thread.  
 <sub>línea 153</sub>
 
-`public function checkThreadRun(o: ObjectLit in default): void`  
+`public function checkThreadRun(literal: ObjectLit in default): void`  
 Thread { run: ... }: a lambda written here, or a synchronized object.  
 <sub>línea 158</sub>
 
@@ -1597,27 +1705,27 @@ Thread { run: ... }: a lambda written here, or a synchronized object.
 
 ## semantics.expressions
 
-`src/semantics/expressions.lar` · 553 líneas · 28 funciones
+`src/compiler/semantics/expressions.lar` · 553 líneas · 28 funciones
 semantics.expressions: semantic analysis (Analyzer.java), part 2: types as written, constants,
 expressions, conversions, calls, switch and patterns.
 
-`public function resolveTop(t: TypeRef in default, ctx: int32, what: String): Type`
+`public function resolveTop(typeRef: TypeRef in default, ctx: int32, what: String): Type`
 <sub>línea 40</sub>
 
-`public function resolveValue(t: TypeRef in default, what: String): Type`
+`public function resolveValue(typeRef: TypeRef in default, what: String): Type`
 <sub>línea 51</sub>
 
-`public function resolveType(t: TypeRef in default): Type`
+`public function resolveType(typeRef: TypeRef in default): Type`
 <sub>línea 56</sub>
 
-`function resolveNamed(t: TypeRef in default): Type`
+`function resolveNamed(typeRef: TypeRef in default): Type`
 <sub>línea 101</sub>
 
-`public function note(t: Type in default): void`  
+`public function note(type: Type in default): void`  
 Registers a type (and its parts) so the generator emits it.  
 <sub>línea 122</sub>
 
-`public function noted(t: Type in default): Type`  
+`public function noted(type: Type in default): Type`  
 Notes that the generated C needs the type, and returns it.  
 <sub>línea 152</sub>
 
@@ -1627,7 +1735,7 @@ Notes that the generated C needs the type, and returns it.
 `function checkInner(e: Expr in default, expected: Type? in default, place: Place in default): Type`
 <sub>línea 169</sub>
 
-`function checkUnwrap(u: Unwrap in default, expected: Type? in default, place: Place in default): Type`
+`function checkUnwrap(unwrap: Unwrap in default, expected: Type? in default, place: Place in default): Type`
 <sub>línea 197</sub>
 
 `public function checkIntValue(v: ConstVal, line: int32, expected: Type? in default): Type`  
@@ -1646,7 +1754,7 @@ An integer literal where `expected` is wanted.
 `public function lookupIn(sc: Scope in default, name: String): Symbol?`
 <sub>línea 292</sub>
 
-`public function variantFieldNames(v: VariantInfo in default): String`
+`public function variantFieldNames(variant: VariantInfo in default): String`
 <sub>línea 300</sub>
 
 `public function typeNamed(e: Expr): String`  
@@ -1663,14 +1771,14 @@ The memory a name refers to, if it is one.
 `function checkMember(m: Member in default, place: Place in default): Type`
 <sub>línea 325</sub>
 
-`public function isProperty(t: Type in default, name: String): bool`  
+`public function isProperty(type: Type in default, name: String): bool`  
 A value read without parentheses: the length of a String, an array, a list or an Any, or a native let.  
 <sub>línea 420</sub>
 
-`public function fieldOf(t: Type in default, name: String): FieldInfo?`
+`public function fieldOf(type: Type in default, name: String): FieldInfo?`
 <sub>línea 426</sub>
 
-`public function methodOf(t: Type in default, name: String): MethodInfo?`  
+`public function methodOf(type: Type in default, name: String): MethodInfo?`  
 A method of a struct, class or interface (not an operator).  
 <sub>línea 432</sub>
 
@@ -1681,7 +1789,7 @@ A method that a native type declares for a C type.
 `public function describeExpr(e: Expr): String`
 <sub>línea 450</sub>
 
-`function checkIndex(ix: Index in default): Type`
+`function checkIndex(indexExpr: Index in default): Type`
 <sub>línea 459</sub>
 
 `public function resolvePlacement(p: Placed in default): Place?`  
@@ -1699,30 +1807,30 @@ The Place written after `in`, or null after reporting an error.
 
 ## semantics.expressions.calls
 
-`src/semantics/expressions/calls.lar` · 793 líneas · 31 funciones
+`src/compiler/semantics/expressions/calls.lar` · 793 líneas · 31 funciones
 semantics.expressions.calls: calls: functions, methods, constructors and what the language has built in.
 
-`public function checkAllArgs(c: Call in default): Type`
+`public function checkAllArgs(call: Call in default): Type`
 <sub>línea 29</sub>
 
-`function builtinCall(c: Call in default, kind: BK, receiver: Type? in default): void`
+`function builtinCall(c: Call in default, kind: BuiltinKind, receiver: Type? in default): void`
 <sub>línea 34</sub>
 
-`function throwing(c: Call in default, tt: Type?, what: String): void`  
+`function throwing(call: Call in default, tt: Type?, what: String): void`  
 A call to something that can throw: it must be handled.  
 <sub>línea 39</sub>
 
-`public function checkCall(c: Call in default, expected: Type? in default, place: Place in default): Type`
+`public function checkCall(call: Call in default, expected: Type? in default, place: Place in default): Type`
 <sub>línea 45</sub>
 
 `function checkMemoryCall(c: Call in default, compact: bool): Type`  
 Memory.limit(m, bytes) and Memory.compact(m): they work on the memory itself, so m must be its name. compact() is checked again at the end (checkCompacts), once the memory of every variable is known.  
 <sub>línea 94</sub>
 
-`function checkFunctionCall(c: Call in default, f: FunctionInfo in default, place: Place in default): Type`
+`function checkFunctionCall(c: Call in default, functionInfo: FunctionInfo in default, place: Place in default): Type`
 <sub>línea 123</sub>
 
-`function flowsOf(c: Call, m: MethodInfo): bool[*]`  
+`function flowsOf(call: Call, method: MethodInfo): bool[*]`  
 The arguments the result of a method call may point to.  
 <sub>línea 167</sub>
 
@@ -1730,7 +1838,7 @@ The arguments the result of a method call may point to.
 n times b.  
 <sub>línea 172</sub>
 
-`public function madeBy(e: Expr in default, m: MethodInfo in default, place: Place in default): Region`  
+`public function madeBy(e: Expr in default, method: MethodInfo in default, place: Place in default): Region`  
 What a method call creates (only if some method of that name may create its result).  
 <sub>línea 179</sub>
 
@@ -1750,55 +1858,55 @@ A result with data, created where the expression says (like a call's).
 `function closureCall(c: Call in default, t: Type in default, calleeRegion: Region in default, place: Place in default): Type`
 <sub>línea 325</sub>
 
-`public function same(c: Call in default, place: Place in default): Place[*]`  
+`public function same(call: Call in default, place: Place in default): Place[*]`  
 The same place for every argument.  
 <sub>línea 339</sub>
 
-`function checkArgsLives(c: Call in default, params: Type[*] in default, varargs: bool, memParams: bool[*], name: String,`  
+`function checkArgsLives(call: Call in default, params: Type[*] in default, varargs: bool, memParams: bool[*], name: String,`  
 Checks arguments, and the `in` of the parameters; returns the meet of the regions of the arguments that reference memory. argPlace: where arguments with data are created (the call's place when the result may point to them). A parameter that says where it lives gets its argument created there: `in default`, `in self`.  
 <sub>línea 350</sub>
 
-`function checkArgs(c: Call in default, params: Type[*] in default, varargs: bool, memParams: bool[*], name: String, places: Place[*] in default,`
+`function checkArgs(call: Call in default, params: Type[*] in default, varargs: bool, memParams: bool[*], name: String, places: Place[*] in default,`
 <sub>línea 410</sub>
 
-`function checkClone(c: Call in default, ot: Type in default, place: Place in default): Type`
+`function checkClone(call: Call in default, objectType: Type in default, place: Place in default): Type`
 <sub>línea 456</sub>
 
 `function heldResource(t: Type, visiting: Any): String`  
 The resource type a value holds (directly or in a field, an element...), or "".  
 <sub>línea 475</sub>
 
-`function changesArray(c: Call in default, obj: Expr in default, at: Type in default, kind: BK): void`  
+`function changesArray(call: Call in default, obj: Expr in default, at: Type in default, kind: BuiltinKind): void`  
 push, pop and clear change a fixed array in place: it must be a variable or a field.  
 <sub>línea 500</sub>
 
-`function checkArrayMethod(c: Call in default, m: Member in default, at: Type in default, expected: Type? in default, place: Place in default): Type`
+`function checkArrayMethod(call: Call in default, member: Member in default, at: Type in default, expected: Type? in default, place: Place in default): Type`
 <sub>línea 506</sub>
 
-`function checkSort(c: Call in default, obj: Expr in default, at: Type in default): Type`  
+`function checkSort(call: Call in default, obj: Expr in default, at: Type in default): Type`  
 list.sort(): numbers and Strings in their natural order. list.sort(compare): any elements, in the order that compare(a, b) says (negative: a goes first; zero: equal; positive: b goes first). Stable, in place.  
 <sub>línea 570</sub>
 
-`function checkMapFilter(c: Call in default, obj: Expr in default, isMap: bool, at: Type in default, expected: Type? in default, place: Place in default): Type`
+`function checkMapFilter(call: Call in default, obj: Expr in default, isMap: bool, at: Type in default, expected: Type? in default, place: Place in default): Type`
 <sub>línea 587</sub>
 
 `function stringForms(name: String): String`  
 The String methods the compiler writes itself (the rest are written in Larimar in std/lang.lar).  
 <sub>línea 621</sub>
 
-`function checkStringMethod(c: Call in default, m: Member in default, place: Place in default): Type`  
+`function checkStringMethod(call: Call in default, member: Member in default, place: Place in default): Type`  
 The core methods of String: its length, views of it (substring, bytes) and lists of views (split, lines).  
 <sub>línea 631</sub>
 
-`function checkAnyMethod(c: Call in default, m: Member in default): Type`  
+`function checkAnyMethod(call: Call in default, member: Member in default): Type`  
 remove(name), removeAt(i), clear(), removeIf((value) -> ...) or removeIf((name, value) -> ...).  
 <sub>línea 691</sub>
 
-`function comparableInAny(t: Type): bool`  
+`function comparableInAny(type: Type): bool`  
 Values contains() can find in an Any: compared by value (numbers, bool, String) or identity (objects).  
 <sub>línea 763</sub>
 
-`function comparable(t: Type): bool`  
+`function comparable(type: Type): bool`  
 Elements contains() can compare with ==.  
 <sub>línea 769</sub>
 
@@ -1815,7 +1923,7 @@ Elements contains() can compare with ==.
 
 ## semantics.expressions.constants
 
-`src/semantics/expressions/constants.lar` · 153 líneas · 9 funciones
+`src/compiler/semantics/expressions/constants.lar` · 153 líneas · 9 funciones
 semantics.expressions.constants: the values known when compiling.
 
 ### class `ConstVal`
@@ -1836,7 +1944,7 @@ semantics.expressions.constants: the values known when compiling.
 The value of an integer literal, negated or not.  
 <sub>línea 28</sub>
 
-`public function intFits(i: int64, big: bool, huge: bool, t: Type): bool`  
+`public function intFits(i: int64, big: bool, huge: bool, type: Type): bool`  
 Integer values: does it fit in t?  
 <sub>línea 51</sub>
 
@@ -1854,7 +1962,7 @@ int64, float64, bool or String (raw text), or null after reporting an error.
 
 ## semantics.expressions.conversions
 
-`src/semantics/expressions/conversions.lar` · 228 líneas · 13 funciones
+`src/compiler/semantics/expressions/conversions.lar` · 228 líneas · 13 funciones
 semantics.expressions.conversions: when a value of one type can be used as another: coercion and conversions.
 
 `public function typeOf(e: Node): Type`
@@ -1873,27 +1981,27 @@ semantics.expressions.conversions: when a value of one type can be used as anoth
 The current statement's temporaries (none at the top level: there it is the whole program).  
 <sub>línea 50</sub>
 
-`public function hasRefs(t: Type): bool`
+`public function hasRefs(type: Type): bool`
 <sub>línea 59</sub>
 
-`public function namedHasRefs(name: String, nk: NamedK): bool`  
+`public function namedHasRefs(name: String, namedKind: NamedKind): bool`  
 Has a struct or an enum (by name) references to memory?  
 <sub>línea 65</sub>
 
-`function hasRefsIn(t: Type, visiting: Any): bool`
+`function hasRefsIn(type: Type, visiting: Any): bool`
 <sub>línea 70</sub>
 
-`function namedRefsIn(name: String, nk: NamedK, visiting: Any): bool`
+`function namedRefsIn(name: String, namedKind: NamedKind, visiting: Any): bool`
 <sub>línea 85</sub>
 
-`public function conv(kind: ConvK, from: Type in default, to: Type in default): Conversion`
+`public function conversionOf(kind: ConversionKind, from: Type in default, to: Type in default): Conversion`
 <sub>línea 108</sub>
 
 `public function coerce(e: Expr in default, target: Type in default, place: Place in default, ctx: String in default): Type`  
 Checks `e` where a value of type `target` is needed, applying implicit conversions. Returns the target type, or ERROR.  
 <sub>línea 117</sub>
 
-`function box(e: Expr in default, t: Type, place: Place in default): void`  
+`function box(e: Expr in default, type: Type, place: Place in default): void`  
 A struct or enum put in an Any is copied into a memory: the one written with `in`, or the table's.  
 <sub>línea 181</sub>
 
@@ -1904,78 +2012,78 @@ A struct or enum put in an Any is copied into a memory: the one written with `in
 
 ## semantics.expressions.literals
 
-`src/semantics/expressions/literals.lar` · 363 líneas · 15 funciones
+`src/compiler/semantics/expressions/literals.lar` · 367 líneas · 15 funciones
 semantics.expressions.literals: lambdas, objects, lists, tables and casts.
 
-`public function checkLambda(l: Lambda in default, expected: Type? in default): Type`
+`public function checkLambda(l: Lambda in default, expected: Type? in default, place: Place in default): Type`
 <sub>línea 20</sub>
 
 `public function calledReference(c: Call in default, ref: Call in default): Type`  
 pepito::run(): the parentheses call it; the reference is written without them.  
-<sub>línea 69</sub>
+<sub>línea 73</sub>
 
-`public function refText(c: Call): String`  
+`public function refText(call: Call): String`  
 How a method reference was written: Pages::show.  
-<sub>línea 78</sub>
+<sub>línea 82</sub>
 
-`function referenceTarget(c: Call in default): bool`  
+`function referenceTarget(call: Call in default): bool`  
 Module::function, variable::method or self::method; not a field (it would be read on every call).  
-<sub>línea 89</sub>
+<sub>línea 93</sub>
 
-`function checkValues(o: ObjectLit in default): Type`
-<sub>línea 97</sub>
+`function checkValues(literal: ObjectLit in default): Type`
+<sub>línea 101</sub>
 
-`function valuesRegion(o: ObjectLit in default): Region`
-<sub>línea 102</sub>
+`function valuesRegion(literal: ObjectLit in default): Region`
+<sub>línea 106</sub>
 
 `function writtenHere(e: Expr in default): bool`  
 A value nobody else has: a list or an object written there, of values or of what is written there too.  
-<sub>línea 109</sub>
+<sub>línea 113</sub>
 
-`function checkSynchronizedInits(o: ObjectLit in default, typeName: String in default): void`  
+`function checkSynchronizedInits(literal: ObjectLit in default, typeName: String in default): void`  
 What a synchronized object is created with: values, or what is written right there. A list or an object that whoever creates it still has would be used by two threads without the lock, and a function could be called by two at once: that one is `thread safe`.  
-<sub>línea 131</sub>
+<sub>línea 135</sub>
 
-`public function checkObjectLit(o: ObjectLit in default, expected: Type? in default, place: Place in default): Type`
-<sub>línea 144</sub>
+`public function checkObjectLit(literal: ObjectLit in default, expected: Type? in default, place: Place in default): Type`
+<sub>línea 148</sub>
 
-`function checkAnyLit(o: ObjectLit in default, place: Place in default): Type`  
+`function checkAnyLit(literal: ObjectLit in default, place: Place in default): Type`  
 { 1, "two", name: v, inner: { ... } }: positions and named entries.  
-<sub>línea 234</sub>
+<sub>línea 238</sub>
 
-`function checkFieldInits(o: ObjectLit in default, fields: FieldInfo[*] in default, typeName: String, place: Place in default, objRegion: Region? in default): void`  
+`function checkFieldInits(literal: ObjectLit in default, fields: FieldInfo[*] in default, typeName: String, place: Place in default, objRegion: Region? in default): void`  
 objRegion != null: a class object, whose fields must not reference shorter-lived data.  
-<sub>línea 254</sub>
+<sub>línea 258</sub>
 
 `public function checkArrayLit(a: ArrayLit in default, expected: Type? in default, place: Place in default): Type`
-<sub>línea 285</sub>
+<sub>línea 289</sub>
 
 `public function checkCast(c: Cast in default): Type`
-<sub>línea 326</sub>
+<sub>línea 330</sub>
 
 `public function checkWith(facts: Symbol[*] in default, e: Expr in default, expected: Type? in default, place: Place in default): Type`  
 Checks e where the facts hold (the right side of && and ||, a side of ?:).  
-<sub>línea 346</sub>
+<sub>línea 350</sub>
 
 `public function coerceWith(facts: Symbol[*] in default, e: Expr in default, target: Type in default, place: Place in default, ctx: String in default): Type`
-<sub>línea 355</sub>
+<sub>línea 359</sub>
 
 ---
 
 ## semantics.expressions.operators
 
-`src/semantics/expressions/operators.lar` · 341 líneas · 16 funciones
+`src/compiler/semantics/expressions/operators.lar` · 341 líneas · 16 funciones
 semantics.expressions.operators: ? :, is, and the unary and binary operators.
 
 `public function checkTernary(t: Ternary in default, expected: Type? in default, place: Place in default): Type`  
 c ? a : b. The side that is not a bare literal (a number or null) gives the type, and the other side takes it. Two classes meet in their nearest common ancestor.  
 <sub>línea 26</sub>
 
-`public function checkIs(x: IsExpr in default): Type`  
+`public function checkIs(isExpr: IsExpr in default): Type`  
 x is Dog [d]: the binding is declared where the test is known to be true (see facts).  
 <sub>línea 64</sub>
 
-`public function related(cls: ClassInfo in default, t: Type in default): bool`  
+`public function related(classInfo: ClassInfo in default, type: Type in default): bool`  
 Can a value of class or interface type `t` be a `cls`?  
 <sub>línea 95</sub>
 
@@ -1983,11 +2091,11 @@ Can a value of class or interface type `t` be a `cls`?
 A number or null literal: it takes the type of the other side of ?:.  
 <sub>línea 100</sub>
 
-`public function withoutThreadSafe(t: Type in default): Type`  
+`public function withoutThreadSafe(type: Type in default): Type`  
 A type without `thread safe` (also inside an optional), or the type itself.  
 <sub>línea 103</sub>
 
-`public function optional(t: Type in default): Type`
+`public function optional(type: Type in default): Type`
 <sub>línea 109</sub>
 
 `function unify(a: Type in default, b: Type in default): Type?`
@@ -1996,46 +2104,46 @@ A type without `thread safe` (also inside an optional), or the type itself.
 `function convertTo(e: Expr in default, from: Type in default, to: Type in default): void`
 <sub>línea 130</sub>
 
-`public function checkUnary(u: Unary in default, expected: Type? in default, place: Place in default): Type`
+`public function checkUnary(unary: Unary in default, expected: Type? in default, place: Place in default): Type`
 <sub>línea 139</sub>
 
-`function checkAddress(u: Unary in default): Type`  
+`function checkAddress(unary: Unary in default): Type`  
 &x: a pointer to the variable x, for C to read or write (getaddrinfo(..., &list), accept(fd, &addr, &len)). Only as an argument of an extern function, so it never outlives the call; x is a variable whose type a C pointer can point to.  
 <sub>línea 171</sub>
 
-`function operatorOf(t: Type in default, op: String, arity: int32): MethodInfo?`
+`function operatorOf(type: Type in default, op: String, arity: int32): MethodInfo?`
 <sub>línea 200</sub>
 
 `function isIntLiteral(e: Expr): bool`
 <sub>línea 205</sub>
 
-`public function checkBinary(b: Binary in default, expected: Type? in default, place: Place in default): Type`
+`public function checkBinary(binary: Binary in default, expected: Type? in default, place: Place in default): Type`
 <sub>línea 213</sub>
 
-`function checkEquality(b: Binary in default): void`
+`function checkEquality(binary: Binary in default): void`
 <sub>línea 282</sub>
 
-`function operands(b: Binary in default, hint: Type? in default): bool`  
+`function operands(binary: Binary in default, hint: Type? in default): bool`  
 Checks both sides (into lt and rt); integer literals adapt to the other side. Returns false when one is an error.  
 <sub>línea 311</sub>
 
-`function overloaded(b: Binary in default, t0: Type in default, op: String in default): bool`
+`function overloaded(binary: Binary in default, firstType: Type in default, op: String in default): bool`
 <sub>línea 330</sub>
 
 ---
 
 ## semantics.expressions.switches
 
-`src/semantics/expressions/switches.lar` · 336 líneas · 10 funciones
+`src/compiler/semantics/expressions/switches.lar` · 336 líneas · 10 funciones
 semantics.expressions.switches: switch: its patterns and what they cover.
 
-`public function analyzeSwitch(sw: SwitchExpr in default, isExpr: bool, expected: Type? in default, place: Place in default): Type`
+`public function analyzeSwitch(switchExpr: SwitchExpr in default, isExpr: bool, expected: Type? in default, place: Place in default): Type`
 <sub>línea 20</sub>
 
 `function namedTypeByName(name: String in default): Type?`
 <sub>línea 118</sub>
 
-`function bind(name: String in default, t: Type in default, line: int32): Symbol`  
+`function bind(name: String in default, type: Type in default, line: int32): Symbol`  
 An immutable name bound by a pattern.  
 <sub>línea 127</sub>
 
@@ -2043,21 +2151,21 @@ An immutable name bound by a pattern.
 Declares pattern bindings before inferring the switch type from the first arm.  
 <sub>línea 134</sub>
 
-`function bindPart(name: String in default, t: Type in default, line: int32, subject: Expr in default): Symbol`  
+`function bindPart(name: String in default, type: Type in default, line: int32, subject: Expr in default): Symbol`  
 A name bound to (part of) the subject: it shares the subject's memory when it references any.  
 <sub>línea 160</sub>
 
 `function resolvePattern(p: Pattern in default, st: Type in default, inner: Type in default, subject: Expr in default): PatternInfo?`
 <sub>línea 166</sub>
 
-`function anyPattern(p: Pattern in default, subject: Expr in default, pi: PatternInfo in default): PatternInfo?`  
+`function anyPattern(p: Pattern in default, subject: Expr in default, patternInfo: PatternInfo in default): PatternInfo?`  
 case int64 n, case String s, case Any t (a table), case null.  
 <sub>línea 252</sub>
 
-`function classPattern(p: Pattern in default, inner: Type in default, pi: PatternInfo in default, binding: String in default, subject: Expr in default): PatternInfo?`
+`function classPattern(p: Pattern in default, inner: Type in default, patternInfo: PatternInfo in default, binding: String in default, subject: Expr in default): PatternInfo?`
 <sub>línea 268</sub>
 
-`function analyzeArm(c: SwitchCase in default, si: SwitchInfo in default, isExpr: bool, place: Place in default): void`
+`function analyzeArm(c: SwitchCase in default, switchInfo: SwitchInfo in default, isExpr: bool, place: Place in default): void`
 <sub>línea 284</sub>
 
 `function alwaysYields(body: Stmt[*]): bool`
@@ -2067,7 +2175,7 @@ case int64 n, case String s, case Any t (a table), case null.
 
 ## semantics.linker
 
-`src/semantics/linker.lar` · 1416 líneas · 69 funciones
+`src/compiler/semantics/linker.lar` · 1364 líneas · 72 funciones
 semantics.linker: modules (Linker.java). Each file is a module; `import a.b` loads a/b.lar.
 
 Every module is parsed, its top-level declarations are renamed with its path
@@ -2080,273 +2188,406 @@ Lines are file index * 1000000 + line; decode() turns them back into "file:line"
 ### class `Module`
 
 `function newModule(path: String in default, index: int32): Module`
-<sub>línea 41</sub>
+<sub>línea 40</sub>
 
 `public function inTarget(platform: String): bool`  
 Whether what is for `platform` ("": every one) is for the target.  
-<sub>línea 65</sub>
+<sub>línea 64</sub>
 
 `function ownStd(mainPath: String in default): String?`  
 The standard library a file belongs to, when it is one of its files (std/crypto.lar open in the editor, of a copy that is not the installed one): its modules are then the ones of that copy, so that `import std.crypto` in its parts is the file being read, not another.  
-<sub>línea 83</sub>
+<sub>línea 82</sub>
 
-`public function link(mainShown: String in default, mainSource: String in default, sourceDir: String in default, std: String in default, mainPath: String in default): Program`
-<sub>línea 97</sub>
+`public function link(mainShown: String in default, mainSource: String in default, sourceDir: String in default, std: String in default, mainPath: String in default): void`  
+Link: reads the main file and every module it imports (parsing each), in an order where a module comes after the ones it uses, and gives each the names it sees. The rules (semantics.rules) look at the modules next; assemble puts them together.  
+<sub>línea 104</sub>
+
+`public function flushRuleErrors(): void`  
+The errors said so far, into linkErrors (each once).  
+<sub>línea 126</sub>
+
+`public function linkedModules(): Module[*]`  
+The modules linked, each after the ones it imports.  
+<sub>línea 132</sub>
+
+`public function declarationsOf(module: Module in default): Node[*]`  
+The declarations of a module, as written (before assemble gives them their C names).  
+<sub>línea 135</sub>
+
+`public function linkedMainFile(): String`  
+The main file linked.  
+<sub>línea 138</sub>
+
+`public function importsOf(module: Module in default): ImportDecl[*]`  
+The imports of a module.  
+<sub>línea 141</sub>
+
+`public function ruleError(line: int32, rule: String, msg: String): void`  
+A broken rule of the language: its message, with the rule's id (semantics.rules).  
+<sub>línea 144</sub>
+
+`public function assemble(): Program`  
+Assemble: every module's declarations, with their C names, in one Program; the errors go to linkErrors.  
+<sub>línea 149</sub>
 
 `function dictFromSet(into: Any, names: Any in default, prefix: String): void`
-<sub>línea 142</sub>
+<sub>línea 177</sub>
 
 `function error(line: int32, msg: String): void`
-<sub>línea 146</sub>
+<sub>línea 181</sub>
 
 `function loadLang(): void`  
 std.lang, cut down to the declarations the program mentions, and the ones those mention (comments after // do not count). A name the main file declares itself is its own.  
-<sub>línea 154</sub>
+<sub>línea 189</sub>
 
 `function taskInterface(c: ClassDecl in default, p: Program in default): String`  
 The name of `implements` that is std.os.process.Task, as the class wrote it ("" when it does not implement it): Task imported by name, or through the alias of std.os.process.  
-<sub>línea 239</sub>
+<sub>línea 274</sub>
 
-`function taskScalar(t: TypeRef in default): bool`
-<sub>línea 254</sub>
+`function taskScalar(typeRef: TypeRef in default): bool`
+<sub>línea 289</sub>
 
-`function fromTable(t: TypeRef in default, x: String): String`  
+`function fromTable(typeRef: TypeRef in default, x: String): String`  
 What a value of a scalar type is when it comes back from a table (`x`: the Any).  
-<sub>línea 257</sub>
+<sub>línea 292</sub>
 
 `function modulePathOf(file: String): String`  
 The module path a file is imported by: from the project's folder (tests, and the editor, also from the folder above it, as moduleFile does). "" when it is under neither.  
-<sub>línea 268</sub>
+<sub>línea 303</sub>
 
 `function pathUnder(dir: String, file: String): String`
-<sub>línea 274</sub>
+<sub>línea 318</sub>
 
 `function writeTasks(mainPath: String): void`  
 For each module with classes that implement Task, two functions of its own: one gives the class and fields of a task as a table, the other makes it again from them. std.os.process.tasks is then written to ask each of those modules.  
-<sub>línea 290</sub>
+<sub>línea 334</sub>
 
 `function addWords(text: String in default): void`  
 Adds the words of a text (not those of its comments) to `words`.  
-<sub>línea 428</sub>
+<sub>línea 472</sub>
 
 `function cWords(code: String in default, names: Any in default): void`  
 Every name in a piece of C, into names.  
-<sub>línea 444</sub>
+<sub>línea 488</sub>
 
 `function cCodeUses(code: String in default, cSymbols: Any in default): bool`
-<sub>línea 457</sub>
+<sub>línea 501</sub>
 
-`function parse(m: Module in default, source: String in default): void`
-<sub>línea 477</sub>
+`function parse(module: Module in default, source: String in default): void`
+<sub>línea 521</sub>
 
 `public function readSource(path: String): String?`  
 The text of a file, or null if it cannot be read.  
-<sub>línea 518</sub>
+<sub>línea 555</sub>
 
 `public function isStd(path: String): bool`
-<sub>línea 528</sub>
+<sub>línea 565</sub>
 
-`function unsafeModule(m: Module in default): bool`  
+`public function unsafeModule(module: Module in default): bool`  
 Whether the module may have native interfaces of its own (unsafe_c of its project or library).  
-<sub>línea 549</sub>
+<sub>línea 586</sub>
 
-`function sourceOf(m: Module in default): String`  
+`public function sourceOf(module: Module in default): String`  
 Who a module's C is from: its library, or the project.  
-<sub>línea 557</sub>
+<sub>línea 594</sub>
 
-`function trusted(m: Module in default, mainPath: String): bool`  
+`public function trusted(module: Module in default, mainPath: String): bool`  
 Whether a module may have C: the standard library's (the installed one, or the copy being edited), and the language's.  
-<sub>línea 563</sub>
-
-`function noC(m: Module in default, interfaces: bool): void`  
-C is only the standard library's: a program, and a library written in Larimar, use what std gives (and, for the rest, other programs). Whatever would bring C of its own here is an error.  
-<sub>línea 573</sub>
-
-`function interfaceTypes(m: Module in default): String[*]`  
-The types and structs the native interfaces of a module declare (their names).  
-<sub>línea 614</sub>
+<sub>línea 600</sub>
 
 `function moduleFile(path: String): String`  
 Where a module's file is: std/, else a library of [dependencies] (its name, or <name>.<part>), else the project's folder (the main file's).  
-<sub>línea 628</sub>
+<sub>línea 610</sub>
 
-`function libraryOf(path: String): int32`  
+`public function libraryOf(path: String): int32`  
 The library a module belongs to (its name, or <name>.<part>): its index, or -1.  
-<sub>línea 649</sub>
+<sub>línea 636</sub>
 
 `function shownName(path: String): String`  
 How a module's file is shown in messages.  
-<sub>línea 657</sub>
+<sub>línea 644</sub>
 
-`function visit(m: Module in default): void`  
+`function visit(module: Module in default): void`  
 Loads the imports first, so each module comes after the ones it uses (and globals start in that order).  
-<sub>línea 666</sub>
+<sub>línea 653</sub>
 
-`function tables(m: Module in default): void`
-<sub>línea 713</sub>
+`function tables(module: Module in default): void`
+<sub>línea 684</sub>
 
-`function bring(m: Module, into: Any, n: String in into, from: Module, mangled: String in into, line: int32): void`
-<sub>línea 776</sub>
+`function bring(module: Module, into: Any, n: String in into, from: Module, mangled: String in into, line: int32): void`
+<sub>línea 747</sub>
 
 `function push(): void`
-<sub>línea 794</sub>
+<sub>línea 765</sub>
 
 `function pop(): void`
-<sub>línea 799</sub>
+<sub>línea 770</sub>
 
 `function declare(n: String in default): void`
-<sub>línea 801</sub>
+<sub>línea 772</sub>
 
 `function local(n: String): bool`
-<sub>línea 805</sub>
+<sub>línea 776</sub>
 
-`function stdOwn(path: String): bool`  
-A module of std that only std imports: the C of one system (std.x.posix, .windows, .macos) and what the modules of a part share (std.x.common, std.x.internal).  
-<sub>línea 819</sub>
-
-`function stdPublicOf(path: String): String`  
-std.net.posix -> std.net: where what it does is given.  
-<sub>línea 828</sub>
-
-`function stdFileOpened(m: Module in default): bool`  
+`public function stdFileOpened(module: Module in default): bool`  
 A file of std opened alone (the editor, larimar check std/x.lar): it is std, whatever its module path.  
-<sub>línea 839</sub>
+<sub>línea 787</sub>
 
-`function isLanguage(m: Module in default): bool`  
+`public function isLanguage(module: Module in default): bool`  
 std.lang (or std/lang.lar opened alone): what has no body there the compiler writes.  
-<sub>línea 846</sub>
+<sub>línea 794</sub>
 
-`function nativeKnown(m: Module in default, name: String): bool`
-<sub>línea 851</sub>
+`function nativeKnown(module: Module in default, name: String): bool`
+<sub>línea 799</sub>
 
-`function larNames(m: Module in default, code: String, line: int32): String`  
+`function larNames(module: Module in default, code: String, line: int32): String`  
 lar"name" in ccode: a function, type or global of Larimar, by its Larimar name (module.name for another module); it becomes lar"its linked name", and the generator writes its C name there.  
-<sub>línea 860</sub>
+<sub>línea 808</sub>
 
-`function larName(m: Module in default, name: String): String`  
+`function larName(module: Module in default, name: String): String`  
 The linked name of a Larimar name seen from module m ("a.b.name": the module a.b), or "".  
-<sub>línea 885</sub>
+<sub>línea 833</sub>
 
-`function rewriteDecl(m: Module in default, d: Node in default): void`
-<sub>línea 899</sub>
+`function rewriteDecl(module: Module in default, d: Node in default): void`
+<sub>línea 847</sub>
 
-`function hasHeaders(m: Module in default): bool`  
+`function hasHeaders(module: Module in default): bool`  
 Whether a module brings its own C headers (cinclude or ccode), itself or in its parts (the modules of its folder, net/posix.lar for net.lar): then its natives are declared by them, not by us.  
-<sub>línea 997</sub>
+<sub>línea 945</sub>
 
 `function function_(f: FunctionDecl in default, name: String in default): void`
-<sub>línea 1009</sub>
+<sub>línea 957</sub>
 
 `function fields(fs: FieldDecl[*] in default): void`
-<sub>línea 1020</sub>
+<sub>línea 968</sub>
 
 `function params(ps: Param[*] in default): void`
-<sub>línea 1027</sub>
+<sub>línea 975</sub>
 
 `function typeRef(t: TypeRef? in default): void`
-<sub>línea 1031</sub>
+<sub>línea 979</sub>
 
 `function typeName(name: String in default, line: int32): String`  
 Shape, geo.Shape, Shape.Circle (enum variant), geo.Shape.Circle.  
-<sub>línea 1044</sub>
+<sub>línea 992</sub>
 
 `function exported(from: Module, n: String, values: bool, line: int32): String`  
 A public name of another module: values first, then types ("" after an error).  
-<sub>línea 1061</sub>
+<sub>línea 1009</sub>
 
 `function hidden(n: String, line: int32): void`  
 Modules do not see the main file's declarations (nobody imports the main file).  
-<sub>línea 1075</sub>
+<sub>línea 1023</sub>
 
 `function block(body: Stmt[*] in default, newScope: bool): void`
-<sub>línea 1083</sub>
+<sub>línea 1031</sub>
 
 `function stmt(s: Stmt in default): void`
-<sub>línea 1089</sub>
+<sub>línea 1037</sub>
 
 `function exprOpt(e: Expr? in default): Expr?`
-<sub>línea 1140</sub>
+<sub>línea 1088</sub>
 
 `function expr(e: Expr in default): Expr`  
 The expression renamed; module.name comes back as the name itself.  
-<sub>línea 1143</sub>
+<sub>línea 1091</sub>
 
 `function asksPlatform(e: Expr in default): bool`  
 Platform.current(), as the linker leaves it.  
-<sub>línea 1230</sub>
+<sub>línea 1178</sub>
 
-`function chosen(sw: SwitchExpr in default): bool`  
+`function chosen(switchExpr: SwitchExpr in default): bool`  
 A switch on the platform that --target reduced to its arm.  
-<sub>línea 1236</sub>
+<sub>línea 1184</sub>
 
-`function choosePlatform(sw: SwitchExpr in default): void`  
+`function choosePlatform(switchExpr: SwitchExpr in default): void`  
 With --target, a switch on Platform.current() keeps only the arm of that platform, as its default.  
-<sub>línea 1241</sub>
+<sub>línea 1189</sub>
 
 `function switchExpr(sw: SwitchExpr in default): void`
-<sub>línea 1260</sub>
+<sub>línea 1208</sub>
 
 `function isAlias(n: String): bool`
-<sub>línea 1274</sub>
+<sub>línea 1222</sub>
 
 `function identName(id: Ident in default): void`
-<sub>línea 1278</sub>
+<sub>línea 1226</sub>
 
 `function pattern(p: Pattern in default): void`  
 A variant keeps its name; a type or a constant is renamed (variant lookup ignores a module prefix).  
-<sub>línea 1294</sub>
+<sub>línea 1242</sub>
 
 `public function decode(msg: String): String`  
 "[Line 2000005]" -> "[src/geo.lar:5]", "line 7" -> "main.lar:7", and geo__Shape -> geo.Shape.  
-<sub>línea 1316</sub>
+<sub>línea 1264</sub>
 
 `function replaceLines(msg: String, key: String, bracket: bool): String`
-<sub>línea 1322</sub>
+<sub>línea 1270</sub>
 
 `function moduleOfFile(index: int32): Module?`
-<sub>línea 1362</sub>
+<sub>línea 1310</sub>
 
 `public function namesOfFile(index: int32): Any`  
 What a file can name: name -> its name after linking (its own, imported and the language's).  
-<sub>línea 1371</sub>
+<sub>línea 1319</sub>
 
 `public function isLangHelper(name: String): bool`  
 A name std.lang keeps to itself (its helpers): every file sees it, but the editor does not offer it.  
-<sub>línea 1381</sub>
+<sub>línea 1329</sub>
 
 `public function aliasesOfFile(index: int32): Any`  
 The modules a file imports with a name: alias -> module path ("geo.shapes").  
-<sub>línea 1388</sub>
+<sub>línea 1336</sub>
 
 `public function publicsOfModule(path: String): Any`  
 The public names of a module, each with its name after linking.  
-<sub>línea 1400</sub>
+<sub>línea 1348</sub>
 
 `public function fileOfModule(path: String): String`  
 The file of a module, from its path ("geo.shapes"), or "".  
-<sub>línea 1410</sub>
+<sub>línea 1358</sub>
+
+---
+
+## semantics.rules
+
+`src/compiler/semantics/rules.lar` · 208 líneas · 26 funciones
+semantics.rules: the rules of the language that are checked on the linked modules, one object each,
+listed by languageRules(). Each has an id, which its errors say (error[std-own-import]), and the part of
+the spec that says it. The pass CheckRules (pipeline) asks each rule about each module, after Link and
+before the modules are put together; tests/language/rules_test.lar has a case that breaks each one.
+
+The rules that need types (lifetimes, threads, what crosses to a process) are the analyzer's; these are
+the ones about modules and what they declare: where C may be, which modules a module may import, and
+what must have a body.
+
+### interface `Rule`
+A rule of the language.
+
+- `function id(): String`  
+  Its id, as its errors say it: error[<id>].  
+  <sub>línea 20</sub>
+
+- `function spec(): String`  
+  Where the spec says it (docs/spec.md).  
+  <sub>línea 22</sub>
+
+- `function check(module: Module in default): void`  
+  Says each place where the module breaks it (ruleError).  
+  <sub>línea 24</sub>
+
+`public function languageRules(): Rule[*]`  
+Every rule CheckRules asks, in this order.  
+<sub>línea 28</sub>
+
+`public function ruleIds(): String[*]`  
+The ids of every rule (for the test that each one has a case that breaks it).  
+<sub>línea 33</sub>
+
+`function stdOwnPart(part: String): bool`  
+A part of a module's path that makes a module of std std's own: the C of one system, what its parts share.  
+<sub>línea 42</sub>
+
+`public function stdOwn(path: String): bool`  
+A module of std that only std imports (std.net.posix, std.os.process.internal).  
+<sub>línea 47</sub>
+
+`public function stdPublicOf(path: String): String`  
+std.net.posix -> std.net: where what it does is given.  
+<sub>línea 56</sub>
+
+### class `StdOwnImport implements Rule`
+A part of std for std itself is imported only from std.
+
+- `override function id(): String`
+  <sub>línea 67</sub>
+
+- `override function spec(): String`
+  <sub>línea 68</sub>
+
+- `override function check(module: Module in default): void`
+  <sub>línea 69</sub>
+
+`public function internalOwner(path: String): String?`  
+What is inside an `internal` folder (a.b.internal.c) is imported only by the modules of its folder (a.b...).  
+<sub>línea 80</sub>
+
+### class `InternalImport implements Rule`
+
+- `override function id(): String`
+  <sub>línea 93</sub>
+
+- `override function spec(): String`
+  <sub>línea 94</sub>
+
+- `override function check(module: Module in default): void`
+  <sub>línea 95</sub>
+
+`function interfaceTypes(module: Module in default): String[*]`  
+The types and structs the native interfaces of a module declare (their names).  
+<sub>línea 113</sub>
+
+### class `NoCOutsideStd implements Rule`
+C is only the standard library's: a program, and a library written in Larimar, use what std gives (and, for the rest, other programs). With [project] unsafe_c = true, native interfaces (and nothing else of C), which every build says (unsafeSources).
+
+- `override function id(): String`
+  <sub>línea 129</sub>
+
+- `override function spec(): String`
+  <sub>línea 130</sub>
+
+- `override function check(module: Module in default): void`
+  <sub>línea 131</sub>
+
+`function cKind(d: Node, interfaces: bool, declared: String[*], parts: Any): String`  
+What of C a declaration is ("" when it is not C, or is what a native interface allows).  
+<sub>línea 160</sub>
+
+### class `BodyNeeded implements Rule`
+A function has its body: only what the compiler writes, in std.lang (and std.memory), has none.
+
+- `override function id(): String`
+  <sub>línea 184</sub>
+
+- `override function spec(): String`
+  <sub>línea 185</sub>
+
+- `override function check(module: Module in default): void`
+  <sub>línea 186</sub>
+
+### class `LanguageTypeOnlyInLang implements Rule`
+`type X { }` (a type of the language, String and Any) is only in std.lang.
+
+- `override function id(): String`
+  <sub>línea 197</sub>
+
+- `override function spec(): String`
+  <sub>línea 198</sub>
+
+- `override function check(module: Module in default): void`
+  <sub>línea 199</sub>
 
 ---
 
 ## semantics.types
 
-`src/semantics/types.lar` · 968 líneas · 84 funciones
+`src/compiler/semantics/types.lar` · 1004 líneas · 87 funciones
 semantics.types: what the analyzer knows. Types, regions (where data lives), scopes, symbols,
 the information about declarations, and the per-node facts the generator reads.
 It follows Types.java and Analysis.java of the Java version.
 
-### enum `TyK`
+### enum `TypeKind`
 
-### enum `NamedK`
+### enum `NamedKind`
 
-### enum `ArrK`
+### enum `ArrayKind`
 
 ### class `Type`
 
-`function intern(t: Type in default): Type`
+`function intern(type: Type in default): Type`
 <sub>línea 38</sub>
 
-`function prim(name: String in default): Type`
+`function primitive(name: String in default): Type`
 <sub>línea 46</sub>
 
 `public function primByName(name: String): Type?`  
@@ -2356,99 +2597,99 @@ A built-in type by name (uint8 is byte), or null.
 `public function isPrimName(name: String): bool`
 <sub>línea 79</sub>
 
-`public function named(name: String in default, nk: NamedK): Type`
+`public function named(name: String in default, namedKind: NamedKind): Type`
 <sub>línea 81</sub>
 
-`public function funcT(params: Type[*] in default, ret: Type in default, safe: bool): Type`
+`public function functionTypeOf(params: Type[*] in default, ret: Type in default, safe: bool): Type`
 <sub>línea 85</sub>
 
-`public function hasThreadSafe(t: Type in default): bool`  
+`public function hasThreadSafe(type: Type in default): bool`  
 Is there a `thread safe` function type in t (itself, or the element of an optional or an array)?  
 <sub>línea 102</sub>
 
-`public function cTypeOf(t: Type in default): Type`  
+`public function cTypeOf(type: Type in default): Type`  
 The type C sees: t without `thread safe` (the same closure type), also inside optionals and arrays.  
 <sub>línea 109</sub>
 
-`public function arrayT(elem: Type in default, ak: ArrK, size: int64): Type`
+`public function arrayTypeOf(elem: Type in default, arrayKind: ArrayKind, size: int64): Type`
 <sub>línea 116</sub>
 
-`public function optT(inner: Type in default): Type`
+`public function optionalOf(inner: Type in default): Type`
 <sub>línea 127</sub>
 
-`public function ptrT(inner: Type in default): Type`  
+`public function pointerTo(inner: Type in default): Type`  
 T*: a C pointer (only to numbers, C structs, extern types and other pointers).  
 <sub>línea 134</sub>
 
-`public function isPtr(t: Type): bool`
+`public function isPtr(type: Type): bool`
 <sub>línea 138</sub>
 
-`public function bits(t: Type): int32`
+`public function bits(type: Type): int32`
 <sub>línea 140</sub>
 
-`public function isFloat(t: Type): bool`
+`public function isFloat(type: Type): bool`
 <sub>línea 151</sub>
 
-`public function isInteger(t: Type): bool`
+`public function isInteger(type: Type): bool`
 <sub>línea 152</sub>
 
-`public function isNumeric(t: Type): bool`
+`public function isNumeric(type: Type): bool`
 <sub>línea 153</sub>
 
-`public function isSigned(t: Type): bool`
+`public function isSigned(type: Type): bool`
 <sub>línea 154</sub>
 
-`public function isError(t: Type): bool`
+`public function isError(type: Type): bool`
 <sub>línea 155</sub>
 
-`public function isClass(t: Type): bool`
+`public function isClass(type: Type): bool`
 <sub>línea 156</sub>
 
-`public function isStruct(t: Type): bool`
+`public function isStruct(type: Type): bool`
 <sub>línea 157</sub>
 
-`public function isInterface(t: Type): bool`
+`public function isInterface(type: Type): bool`
 <sub>línea 158</sub>
 
-`public function isEnumT(t: Type): bool`
+`public function isEnumT(type: Type): bool`
 <sub>línea 159</sub>
 
-`public function isExternT(t: Type): bool`
+`public function isExternT(type: Type): bool`
 <sub>línea 160</sub>
 
-`public function isByteArray(t: Type): bool`
+`public function isByteArray(type: Type): bool`
 <sub>línea 161</sub>
 
-`public function isOpt(t: Type): bool`
+`public function isOpt(type: Type): bool`
 <sub>línea 162</sub>
 
-`public function isArray(t: Type, ak: ArrK): bool`
+`public function isArray(type: Type, arrayKind: ArrayKind): bool`
 <sub>línea 163</sub>
 
 `public function optIsPointer(o: Type): bool`  
 An optional that is a pointer in C (null is NULL): classes, extern types, T[*].  
 <sub>línea 166</sub>
 
-`public function minOf(t: Type): int64`  
+`public function minOf(type: Type): int64`  
 The smallest and largest value of an integer type; for uint64 the largest is kept apart.  
 <sub>línea 172</sub>
 
-`public function maxOf(t: Type): int64`
+`public function maxOf(type: Type): int64`
 <sub>línea 182</sub>
 
-`public function maxText(t: Type): String`  
+`public function maxText(type: Type): String`  
 "the largest value" as text, for messages.  
 <sub>línea 200</sub>
 
-### enum `RK`
+### enum `RegionKind`
 
 ### class `Region`
 
-`public function rStaticMemory(s: Symbol in default): Region`  
+`public function rStaticMemory(symbol: Symbol in default): Region`  
 The region of a global memory: static like R_STATIC, but it keeps the memory's name for messages.  
 <sub>línea 221</sub>
 
-`public function rMemory(s: Symbol in default): Region`  
+`public function rMemory(symbol: Symbol in default): Region`  
 The region of a local memory with a name.  
 <sub>línea 223</sub>
 
@@ -2462,13 +2703,13 @@ The memory a caller gives for the result of a function (or method, or lambda).
 `public function rLocal(s: Scope in default, label: String in default): Region`
 <sub>línea 231</sub>
 
-`public function rVar(v: Symbol in default): Region`
+`public function variableRegion(v: Symbol in default): Region`
 <sub>línea 232</sub>
 
-`public function symbolic(r: Region): bool`
+`public function symbolic(region: Region): bool`
 <sub>línea 234</sub>
 
-`public function resolveRegion(r: Region in default): Region`  
+`public function resolveRegion(region: Region in default): Region`  
 Replaces Var parts with the regions computed for those variables (Symbol.resolved).  
 <sub>línea 245</sub>
 
@@ -2483,7 +2724,7 @@ The shorter-lived of two regions.
 `public function sameRegion(a: Region, b: Region): bool`
 <sub>línea 295</sub>
 
-`public function describe(r: Region): String`
+`public function describe(region: Region): String`
 <sub>línea 307</sub>
 
 ### class `Scope`
@@ -2494,7 +2735,7 @@ The shorter-lived of two regions.
 `public function isAncestorOrSelf(a: Scope, s: Scope): bool`
 <sub>línea 344</sub>
 
-### enum `FrameK`
+### enum `FrameKind`
 
 ### class `Owner`
 What a body can reach, for the thread checks: the globals it uses and what it calls.
@@ -2504,15 +2745,15 @@ What a body can reach, for the thread checks: the globals it uses and what it ca
 
 ### class `Frame`
 
-### enum `SymK`
+### enum `SymbolKind`
 
-### enum `MemK`
+### enum `MemoryKind`
 
-### enum `ConstK`
+### enum `ConstantKind`
 
 ### class `Symbol`
 
-`public function isMemory(s: Symbol): bool`
+`public function isMemory(symbol: Symbol): bool`
 <sub>línea 419</sub>
 
 `public function isCReserved(name: String): bool`
@@ -2525,12 +2766,16 @@ C99 identifiers are ASCII: año -> a_u00f1o.
 `function asciiChar(c: int32): String`
 <sub>línea 455</sub>
 
-`function hex4(c: int32): String`  
+`function hex4Digits(c: int32): String`  
 Lowercase hexadecimal, at least 4 digits (like %04x).  
 <sub>línea 460</sub>
 
+`function startsLar(n: String): bool`  
+Lar and a capital (LarMemory): the names of the runtime's types.  
+<sub>línea 474</sub>
+
 `public function escapeName(name: String): String`
-<sub>línea 473</sub>
+<sub>línea 476</sub>
 
 ### class `FieldInfo`
 
@@ -2542,10 +2787,10 @@ A type that comes from C: opaque (void*), a C type (c "T") or a pointer to a C f
 ### class `MethodInfo`
 
 `public function isMemParam(flags: bool[*], i: int32): bool`
-<sub>línea 548</sub>
+<sub>línea 551</sub>
 
-`public function cSuffix(m: MethodInfo): String`
-<sub>línea 550</sub>
+`public function cSuffix(method: MethodInfo): String`
+<sub>línea 553</sub>
 
 ### class `StructInfo`
 
@@ -2559,28 +2804,36 @@ A type that comes from C: opaque (void*), a C type (c "T") or a pointer to a C f
 
 ### class `LambdaInfo`
 
-`public function hasCapture(l: LambdaInfo, s: Symbol): bool`
-<sub>línea 621</sub>
+`public function bytesOf(t: Type): int64`  
+How many bytes a value of the type takes in C, roughly (enough to tell a small value from a big one).  
+<sub>línea 628</sub>
 
-### enum `PlaceK`
+`public function hasBigCaptures(lambdaInfo: LambdaInfo): bool`  
+A lambda whose captures are too big to carry in every closure of its type.  
+<sub>línea 651</sub>
+
+`public function hasCapture(lambdaInfo: LambdaInfo, symbol: Symbol): bool`
+<sub>línea 657</sub>
+
+### enum `PlaceKind`
 Where an allocating expression puts its data. Temp: nothing said, a temporary of the statement; Global: `in default`; Block: a variable's value, the memory of its block; Result: a returned value, the memory the caller gives; Memory, Stack: `in m`, `in byte[N]`; OfObject, OfList, OfAny: stored inside an object, a list or a table.
 
 ### class `Place`
 
-`public function placeOf(kind: PlaceK, expr: Expr? in default): Place`
-<sub>línea 648</sub>
+`public function placeOf(kind: PlaceKind, expr: Expr? in default): Place`
+<sub>línea 684</sub>
 
-### enum `ConvK`
+### enum `ConversionKind`
 
 ### class `Conversion`
 
 ### enum `CallK`
 
-### enum `BK`
+### enum `BuiltinKind`
 
 ### class `CallInfo`
 
-### enum `MbK`
+### enum `MemberKind`
 
 ### class `MemberInfo`
 
@@ -2595,109 +2848,109 @@ Where an allocating expression puts its data. Temp: nothing said, a temporary of
 ### class `CatchInfo`
 
 `public function structOf(name: String): StructInfo?`
-<sub>línea 763</sub>
+<sub>línea 799</sub>
 
 `public function classOf(name: String): ClassInfo?`
-<sub>línea 768</sub>
+<sub>línea 804</sub>
 
 `public function interfaceOf(name: String): InterfaceInfo?`
-<sub>línea 773</sub>
+<sub>línea 809</sub>
 
 `public function enumOf(name: String): EnumInfo?`
-<sub>línea 778</sub>
+<sub>línea 814</sub>
 
 `public function functionOf(name: String): FunctionInfo?`
-<sub>línea 783</sub>
+<sub>línea 819</sub>
 
 `public function isExternTypeName(name: String): bool`
-<sub>línea 788</sub>
+<sub>línea 824</sub>
 
-`public function isResource(t: Type): bool`  
+`public function isResource(type: Type): bool`  
 An extern type declared `released by`: a resource that lives in a memory.  
-<sub>línea 791</sub>
+<sub>línea 827</sub>
 
 `public function platformCondition(p: String): String`  
 The C condition of a platform, for #if.  
-<sub>línea 798</sub>
+<sub>línea 834</sub>
 
 `public function platformWithin(inner: String, outer: String): bool`  
 Code that runs only on `inner` also runs where `outer` holds? (macos and linux are unix)  
-<sub>línea 808</sub>
+<sub>línea 844</sub>
 
 `public function nativeOwner(owner: String): Type`  
 The type whose methods a native type declares: one the compiler knows (String), or one of C.  
-<sub>línea 814</sub>
+<sub>línea 850</sub>
 
 `public function externInfoOf(name: String): ExternTypeInfo?`
-<sub>línea 821</sub>
+<sub>línea 857</sub>
 
-`public function externStructC(t: Type): String`  
+`public function externStructC(type: Type): String`  
 The C struct a `native struct X { ... }` describes ("" for other types).  
-<sub>línea 827</sub>
+<sub>línea 863</sub>
 
-`public function isExternStruct(t: Type): bool`
-<sub>línea 833</sub>
-
-`public function isCValue(t: Type): bool`  
-What can cross to C and back: numbers, bool, String (const char*), extern types, C structs and C pointers.  
-<sub>línea 836</sub>
-
-`public function pointable(t: Type): bool`  
-What a C pointer can point to: numbers, bool, C structs, extern types that are not resources, pointers.  
-<sub>línea 842</sub>
-
-`public function structMethod(s: StructInfo, n: String, op: bool, arity: int32): MethodInfo?`
-<sub>línea 847</sub>
-
-`public function structField(s: StructInfo, n: String): FieldInfo?`
-<sub>línea 854</sub>
-
-`public function interfaceMethod(i: InterfaceInfo, n: String): MethodInfo?`
-<sub>línea 861</sub>
-
-`public function variantOf(e: EnumInfo, name: String): VariantInfo?`  
-A variant by name; a module prefix never names a variant.  
+`public function isExternStruct(type: Type): bool`
 <sub>línea 869</sub>
 
-`public function enumSimple(e: EnumInfo): bool`
-<sub>línea 879</sub>
+`public function isCValue(type: Type): bool`  
+What can cross to C and back: numbers, bool, String (const char*), extern types, C structs and C pointers.  
+<sub>línea 872</sub>
 
-`public function parentOf(c: ClassInfo): ClassInfo?`
-<sub>línea 886</sub>
+`public function pointable(type: Type): bool`  
+What a C pointer can point to: numbers, bool, C structs, extern types that are not resources, pointers.  
+<sub>línea 878</sub>
 
-`public function syncField(c: ClassInfo in default): String`  
+`public function structMethod(structInfo: StructInfo, n: String, op: bool, arity: int32): MethodInfo?`
+<sub>línea 883</sub>
+
+`public function structField(structInfo: StructInfo, n: String): FieldInfo?`
+<sub>línea 890</sub>
+
+`public function interfaceMethod(interfaceInfo: InterfaceInfo, n: String): MethodInfo?`
+<sub>línea 897</sub>
+
+`public function variantOf(enumInfo: EnumInfo, name: String): VariantInfo?`  
+A variant by name; a module prefix never names a variant.  
+<sub>línea 905</sub>
+
+`public function enumSimple(enumInfo: EnumInfo): bool`
+<sub>línea 915</sub>
+
+`public function parentOf(classInfo: ClassInfo): ClassInfo?`
+<sub>línea 922</sub>
+
+`public function syncField(classInfo: ClassInfo in default): String`  
 Where the lock of a synchronized class is in its C struct: the first synchronized class of the chain has it.  
-<sub>línea 891</sub>
+<sub>línea 927</sub>
 
 `public function chain(name: String in default): ClassInfo[*]`  
 Root first; safe on broken hierarchies.  
-<sub>línea 897</sub>
+<sub>línea 933</sub>
 
 `public function findField(cls: String in default, field: String): FieldInfo?`
-<sub>línea 917</sub>
+<sub>línea 953</sub>
 
 `public function findMethod(cls: String in default, name: String, op: bool, arity: int32): MethodInfo?`  
 The most derived definition (operators match by arity).  
-<sub>línea 927</sub>
+<sub>línea 963</sub>
 
 `public function allFields(cls: String in default): FieldInfo[*]`
-<sub>línea 939</sub>
+<sub>línea 975</sub>
 
 `public function isSubclass(sub: String in default, sup: String): bool`
-<sub>línea 947</sub>
+<sub>línea 983</sub>
 
 `public function implementor(cls: String in default, iface: String): String`  
 The ancestor (or the class itself) that declares `implements iface`, or "".  
-<sub>línea 955</sub>
+<sub>línea 991</sub>
 
 `public function classDepth(name: String in default): int32`
-<sub>línea 967</sub>
+<sub>línea 1003</sub>
 
 ---
 
 ## codegen.debugmap
 
-`src/codegen/debugmap.lar` · 224 líneas · 10 funciones
+`src/compiler/codegen/debugmap.lar` · 224 líneas · 10 funciones
 codegen.debugmap: with larimar build --debug, what the debugger (larimar dap) needs to show the program as
 Larimar: for each C function, its Larimar name and the variables it has (their Larimar names, their
 names in C and their types), the globals, and the shape of every type (fields with their C paths,
@@ -2711,13 +2964,13 @@ A type is described as JSON: {"k": "int"|"float"|"bool"|"String"|"any"|"list"|"s
 The debug map of the program just generated, as JSON.  
 <sub>línea 25</sub>
 
-`function methodJson(m: MethodInfo in default, isStruct: bool): String`
+`function methodJson(method: MethodInfo in default, isStruct: bool): String`
 <sub>línea 61</sub>
 
 `function fnJson(cName: String, display: String, line: int32, params: Symbol[*], selfVar: String?, body: Stmt[*] in default,`
 <sub>línea 71</sub>
 
-`function varJson(name: String, c: String, t: Type, line: int32): String`  
+`function varJson(name: String, c: String, type: Type, line: int32): String`  
 line: where it is declared (0 for parameters: from the start), so the debugger hides it before.  
 <sub>línea 86</sub>
 
@@ -2725,216 +2978,220 @@ line: where it is declared (0 for parameters: from the start), so the debugger h
 The variables a body declares (not those of lambdas inside it: they are their own functions).  
 <sub>línea 91</sub>
 
-`function switchBindings(sw: SwitchExpr in out, out: Symbol[*]): void`
+`function switchBindings(switchExpr: SwitchExpr in out, out: Symbol[*]): void`
 <sub>línea 130</sub>
 
-`function typeJson(t: Type): String`
+`function typeJson(type: Type): String`
 <sub>línea 143</sub>
 
-`function raw(t: Type): String`
+`function raw(type: Type): String`
 <sub>línea 172</sub>
 
-`function describe(name: String, nk: NamedK): void`  
+`function describe(name: String, namedKind: NamedKind): void`  
 Adds a named type to "types" (once).  
 <sub>línea 175</sub>
 
-`function fieldJson(f: FieldInfo, path: String): String`
+`function fieldJson(field: FieldInfo, path: String): String`
 <sub>línea 221</sub>
 
 ---
 
 ## codegen.expressions
 
-`src/codegen/expressions.lar` · 683 líneas · 51 funciones
+`src/compiler/codegen/expressions.lar` · 687 líneas · 52 funciones
 codegen.expressions: C99 code generation (Gen.java), part 2: expressions.
 An expression becomes a C expression; what needs statements first writes them with line().
 
-`public function tname(n: String): String`
-<sub>línea 30</sub>
+`public function typeCName(n: String): String`
+<sub>línea 31</sub>
 
-`public function mangle(t: Type): String`
-<sub>línea 35</sub>
+`public function mangle(type: Type): String`
+<sub>línea 36</sub>
 
-`public function cType(t: Type): String`
-<sub>línea 64</sub>
+`public function cType(type: Type): String`
+<sub>línea 65</sub>
 
-`public function structName(t: Type): String`
-<sub>línea 102</sub>
+`public function structName(type: Type): String`
+<sub>línea 103</sub>
 
 `public function paren(s: String): String`
-<sub>línea 111</sub>
+<sub>línea 112</sub>
 
-`public function hoist(ct: String, v: String): String`
-<sub>línea 113</sub>
+`public function hoist(cTypeText: String, v: String): String`
+<sub>línea 114</sub>
 
-`function hoistAddr(ct: String, v: String): String`
-<sub>línea 119</sub>
+`public function hoistAs(cTypeText: String, v: String, role: String): String`  
+A value kept in a temporary that says what it is.  
+<sub>línea 117</sub>
 
-`public function hoistIfNeeded(ct: String, v: String, e: Expr?): String`
-<sub>línea 121</sub>
+`function hoistAddr(cTypeText: String, v: String): String`
+<sub>línea 123</sub>
+
+`public function hoistIfNeeded(cTypeText: String, v: String, e: Expr?): String`
+<sub>línea 125</sub>
 
 `public function inOrder(parts: Expr[*] in default): Expr[*]`  
 Computes, in order, the parts before the last one with effects; returns them, for forget().  
-<sub>línea 133</sub>
+<sub>línea 137</sub>
 
 `public function forget(held: Expr[*]): void`  
 The C of these parts is written: they are computed again where they appear next.  
-<sub>línea 150</sub>
+<sub>línea 154</sub>
 
 `function hasEffects(e: Expr): bool`  
 Whether evaluating it can do something another part could see: a call, an index (a panic)...  
-<sub>línea 155</sub>
+<sub>línea 159</sub>
 
 `function anyEffects(es: Expr[*]): bool`
-<sub>línea 167</sub>
+<sub>línea 171</sub>
 
 `function unchangeable(e: Expr): bool`  
 Whether nothing evaluated after it can change its value: literals, locals, parameters, constants.  
-<sub>línea 175</sub>
+<sub>línea 179</sub>
 
 `function callParts(c: Call in default): Expr[*]`  
 The parts of a call, in the order they are written: the object (not a struct, which is passed by address), then the arguments.  
-<sub>línea 188</sub>
+<sub>línea 192</sub>
 
 `function orderedCall(c: Call in default): String`
-<sub>línea 201</sub>
+<sub>línea 205</sub>
 
 `function orderedIndex(x: Index in default): String`
-<sub>línea 208</sub>
+<sub>línea 212</sub>
 
-`function orderedBinary(b: Binary in default, t: Type): String`
-<sub>línea 215</sub>
+`function orderedBinary(b: Binary in default, type: Type): String`
+<sub>línea 219</sub>
 
-`public function writtenValues(o: ObjectLit in default): Expr[*]`  
+`public function writtenValues(literal: ObjectLit in default): Expr[*]`  
 The values of a literal, in the order they are written.  
-<sub>línea 224</sub>
+<sub>línea 228</sub>
 
 `public function isPure(e: Expr): bool`
-<sub>línea 230</sub>
+<sub>línea 234</sub>
 
 `public function lazy(e: Expr in default): String`  
 Generates `e` (its value) into a separate buffer: its statements go to lazyPre.  
-<sub>línea 242</sub>
+<sub>línea 246</sub>
 
 `public function strip(s: String): String`  
 Removes the outer parentheses of a C expression when they enclose all of it.  
-<sub>línea 253</sub>
+<sub>línea 257</sub>
 
-`public function zero(t: Type): String`
-<sub>línea 279</sub>
+`public function zero(type: Type): String`
+<sub>línea 283</sub>
 
 `public function discard(e: String): void`  
 A call whose result is not used.  
-<sub>línea 290</sub>
+<sub>línea 294</sub>
 
 `function isIdentifier(s: String): bool`
-<sub>línea 296</sub>
+<sub>línea 300</sub>
 
 `public function value(e: Expr in default): String`  
 An expression with its conversion applied: where a value is stored or passed.  
-<sub>línea 308</sub>
+<sub>línea 312</sub>
 
-`function convert(v: String, c: Conversion in default, e: Expr? in default): String`
-<sub>línea 315</sub>
+`function convert(v: String, conversion: Conversion in default, e: Expr? in default): String`
+<sub>línea 319</sub>
 
 `function innerConversion(from: Type in default, to: Type in default, outer: Conversion in default): Conversion?`  
 The inner conversion of WRAP_OPTIONAL (upcast or interface), if any.  
-<sub>línea 360</sub>
+<sub>línea 364</sub>
 
-`public function boxType(t: Type in default): String`  
+`public function boxType(type: Type in default): String`  
 The descriptor of a struct or enum stored in an Any (its name and how to clone it).  
-<sub>línea 372</sub>
+<sub>línea 376</sub>
 
 `public function boxDescriptors(): String`
-<sub>línea 380</sub>
+<sub>línea 384</sub>
 
-`public function anyKind(t: Type): String`  
-RT_ANY_I32 and so on: the kind an Any uses for a value of type t.  
-<sub>línea 395</sub>
+`public function anyKind(type: Type): String`  
+LAR_ANY_I32 and so on: the kind an Any uses for a value of type t.  
+<sub>línea 399</sub>
 
-`public function anyPayload(t: Type, v: String): String`  
+`public function anyPayload(type: Type, v: String): String`  
 The value inside an Any already known to hold kind t.  
-<sub>línea 414</sub>
+<sub>línea 418</sub>
 
 `function toAny(v: String, from: Type in default, e: Expr in default): String`
-<sub>línea 424</sub>
+<sub>línea 428</sub>
 
 `public function expr(e: Expr in default): String`
-<sub>línea 449</sub>
+<sub>línea 453</sub>
 
 `function unwrap(u: Unwrap in default): String`
-<sub>línea 478</sub>
+<sub>línea 482</sub>
 
 `function placed(inner: Expr in default): String`  
 `x in memory`: the value; a lambda that becomes an interface object is created there.  
-<sub>línea 486</sub>
+<sub>línea 490</sub>
 
 `public function intLiteral(v: int64, big: bool, t: Type?): String`  
 An integer literal of type t (value v, as uint64 when big).  
-<sub>línea 492</sub>
+<sub>línea 496</sub>
 
 `function identExpr(id: Ident in default): String`
-<sub>línea 509</sub>
+<sub>línea 513</sub>
 
-`function constValue(s: Symbol): String`
-<sub>línea 522</sub>
+`function constValue(symbol: Symbol): String`
+<sub>línea 526</sub>
 
 `function selfExpr(se: Expr in default): String`
-<sub>línea 533</sub>
+<sub>línea 537</sub>
 
 `function member(m: Member in default): String`
-<sub>línea 540</sub>
+<sub>línea 544</sub>
 
 `function fieldAccess(obj: Expr in default, f: MemberInfo): String`
-<sub>línea 581</sub>
+<sub>línea 585</sub>
 
-`public function fieldC(f: FieldInfo): String`  
+`public function fieldC(field: FieldInfo): String`  
 A field's name in C: the exact one in a C struct, otherwise escaped.  
-<sub>línea 592</sub>
+<sub>línea 596</sub>
 
-`public function classFieldPath(cls: String, f: FieldInfo): String`
-<sub>línea 598</sub>
+`public function classFieldPath(cls: String, field: FieldInfo): String`
+<sub>línea 602</sub>
 
-`function index(ix: Index in default): String`
-<sub>línea 609</sub>
+`function index(indexExpr: Index in default): String`
+<sub>línea 613</sub>
 
 `function isLvalueExpr(e: Expr): bool`
-<sub>línea 627</sub>
+<sub>línea 631</sub>
 
 `public function lvalue(target: Expr in default): String`  
 The C lvalue of an assignment target (no narrowing).  
-<sub>línea 641</sub>
+<sub>línea 645</sub>
 
 `public function addrOf(e: Expr in default): String`  
 A pointer to the value of `e` (a temporary if `e` is not a variable or field).  
-<sub>línea 646</sub>
+<sub>línea 650</sub>
 
 `public function memoryRef(mem: Symbol): String`
-<sub>línea 651</sub>
+<sub>línea 655</sub>
 
 `public function placeMem(e: Expr in default): String`  
-C expression of type RtMem* for an allocation.  
-<sub>línea 656</sub>
+C expression of type LarMemory* for an allocation.  
+<sub>línea 660</sub>
 
 `public function callMem(c: Expr in default): String`  
 The memory a call gives for its result: none (NULL) when the callee only returns data that already exists.  
-<sub>línea 659</sub>
+<sub>línea 663</sub>
 
 `public function placeMemOf(p: Place? in default): String`
-<sub>línea 661</sub>
+<sub>línea 665</sub>
 
 ---
 
 ## codegen.expressions.calls
 
-`src/codegen/expressions/calls.lar` · 443 líneas · 17 funciones
+`src/compiler/codegen/expressions/calls.lar` · 442 líneas · 17 funciones
 codegen.expressions.calls: calls.
 
-`public function receiver(c: Call): Expr`  
+`public function receiver(call: Call): Expr`  
 The object a method is called on: a in a.f(...).  
 <sub>línea 20</sub>
 
-`function calleeName(c: Call): String`  
+`function calleeName(call: Call): String`  
 The name of the method called: f in a.f(...).  
 <sub>línea 25</sub>
 
@@ -2945,13 +3202,13 @@ The name of the method called: f in a.f(...).
 x, then the items of xs.  
 <sub>línea 131</sub>
 
-`function isBuilderAdd(c: Call, ci: CallInfo): bool`
+`function isBuilderAdd(call: Call, callInfo: CallInfo): bool`
 <sub>línea 137</sub>
 
 `public function args(asg: Expr[*] in default, memParams: bool[*]): String[*]`
 <sub>línea 144</sub>
 
-`function writtenParams(f: FunctionInfo): Type[*]`  
+`function writtenParams(functionInfo: FunctionInfo): Type[*]`  
 The parameters of a C function that a call writes (not the memory of the call, when C takes it first).  
 <sub>línea 154</sub>
 
@@ -2963,16 +3220,16 @@ The arguments as C takes them, for C parameters of these types (a T[] is two: it
 The elements of an array as C: items and length.  
 <sub>línea 200</sub>
 
-`function builtin(c: Call in default, b: CallInfo in default): String`
+`function builtin(call: Call in default, b: CallInfo in default): String`
 <sub>línea 210</sub>
 
-`function printCall(c: Call in default, newline: bool): String`
+`function printCall(call: Call in default, newline: bool): String`
 <sub>línea 263</sub>
 
-`function stringMethod(c: Call in default): String`
+`function stringMethod(call: Call in default): String`
 <sub>línea 277</sub>
 
-`function splitText(c: Call in default, s: String, sep: String, isLines: bool): String`  
+`function splitText(call: Call in default, s: String, sep: String, isLines: bool): String`  
 split, lines: views of the text in a new list.  
 <sub>línea 292</sub>
 
@@ -2980,22 +3237,22 @@ split, lines: views of the text in a new list.
 Several lines of C, each written like line() does (a final newline adds no empty line).  
 <sub>línea 323</sub>
 
-`function anyRemoveIf(c: Call in default): String`  
+`function anyRemoveIf(call: Call in default): String`  
 Keeps the entries for which the lambda says false; returns how many were removed.  
 <sub>línea 331</sub>
 
-`function sortList(c: Call in default, at: Type in default): String`  
+`function sortList(call: Call in default, at: Type in default): String`  
 list.sort(...): a merge sort, bottom up, in place (stable: of two equal elements the first stays first), with a buffer for one copy of the elements while it runs.  
 <sub>línea 375</sub>
 
-`function mapFilter(c: Call in default, b: CallInfo): String`
+`function mapFilter(call: Call in default, b: CallInfo): String`
 <sub>línea 414</sub>
 
 ---
 
 ## codegen.expressions.clone
 
-`src/codegen/expressions/clone.lar` · 205 líneas · 10 funciones
+`src/compiler/codegen/expressions/clone.lar` · 205 líneas · 10 funciones
 codegen.expressions.clone: clone: copying a value into another memory.
 
 `public function cloneTypeList(): Type[*]`
@@ -3007,20 +3264,20 @@ codegen.expressions.clone: clone: copying a value into another memory.
 `public function requireClone(t: Type in default): void`
 <sub>línea 41</sub>
 
-`public function cloneHeader(t: Type): String`
+`public function cloneHeader(type: Type): String`
 <sub>línea 63</sub>
 
-`public function cloneOf(t: Type in default, v: String): String`
+`public function cloneOf(type: Type in default, v: String): String`
 <sub>línea 67</sub>
 
 `function requireClassClones(): void`  
 A class object is copied by its own class (a subclass, maybe): every class's fields may need copying.  
 <sub>línea 74</sub>
 
-`public function cloneCall(c: Call in default, b: CallInfo in default): String`
+`public function cloneCall(call: Call in default, b: CallInfo in default): String`
 <sub>línea 82</sub>
 
-`public function compactCall(c: Call in default, b: CallInfo in default): String`  
+`public function compactCall(call: Call in default, b: CallInfo in default): String`  
 Memory.compact(m): m starts again with no blocks; what its variables reach in the old blocks is copied back (each thing once, cycles included), the variables are pointed at the copies, and the old blocks are freed. What lives in other memories is left where it is.  
 <sub>línea 102</sub>
 
@@ -3034,72 +3291,72 @@ Memory.compact(m): m starts again with no blocks; what its variables reach in th
 
 ## codegen.expressions.lambdas
 
-`src/codegen/expressions/lambdas.lar` · 200 líneas · 10 funciones
+`src/compiler/codegen/expressions/lambdas.lar` · 212 líneas · 10 funciones
 codegen.expressions.lambdas: lambdas and literal objects.
 
 `public function lambdaValue(l: Lambda in default): String`
 <sub>línea 20</sub>
 
-`function captureValue(s: Symbol): String`
-<sub>línea 30</sub>
-
-`function genLambda(li: LambdaInfo in default): void`
+`function captureValue(symbol: Symbol): String`
 <sub>línea 36</sub>
 
-`public function sam(l: Lambda in default, c: Conversion in default): String`  
+`function genLambda(lambdaInfo: LambdaInfo in default): void`
+<sub>línea 42</sub>
+
+`public function singleMethodObject(lambda: Lambda in default, conversion: Conversion in default): String`  
 A lambda used as a single-method interface: a small object holding the closure.  
-<sub>línea 52</sub>
+<sub>línea 64</sub>
 
-`function givenValue(o: ObjectLit, name: String): Expr?`
-<sub>línea 66</sub>
+`function givenValue(literal: ObjectLit, name: String): Expr?`
+<sub>línea 78</sub>
 
-`public function objectLit(o: ObjectLit in default, t: Type in default): String`
-<sub>línea 74</sub>
+`public function objectLit(literal: ObjectLit in default, type: Type in default): String`
+<sub>línea 86</sub>
 
-`function fieldInits(fields: FieldInfo[*] in default, o: ObjectLit in default, mem: String in default): String`
-<sub>línea 125</sub>
+`function fieldInits(fields: FieldInfo[*] in default, literal: ObjectLit in default, mem: String in default): String`
+<sub>línea 137</sub>
 
-`function classInit(level: ClassInfo in default, concrete: String, o: ObjectLit in default, mem: String in default): String`
-<sub>línea 145</sub>
+`function classInit(level: ClassInfo in default, concrete: String, literal: ObjectLit in default, mem: String in default): String`
+<sub>línea 157</sub>
 
-`function interfaceLit(o: ObjectLit in default, i: InterfaceInfo in default): String`
-<sub>línea 156</sub>
+`function interfaceLit(literal: ObjectLit in default, interfaceInfo: InterfaceInfo in default): String`
+<sub>línea 168</sub>
 
-`public function arrayLit(a: ArrayLit in default, t: Type): String`
-<sub>línea 185</sub>
+`public function arrayLit(a: ArrayLit in default, type: Type): String`
+<sub>línea 197</sub>
 
 ---
 
 ## codegen.expressions.operators
 
-`src/codegen/expressions/operators.lar` · 218 líneas · 12 funciones
+`src/compiler/codegen/expressions/operators.lar` · 218 líneas · 12 funciones
 codegen.expressions.operators: operators.
 
-`public function wide(t: Type): String`
+`public function wide(type: Type): String`
 <sub>línea 15</sub>
 
-`public function unary(u: Unary in default, t: Type): String`
+`public function unary(u: Unary in default, type: Type): String`
 <sub>línea 19</sub>
 
-`public function binary(b: Binary in default, t: Type): String`
+`public function binary(b: Binary in default, type: Type): String`
 <sub>línea 30</sub>
 
-`public function isTest(x: IsExpr in default): String`  
-x is T [b]: rt_as_class gives the object when it is a T (NULL otherwise); the binding keeps it.  
+`public function isTest(isExpr: IsExpr in default): String`  
+x is T [b]: lar_as_class gives the object when it is a T (NULL otherwise); the binding keeps it.  
 <sub>línea 90</sub>
 
-`public function ternary(te: Ternary in default, t: Type): String`  
+`public function ternary(te: Ternary in default, type: Type): String`  
 c ? a : b: a C conditional, or an if when a side needs statements of its own.  
 <sub>línea 107</sub>
 
-`function coalesce(b: Binary in default, t: Type): String`
+`function coalesce(binary: Binary in default, type: Type): String`
 <sub>línea 126</sub>
 
-`function operatorCall(m: MethodInfo, op: Expr in default, left: Expr in default, right: Expr? in default): String`  
+`function operatorCall(method: MethodInfo, op: Expr in default, left: Expr in default, right: Expr? in default): String`  
 a OP b, where the operator is a method of a's type; `op` is the expression (data it returns is created where it says).  
 <sub>línea 153</sub>
 
-`function operatorCallSwapped(m: MethodInfo, b: Binary in default): String`  
+`function operatorCallSwapped(method: MethodInfo, binary: Binary in default): String`  
 b < a, keeping the evaluation order a then b.  
 <sub>línea 162</sub>
 
@@ -3112,7 +3369,7 @@ b < a, keeping the evaluation order a then b.
 `public function cast(c: Cast in default, to: Type in default): String`
 <sub>línea 174</sub>
 
-`function anyAs(v: String, t: Type in default, ot: Type): String`  
+`function anyAs(v: String, type: Type in default, objectType: Type): String`  
 `a as T`: T? holding the value if the Any has one of that kind (numbers convert when they fit).  
 <sub>línea 186</sub>
 
@@ -3120,21 +3377,21 @@ b < a, keeping the evaluation order a then b.
 
 ## codegen.expressions.patterns
 
-`src/codegen/expressions/patterns.lar` · 66 líneas · 2 funciones
+`src/compiler/codegen/expressions/patterns.lar` · 66 líneas · 2 funciones
 codegen.expressions.patterns: the patterns of a switch.
 
-`public function patternTest(pi: PatternInfo in default, st: Type, inner: Type, subj: String, val: String): String`  
+`public function patternTest(patternInfo: PatternInfo in default, st: Type, inner: Type, subj: String, val: String): String`  
 Joined only with || (several patterns in one case), so a comparison needs no parentheses of its own (clang warns about if ((a == b))).  
 <sub>línea 11</sub>
 
-`public function bindPattern(pi: PatternInfo, inner: Type, subj: String, val: String): void`
+`public function bindPattern(patternInfo: PatternInfo, inner: Type, subj: String, val: String): void`
 <sub>línea 42</sub>
 
 ---
 
 ## codegen.expressions.strings
 
-`src/codegen/expressions/strings.lar` · 220 líneas · 8 funciones
+`src/compiler/codegen/expressions/strings.lar` · 220 líneas · 8 funciones
 codegen.expressions.strings: strings: literals, interpolation and their methods.
 
 `public function string(s: StringLit in default, memOverride: String): String`  
@@ -3154,7 +3411,7 @@ The C literal of some bytes.
 <sub>línea 116</sub>
 
 `public function appendPieces(s: StringLit in default, sbRef: String): void`  
-Writes the parts of an interpolated text into a builder (sbRef: an RtSb*).  
+Writes the parts of an interpolated text into a builder (sbRef: a LarTextBuilder*).  
 <sub>línea 125</sub>
 
 `public function stringLiteral(raw: String): String`
@@ -3163,27 +3420,27 @@ Writes the parts of an interpolated text into a builder (sbRef: an RtSb*).
 `function cBytes(raw: String): String`
 <sub>línea 163</sub>
 
-`function cByte(sb: StringBuilder, v: byte, text: String): void`
+`function cByte(builder: StringBuilder, v: byte, text: String): void`
 <sub>línea 200</sub>
 
 ---
 
 ## codegen.gen
 
-`src/codegen/gen.lar` · 664 líneas · 21 funciones
+`src/compiler/codegen/gen.lar` · 674 líneas · 24 funciones
 codegen.gen: C99 code generation (Gen.java), part 1: the file, types, classes and interfaces,
 globals, bodies and statements. Expressions are in genexpr.lar.
 
 - struct     -> C struct, copied by value; methods are plain functions on S*.
 - class      -> C struct in a memory, used through pointers. The root struct starts with
-RtObjHead (vtable + memory); a subclass embeds its parent as `_super`.
+LarObjectHeader (vtable + memory); a subclass embeds its parent as `_super`.
 - interface  -> { void* obj; const I_Table* t; }
 - enum       -> { int32_t tag; union { ...payloads } as; }
 - closure    -> { fn; union of every environment of that type }, copied by value.
 - T[N]       -> { length; items[N] } by value; T[] -> { items*, length };
 T[*] -> pointer to { items*, length, capacity, mem }.
-- errors     -> a function that throws takes RtError* err_out; every call checks it.
-- memories   -> RtMem; heap memories are freed on every exit of their block.
+- errors     -> a function that throws takes LarError* err_out; every call checks it.
+- memories   -> LarMemory; heap memories are freed on every exit of their block.
 
 ### class `Block`
 
@@ -3191,86 +3448,100 @@ T[*] -> pointer to { items*, length, capacity, mem }.
 
 ### class `ArmCtx`
 
-### class `Fn`
+### class `FunctionCode`
 
 ### class `Temp`
 A statement's temporary memory, declared before the statement only if something used it.
 
-`public function newFn(): Fn`
-<sub>línea 75</sub>
+`public function newFunctionCode(): FunctionCode`
+<sub>línea 77</sub>
 
 `public function internalError(line: int32, msg: String): void`
-<sub>línea 84</sub>
+<sub>línea 86</sub>
 
 `public function lineMark(encoded: int32): String`
-<sub>línea 108</sub>
+<sub>línea 110</sub>
 
 `function cPathLiteral(path: String): String`
-<sub>línea 115</sub>
+<sub>línea 117</sub>
 
 `public function spreadLines(c: String, cFile: String): String`  
 After generating with debugLines: inside a function, every line of C after a #line gets that same .lar line (C would count on: N, N+1, N+2...); after the function, the lines are the C file's again, so the runtime and helpers are shown as the C they are.  
-<sub>línea 122</sub>
+<sub>línea 124</sub>
 
 `function firstMark(all: String[*], k: int32): String`  
 The first #line of the function whose header is all[k] (before the function ends), or "".  
-<sub>línea 169</sub>
+<sub>línea 171</sub>
 
 `public function line(s: String): void`
-<sub>línea 182</sub>
+<sub>línea 184</sub>
 
-`public function tmp(prefix: String): String`
-<sub>línea 191</sub>
+`public function tmp(role: String): String`  
+A temporary of the function being generated, by what it is: its name comes from codegen.localnames.  
+<sub>línea 194</sub>
 
 `public function indent4(text: String in default): String`  
 Adds four spaces to every line (like String.indent(4) in Java).  
-<sub>línea 198</sub>
+<sub>línea 197</sub>
 
-`public function pushBlock(b: Block in default): void`
-<sub>línea 210</sub>
+`public function pushBlock(blockCode: Block in default): void`
+<sub>línea 209</sub>
 
 `public function popBlock(): void`
-<sub>línea 212</sub>
+<sub>línea 211</sub>
 
 `public function topBlock(): Block`
-<sub>línea 222</sub>
+<sub>línea 221</sub>
 
 `public function rootBlock(): Block`
-<sub>línea 223</sub>
+<sub>línea 222</sub>
 
-`public function generate(): String`
+`public function generate(): String`  
+The C of the analyzed program: emitC, then nameC, then pruneC (the passes EmitC, NameC and Prune).  
 <sub>línea 231</sub>
+
+`public function nameC(program: String): String`  
+The names of the compiler's variables left outside functions (codegen.localnames).  
+<sub>línea 234</sub>
+
+`public function emitC(): String`  
+EmitC: the whole program, every function and type, before anything is cut.  
+<sub>línea 237</sub>
+
+`public function pruneC(emitted: String): String`  
+Prune: only what main and the ccode reach, after the runtime it needs.  
+<sub>línea 536</sub>
 
 `function resources(out: StringBuilder): void`  
 Resources (extern type X released by f): a value lives in a cell of the memory it was made in, with its state; the memory releases it when it is freed, unless release(x) already did.  
-<sub>línea 556</sub>
+<sub>línea 566</sub>
 
 `function shortName(n: String): String`  
 A name without its module prefix: std__net__Socket -> Socket.  
-<sub>línea 601</sub>
+<sub>línea 611</sub>
 
 `function sectionOf(out: StringBuilder, title: String, content: StringBuilder): void`
-<sub>línea 606</sub>
+<sub>línea 616</sub>
 
 `public function section(out: StringBuilder, title: String): void`
-<sub>línea 612</sub>
+<sub>línea 622</sub>
 
 `function bodyText(body: String in default): String`  
 A C body as it was written, indented once (its closing line's indentation does not count).  
-<sub>línea 619</sub>
+<sub>línea 629</sub>
 
 `function stripIndent(code: String in default): String`  
 Like Java's stripIndent().strip(): removes the common indentation and the blank lines around.  
-<sub>línea 627</sub>
+<sub>línea 637</sub>
 
 `public function classesByDepth(): ClassInfo[*]`
-<sub>línea 650</sub>
+<sub>línea 660</sub>
 
 ---
 
 ## codegen.gen.classes
 
-`src/codegen/gen/classes.lar` · 351 líneas · 28 funciones
+`src/compiler/codegen/gen/classes.lar` · 351 líneas · 28 funciones
 codegen.gen.classes: classes, interfaces and closures in C; globals and the entry point.
 
 `function errParam(throwsOut: bool): String`
@@ -3280,72 +3551,72 @@ codegen.gen.classes: classes, interfaces and closures in C; globals and the entr
 Returning something that points to memory: the function creates it in the memory of the call.  
 <sub>línea 20</sub>
 
-`public function params(ps: Symbol[*], memParams: bool[*]): String`
+`public function params(paramSymbols: Symbol[*], memParams: bool[*]): String`
 <sub>línea 22</sub>
 
-`public function functionHeader(f: FunctionInfo): String`
+`public function functionHeader(functionInfo: FunctionInfo): String`
 <sub>línea 30</sub>
 
-`public function methodName(m: MethodInfo): String`
+`public function methodName(method: MethodInfo): String`
 <sub>línea 41</sub>
 
-`public function methodHeader(m: MethodInfo, isStructMethod: bool): String`
+`public function methodHeader(method: MethodInfo, isStructMethod: bool): String`
 <sub>línea 52</sub>
 
-`public function nativeMethodHeader(m: MethodInfo): String`
+`public function nativeMethodHeader(method: MethodInfo): String`
 <sub>línea 65</sub>
 
-`public function lambdaHeader(l: LambdaInfo): String`
+`public function lambdaHeader(lambdaInfo: LambdaInfo): String`
 <sub>línea 72</sub>
 
-`public function paramCTypes(m: MethodInfo in default): String[*]`  
+`public function paramCTypes(method: MethodInfo in default): String[*]`  
 The C parameters after self: the memory of the call first when it returns data.  
 <sub>línea 81</sub>
 
-`public function vtableStruct(out: StringBuilder, c: ClassInfo in default): void`
+`public function vtableStruct(out: StringBuilder, classInfo: ClassInfo in default): void`
 <sub>línea 90</sub>
 
 `public function vtableInit(concrete: ClassInfo in default, level: ClassInfo): String`
 <sub>línea 107</sub>
 
-`public function dispatchName(intro: String, m: MethodInfo): String`
+`public function dispatchName(intro: String, method: MethodInfo): String`
 <sub>línea 122</sub>
 
-`function argsDecl(pt: String[*], throwsOut: bool): String`
+`function argsDecl(paramTypes: String[*], throwsOut: bool): String`
 <sub>línea 124</sub>
 
 `function argsPass(n: int32, throwsOut: bool): String`
 <sub>línea 131</sub>
 
-`function retWord(t: Type): String`
+`function retWord(type: Type): String`
 <sub>línea 142</sub>
 
-`public function dispatchHelper(out: StringBuilder, c: ClassInfo, m: MethodInfo in default): void`
+`public function dispatchHelper(out: StringBuilder, classInfo: ClassInfo, method: MethodInfo in default): void`
 <sub>línea 146</sub>
 
-`public function interfaceTableStruct(out: StringBuilder, i: InterfaceInfo in default): void`
+`public function interfaceTableStruct(out: StringBuilder, interfaceInfo: InterfaceInfo in default): void`
 <sub>línea 153</sub>
 
-`public function ifaceCallName(i: InterfaceInfo, m: MethodInfo): String`
+`public function ifaceCallName(interfaceInfo: InterfaceInfo, method: MethodInfo): String`
 <sub>línea 165</sub>
 
-`public function interfaceCallHelper(out: StringBuilder, i: InterfaceInfo, m: MethodInfo in default): void`
+`public function interfaceCallHelper(out: StringBuilder, interfaceInfo: InterfaceInfo, method: MethodInfo in default): void`
 <sub>línea 167</sub>
 
 `public function interfaceImplementations(out: StringBuilder): void`  
 For each class that declares `implements I`: thunks plus a table.  
 <sub>línea 175</sub>
 
-`public function samTable(out: StringBuilder, i: InterfaceInfo in default): void`
+`public function samTable(out: StringBuilder, interfaceInfo: InterfaceInfo in default): void`
 <sub>línea 193</sub>
 
-`public function samThunk(out: StringBuilder, i: InterfaceInfo in default): void`
+`public function samThunk(out: StringBuilder, interfaceInfo: InterfaceInfo in default): void`
 <sub>línea 201</sub>
 
-`public function closureCallHelper(out: StringBuilder, ft: Type): void`
+`public function closureCallHelper(out: StringBuilder, functionType: Type): void`
 <sub>línea 208</sub>
 
-`public function collectionHelpers(out: StringBuilder, t: Type): void`
+`public function collectionHelpers(out: StringBuilder, type: Type): void`
 <sub>línea 224</sub>
 
 `public function initGlobals(): String`
@@ -3357,133 +3628,133 @@ For each class that declares `implements I`: thunks plus a table.
 `public function clonePrototypes(): String`
 <sub>línea 328</sub>
 
-`public function classClone(out: StringBuilder, c: ClassInfo in default): void`
+`public function classClone(out: StringBuilder, classInfo: ClassInfo in default): void`
 <sub>línea 334</sub>
 
 ---
 
 ## codegen.gen.statements
 
-`src/codegen/gen/statements.lar` · 650 líneas · 31 funciones
+`src/compiler/codegen/gen/statements.lar` · 651 líneas · 31 funciones
 codegen.gen.statements: bodies and statements, switch included.
 
 `function usesErrors(body: Stmt[*] in default): bool`
-<sub>línea 23</sub>
+<sub>línea 24</sub>
 
 `public function body(stmts: Stmt[*] in default, ret: Type in default, throwsOut: bool, lambda: LambdaInfo? in default,`  
 lock != "": a method of a synchronized class, locked for its whole run (unlocked on every exit).  
-<sub>línea 44</sub>
+<sub>línea 45</sub>
 
 `public function endsWithJump(stmts: Stmt[*]): bool`
-<sub>línea 93</sub>
+<sub>línea 94</sub>
 
-`function emitCleanups(b: Block): void`
-<sub>línea 99</sub>
+`function emitCleanups(blockCode: Block): void`
+<sub>línea 100</sub>
 
 `public function block(stmts: Stmt[*] in default): void`
-<sub>línea 107</sub>
+<sub>línea 108</sub>
 
 `function bracedBlock(stmts: Stmt[*] in default): void`  
 A block between braces, one level in.  
-<sub>línea 117</sub>
+<sub>línea 118</sub>
 
 `public function cleanupsUntil(stop: Block): void`  
 Emits the cleanups of every block from the innermost up to `stop` (inclusive).  
-<sub>línea 124</sub>
+<sub>línea 125</sub>
 
 `function anyCleanups(stop: Block): bool`
-<sub>línea 134</sub>
+<sub>línea 135</sub>
 
 `public function stmt(s: Stmt in default): void`  
 A statement; what it creates without a place lives in its temporary memory, freed when it ends.  
-<sub>línea 146</sub>
+<sub>línea 147</sub>
 
 `public function openMemory(stmts: Stmt[*] in default): void`  
 A block whose variables hold data gets its memory, freed when the block ends.  
-<sub>línea 178</sub>
+<sub>línea 179</sub>
 
 `public function tempMem(): String`  
 The current statement's temporary memory (declared before it the first time it is used).  
-<sub>línea 186</sub>
+<sub>línea 187</sub>
 
 `function stmtInner(s: Stmt in default): void`
-<sub>línea 196</sub>
+<sub>línea 197</sub>
 
 `function assign(s: AssignStmt in default): void`
-<sub>línea 228</sub>
+<sub>línea 229</sub>
 
 `function placeParts(target: Expr in default, parts: Expr[*] in default): void`  
 The parts of a place that are computed, in order: the object and the index of a[i], the object of a.f. An object that is a value (a struct, a T[N]) is not copied: its own place is looked into.  
-<sub>línea 252</sub>
+<sub>línea 253</sub>
 
 `function placeObject(o: Expr in default, parts: Expr[*] in default): void`
-<sub>línea 263</sub>
+<sub>línea 264</sub>
 
 `function assignTo(s: AssignStmt in default, target: Expr in default): void`
-<sub>línea 272</sub>
+<sub>línea 273</sub>
 
 `function varDecl(v: VarDecl in default): void`
-<sub>línea 294</sub>
+<sub>línea 295</sub>
 
 `public function ret(r: ReturnStmt in default): void`
-<sub>línea 319</sub>
+<sub>línea 320</sub>
 
 `function ifStmt(i: IfStmt in default): void`
-<sub>línea 337</sub>
+<sub>línea 338</sub>
 
-`function whenStmt(i: IfStmt in default): void`  
+`function whenStmt(ifStmt: IfStmt in default): void`  
 An if for platforms (IfStmt.platform): C's #if / #elif / #else / #endif, with no braces, so what a branch declares stays for the code after it. Every branch is written (the C compiler keeps one); what a branch leaves to free at the end of the block is freed only where that branch is kept.  
-<sub>línea 357</sub>
+<sub>línea 358</sub>
 
 `function keptWhen(c: String, above: String[*]): String`  
 When the C compiler keeps a branch: its condition, and none of the ones above.  
-<sub>línea 378</sub>
+<sub>línea 379</sub>
 
 `function whenBranch(stmts: Stmt[*] in default, kept: String): void`
-<sub>línea 383</sub>
+<sub>línea 384</sub>
 
 `function loopBlockOpen(): Block`  
 Opens the block of a loop body.  
-<sub>línea 393</sub>
+<sub>línea 394</sub>
 
-`function loopBody(body: Stmt[*] in default, b: Block in default): void`
-<sub>línea 400</sub>
+`function loopBody(body: Stmt[*] in default, blockCode: Block in default): void`
+<sub>línea 401</sub>
 
 `function whileStmt(w: WhileStmt in default): void`
-<sub>línea 407</sub>
+<sub>línea 408</sub>
 
 `function indexVar(ix: Symbol? in default, value: String): void`  
 `int32_t i = idx;` for the index variable of a for, if it has one.  
-<sub>línea 425</sub>
+<sub>línea 426</sub>
 
 `function forStmt(f: ForStmt in default): void`
-<sub>línea 431</sub>
+<sub>línea 432</sub>
 
 `public function throwStmt(t: ThrowStmt in default): void`
-<sub>línea 508</sub>
+<sub>línea 509</sub>
 
 `public function propagate(): void`  
 Sends the current error to the innermost try, or to the caller.  
-<sub>línea 517</sub>
+<sub>línea 518</sub>
 
 `function tryStmt(t: TryStmt in default): void`
-<sub>línea 533</sub>
+<sub>línea 534</sub>
 
-`public function switchCode(sw: SwitchExpr in default, isExpr: bool): String`
-<sub>línea 573</sub>
+`public function switchCode(switchExpr: SwitchExpr in default, isExpr: bool): String`
+<sub>línea 574</sub>
 
 ---
 
 ## codegen.gen.types
 
-`src/codegen/gen/types.lar` · 231 líneas · 12 funciones
+`src/compiler/codegen/gen/types.lar` · 231 líneas · 12 funciones
 codegen.gen.types: the C of the types of a program.
 
-`public function externPrototype(f: FunctionInfo in default): String`  
+`public function externPrototype(functionInfo: FunctionInfo in default): String`  
 C functions receive String as a NUL-terminated const char*.  
 <sub>línea 14</sub>
 
-`public function externDefinition(f: FunctionInfo in default): String`  
+`public function externDefinition(functionInfo: FunctionInfo in default): String`  
 The header of the C function of a C body, with its parameters named as in Larimar (a T[] is name and name_length).  
 <sub>línea 35</sub>
 
@@ -3495,7 +3766,7 @@ ccode with lar"name" (the linker gave the linked name): the C name of that funct
 The prototypes of the Larimar functions a ccode names (those with C types the runtime already has).  
 <sub>línea 72</sub>
 
-`function plainSig(sig: Type): bool`  
+`function plainSig(signature: Type): bool`  
 Only numbers, bool, String and void: C types the runtime declares before any ccode.  
 <sub>línea 87</sub>
 
@@ -3506,27 +3777,63 @@ Only numbers, bool, String and void: C types the runtime declares before any cco
 A plain C name (a function a prototype can declare), not C text.  
 <sub>línea 109</sub>
 
-`public function externCType(t: Type): String`
+`public function externCType(type: Type): String`
 <sub>línea 117</sub>
 
-`function cStruct(t: Type): bool`  
+`function cStruct(type: Type): bool`  
 A C struct (extern type X = struct { ... }): C defines it, Larimar does not.  
 <sub>línea 125</sub>
 
-`public function forward(out: StringBuilder, t: Type): void`
+`public function forward(out: StringBuilder, type: Type): void`
 <sub>línea 131</sub>
 
 `public function define(out: StringBuilder, t: Type): void`
 <sub>línea 147</sub>
 
-`public function envField(s: Symbol): String`
+`public function envField(symbol: Symbol): String`
 <sub>línea 230</sub>
+
+---
+
+## codegen.localnames
+
+`src/compiler/codegen/localnames.lar` · 89 líneas · 6 funciones
+codegen.localnames: the names of the C variables the compiler makes in a function (its temporaries,
+its memories, the result it returns). Each is asked for by what it is (`localName("result")`), and gets
+that name, or `result_2`, `result_3`... when the name is taken in the function: by another temporary,
+or by anything the function's C already names (a variable of the Larimar code, a global, a function).
+
+While a function is generated, a temporary is a mark in its text (its role and a number of its own);
+when the function is done, nameLocals gives each mark its name. So a name never meets a name of the
+code, whichever comes first in the text.
+
+`function markByte(): String`  
+The byte that starts and ends the parts of a mark (it never appears in the C: texts escape it).  
+<sub>línea 11</sub>
+
+`public function localName(role: String): String`  
+The name of a temporary that is `role` (letters, digits and '_'): one of its own, decided by nameLocals.  
+<sub>línea 20</sub>
+
+`public function localNameFor(role: String, key: String): String`  
+The same temporary for a key that names it already (a memory of a block of the analysis: mem_3).  
+<sub>línea 26</sub>
+
+`function isNameStart(c: byte): bool`
+<sub>línea 28</sub>
+
+`function isNamePart(c: byte): bool`
+<sub>línea 30</sub>
+
+`public function nameLocals(text: String): String`  
+The text with each mark replaced by its name: the role, or the role and a number when it is taken.  
+<sub>línea 33</sub>
 
 ---
 
 ## codegen.prune
 
-`src/codegen/prune.lar` · 482 líneas · 22 funciones
+`src/compiler/codegen/prune.lar` · 482 líneas · 22 funciones
 codegen.prune: only the C the program reaches, of what it generates and of the runtime.
 
 The C is cut into pieces: the generated program into declarations (a function, a type, a helper, a
@@ -3534,7 +3841,7 @@ prototype, a global), the runtime into paragraphs (blank lines outside braces an
 #include is one). A piece is kept when it defines a name that a kept piece uses. For the program, the
 roots are main, the export functions, and what the program wrote in C itself (cinclude, ccode), which
 stays whole; the ccode of the standard library ("ccode (std)") is cut like the rest. For the runtime,
-the roots are the names the pruned program uses; #ifdef RT_THREADS and #ifdef RT_FILES are decided here.
+the roots are the names the pruned program uses; #ifdef LAR_THREADS and #ifdef LAR_FILES are decided here.
 
 The runtime itself is C, in the ccode of runtime/*.lar, beside std/ (read in the order of runtimeFiles):
 editing it does not change the compiler, nor the bootstrap.
@@ -3581,7 +3888,7 @@ The lines gathered so far become a paragraph: a heading when it is only a commen
 <sub>línea 203</sub>
 
 `function resolve(text: String, threads: bool, files: bool): String[*]`  
-Keeps the lines that apply: #ifdef RT_THREADS / RT_FILES (and their #else) are decided; other #if stay.  
+Keeps the lines that apply: #ifdef LAR_THREADS / LAR_FILES (and their #else) are decided; other #if stay.  
 <sub>línea 215</sub>
 
 `function reach(pieces: Piece[*], wanted: String[*]): bool[*]`  
@@ -3629,7 +3936,7 @@ C tokens: names, numbers and single punctuation characters; comments, strings an
 
 ## project.cc
 
-`src/project/cc.lar` · 148 líneas · 11 funciones
+`src/compiler/project/cc.lar` · 148 líneas · 11 funciones
 project.cc: calling the C compiler and other programs (larimar build, larimar test).
 
 `public function windows(): bool`
@@ -3681,7 +3988,7 @@ The command that installs a C compiler here.
 
 ## project.libraries
 
-`src/project/libraries.lar` · 108 líneas · 4 funciones
+`src/compiler/project/libraries.lar` · 98 líneas · 4 funciones
 project.libraries: the libraries written in Larimar that a project uses, as source.
 
 [dependencies] of larimar.toml names each one with its folder: the folder of a library project
@@ -3693,105 +4000,29 @@ is the same on both sides: classes, interfaces, lists, throws.
 A library's own [dependencies] are read too (their folders are relative to the library's): a program names
 only the libraries it imports. Two libraries with the same name in different folders are an error.
 
-[dependencies] can also name a service ([project] kind = "service", project.services): the program does not
-compile its code, but a module written for it, whose calls go to the service's executable. A service's
-own [dependencies] are its own: they go into its executable, not into the program.
-
 ### class `LarimarLibrary`
 A library of [dependencies]: its name (its module) and the folder of its modules.
 
 `public function larimarLibraries(dir: String, config: Any, problems: String[*]): LarimarLibrary[*]`  
 The libraries of a project's [dependencies], and theirs. Problems go to `problems`.  
-<sub>línea 34</sub>
+<sub>línea 27</sub>
 
 `function collect(dir: String, config: Any, of: String, out: LarimarLibrary[*], problems: String[*]): void`  
 The [dependencies] of one larimar.toml (of the program, or of a library: `of` is its name).  
-<sub>línea 41</sub>
+<sub>línea 34</sub>
 
 `function libraryConfig(name: String, folder: String, from: String, problems: String[*]): Any`  
 The larimar.toml of a library's folder, checked to be that library's (null: a problem was given).  
-<sub>línea 74</sub>
+<sub>línea 64</sub>
 
 `function named(libraries: LarimarLibrary[*], name: String): LarimarLibrary?`
-<sub>línea 102</sub>
-
----
-
-## project.services
-
-`src/project/services.lar` · 210 líneas · 12 funciones
-project.services: a service is a project whose public functions another program calls in another process.
-
-[project]
-name = "imagen"
-kind = "service"
-main = "src/imagen.lar"            # its public functions are what it gives
-
-larimar build makes its executable (build/imagen): a main that answers calls (std.os.rpc.serve) by
-calling those functions. A program that names it in [dependencies] (imagen = "../imagen") imports a module
-written for it instead of its code: a class with the same functions, each one a call to that executable.
-
-import imagen { Imagen };
-let img: Imagen = Imagen.start();               // starts build/imagen: shared memory between the two
-let small: String = img.resize("casa.jpg", 800);
-
-What crosses is what JSON carries: numbers, bool, String, optionals and lists of them, and Any. A
-function of the service throws nothing (an error cannot cross); a call of the program can throw
-RpcError, when the service cannot answer.
-
-### class `ServiceFunction`
-A function the service gives: its name, its parameters (name and type) and what it returns.
-
-`function scalar(t: TypeRef): bool`
-<sub>línea 34</sub>
-
-`function crosses(t: TypeRef): bool`  
-Whether a value of this type crosses: a scalar, an optional or a list of one, or Any.  
-<sub>línea 37</sub>
-
-`function text(t: TypeRef): String`  
-The type as Larimar writes it.  
-<sub>línea 44</sub>
-
-`public function className(service: String): String`  
-The class of the program for a service: imagen -> Imagen, image_tools -> ImageTools.  
-<sub>línea 51</sub>
-
-`public function contract(source: String in default, line: int32, problems: String[*]): ServiceFunction[*]`  
-The public functions of the service's main file (its source): what it gives. Problems go to `problems`.  
-<sub>línea 67</sub>
-
-`function fromAny(t: TypeRef, x: String): String`  
-A value of type `t` read from the Any `x`.  
-<sub>línea 98</sub>
-
-`function isVoid(t: TypeRef): bool`
-<sub>línea 109</sub>
-
-`function toAny(t: TypeRef, v: String, into: String, key: String, indent: String): String`  
-Statements that put the value `v` (of type `t`) into the table `into` under `key` (or that return it, when key is "").  
-<sub>línea 112</sub>
-
-`function declareFrom(t: TypeRef, name: String, x: String, indent: String): String`  
-The statements that make the variable `name` (of type `t`) from the Any `x`.  
-<sub>línea 126</sub>
-
-`public function clientSource(service: String, functions: ServiceFunction[*], built: String): String`  
-The module a program imports for the service: a class with a function for each one of the service's, each a call to its executable (next to the program's, or else where the service was built).  
-<sub>línea 143</sub>
-
-`public function serverSource(service: String, functions: ServiceFunction[*]): String`  
-The main of the service's executable: it answers each call with the function of the same name.  
-<sub>línea 184</sub>
-
-`function quoted(s: String): String`
-<sub>línea 209</sub>
+<sub>línea 92</sub>
 
 ---
 
 ## project.testing
 
-`src/project/testing.lar` · 485 líneas · 27 funciones
+`src/compiler/project/testing.lar` · 485 líneas · 27 funciones
 project.testing: larimar test, the test runner.
 
 larimar test [file|folder]... [--only <text>] [--test <name>]... [--list] [--json] [--no-sanitize]
@@ -3923,7 +4154,7 @@ A file of test functions: compiled once with a main, then each test runs alone.
 
 ## editor.dap
 
-`src/editor/dap.lar` · 1269 líneas · 62 funciones
+`src/compiler/editor/dap.lar` · 1269 líneas · 62 funciones
 editor.dap: larimar dap, the debugger for editors (Debug Adapter Protocol on stdin and stdout).
 
 It sits between the editor and lldb-dap (LLVM's debug adapter, which runs the program under lldb):
@@ -4050,7 +4281,7 @@ What the editor shows for one value: its text, and its children (a handle) when 
 <sub>línea 386</sub>
 
 `function stringValue(frame: int32, expr: String): String?`  
-The text of a String value at expr (an RtString).  
+The text of a String value at expr (a LarString).  
 <sub>línea 389</sub>
 
 `function classOfObject(frame: int32, pointer: String): String`  
@@ -4154,7 +4385,7 @@ The debug console, hovers and watches: Larimar paths here; the rest (C, lldb com
 <sub>línea 1121</sub>
 
 `function exceptionInfo(msg: Any): void`  
-The panic's message: the msg argument of rt_panic, at the top of the thread's stack.  
+The panic's message: the msg argument of lar_panic, at the top of the thread's stack.  
 <sub>línea 1132</sub>
 
 `function fromBackend(body: String, msg: Any): void`
@@ -4169,30 +4400,9 @@ lldb-dap: the one given, $LARIMAR_LLDB_DAP, on the PATH, or Xcode's (xcrun).
 
 ---
 
-## editor.docstore
-
-`src/editor/docstore.lar` · 16 líneas · 2 funciones
-editor.docstore: the texts of the documents open in the editor, by file path, for the analysis of one
-question (larimar lsp-worker). The linker reads a file from here when it is open in the editor (with its
-changes not saved yet), and from the disk otherwise.
-
-A worker answers one question and ends, so the texts live in the default memory: nothing is ever freed
-here. The server, which runs for hours while the texts change on every key, keeps its own copies in a
-memory it compacts (editor.lsp, Documents).
-
-`public function setDocument(path: String, text: String): void`  
-Keeps (a copy of) the editor's text of a file.  
-<sub>línea 12</sub>
-
-`public function document(path: String): String?`  
-The editor's text of a file, or null when it is not open.  
-<sub>línea 15</sub>
-
----
-
 ## editor.ide
 
-`src/editor/ide.lar` · 1502 líneas · 74 funciones
+`src/compiler/editor/ide.lar` · 1502 líneas · 74 funciones
 editor.ide: answers the editor's questions (larimar lsp) from an analyzed program: errors, hover, go to
 definition, references, the symbols of a file, completion and the signature being written.
 
@@ -4299,7 +4509,7 @@ The name to show: geo__shapes__Shape -> geo.shapes.Shape.
 `function ofSymbol(s: Symbol in default): Target`
 <sub>línea 347</sub>
 
-`function ofFunc(f: FunctionInfo in default): Target`
+`function ofFunc(functionInfo: FunctionInfo in default): Target`
 <sub>línea 361</sub>
 
 `function ofMethod(m: MethodInfo in default): Target`
@@ -4308,7 +4518,7 @@ The name to show: geo__shapes__Shape -> geo.shapes.Shape.
 `function ofField(f: FieldInfo in default): Target`
 <sub>línea 369</sub>
 
-`function ofVariant(e: EnumInfo in default, v: VariantInfo in default): Target`
+`function ofVariant(enumInfo: EnumInfo in default, v: VariantInfo in default): Target`
 <sub>línea 373</sub>
 
 `function ofType(linked: String): Target`  
@@ -4326,19 +4536,19 @@ What the name under the cursor refers to.
 `function signature(name: String, params: String[*], ret: String, throwsText: String): String`
 <sub>línea 524</sub>
 
-`function funcParams(f: FunctionInfo): String[*]`
+`function funcParams(functionInfo: FunctionInfo): String[*]`
 <sub>línea 530</sub>
 
-`function methodParams(m: MethodInfo): String[*]`
+`function methodParams(method: MethodInfo): String[*]`
 <sub>línea 541</sub>
 
-`function funcLabel(f: FunctionInfo): String`
+`function funcLabel(functionInfo: FunctionInfo): String`
 <sub>línea 551</sub>
 
-`function methodLabel(m: MethodInfo): String`
+`function methodLabel(method: MethodInfo): String`
 <sub>línea 557</sub>
 
-`function detail(t: Target): String`  
+`function detail(target: Target): String`  
 The code shown on hover.  
 <sub>línea 563</sub>
 
@@ -4359,7 +4569,7 @@ The comment written right above a declaration (// lines or a doc block), as text
 ### class `Place`
 Where a target is declared: file index, line and the byte columns of its name.
 
-`function placeOf(t: Target): Place`
+`function placeOf(target: Target): Place`
 <sub>línea 724</sub>
 
 `function locationJson(p: Place): String`
@@ -4375,7 +4585,7 @@ The cursor: a file index, a line from 1 and a byte column.
 Hover: the declaration, as code, and its comment.  
 <sub>línea 768</sub>
 
-`function ownerNote(t: Target): String`
+`function ownerNote(target: Target): String`
 <sub>línea 785</sub>
 
 `public function definitionJson(path: String, line0: int32, char16: int32): String`  
@@ -4386,7 +4596,7 @@ Go to definition.
 Every place that names the same thing (with its declaration when `withDecl`).  
 <sub>línea 808</sub>
 
-`function refersTo(e: Expr, t: Target): int32`  
+`function refersTo(e: Expr, target: Target): int32`  
 Whether an expression names the target: -1 no; else how its name is written (1 after a '.', 0 not, -1 any).  
 <sub>línea 863</sub>
 
@@ -4440,7 +4650,7 @@ The probe left by prepareCompletion: the object before the '.'.
 `function memberItems(items: Items, index: int32): void`
 <sub>línea 1212</sub>
 
-`function memberItem(items: Items, m: MethodInfo): void`  
+`function memberItem(items: Items, method: MethodInfo): void`  
 A method, or a native let (read without parentheses).  
 <sub>línea 1241</sub>
 
@@ -4468,7 +4678,7 @@ The line where the function or method around a line starts, or 0.
 The signature of the call being written, after prepareCompletion(..., true) and the analysis.  
 <sub>línea 1386</sub>
 
-`function methodOf(t0: Type, name: String): MethodInfo?`
+`function methodOf(firstType: Type, name: String): MethodInfo?`
 <sub>línea 1441</sub>
 
 `public function diagnosticsJson(requested: String): String`  
@@ -4479,7 +4689,7 @@ The errors of the analysis, per file: one { uri, diagnostics } per line, for eve
 
 ## editor.lsp
 
-`src/editor/lsp.lar` · 351 líneas · 21 funciones
+`src/compiler/editor/lsp.lar` · 351 líneas · 21 funciones
 editor.lsp: larimar lsp, the language server editors start (Language Server Protocol, JSON-RPC on stdin and
 stdout, each message after a "Content-Length: N" header).
 
@@ -4573,45 +4783,70 @@ larimarc lsp-worker: answers one question written to a file by the server.
 
 ---
 
+## editor.opendocuments
+
+`src/compiler/editor/opendocuments.lar` · 16 líneas · 2 funciones
+editor.opendocuments: the texts of the documents open in the editor, by file path, for the analysis of one
+question (larimar lsp-worker). The linker reads a file from here when it is open in the editor (with its
+changes not saved yet), and from the disk otherwise.
+
+A worker answers one question and ends, so the texts live in the default memory: nothing is ever freed
+here. The server, which runs for hours while the texts change on every key, keeps its own copies in a
+memory it compacts (editor.lsp, Documents).
+
+`public function setOpenDocument(path: String, text: String): void`  
+Keeps (a copy of) the editor's text of a file.  
+<sub>línea 12</sub>
+
+`public function openDocument(path: String): String?`  
+The editor's text of a file, or null when it is not open.  
+<sub>línea 15</sub>
+
+---
+
 ## editor.session
 
-`src/editor/session.lar` · 188 líneas · 8 funciones
+`src/compiler/editor/session.lar` · 159 líneas · 9 funciones
 editor.session: one analysis of a program, without generating C (larimar check, larimar lsp).
 It links and analyzes like a compilation; the errors stay in linkErrors and analysisErrors (with the
 line numbers that also say the file), and the analyzed program stays in `program` for the questions
 of the editor (ide.lar).
 
 `public function analyzeFile(main: String, shownFrom: String): bool`  
-Links and analyzes a main file. true: no errors. Messages name files relative to `shownFrom`.  
+Links and analyzes a main file (pipeline.analysisPasses). true: no errors. Messages name files relative to `shownFrom`.  
 <sub>línea 29</sub>
 
-`function findLibraryRoots(main: String): void`  
-The libraries the project of a file uses ([dependencies] of its larimar.toml, and theirs): `import textkit` finds textkit.lar in the folder of its modules. A problem with them is larimar build's to say.  
-<sub>línea 51</sub>
+`public function compilationOf(main: String, shownFrom: String): Compilation`  
+A compilation of a main file, with this session's std and source root.  
+<sub>línea 39</sub>
 
 `public function stdDir(): String`  
 Where std/ is: $LARIMAR_HOME/std, or next to the tool (bin/larimar -> std/).  
-<sub>línea 83</sub>
+<sub>línea 44</sub>
+
+`function stdIn(home: String): String?`  
+The std of a folder: std/ of an installation, or src/std of the repository.  
+<sub>línea 58</sub>
 
 ### class `Diagnostic`
 An error of the analysis, with its file and line.
 
 `public function diagnostics(): Diagnostic[*]`  
 The errors of the last analysis.  
-<sub>línea 104</sub>
+<sub>línea 75</sub>
 
 `function diagnostic(raw: String): Diagnostic`  
 "Semantic Error [Line 1000012]: message" -> file 1, line 12.  
-<sub>línea 113</sub>
+<sub>línea 84</sub>
 
 `public function projectMain(file: String): String`  
 The main file of the project a file belongs to (larimar.toml above it), or the file itself.  
-<sub>línea 129</sub>
+<sub>línea 100</sub>
 
 `function tomlMain(path: String): String`  
 [project] main of a larimar.toml ("src/main.lar" when it does not say).  
-<sub>línea 145</sub>
+<sub>línea 116</sub>
 
 `public function checkCommand(rest: String[*]): int32`  
 larimar check [file.lar | folder] [--json]: the errors of a program, without generating C. A folder means its larimar.toml. With --json, a list of { file, line, message, kind }. Exit code 1 when there are errors.  
-<sub>línea 161</sub>
+<sub>línea 132</sub>

@@ -1,0 +1,197 @@
+// std.os.process.internal: a program started by this one, with pipes to its input and output (Child).
+// It is what std.os.process.Process is made of, and what std.os.rpc starts programs with; it throws
+// nothing (it says what failed), so that each one gives its own error. Only std imports it.
+
+import std.platform { Platform, OS };
+import std.os.process.posix { PosixProcesses, PosixExecutables };
+import std.os.process.windows { WindowsProcesses, WindowsExecutables };
+
+cinclude "<time.h>";
+cinclude "<errno.h>";
+
+native type ProcessHandle = LarProcess* released by lar_process_free;
+native function lar_process_free(p: ProcessHandle): void;
+native function lar_process_new(program: String, quiet: int32, mergeErrors: int32, shareConsole: int32): ProcessHandle?;
+native function lar_process_arg(p: ProcessHandle, arg: String): void;
+native function lar_process_env(p: ProcessHandle, entry: String): void;
+native function lar_process_start(p: ProcessHandle): int32;
+native function lar_process_error_text(code: int32): String;
+native function lar_process_write(p: ProcessHandle, bytes: byte*, count: int64): int32;
+native function lar_process_read(p: ProcessHandle, into: byte*, size: int32, ms: int32): int32;
+native function lar_process_wait(p: ProcessHandle, ms: int32): int32;
+native function lar_process_code(p: ProcessHandle): int32;
+native function lar_process_kill(p: ProcessHandle): void;
+native function lar_process_close_input(p: ProcessHandle): void;
+native function lar_process_now(): int64;
+
+/** A program to run and, once started, the running program. */
+public class Child {
+    /** The program: a path, or a name looked for in the PATH. */
+    let program: String = "";
+    let args: String[*] = [];
+    /** "NAME=value": added to this program's environment for it. */
+    let env: String[*] = [];
+    /** true: its error output is thrown away (else it goes where this program's goes). */
+    let quiet: bool = false;
+    /** true: its error output comes with its output, read together (it wins over quiet). */
+    let mergeErrors: bool = false;
+    /** true: it uses this program's console (input, output, error output); nothing is read or written through it. */
+    let shareConsole: bool = false;
+
+    let handle: ProcessHandle? = null;
+    /** What was read and not given yet: from `taken` on. */
+    let pending: byte[*] = [];
+    let taken: int32 = 0;
+    let chunk: byte[*] = [];
+    let ended: bool = false;
+
+    /** Starts it: null when it runs, else why it could not (not found, not allowed). */
+    function launch(): String? {
+        self.handle = lar_process_new(self.program, self.quiet ? 1 : 0, self.mergeErrors ? 1 : 0, self.shareConsole ? 1 : 0);
+        if (self.handle == null) { return "out of memory"; }
+        for (a in self.args) { lar_process_arg(self.handle!, a); }
+        for (e in self.env) { lar_process_env(self.handle!, e); }
+        let code: int32 = lar_process_start(self.handle!);
+        if (code != 0) {
+            self.handle = null;
+            return lar_process_error_text(code).clone();
+        }
+        for (i in 0..4096) { self.chunk.push(0); }
+        return null;
+    }
+
+    /** Writes text to its input: false when it does not read it any more (or never started). */
+    function send(text: String): bool {
+        if (self.handle == null) { return false; }
+        let bytes: byte[*] = [];
+        for (b in text) { bytes.push(b); }
+        return lar_process_write(self.handle!, bytes, bytes.length as int64) != 0;
+    }
+
+    /** Closes its input: it reads the end (a program that reads until the end, like `cat`, then finishes). */
+    function closeInput(): void {
+        if (self.handle != null) { lar_process_close_input(self.handle!); }
+    }
+
+    /**
+     * The next line of its output, without the line end (\n or \r\n). Waits up to `ms` milliseconds for
+     * it; null when it did not come in time, or the output ended (what is left without a line end is the
+     * last line).
+     */
+    function readLine(ms: int32): String? {
+        let until: int64 = lar_process_now() + (ms as int64);
+        while (true) {
+            let i: int32 = self.taken;
+            while (i < self.pending.length) {
+                if (self.pending[i] == '\n') {
+                    let end: int32 = i > self.taken && self.pending[i - 1] == '\r' ? i - 1 : i;
+                    let line: String = stringOfRange(self.pending, self.taken, end).clone();
+                    self.taken = i + 1;
+                    return line;
+                }
+                i += 1;
+            }
+            if (self.ended) {
+                if (self.taken >= self.pending.length) { return null; }
+                let rest: String = stringOfRange(self.pending, self.taken, self.pending.length).clone();
+                self.taken = self.pending.length;
+                return rest;
+            }
+            if (!self.fill(until)) { return null; }
+        }
+        return null;
+    }
+
+    /** Exactly `count` bytes of its output, as text; waits up to `ms` for them (null if they did not all come). */
+    function read(count: int32, ms: int32): String? {
+        let until: int64 = lar_process_now() + (ms as int64);
+        while (self.pending.length - self.taken < count) {
+            if (self.ended || !self.fill(until)) { return null; }
+        }
+        let text: String = stringOfRange(self.pending, self.taken, self.taken + count).clone();
+        self.taken += count;
+        return text;
+    }
+
+    /** All of its output until it ends, waiting up to `ms` in total (what came, if it did not end in time). */
+    function readAll(ms: int32): String {
+        let until: int64 = lar_process_now() + (ms as int64);
+        while (!self.ended && self.fill(until)) { }
+        let text: String = stringOfRange(self.pending, self.taken, self.pending.length).clone();
+        self.taken = self.pending.length;
+        return text;
+    }
+
+    /** Reads more of its output into `pending`, waiting until `until`: false when nothing came in time. */
+    function fill(until: int64): bool {
+        if (self.handle == null || self.ended) { return false; }
+        if (self.taken > 65536 && self.taken * 2 > self.pending.length) { self.compact(); }
+        let left: int64 = until - lar_process_now();
+        let n: int32 = lar_process_read(self.handle!, self.chunk, 4096, left > 0 ? left as int32 : 0);
+        if (n < 0) {
+            self.ended = true;
+            return true;
+        }
+        let i: int32 = 0;
+        while (i < n) {
+            self.pending.push(self.chunk[i]);
+            i += 1;
+        }
+        return n > 0;
+    }
+
+    /** Drops what was already given. */
+    function compact(): void {
+        let kept: byte[*] = [];
+        let i: int32 = self.taken;
+        while (i < self.pending.length) {
+            kept.push(self.pending[i]);
+            i += 1;
+        }
+        self.pending.clear();
+        for (b in kept) { self.pending.push(b); }
+        self.taken = 0;
+    }
+
+    /** Waits up to `ms` (-1: as long as it takes) for it to end: its exit code, or null if it did not end yet. */
+    function wait(ms: int32): int32? {
+        if (self.handle == null) { return null; }
+        if (lar_process_wait(self.handle!, ms) == 0) { return null; }
+        return lar_process_code(self.handle!);
+    }
+
+    /** Ends it now (if it still runs). */
+    function kill(): void {
+        if (self.handle != null) { lar_process_kill(self.handle!); }
+    }
+
+    /** Whether it was started (and not given up when it could not start). */
+    function started(): bool { return self.handle != null; }
+
+    /** True when what it runs is a task of this program, not a program (a Process with `run`). */
+    function hasTask(): bool { return false; }
+}
+
+/** Where a program is found in the PATH (with .exe on Windows), or null. A path with a folder is checked as it is. */
+public function findProgram(name: String): String? {
+    let windows: bool = Platform.current() == OS.Windows;
+    if (name.contains("/") || name.contains("\\")) { return isRunnable(name) ? name : null; }
+    let path: String = getenv("PATH") ?? "";
+    let separator: String = windows ? ";" : ":";
+    for (dir in path.split(separator)) {
+        if (dir == "") { continue; }
+        let candidate: String = "${dir}/${name}";
+        if (isRunnable(candidate)) { return candidate.clone(); }
+        if (windows && isRunnable("${candidate}.exe")) { return "${candidate}.exe".clone(); }
+    }
+    return null;
+}
+
+native function getenv(name: String): String?;
+/** Whether a program can be run (std/os/process/posix.lar, windows.lar). */
+function isRunnable(path: String): bool {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixExecutables.check(path);
+        case Windows -> WindowsExecutables.check(path);
+    };
+}

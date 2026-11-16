@@ -429,7 +429,7 @@
       <nav class="nav-links">
         <a href="#features" data-i18n="nav.features">Language</a>
         <a href="#memory" data-i18n="nav.memory">Memory</a>
-        <a href="#concurrency" data-i18n="nav.concurrency">Threads</a>
+        <a href="#concurrency" data-i18n="nav.concurrency">Threads and processes</a>
         <a href="#interop" data-i18n="nav.interop">Processes</a>
         <a href="#docs" data-i18n="nav.docs">Tools</a>
       </nav>
@@ -450,10 +450,10 @@
       <div class="container">
         <div class="hero-grid">
           <div>
-            <div class="eyebrow"><span style="width:0.375rem; height:0.375rem; border-radius:50%; background:var(--larimar);"></span><span data-i18n="hero.eyebrow">v1.10 · language 1.3 · transpiles to C99</span></div>
+            <div class="eyebrow"><span style="width:0.375rem; height:0.375rem; border-radius:50%; background:var(--larimar);"></span><span data-i18n="hero.eyebrow">v1.11 · language 1.4 · transpiles to C99</span></div>
             <h1 style="font-size: clamp(2.25rem, 4.5vw, 3.75rem); font-weight: 700; line-height: 1.1; margin-top: 1.5rem; letter-spacing: -0.025em;" data-i18n-html="hero.title.html">A small language that <span class="gradient-text">compiles to C</span>.</h1>
             <p style="color: var(--text-muted); font-size: 1.125rem; line-height: 1.625; margin-top: 1.5rem;" data-i18n="hero.body">Larimar transpiles to a single C99 file, has no garbage collector (memory is freed in blocks, at points you can see in the code), and its compiler is written in Larimar itself.</p>
-            <div class="status-note" data-i18n-html="hero.status.html"><strong>Status:</strong> 258 tests: memory, threads, network, debugger, editor and standard library. Language specification 1.3.</div>
+            <div class="status-note" data-i18n-html="hero.status.html"><strong>Status:</strong> 266 tests: memory, threads, network, debugger, editor and standard library. Language specification 1.4.</div>
             <!-- the install command for the visitor's system (install.sh / install.ps1, next to this page) -->
             <div id="get" class="install-box">
               <div class="install-tabs" role="tablist">
@@ -536,7 +536,7 @@ export PATH="$PWD/larimar/bin:$PATH"</div>
           </div>
           <div class="card" style="padding: 1.5rem;">
             <h3 class="card-title" data-i18n="f6.title">Modules and projects</h3>
-            <p class="card-body" data-i18n="f6.body">Each file is a module with its own namespace. Projects with larimar.toml: a program, a library compiled with the programs that use it, or a service that runs in its own process.</p>
+            <p class="card-body" data-i18n="f6.body">Each file is a module with its own namespace. Projects with larimar.toml: a program, or a library compiled with the programs that use it.</p>
           </div>
         </div>
 
@@ -641,18 +641,18 @@ export PATH="$PWD/larimar/bin:$PATH"</div>
             <div class="code-block" style="margin-top: 1rem;">
               <div class="code-title"><span>loop.c</span></div>
               <pre><span class="tok-com">/* the C that Larimar writes, trimmed */</span>
-<span class="tok-kw">void</span> <span class="tok-fn">greet</span>(<span class="tok-type">RtString</span> name) {
-    <span class="tok-type">RtMem</span> tmp_11 = <span class="tok-fn">rt_mem_growable</span>();
-    <span class="tok-type">RtString</span> t_12 = <span class="tok-fn">String_toUpperCase</span>(name, &amp;tmp_11);
-    <span class="tok-fn">printf</span>(<span class="tok-str">"hello %.*s\n"</span>, (<span class="tok-kw">int</span>)t_12.len, t_12.ptr);
-    <span class="tok-fn">rt_mem_free</span>(&amp;tmp_11);             <span class="tok-com">/* the ; */</span>
+<span class="tok-kw">void</span> <span class="tok-fn">greet</span>(<span class="tok-type">LarString</span> name) {
+    <span class="tok-type">LarMemory</span> line2_temps = <span class="tok-fn">lar_memory_growable</span>();
+    <span class="tok-type">LarString</span> value = <span class="tok-fn">String_toUpperCase</span>(name, &amp;line2_temps);
+    <span class="tok-fn">printf</span>(<span class="tok-str">"hello %.*s\n"</span>, (<span class="tok-kw">int</span>)value.len, value.ptr);
+    <span class="tok-fn">lar_memory_free</span>(&amp;line2_temps);    <span class="tok-com">/* the ; */</span>
 }
 
-<span class="tok-kw">for</span> (<span class="tok-type">int32_t</span> i = from_13; i &lt; to_14; i++) {
-    <span class="tok-type">RtMem</span> mem_0 = <span class="tok-fn">rt_mem_growable</span>();
+<span class="tok-kw">for</span> (<span class="tok-type">int32_t</span> i = range_start; i &lt; range_end; i++) {
+    <span class="tok-type">LarMemory</span> memory = <span class="tok-fn">lar_memory_growable</span>();
     ...
     <span class="tok-fn">greet</span>(label);
-    <span class="tok-fn">rt_mem_free</span>(&amp;mem_0);              <span class="tok-com">/* the } */</span>
+    <span class="tok-fn">lar_memory_free</span>(&amp;memory);         <span class="tok-com">/* the } */</span>
 }</pre>
             </div>
             <p class="caption" data-i18n="arena.caption">The C the compiler writes, trimmed: one memory per statement and one per turn, each with its release.</p>
@@ -862,6 +862,54 @@ server.<span class="tok-fn">run</span>();</pre>
             <p class="caption" data-i18n-html="srv.out.html">8 threads serve at the same time, without races: the compiler checked it.</p>
           </div>
         </div>
+
+        <!-- processes and tasks -->
+        <div style="margin-top: 5rem; align-items: start;" class="split">
+          <div>
+            <div class="code-block">
+              <div class="code-title"><span>processes.lar</span></div>
+              <pre><span class="tok-kw">import</span> std.os.process { <span class="tok-type">Process</span>, <span class="tok-type">ProcessPool</span>, <span class="tok-type">Task</span>, <span class="tok-type">ProcessError</span> };
+
+<span class="tok-com">// may fail: it runs in a copy of the program</span>
+<span class="tok-kw">class</span> <span class="tok-plain">Resize</span> <span class="tok-kw">implements</span> <span class="tok-type">Task</span> {
+    <span class="tok-kw">let</span> file: <span class="tok-type">String</span>;
+    <span class="tok-kw">let</span> width: <span class="tok-type">int32</span>;
+    <span class="tok-kw">override</span> <span class="tok-kw">function</span> <span class="tok-fn">run</span>(): <span class="tok-type">Any</span> {
+        <span class="tok-kw">return</span> Images.<span class="tok-fn">resize</span>(<span class="tok-kw">self</span>.file, <span class="tok-kw">self</span>.width);
+    }
+}
+
+<span class="tok-kw">function</span> <span class="tok-fn">main</span>(): <span class="tok-type">int32</span> <span class="tok-kw">throws</span> <span class="tok-type">ProcessError</span> {
+    <span class="tok-com">// one, like a thread: start, join</span>
+    <span class="tok-kw">let</span> p: <span class="tok-type">Process</span> = {
+        run: Resize { file: <span class="tok-str">"casa.jpg"</span>, width: <span class="tok-num">800</span> }
+    };
+    p.<span class="tok-fn">start</span>();
+    <span class="tok-kw">let</span> cover: <span class="tok-type">Any</span> = p.<span class="tok-fn">join</span>();
+
+    <span class="tok-com">// many, like a ThreadPool: submit, wait</span>
+    <span class="tok-kw">let</span> photos: <span class="tok-type">String</span>[*] = [<span class="tok-str">"1.jpg"</span>, <span class="tok-str">"2.jpg"</span>];
+    <span class="tok-kw">let</span> pool: <span class="tok-type">ProcessPool</span> = { processes: <span class="tok-num">4</span> };
+    <span class="tok-kw">for</span> (name <span class="tok-kw">in</span> photos) {
+        pool.<span class="tok-fn">submit</span>(Resize { file: name, width: <span class="tok-num">800</span> });
+    }
+    <span class="tok-kw">let</span> all: <span class="tok-type">Any</span> = pool.<span class="tok-fn">wait</span>();   <span class="tok-com">// in order</span>
+    <span class="tok-kw">return</span> <span class="tok-num">0</span>;
+}</pre>
+            </div>
+            <p class="caption" data-i18n-html="proc.out.html">A panic in Resize ends only its copy: here it is a <span style="font-family:monospace; color:var(--text-main);">ProcessError</span>, and the pool starts another.</p>
+          </div>
+          <div>
+            <div class="eyebrow" data-i18n="proc.eyebrow">Processes</div>
+            <h3 class="h3" data-i18n="proc.title">Processes, used like threads</h3>
+            <p class="text" data-i18n="proc.body">Unix has long put the work that may fail in a process of its own: what breaks there does not break the rest. Larimar makes it as plain as a thread. A Task goes to a copy of the program with its fields, and what its run gives comes back.</p>
+            <ul class="bullets">
+              <li data-i18n-html="proc.li1.html">The same verbs: a <code style="color:var(--larimar-light);">Thread</code> runs a <code style="color:var(--larimar-light);">Runnable</code>, a <code style="color:var(--larimar-light);">Process</code> runs a <code style="color:var(--larimar-light);">Task</code>; <code style="color:var(--larimar-light);">start</code> and <code style="color:var(--larimar-light);">join</code>, <code style="color:var(--larimar-light);">submit</code> and <code style="color:var(--larimar-light);">wait</code>.</li>
+              <li data-i18n="proc.li2">What travels is checked at compile time: a field that cannot go to another process does not compile.</li>
+              <li data-i18n="proc.li3">Threads share memory, checked by the compiler; processes share nothing, and a crash stays where it happened. One program uses both.</li>
+            </ul>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -871,30 +919,30 @@ server.<span class="tok-fn">run</span>();</pre>
         <div style="text-align: center; max-width: 48rem; margin: 0 auto;">
           <div class="eyebrow" data-i18n="interop.eyebrow">Other programs</div>
           <h2 class="h2" data-i18n="interop.title">No C of its own: other processes</h2>
-          <p class="lead" data-i18n-html="interop.body.html">What Larimar does not have runs in another process: a service written in Larimar, any program that speaks JSON-RPC, or a part of the program itself. They talk through shared memory or pipes, and a failure there is an error here, not a crash.</p>
+          <p class="lead" data-i18n-html="interop.body.html">What Larimar does not have runs in another process: another program that answers calls (yours, or any that speaks JSON-RPC), or a part of the program itself. They talk through shared memory or pipes, and a failure there is an error here, not a crash.</p>
         </div>
 
         <div style="margin-top: 4rem;" class="split">
           <div>
             <div class="code-block">
-              <div class="code-title"><span>a service, and a program that calls it</span></div>
-              <pre><span class="tok-com">// calc/src/calc.lar: [project] kind = "service"</span>
-<span class="tok-kw">public</span> <span class="tok-kw">function</span> <span class="tok-fn">add</span>(a: <span class="tok-type">int64</span>, b: <span class="tok-type">int64</span>): <span class="tok-type">int64</span> { <span class="tok-kw">return</span> a + b; }
+              <div class="code-title"><span>a program that serves, and one that calls it</span></div>
+              <pre><span class="tok-com">// calc.lar: answers each call</span>
+<span class="tok-fn">serve</span>((call) -> { <span class="tok-kw">return</span> (call.params.a <span class="tok-kw">as</span> <span class="tok-type">int64</span> ?? <span class="tok-num">0</span>) + (call.params.b <span class="tok-kw">as</span> <span class="tok-type">int64</span> ?? <span class="tok-num">0</span>); });
 
-<span class="tok-com">// the program: [dependencies] calc = "../calc"</span>
-<span class="tok-kw">import</span> calc { <span class="tok-type">Calc</span> };
-<span class="tok-kw">import</span> std.os.rpc { <span class="tok-type">RpcError</span> };
+<span class="tok-com">// the program that calls it</span>
+<span class="tok-kw">import</span> std.os.rpc { <span class="tok-type">Rpc</span>, <span class="tok-type">RpcError</span> };
+<span class="tok-kw">import</span> std.os.process { <span class="tok-type">Process</span> };
 
 <span class="tok-kw">function</span> <span class="tok-fn">main</span>(): <span class="tok-type">int32</span> <span class="tok-kw">throws</span> <span class="tok-type">RpcError</span> {
-    <span class="tok-kw">let</span> c: <span class="tok-type">Calc</span> = <span class="tok-type">Calc</span>.<span class="tok-fn">start</span>();     <span class="tok-com">// its own process</span>
-    <span class="tok-fn">println</span>(<span class="tok-str">"${c.add(2, 40)}"</span>);     <span class="tok-com">// 42, computed there</span>
+    <span class="tok-kw">let</span> calc: <span class="tok-type">Rpc</span> = <span class="tok-type">Rpc</span>.<span class="tok-fn">startShared</span>(<span class="tok-type">Process</span> { program: <span class="tok-str">"./calc"</span> });
+    <span class="tok-fn">println</span>(<span class="tok-str">"${calc.call("add", { a: 2, b: 40 })}"</span>);     <span class="tok-com">// 42, computed there</span>
     <span class="tok-kw">return</span> <span class="tok-num">0</span>;
 }</pre>
             </div>
             <div class="pairs">
-              <div class="card" style="padding: 0.75rem;"><div class="pair-k">kind = "service"</div><div class="pair-v" data-i18n="i1">Its public functions run in its own process; a program imports a class with them.</div></div>
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">Rpc.startShared(process)</div><div class="pair-v" data-i18n="i1">The Process says what runs; Rpc starts it and talks to it.</div></div>
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">std.os.rpc</div><div class="pair-v" data-i18n="i2">Calls to another program: JSON-RPC through shared memory, or through its pipes.</div></div>
-              <div class="card" style="padding: 0.75rem;"><div class="pair-k">std.os.shared</div><div class="pair-v" data-i18n="i3">A stream of bytes between two programs, through shared memory.</div></div>
+              <div class="card" style="padding: 0.75rem;"><div class="pair-k">std.os.sharedmemory</div><div class="pair-v" data-i18n="i3">Streams and segments of shared memory between programs: a queue, or a board.</div></div>
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">Process { run: task }</div><div class="pair-v" data-i18n="i4">A Task of the program that runs in a copy of it, like a thread.</div></div>
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">RpcError</div><div class="pair-v" data-i18n="i5">The other process ended or failed: an error to catch.</div></div>
               <div class="card" style="padding: 0.75rem;"><div class="pair-k">Platform.current()</div><div class="pair-v" data-i18n="i6">What each system does differently, chosen with a switch. All are checked.</div></div>
@@ -1025,10 +1073,10 @@ export PATH="$PWD/../out/larimar/bin:$PATH"</div>
         <div style="margin-top: 5rem;" class="split">
           <div>
             <h3 style="font-size: 1.75rem; font-weight: 700;" data-i18n="toml.title">The project file</h3>
-            <p class="text" data-i18n-html="toml.body.html">A <code style="color:var(--larimar-light);">larimar.toml</code> describes the project: a program, a library or a service, what it uses, and which C compiler builds it. An unknown key is an error, so a typo does not go unnoticed.</p>
+            <p class="text" data-i18n-html="toml.body.html">A <code style="color:var(--larimar-light);">larimar.toml</code> describes the project: a program or a library, what it uses, and which C compiler builds it. An unknown key is an error, so a typo does not go unnoticed.</p>
             <ul class="bullets">
-              <li data-i18n-html="toml.li1.html"><code style="color:var(--larimar-light);">kind</code>: <code style="color:var(--larimar-light);">"program"</code> (the default), <code style="color:var(--larimar-light);">"library"</code> or <code style="color:var(--larimar-light);">"service"</code></li>
-              <li data-i18n-html="toml.li2.html"><code style="color:var(--larimar-light);">[dependencies]</code>: the libraries and services written in Larimar that it uses, by folder</li>
+              <li data-i18n-html="toml.li1.html"><code style="color:var(--larimar-light);">kind</code>: <code style="color:var(--larimar-light);">"program"</code> (the default) or <code style="color:var(--larimar-light);">"library"</code></li>
+              <li data-i18n-html="toml.li2.html"><code style="color:var(--larimar-light);">[dependencies]</code>: the libraries written in Larimar that it uses, by folder</li>
               <li data-i18n-html="toml.li3.html"><code style="color:var(--larimar-light);">compiler</code>: by default the system's (cc, gcc, clang), or the bundled tcc</li>
               <li data-i18n-html="toml.li4.html"><code style="color:var(--larimar-light);">flags</code>: options for the C compiler</li>
               <li data-i18n-html="toml.li5.html"><code style="color:var(--larimar-light);">[c.linux]</code>, <code style="color:var(--larimar-light);">[c.windows]</code>...: what changes on one platform</li>
@@ -1044,7 +1092,6 @@ main = <span class="tok-str">"src/main.lar"</span>
 
 <span class="tok-kw">[dependencies]</span>
 textkit = <span class="tok-str">"../textkit"</span>     <span class="tok-com"># a library</span>
-calc = <span class="tok-str">"../calc"</span>           <span class="tok-com"># a service</span>
 
 <span class="tok-kw">[c]</span>
 compiler = <span class="tok-str">"gcc"</span>
@@ -1072,7 +1119,7 @@ flags = [<span class="tok-str">"-O2"</span>, <span class="tok-str">"-Wall"</span
           <ul class="footer-list">
             <li><a href="#features" data-i18n="nav.features">Language</a></li>
             <li><a href="#memory" data-i18n="nav.memory">Memory</a></li>
-            <li><a href="#concurrency" data-i18n="nav.concurrency">Threads</a></li>
+            <li><a href="#concurrency" data-i18n="nav.concurrency">Threads and processes</a></li>
             <li><a href="#interop" data-i18n="nav.interop">Processes</a></li>
           </ul>
         </div>

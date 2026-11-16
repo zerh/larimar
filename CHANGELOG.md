@@ -2,13 +2,62 @@
 
 Each version of the compiler (`larimar --version`) and the version of the language it implements.
 
-## 1.11.0 — unreleased
+## 1.11.0 — 2026-11-16 (language 1.4)
+
+The compiler has no C of its own, names that read, readable C, a pipeline of passes, and everything
+under `src/`. Services leave the project: a program that answers is any program, started with a `Process`.
+
+- **The repository**: `src/compiler` (the compiler: `main.lar`, `pipeline.lar` and a folder per stage),
+  `src/std` and `src/runtime` (installed, as before, as `std/` and `runtime/`). The compiler finds
+  `$LARIMAR_HOME/src/std` when there is no `$LARIMAR_HOME/std`, so `LARIMAR_HOME=src` and the root of the
+  repository both work; `larimar test` finds `tests.support` in the folders above the main file's, up to
+  the project's.
 
 - **The compiler has no C of its own** and builds without `--unsafe-c`. `larimar lsp` keeps the editor's
   texts in a memory it compacts and answers each question with a `larimarc lsp-worker` started with
   `Process`, the same on every system (no `fork()`; `LARIMAR_LSP_NO_FORK` is gone). `larimar dap` talks
   to lldb-dap through a `Process` and keeps its variable handles in Larimar.
 - **`std.io.console`**: `unbufferInput()` and `waitForInput(ms)` (true when there is something to read).
+- **Every program starts through `Process`**: `Rpc.start(process)` and `Rpc.startShared(process)` take a
+  `Process` (its `program`, `args`, `env`, `quiet`...) and start it; `startShared` adds `LARIMAR_RPC` to
+  its `env`. `Rpc.start(program, args)` and `startSharedWith` are gone. Rpc refuses, with
+  `RpcError.Ended`, a Process with a task (*the Process has a task, not a program: start it with start()
+  and wait for it with join()*), one without a program, and one started already.
+- **`os.run` is `os.runCommand`**: a command line of the shell, waited for; its exit code.
+- **No services in the project**: `kind = "service"`, services in `[dependencies]`, the generated client
+  class and server, and `larimar new --service` are gone. A program that answers with `serve()` is any
+  program: another one starts it with `Rpc.startShared(Process { program: "..." })`. The kinds of a
+  project are a program and a library.
+- **Shared memory, by its name**: `std.os.shared` is `std.os.sharedmemory`, and its streams are
+  `SharedMemoryOutputStream` and `SharedMemoryInputStream`. New **`SharedMemorySegment`**:
+  `create(name, size)` / `open(name, ms)`, and `get`/`put` of `byte`, `int32`, `int64`, `float64` and bytes
+  at an offset, each checked against its size; an `int64` at a multiple of 8 is read and written whole, in
+  order. A stream is a queue; a segment is a board.
+- **`std.io.bytes`**: `ByteWriter` and `ByteReader`, binary messages (numbers little-endian, a `String` as
+  its length and its bytes).
+- **`MemoryInputStream` / `MemoryOutputStream` are `BytesInputStream` / `BytesOutputStream`.**
+- **The compilation is a pipeline**: a `Compilation` and its passes (`pipeline.lar`: Link, CheckRules,
+  Assemble, Analyze, EmitC, NameC, Prune), each of which reports problems instead of throwing; `larimar
+  check` and the editor run them up to Analyze.
+- **The rules in one place**: `src/semantics/rules.lar`, one object each (`Rule { id(); spec(); check() }`,
+  listed by `languageRules()`); each error says its rule: `error[std-own-import]`, `error[no-c-outside-std]`,
+  `error[body-needed]`, `error[language-type]`, and the new **`error[internal-import]`**: a module of a
+  folder `internal` (`tools.internal.cache`) is imported only by the modules of the folder above it. A test
+  breaks each rule.
+- **A README.md in each folder of the compiler and in std**: what it does, written by hand, and its API,
+  written by `tools/reference.py` from the code (a test fails when they differ).
+- **Names that read on their own** in the compiler (`TypeKind`, `optionalOf`, `constantKind`, `method`,
+  `classInfo`, `builder`...); the rule is in CONTRIBUTING. `editor.docstore` is `editor.opendocuments`.
+- **Readable C.** The runtime and std's C are `lar_` / `Lar` / `LAR_`, in whole words (`LarMemory`,
+  `LarMemoryBlock`, `LarResource`, `LarTextBuilder`, `lar_text_to_c`, `LarMethodTable`, `lar_process_*`,
+  `lar_shared_*`); a C name of a program that starts so gets a `_`. The compiler's variables are named by
+  what they are (`memory`, `line27_temps`, `result`, `new_Shout`, `range_start`), with a number only when
+  the name repeats in the function (`codegen.localnames`); the line a check reports is `LINE(27)`. An
+  object's header is `.header`, a class's table of methods `methods_Shout`, a type of C
+  `LarNative_FILE` and its cell `LarResource_FILE`.
+- **Lambdas with big captures** (more than 64 bytes) keep them in the memory where the lambda lives:
+  before, every closure of a function type was as big as the biggest (one that captured an
+  `int64[25000]` made every `() -> void` 200 KB, and a `ThreadPool` of empty tasks 700 times slower).
 - The hint of a value that outlives its memory names the right parameter (`docs: Documents in kept`).
 
 ## 1.10.0 — 2026-11-15 (language 1.3)

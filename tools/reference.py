@@ -1,20 +1,31 @@
 #!/usr/bin/env python3
-"""Writes docs/compiler-reference.md from the comments of src/ (run from the repository: tools/reference.py)."""
-import os, re
+"""Writes docs/compiler-reference.md from the comments of the compiler's sources, and the generated part of
+the README.md of each folder of the compiler and of std (its micro API: the public names of each module).
+
+    tools/reference.py            writes them
+    tools/reference.py --check    says which README.md does not match the code (exit 1), and writes nothing
+"""
+import os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GROUPS = ['main', 'syntax', 'semantics', 'codegen', 'project', 'editor']
+SRC = 'src/compiler' if os.path.isdir(os.path.join(ROOT, 'src/compiler')) else 'src'
+STD = 'src/std' if os.path.isdir(os.path.join(ROOT, 'src/std')) else 'std'
+GROUPS = ['main', 'pipeline', 'syntax', 'semantics', 'codegen', 'project', 'editor']
+FOLDERS = ['syntax', 'semantics', 'codegen', 'project', 'editor']
+BEGIN = '<!-- api: written by tools/reference.py from the code; not edited by hand -->'
+END = '<!-- /api -->'
 
 
-def files():
+def files(base=None):
+    base = base or SRC
     out = []
-    for dirpath, _, names in os.walk(os.path.join(ROOT, 'src')):
+    for dirpath, _, names in os.walk(os.path.join(ROOT, base)):
         for n in names:
             if n.endswith('.lar'):
                 rel = os.path.relpath(os.path.join(dirpath, n), ROOT)
                 out.append(rel)
     def key(rel):
-        parts = rel[len('src/'):-len('.lar')].split('/')
+        parts = rel[len(base) + 1:-len('.lar')].split('/')
         return (GROUPS.index(parts[0]) if parts[0] in GROUPS else 99, parts)
     return sorted(out, key=key)
 
@@ -137,14 +148,97 @@ def module(rel):
 
 
 def anchor(rel):
-    return rel[len('src/'):-len('.lar')].replace('/', '-')
+    return rel[len(SRC) + 1:-len('.lar')].replace('/', '-')
 
 
 def title(rel):
-    return rel[len('src/'):-len('.lar')].replace('/', '.')
+    return rel[len(SRC) + 1:-len('.lar')].replace('/', '.')
+
+
+def module_name(rel, base):
+    name = rel[len(base) + 1:-len('.lar')].replace('/', '.')
+    return ('std.' + name) if base == STD else name
+
+
+def public_api(rel, base):
+    """The public names of a module: its first line of comment, and each public type and function (its signature, its doc's first sentence)."""
+    src = open(os.path.join(ROOT, rel)).read()
+    head, entries, count, n = module(rel)
+    lines = src.split('\n')
+    out = []
+    first = ''
+    if head:
+        first = ' '.join(head).split('. ')[0].strip()
+        first = re.sub(r'^[\w.]+:\s*', '', first)
+    out.append(f'- **`{module_name(rel, base)}`**' + (f': {first}' if first else ''))
+    for kind, text, doc, line, inside in entries:
+        decl = lines[line - 1].strip()
+        if inside or not decl.startswith('public'):
+            continue
+        short = doc.split('. ')[0].rstrip('.') if doc else ''
+        sig = text if kind == 'func' else text.replace('`', '')
+        sig = sig.replace('public ', '')
+        out.append(f'  - `{sig}`' + (f': {short}' if short else ''))
+    return out
+
+
+def readme_api(folder, base):
+    path = os.path.join(base, folder) if folder else base
+    mods = [rel for rel in files(base) if rel.startswith(path + '/') or rel == path + '.lar']
+    if folder:
+        own = os.path.join(base, folder + '.lar')
+        if os.path.isfile(os.path.join(ROOT, own)):
+            mods = [own] + [m for m in mods if m != own]
+    out = []
+    for rel in mods:
+        if '/internal/' in rel or rel.endswith('/internal.lar'):
+            continue
+        out.extend(public_api(rel, base))
+    return '\n'.join(out)
+
+
+def readmes():
+    """(README path, its generated part) for each folder of the compiler, and for std."""
+    done = []
+    for folder in FOLDERS:
+        done.append((os.path.join(SRC, folder, 'README.md'), readme_api(folder, SRC)))
+    std_mods = [rel for rel in files(STD) if not re.search(r'/(posix|windows|macos|common|internal)(/|\.lar$)', rel)]
+    lines = []
+    for rel in std_mods:
+        lines.extend(public_api(rel, STD))
+    done.append((os.path.join(STD, 'README.md'), '\n'.join(lines)))
+    return done
+
+
+def with_api(text, api):
+    if BEGIN in text and END in text:
+        a = text.index(BEGIN)
+        b = text.index(END) + len(END)
+        return text[:a] + BEGIN + '\n\n' + api + '\n\n' + END + text[b:]
+    return text.rstrip('\n') + '\n\n## Its API\n\n' + BEGIN + '\n\n' + api + '\n\n' + END + '\n'
+
+
+def write_readmes(check):
+    wrong = []
+    for path, api in readmes():
+        full = os.path.join(ROOT, path)
+        old = open(full).read() if os.path.isfile(full) else ''
+        new = with_api(old, api)
+        if new != old:
+            if check:
+                wrong.append(path)
+            else:
+                open(full, 'w').write(new)
+    return wrong
 
 
 def main():
+    if '--check' in sys.argv:
+        wrong = write_readmes(True)
+        for w in wrong:
+            print(f'{w}: its API part does not match the code (tools/reference.py writes it)')
+        sys.exit(1 if wrong else 0)
+    write_readmes(False)
     mods = [(rel,) + module(rel) for rel in files()]
     total = sum(m[3] for m in mods)
     documented = sum(1 for m in mods for e in m[2] if e[0] == 'func' and e[2])

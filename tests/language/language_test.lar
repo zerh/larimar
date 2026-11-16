@@ -47,6 +47,11 @@ test function globalUsedBeforeItsValue(): void {
         """, "The initial value of 'total' calls code that uses global 'box'");
 }
 
+// A lambda with big captures keeps them in its memory; the small lambdas of its type stay small.
+test function bigCaptures(): void {
+    runs("tests/cases/language/big_captures.lar", ["9 2", "0", "7", "14"]);
+}
+
 test function lambdaKeptWithoutIn(): void {
     failsWith(raw"""
         class Route { let handler: (int32) -> void; }

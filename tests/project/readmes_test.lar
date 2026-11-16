@@ -1,0 +1,15 @@
+// The README.md of each folder of the compiler and of std ends with its API, written by tools/reference.py
+// from the code: this test fails when a public name changed and the README was not written again.
+import std.os;
+import std.os.process { findProgram };
+import std.test { check, skip };
+
+test function theReadmesSayTheCodesApi(): void {
+    let python: String? = findProgram("python3");
+    if (python == null) {
+        skip("python3 is not here (tools/reference.py --check)");
+        return;
+    }
+    let code: int32 = os.runCommand("python3 tools/reference.py --check");
+    check(code == 0, "a README.md does not match the code: run tools/reference.py (it says which)");
+}

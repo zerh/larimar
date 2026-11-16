@@ -1,0 +1,200 @@
+// syntax.parser: tokens -> syntax tree.
+//
+// A recursive descent parser. Parser holds what is being read (the tokens, where it is, the first
+// error) and reads them one by one; the constructions of the language are functions over it, in the
+// modules of syntax/parser/: declarations, natives (what comes from C), types, statements, expressions.
+// Each reads one construction, and the comment above it shows its form, in this notation:
+//
+//   word        that word (a keyword or a symbol)          [ x ]     x, optionally
+//   NAME        an identifier                              x*        x, any number of times
+//   x | y       x or y                                     ( ... )   grouping
+//
+// The first syntax error is kept; after it every token reads as the end of the file, so the parser
+// unwinds quickly and its result is thrown away.
+
+import syntax.ast { declName, FunctionDecl, Ident, ImportDecl, Node, Program };
+import syntax.lexer { Lexer, Token, TokenType };
+import syntax.parser.declarations { topLevelDeclaration };
+
+/** The tree of one source file; its `error` is the first lexical or syntax error. `startLine`: the number of its first line (it also says the file). */
+public function parseProgram(source: String in default, startLine: int32): Program {
+    let lexer: Lexer = { src: source, line: startLine } in default;
+    lexer.run();
+    let parser: Parser = Parser { tokens: lexer.toks, failed: lexer.error } in default;
+    let tree: Program = program(parser, startLine);
+    tree.error = parser.failed;
+    return tree;
+}
+
+/** What the parser reads past the last token. */
+let endOfFile: Token = Token { kind: TokenType.Eof, text: "", line: 0 } in default;
+
+/** The tokens of a source text, read one by one. */
+public class Parser {
+    let tokens: Token[*];
+    let position: int32 = 0;                    // of the next token
+    let failed: String = "";                    // the first error, lexical or of syntax ("" when there is none)
+    let waitUntilAllowed: bool = false;         // reading the methods of a synchronized class: they may say `wait until (condition)`
+    let readingCastType: bool = false;          // reading the type after `as`: there a '?' may be the ternary's (n > MAX as int64 ? a : b)
+    let cOwner: String = "";                    // the class being read ("" outside one): what its cinclude, ccode and C bodies belong to
+    let staticFunctions: FunctionDecl[*] = [];  // written inside a type: they become top-level `function Type.name` declarations
+    let nativeParts: Node[*] = [];              // what a type also declares at the top level: its C functions, its cinclude and ccode
+
+    function error(line: int32, message: String): void {
+        if (self.failed == "") { self.failed = "Syntax Error [Line ${line}]: ${message}" in default; }
+    }
+
+    function hasFailed(): bool { return self.failed != ""; }
+
+    /** The token to read next. */
+    function current(): Token {
+        return self.hasFailed() || self.position >= self.tokens.length ? endOfFile : self.tokens[self.position];
+    }
+
+    /** The token after the current one. */
+    function next(): Token {
+        if (self.hasFailed()) { return endOfFile; }
+        return self.position + 1 < self.tokens.length ? self.tokens[self.position + 1] : self.tokens[self.tokens.length - 1];
+    }
+
+    /** The token just read. */
+    function previous(): Token { return self.position == 0 ? endOfFile : self.tokens[self.position - 1]; }
+
+    function atEnd(): bool { return self.current().kind == TokenType.Eof; }
+
+    /** Is the current token of this kind? */
+    function at(kind: TokenType): bool { return !self.atEnd() && self.current().kind == kind; }
+
+    /** Is the current token the identifier `word` (a word with a meaning only there: test, type...)? */
+    function atWord(word: String): bool { return self.at(TokenType.Ident) && self.current().text == word; }
+
+    /** Are the next two tokens the identifiers `first` and `second` (wait until, thread safe)? */
+    function atWords(first: String, second: String): bool {
+        return self.atWord(first) && self.next().kind == TokenType.Ident && self.next().text == second;
+    }
+
+    /** Reads the current token and gives it. */
+    function advance(): Token {
+        if (!self.atEnd()) { self.position += 1; }
+        return self.previous();
+    }
+
+    /** [ kind ]: reads the token when it is of this kind, and says whether it was. */
+    function optional(kind: TokenType): bool {
+        if (!self.at(kind)) { return false; }
+        self.advance();
+        return true;
+    }
+
+    /** [ first second ]: reads the two words when they come, and says whether they did. */
+    function optionalWords(first: String, second: String): bool {
+        if (!self.atWords(first, second)) { return false; }
+        self.advance();
+        self.advance();
+        return true;
+    }
+
+    /** kind: reads the token, which must be of this kind (else the error says what came instead). */
+    function expect(kind: TokenType, message: String): Token {
+        if (self.at(kind)) { return self.advance(); }
+        self.error(self.current().line, "${message} (got '${self.current().text}')");
+        return endOfFile;
+    }
+}
+
+// ---- what every part uses -----------------------------------------------------------------------
+
+/** The node, after its ';'. */
+public function endedBySemicolon(parser: Parser in default, node: Node, what: String): Node {
+    parser.expect(TokenType.Semi, "Expected ';' after ${what}");
+    return node;
+}
+
+/** NAME ( . NAME )* */
+public function qualifiedName(parser: Parser in default, message: String): String {
+    let name: String = parser.expect(TokenType.Ident, message).text;
+    while (parser.at(TokenType.Dot) && parser.next().kind == TokenType.Ident) {
+        parser.advance();
+        name = "${name}.${parser.advance().text}" in default;
+    }
+    return name;
+}
+
+/** [ item ( , item )* ] before `close` (which is not read). */
+public function strictList(parser: Parser in default, close: TokenType, readItem: () -> void): void {
+    if (parser.at(close)) { return; }
+    while (true) {
+        readItem();
+        if (!parser.optional(TokenType.Comma)) { break; }
+    }
+}
+
+/** Like strictList, but a comma may also end the list. */
+public function looseList(parser: Parser in default, close: TokenType, readItem: () -> void): void {
+    while (!parser.at(close) && !parser.atEnd()) {
+        readItem();
+        if (!parser.optional(TokenType.Comma)) { break; }
+    }
+}
+
+/** in ( default | self | NAME ): where a parameter or a result lives. */
+public function lives(parser: Parser in default): String {
+    if (parser.optional(TokenType.Default)) { return "default"; }
+    if (parser.optional(TokenType.Self)) { return "self"; }
+    return parser.expect(TokenType.Ident, "Expected 'default', 'self' or a parameter name after 'in'").text;
+}
+
+/** import* ( [public] declaration )* */
+function program(parser: Parser in default, startLine: int32): Program {
+    let program: Program = Program { line: startLine } in default;
+    while (!parser.atEnd()) {
+        if (parser.at(TokenType.Import)) {
+            if (program.decls.length > 0) { parser.error(parser.current().line, "Imports go at the beginning of the file, before any declaration"); }
+            program.imports.push(importDeclaration(parser));
+            continue;
+        }
+        if (parser.at(TokenType.Private)) {
+            parser.error(parser.current().line, "'private' is not needed: what a module declares is private unless it is marked 'public'");
+            parser.advance();
+        }
+        let isPublic: bool = parser.optional(TokenType.Public);
+        let start: Token = parser.current();
+        let declaration: Node = topLevelDeclaration(parser);
+        if (isPublic && declaration is FunctionDecl testFunction && testFunction.isTest) {
+            parser.error(start.line, "A test function cannot be 'public': only larimar test calls it");
+        } else if (isPublic && declaration is FunctionDecl staticFunction && staticFunction.typeName != "") {
+            parser.error(start.line, "A static function is visible where its type is: mark the type 'public', not the function");
+        } else if (isPublic) {
+            let name: String = declName(declaration);
+            if (name == "") { parser.error(start.line, "Only declarations with a name can be 'public'"); } else { program.publics.push(name); }
+        }
+        program.decls.push(declaration);
+        for (part in parser.nativeParts) { program.decls.push(part); }
+        parser.nativeParts.clear();
+        for (staticFunction in parser.staticFunctions) { program.decls.push(staticFunction); }
+        parser.staticFunctions.clear();
+    }
+    return program;
+}
+
+/** import NAME ( . NAME )* [ as NAME | { NAME ( , NAME )* } ] ; */
+function importDeclaration(parser: Parser in default): ImportDecl {
+    let line: int32 = parser.expect(TokenType.Import, "Expected 'import'").line;
+    let last: String = parser.expect(TokenType.Ident, "Expected a module name after 'import'").text;
+    let path: String = last;
+    while (parser.optional(TokenType.Dot)) {
+        last = parser.expect(TokenType.Ident, "Expected a name after '.' in the module path").text;
+        path = "${path}.${last}" in default;
+    }
+    let declaration: ImportDecl = ImportDecl { line, path, alias: last } in default;
+    if (parser.optional(TokenType.As)) {
+        declaration.alias = parser.expect(TokenType.Ident, "Expected a name after 'as'").text;
+    } else if (parser.optional(TokenType.LBrace)) {
+        declaration.hasNames = true;
+        declaration.alias = "";
+        looseList(parser, TokenType.RBrace, () -> { declaration.names.push(parser.expect(TokenType.Ident, "Expected a name to import").text); });
+        parser.expect(TokenType.RBrace, "Expected '}' after the imported names");
+    }
+    parser.expect(TokenType.Semi, "Expected ';' after import");
+    return declaration;
+}

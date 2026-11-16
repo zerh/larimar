@@ -9,7 +9,7 @@ function main(): void throws IoError {
     Files.createDirectories(dir);
     Files.writeString("${dir}/a.txt", "first");
     Files.copy("${dir}/a.txt", "${dir}/b.txt");
-    os.run("chmod 444 ${dir}/b.txt");
+    os.runCommand("chmod 444 ${dir}/b.txt");
     Files.writeString("${dir}/a.txt", "second");
     Files.copy("${dir}/a.txt", "${dir}/b.txt");
     println(Files.readString("${dir}/b.txt"));

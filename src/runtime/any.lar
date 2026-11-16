@@ -1,0 +1,321 @@
+// runtime.any: Any: values of any type, tables.
+// Part of the runtime: the compiler takes from here what a program uses (it is not imported).
+ccode {
+    /* ---- runtime: Any ---------------------------------------------------- */
+
+    enum { LAR_ANY_NULL, LAR_ANY_I8, LAR_ANY_I16, LAR_ANY_I32, LAR_ANY_I64, LAR_ANY_U8, LAR_ANY_U16, LAR_ANY_U32, LAR_ANY_U64,
+        LAR_ANY_F32, LAR_ANY_F64, LAR_ANY_BOOL, LAR_ANY_STR, LAR_ANY_TABLE, LAR_ANY_OBJ, LAR_ANY_VAL };
+
+    static const char* const lar_any_kinds[] = { "null", "int8", "int16", "int32", "int64", "byte", "uint16", "uint32",
+        "uint64", "float32", "float64", "bool", "String", "a table", "an object", "a struct or enum" };
+
+    /* A struct or enum stored in an Any is copied into a box; this describes the box. */
+    typedef struct LarValueType {
+        const char* name;
+        void* (*clone)(const void* v, LarMemory* mem, LarCloneMap* cm);
+    } LarValueType;
+
+    typedef struct LarTable LarTable;
+    typedef struct LarAny {
+        int32_t kind;
+        union { int64_t i; uint64_t u; double f; bool b; LarString s; LarTable* t; struct { void* ptr; const void* type; } box; } as;
+    } LarAny;
+
+    /* Positions (items) and named entries (keys/values, in insertion order, with a hash index). */
+    struct LarTable {
+        LarMemory* mem;
+        LarAny* items; int32_t length, capacity;
+        LarString* keys; LarAny* values; int32_t count, cap;
+        int32_t* slots; int32_t nslots;          /* slot -> entry + 1; 0 is empty */
+    };
+
+    static inline LarAny lar_any_null(void) { LarAny a; memset(&a, 0, sizeof a); return a; }
+    static inline LarAny lar_any_i(int64_t v, int32_t kind) { LarAny a = lar_any_null(); a.kind = kind; a.as.i = v; return a; }
+    static inline LarAny lar_any_u(uint64_t v, int32_t kind) { LarAny a = lar_any_null(); a.kind = kind; a.as.u = v; return a; }
+    static inline LarAny lar_any_f(double v, int32_t kind) { LarAny a = lar_any_null(); a.kind = kind; a.as.f = v; return a; }
+    static inline LarAny lar_any_b(bool v) { LarAny a = lar_any_null(); a.kind = LAR_ANY_BOOL; a.as.b = v; return a; }
+    static inline LarAny lar_any_s(LarString v) { LarAny a = lar_any_null(); a.kind = LAR_ANY_STR; a.as.s = v; return a; }
+    static inline LarAny lar_any_t(LarTable* v) { LarAny a = lar_any_null(); a.kind = LAR_ANY_TABLE; a.as.t = v; return a; }
+    /* A class object: stored by reference, with its class (for case Dog d). */
+    static inline LarAny lar_any_obj(void* o) {
+        LarAny a = lar_any_null();
+        if (!o) return a;
+        a.kind = LAR_ANY_OBJ;
+        a.as.box.ptr = o;
+        a.as.box.type = lar_object_class(o);
+        return a;
+    }
+    static inline LarAny lar_any_val(void* box, const LarValueType* type) {
+        LarAny a = lar_any_null();
+        a.kind = LAR_ANY_VAL;
+        a.as.box.ptr = box;
+        a.as.box.type = type;
+        return a;
+    }
+    static inline bool lar_any_is_obj(LarAny a, const LarClass* c) {
+        return a.kind == LAR_ANY_OBJ && lar_is_a((const LarClass*)a.as.box.type, c);
+    }
+    static inline bool lar_any_is_val(LarAny a, const LarValueType* t) { return a.kind == LAR_ANY_VAL && a.as.box.type == t; }
+
+    static inline LarTable* lar_table_new(LarMemory* mem, int line) {
+        LarTable* t = (LarTable*)lar_memory_alloc(mem, sizeof(LarTable), line);
+        t->mem = mem;
+        return t;
+    }
+
+    static inline LarTable* lar_any_table(LarAny a, int line) {
+        if (a.kind != LAR_ANY_TABLE) {
+            char msg[96];
+            snprintf(msg, sizeof msg, "this Any is not a table (it holds %s)", lar_any_kinds[a.kind]);
+            lar_panic(msg, line);
+        }
+        return a.as.t;
+    }
+
+    static inline LarMemory* lar_any_mem(LarAny a, int line) { return lar_any_table(a, line)->mem; }
+
+    static inline void lar_table_push(LarTable* t, LarAny v, int line) {
+        if (t->length == t->capacity) {
+            int32_t nc = t->capacity ? t->capacity * 2 : 8;
+            LarAny* ni = (LarAny*)lar_memory_try_realloc(t->mem, t->items, sizeof(LarAny) * (size_t)t->capacity, sizeof(LarAny) * (size_t)nc);
+            if (!ni) lar_panic("memory is full", line);
+            t->items = ni;
+            t->capacity = nc;
+        }
+        t->items[t->length++] = v;
+    }
+
+    static inline uint32_t lar_string_hash(LarString s) {
+        uint32_t h = 2166136261u;
+        for (int32_t i = 0; i < s.len; i++) { h ^= (uint8_t)s.ptr[i]; h *= 16777619u; }
+        return h;
+    }
+
+    static inline int32_t lar_table_find(const LarTable* t, LarString key) {
+        if (t->nslots == 0) return -1;
+        uint32_t mask = (uint32_t)t->nslots - 1;
+        for (uint32_t i = lar_string_hash(key) & mask;; i = (i + 1) & mask) {
+            int32_t e = t->slots[i];
+            if (e == 0) return -1;
+            if (lar_string_eq(t->keys[e - 1], key)) return e - 1;
+        }
+    }
+
+    static inline void lar_table_index(LarTable* t, int32_t nslots, int line) {
+        int32_t* slots = (int32_t*)lar_memory_alloc(t->mem, sizeof(int32_t) * (size_t)nslots, line);
+        uint32_t mask = (uint32_t)nslots - 1;
+        for (int32_t e = 0; e < t->count; e++) {
+            uint32_t i = lar_string_hash(t->keys[e]) & mask;
+            while (slots[i] != 0) i = (i + 1) & mask;
+            slots[i] = e + 1;
+        }
+        t->slots = slots;
+        t->nslots = nslots;
+    }
+
+    /* The key is copied into the table's memory, so it lives as long as the table. */
+    static inline void lar_table_set(LarTable* t, LarString key, LarAny v, int line) {
+        int32_t e = lar_table_find(t, key);
+        if (e >= 0) { t->values[e] = v; return; }
+        if (t->count == t->cap) {
+            int32_t nc = t->cap ? t->cap * 2 : 8;
+            LarString* nk = (LarString*)lar_memory_try_realloc(t->mem, t->keys, sizeof(LarString) * (size_t)t->cap, sizeof(LarString) * (size_t)nc);
+            LarAny* nv = nk ? (LarAny*)lar_memory_try_realloc(t->mem, t->values, sizeof(LarAny) * (size_t)t->cap, sizeof(LarAny) * (size_t)nc) : NULL;
+            if (!nk || !nv) lar_panic("memory is full", line);
+            t->keys = nk;
+            t->values = nv;
+            t->cap = nc;
+        }
+        e = t->count++;
+        t->keys[e] = lar_string_clone(key, t->mem, line);
+        t->values[e] = v;
+        if (t->count * 2 > t->nslots) {
+            lar_table_index(t, t->nslots ? t->nslots * 2 : 16, line);
+        } else {
+            uint32_t mask = (uint32_t)t->nslots - 1;
+            uint32_t i = lar_string_hash(key) & mask;
+            while (t->slots[i] != 0) i = (i + 1) & mask;
+            t->slots[i] = e + 1;
+        }
+    }
+
+    /* Reading never fails: a missing entry, or reading from something that is not a table, gives null. */
+    static inline LarAny lar_any_get(LarAny a, LarString key) {
+        if (a.kind != LAR_ANY_TABLE) return lar_any_null();
+        int32_t e = lar_table_find(a.as.t, key);
+        return e < 0 ? lar_any_null() : a.as.t->values[e];
+    }
+
+    static inline LarAny lar_any_at(LarAny a, int64_t i) {
+        if (a.kind != LAR_ANY_TABLE || i < 0 || i >= a.as.t->length) return lar_any_null();
+        return a.as.t->items[i];
+    }
+
+    static inline void lar_any_set(LarAny a, LarString key, LarAny v, int line) { lar_table_set(lar_any_table(a, line), key, v, line); }
+
+    static inline void lar_any_set_at(LarAny a, int64_t i, LarAny v, int line) {
+        LarTable* t = lar_any_table(a, line);
+        t->items[lar_index(i, t->length, line)] = v;
+    }
+
+    static inline void lar_any_push(LarAny a, LarAny v, int line) { lar_table_push(lar_any_table(a, line), v, line); }
+
+    /* Rebuilds the name index in place (after entries were removed). */
+    static inline void lar_table_rehash(LarTable* t) {
+        if (t->nslots == 0) return;
+        memset(t->slots, 0, sizeof(int32_t) * (size_t)t->nslots);
+        uint32_t mask = (uint32_t)t->nslots - 1;
+        for (int32_t e = 0; e < t->count; e++) {
+            uint32_t i = lar_string_hash(t->keys[e]) & mask;
+            while (t->slots[i] != 0) i = (i + 1) & mask;
+            t->slots[i] = e + 1;
+        }
+    }
+
+    /* Removes a named entry, keeping the order of the others. */
+    static inline bool lar_any_remove(LarAny a, LarString key, int line) {
+        LarTable* t = lar_any_table(a, line);
+        int32_t e = lar_table_find(t, key);
+        if (e < 0) return false;
+        for (int32_t k = e + 1; k < t->count; k++) { t->keys[k - 1] = t->keys[k]; t->values[k - 1] = t->values[k]; }
+        t->count--;
+        lar_table_rehash(t);
+        return true;
+    }
+
+    /* Removes a position; the following ones move back by one. */
+    static inline void lar_any_remove_at(LarAny a, int64_t i, int line) {
+        LarTable* t = lar_any_table(a, line);
+        int32_t k = lar_index(i, t->length, line);
+        for (; k + 1 < t->length; k++) t->items[k] = t->items[k + 1];
+        t->length--;
+    }
+
+    static inline void lar_any_clear(LarAny a, int line) {
+        LarTable* t = lar_any_table(a, line);
+        t->length = 0;
+        t->count = 0;
+        lar_table_rehash(t);
+    }
+    static inline int32_t lar_any_length(LarAny a) { return a.kind == LAR_ANY_TABLE ? a.as.t->length : 0; }
+    static inline int32_t lar_any_count(LarAny a) { return a.kind == LAR_ANY_TABLE ? a.as.t->count : 0; }
+    static inline bool lar_any_is_null(LarAny a) { return a.kind == LAR_ANY_NULL; }
+
+    /* `a as int32`: any integer that fits (as raw bits in *out). */
+    static inline bool lar_any_to_int(LarAny a, int64_t lo, uint64_t hi, uint64_t* out) {
+        if (a.kind >= LAR_ANY_I8 && a.kind <= LAR_ANY_I64) {
+            if (a.as.i < lo || (a.as.i > 0 && (uint64_t)a.as.i > hi)) return false;
+            *out = (uint64_t)a.as.i;
+            return true;
+        }
+        if (a.kind >= LAR_ANY_U8 && a.kind <= LAR_ANY_U64) {
+            if (a.as.u > hi) return false;
+            *out = a.as.u;
+            return true;
+        }
+        return false;
+    }
+
+    /* `a as float64`: decimals, and integers converted. */
+    static inline bool lar_any_to_float(LarAny a, double* out) {
+        if (a.kind == LAR_ANY_F32 || a.kind == LAR_ANY_F64) { *out = a.as.f; return true; }
+        if (a.kind >= LAR_ANY_I8 && a.kind <= LAR_ANY_I64) { *out = (double)a.as.i; return true; }
+        if (a.kind >= LAR_ANY_U8 && a.kind <= LAR_ANY_U64) { *out = (double)a.as.u; return true; }
+        return false;
+    }
+
+    /* contains(): numbers by value (1 is 1.0), bool and String by value, the rest by identity. */
+    static inline bool lar_any_equals(LarAny a, LarAny b) {
+        bool an = a.kind >= LAR_ANY_I8 && a.kind <= LAR_ANY_F64, bn = b.kind >= LAR_ANY_I8 && b.kind <= LAR_ANY_F64;
+        if (an || bn) {
+            if (!an || !bn) return false;
+            if (a.kind >= LAR_ANY_F32 || b.kind >= LAR_ANY_F32) {
+                double x, y;
+                lar_any_to_float(a, &x);
+                lar_any_to_float(b, &y);
+                return x == y;
+            }
+            bool as = a.kind <= LAR_ANY_I64, bs = b.kind <= LAR_ANY_I64;
+            if (as == bs) return a.as.u == b.as.u;
+            int64_t i = as ? a.as.i : b.as.i;
+            return i >= 0 && (uint64_t)i == (as ? b.as.u : a.as.u);
+        }
+        if (a.kind != b.kind) return false;
+        switch (a.kind) {
+            case LAR_ANY_NULL: return true;
+            case LAR_ANY_BOOL: return a.as.b == b.as.b;
+            case LAR_ANY_STR: return lar_string_eq(a.as.s, b.as.s);
+            case LAR_ANY_TABLE: return a.as.t == b.as.t;
+            default: return a.as.box.ptr == b.as.box.ptr;
+        }
+    }
+
+    /* x is the name of an entry, or equal to an element by position. */
+    static inline bool lar_any_contains(LarAny a, LarAny x) {
+        if (a.kind != LAR_ANY_TABLE) return false;
+        const LarTable* t = a.as.t;
+        if (x.kind == LAR_ANY_STR && lar_table_find(t, x.as.s) >= 0) return true;
+        for (int32_t i = 0; i < t->length; i++) if (lar_any_equals(t->items[i], x)) return true;
+        return false;
+    }
+
+    static inline bool lar_any_contains_key(LarAny a, LarString key) { return a.kind == LAR_ANY_TABLE && lar_table_find(a.as.t, key) >= 0; }
+
+    static inline void lar_text_builder_any_at(LarTextBuilder* b, LarAny a, int depth, bool quoted) {
+        switch (a.kind) {
+            case LAR_ANY_NULL: lar_text_builder_add_c(b, "null"); break;
+            case LAR_ANY_I8: case LAR_ANY_I16: case LAR_ANY_I32: case LAR_ANY_I64: lar_text_builder_i64(b, a.as.i); break;
+            case LAR_ANY_U8: case LAR_ANY_U16: case LAR_ANY_U32: case LAR_ANY_U64: lar_text_builder_u64(b, a.as.u); break;
+            case LAR_ANY_F32: lar_text_builder_f32(b, (float)a.as.f); break;
+            case LAR_ANY_F64: lar_text_builder_f64(b, a.as.f); break;
+            case LAR_ANY_BOOL: lar_text_builder_bool(b, a.as.b); break;
+            case LAR_ANY_OBJ: case LAR_ANY_VAL:
+                lar_text_builder_add_c(b, "<");
+                lar_text_builder_add_c(b, a.kind == LAR_ANY_OBJ ? ((const LarClass*)a.as.box.type)->name : ((const LarValueType*)a.as.box.type)->name);
+                lar_text_builder_add_c(b, ">");
+                break;
+            case LAR_ANY_STR:
+                if (quoted) lar_text_builder_add_c(b, "\"");
+                lar_text_builder_str(b, a.as.s);
+                if (quoted) lar_text_builder_add_c(b, "\"");
+                break;
+            default: {
+                const LarTable* t = a.as.t;
+                if (depth >= 8) { lar_text_builder_add_c(b, "{...}"); break; }
+                lar_text_builder_add_c(b, "{");
+                for (int32_t i = 0; i < t->length; i++) {
+                    if (i > 0) lar_text_builder_add_c(b, ", ");
+                    lar_text_builder_any_at(b, t->items[i], depth + 1, true);
+                }
+                for (int32_t e = 0; e < t->count; e++) {
+                    if (e > 0 || t->length > 0) lar_text_builder_add_c(b, ", ");
+                    lar_text_builder_str(b, t->keys[e]);
+                    lar_text_builder_add_c(b, ": ");
+                    lar_text_builder_any_at(b, t->values[e], depth + 1, true);
+                }
+                lar_text_builder_add_c(b, "}");
+            }
+        }
+    }
+
+    static inline void lar_text_builder_any(LarTextBuilder* b, LarAny a) { lar_text_builder_any_at(b, a, 0, false); }
+
+    /* A deep copy; tables that appear several times (or in cycles) are copied once. */
+    static inline LarAny lar_any_clone(LarAny a, LarMemory* mem, LarCloneMap* cm) {
+        if (a.kind == LAR_ANY_STR && lar_clone_keeps(cm, a.as.s.ptr)) return a;
+        if ((a.kind == LAR_ANY_OBJ || a.kind == LAR_ANY_VAL) && lar_clone_keeps(cm, a.as.box.ptr)) return a;
+        if (a.kind == LAR_ANY_TABLE && lar_clone_keeps(cm, a.as.t)) return a;
+        if (a.kind == LAR_ANY_STR) { a.as.s = lar_string_clone(a.as.s, mem, 0); return a; }
+        if (a.kind == LAR_ANY_OBJ) { a.as.box.ptr = lar_object_vt(a.as.box.ptr)->clone(a.as.box.ptr, mem, cm); return a; }
+        if (a.kind == LAR_ANY_VAL) { a.as.box.ptr = ((const LarValueType*)a.as.box.type)->clone(a.as.box.ptr, mem, cm); return a; }
+        if (a.kind != LAR_ANY_TABLE) return a;
+        LarTable* done = (LarTable*)lar_clone_get(cm, a.as.t);
+        if (done) return lar_any_t(done);
+        const LarTable* src = a.as.t;
+        LarTable* t = lar_table_new(mem, 0);
+        lar_clone_put(cm, a.as.t, t);
+        for (int32_t i = 0; i < src->length; i++) lar_table_push(t, lar_any_clone(src->items[i], mem, cm), 0);
+        for (int32_t e = 0; e < src->count; e++) lar_table_set(t, src->keys[e], lar_any_clone(src->values[e], mem, cm), 0);
+        return lar_any_t(t);
+    }
+}

@@ -3,7 +3,7 @@
 Larimar becomes C, and the standard library talks to the operating system through it: files, sockets,
 threads, TLS, the clock. That C is written in std, with the declarations of this chapter.
 
-**A program, a library and a service written in Larimar have no C of their own.** `cinclude`, `ccode`, the
+**A program and a library written in Larimar have no C of their own.** `cinclude`, `ccode`, the
 `native` declarations and the functions with a body of C are only for the standard library; anywhere else
 they are an error (a project with `[project] unsafe_c = true` may declare
 [native interfaces](#what-a-header-gives-native-interface), and nothing else, and every build says so):
@@ -14,7 +14,7 @@ Module Error [src/main.lar:1]: ccode is only for the standard library: C is writ
 
 So all the C a program runs is part of Larimar, written and tested with it, and a library someone else
 wrote cannot bring C that the compiler does not check. For what std does not have, a program uses another
-process instead of loading its C: a service, a call of `std.os.rpc`, a stream of `std.os.shared`
+process instead of loading its C: another program, a call of `std.os.rpc`, a stream of `std.os.sharedmemory`
 ([chapter 23 of the manual](manual.md#23-other-programs-calls-shared-memory-and-processes)). If that
 process fails, it does not corrupt the memory of yours.
 
@@ -249,7 +249,7 @@ is copied whole.
 
 That is how `String` is written: the compiler only knows its core (`length`, `[]`, `substring`, `bytes`,
 `split` and `lines`, which are views of the text), and everything else (`indexOf`, `replace`,
-`toUpperCase`, `padStart`, `toInt`, `codePoints`...) is written in Larimar in `std/lang.lar`, with a
+`toUpperCase`, `padStart`, `toInt`, `codePoints`...) is written in Larimar in `src/std/lang.lar`, with a
 small `ccode` only for what needs C (`strtod`, for `toFloat`).
 
 - The content is copied as it is into the generated C, after the headers and before the program.
@@ -267,7 +267,7 @@ chosen with a `switch` on `Platform.current()`. It is how the standard library d
 `std.os`, `std.net`...): its modules are only `.lar` files, and no `#if` is written by hand.
 
 ```ts
-// std/time/posix.lar
+// src/std/time/posix.lar
 import std.platform { UnixPlatform };
 
 public class PosixClock implements UnixPlatform {
@@ -289,9 +289,9 @@ public class PosixClock implements UnixPlatform {
     }
 }
 
-// std/time/windows.lar: the same, with GetTickCount64 and Sleep, implements WindowsPlatform
+// src/std/time/windows.lar: the same, with GetTickCount64 and Sleep, implements WindowsPlatform
 
-// std/time.lar
+// src/std/time.lar
 import std.platform { Platform, OS };
 import std.time.posix { PosixClock };
 import std.time.windows { WindowsClock };
@@ -381,9 +381,9 @@ text:
 ccode {
     #include <ctype.h>
 
-    static const char* shout(RtMem* m, const char* text) {
+    static const char* shout(LarMemory* m, const char* text) {
         size_t n = strlen(text);
-        char* out = (char*)rt_mem_alloc(m, n + 2, 0);     /* zeroed memory: the text ends by itself */
+        char* out = (char*)lar_memory_alloc(m, n + 2, 0);     /* zeroed memory: the text ends by itself */
         for (size_t i = 0; i < n; i++) out[i] = (char)toupper((unsigned char)text[i]);
         out[n] = '!';
         return out;
@@ -407,7 +407,7 @@ HELLO LARIMAR!
 KEPT!
 ```
 
-In C, a memory arrives as `RtMem*`, and `rt_mem_alloc(m, bytes, 0)` reserves space inside it (with the
+In C, a memory arrives as `LarMemory*`, and `lar_memory_alloc(m, bytes, 0)` reserves space inside it (with the
 bytes zeroed). That is the whole interface the C needs to know. The rule is one: **the C uses the memory
 only during the call**. If it kept the pointer for later, the memory could be freed before. A memory in
 another parameter (not the first) is passed written, like any argument.
@@ -418,9 +418,9 @@ This is the Windows example that used to need a separate `.c` file:
 ccode {
     #include <windows.h>
 
-    static const char* computer_name(RtMem* m) {
+    static const char* computer_name(LarMemory* m) {
         DWORD size = MAX_COMPUTERNAME_LENGTH + 1;
-        char* name = (char*)rt_mem_alloc(m, size, 0);
+        char* name = (char*)lar_memory_alloc(m, size, 0);
         return GetComputerNameA(name, &size) ? name : "";
     }
 }

@@ -1,0 +1,171 @@
+// syntax.parser.statements: statements and blocks.
+// Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
+
+import syntax.ast {
+    AssignStmt, Binary, BlockStmt, BreakStmt, CatchClause, ContinueStmt, Expr, ExprStmt, ForStmt, Ident, IfStmt,
+    ReturnStmt, Stmt, SwitchExpr, SwitchStmt, ThrowStmt, TryStmt, VarDecl, WhileStmt, YieldStmt
+};
+import syntax.lexer { Token, TokenType };
+import syntax.parser { Parser, qualifiedName };
+import syntax.parser.expressions { coalesce, expression, switchExpression };
+import syntax.parser.types { type };
+
+/** let NAME : Type [ = expression ] ; */
+public function variable(parser: Parser in default): VarDecl {
+    let keyword: Token = parser.expect(TokenType.Let, "Expected 'let'");
+    let name: Token = parser.expect(TokenType.Ident, "Expected variable name");
+    parser.expect(TokenType.Colon, "Expected ':' and a type after variable '${name.text}'");
+    let declaration: VarDecl = VarDecl { line: keyword.line, name: name.text, type: type(parser) } in default;
+    if (parser.optional(TokenType.Assign)) { declaration.init = expression(parser); }
+    parser.expect(TokenType.Semi, "Expected ';' after variable declaration");
+    return declaration;
+}
+
+/** { statement* } */
+public function block(parser: Parser in default, what: String): Stmt[*] {
+    parser.expect(TokenType.LBrace, "Expected '{' to open ${what}");
+    let statements: Stmt[*] = [] in default;
+    while (!parser.at(TokenType.RBrace) && !parser.atEnd()) { statements.push(statement(parser)); }
+    parser.expect(TokenType.RBrace, "Expected '}' to close ${what}");
+    return statements;
+}
+
+/**
+ * let ... | return [ expression ] ; | if ... | while ( expression ) block | for ... | break ; | continue ; |
+ * throw expression ; | yield expression ; | try ... | block | switch ... | assignment or call
+ */
+function statement(parser: Parser in default): Stmt {
+    let start: Token = parser.current();
+    let line: int32 = start.line;
+    return switch (start.kind) {
+        case Let -> variable(parser);
+        case Const -> misplaced(parser, start, "Constants are declared at top level");
+        case Function -> misplaced(parser, start, "Functions are declared at top level or in a class; use a lambda inside a body");
+        case Return -> {
+            parser.advance();
+            let statement: ReturnStmt = ReturnStmt { line } in default;
+            if (!parser.at(TokenType.Semi)) { statement.value = expression(parser); }
+            parser.expect(TokenType.Semi, "Expected ';' after return");
+            yield statement;
+        }
+        case If -> {
+            parser.advance();
+            yield ifStatement(parser, line);
+        }
+        case While -> {
+            parser.advance();
+            parser.expect(TokenType.LParen, "Expected '(' after 'while'");
+            let condition: Expr = expression(parser);
+            parser.expect(TokenType.RParen, "Expected ')' after while condition");
+            yield WhileStmt { line, cond: condition, body: block(parser, "while body") } in default;
+        }
+        case For -> {
+            parser.advance();
+            yield forStatement(parser, line);
+        }
+        case Break, Continue -> {
+            parser.advance();
+            parser.expect(TokenType.Semi, "Expected ';' after ${start.text}");
+            yield start.kind == TokenType.Break ? (BreakStmt { line } in default) : (ContinueStmt { line } in default);
+        }
+        case Throw -> {
+            parser.advance();
+            let value: Expr = expression(parser);
+            parser.expect(TokenType.Semi, "Expected ';' after throw");
+            yield ThrowStmt { line, value } in default;
+        }
+        case Yield -> {
+            parser.advance();
+            let value: Expr = expression(parser);
+            parser.expect(TokenType.Semi, "Expected ';' after yield");
+            yield YieldStmt { line, value } in default;
+        }
+        case Try -> {
+            parser.advance();
+            yield tryStatement(parser, line);
+        }
+        case LBrace -> BlockStmt { line, body: block(parser, "block") } in default;
+        case Switch -> {
+            parser.advance();
+            let switchExpression: SwitchExpr = switchExpression(parser, line);
+            parser.optional(TokenType.Semi);
+            yield SwitchStmt { line, switchExpr: switchExpression } in default;
+        }
+        default -> assignmentOrCall(parser, line);
+    };
+}
+
+/** expression [ ( = | += | -= | ... ) expression ] ;      (a += b is a = a + b) */
+function assignmentOrCall(parser: Parser in default, line: int32): Stmt {
+    let target: Expr = expression(parser);
+    let statement: Stmt = ExprStmt { line, expr: target } in default;
+    let what: String = "expression";
+    if (parser.optional(TokenType.Assign)) {
+        statement = AssignStmt { line, target, value: expression(parser) } in default;
+        what = "assignment";
+    } else if (parser.optional(TokenType.OpAssign)) {
+        let operatorToken: Token = parser.previous();
+        let value: Expr = Binary { line: operatorToken.line, op: operatorToken.text, left: target, right: expression(parser) } in default;
+        statement = AssignStmt { line, target, value } in default;
+        what = "assignment";
+    }
+    parser.expect(TokenType.Semi, "Expected ';' after ${what}");
+    return statement;
+}
+
+/** Something that does not go here: the error, and an empty statement. */
+function misplaced(parser: Parser in default, token: Token, message: String): Stmt {
+    parser.error(token.line, message);
+    return BlockStmt { line: token.line } in default;
+}
+
+/** (after `if`) ( expression ) block [ else ( if ... | block ) ] */
+function ifStatement(parser: Parser in default, line: int32): IfStmt {
+    parser.expect(TokenType.LParen, "Expected '(' after 'if'");
+    let condition: Expr = expression(parser);
+    parser.expect(TokenType.RParen, "Expected ')' after if condition");
+    let statement: IfStmt = IfStmt { line, cond: condition, thenBody: block(parser, "if body") } in default;
+    if (parser.optional(TokenType.Else)) {
+        statement.hasElse = true;
+        if (parser.at(TokenType.If)) {
+            statement.elseBody.push(ifStatement(parser, parser.advance().line));
+        } else {
+            statement.elseBody = block(parser, "else body");
+        }
+    }
+    return statement;
+}
+
+/** (after `for`) ( [ NAME , ] NAME in expression [ .. expression ] ) block */
+function forStatement(parser: Parser in default, line: int32): ForStmt {
+    parser.expect(TokenType.LParen, "Expected '(' after 'for'");
+    let firstName: String = parser.expect(TokenType.Ident, "Expected loop variable").text;
+    let indexName: String = "";
+    let valueName: String = firstName;
+    if (parser.optional(TokenType.Comma)) {
+        indexName = firstName;
+        valueName = parser.expect(TokenType.Ident, "Expected value variable after ','").text;
+    }
+    parser.expect(TokenType.In, "Expected 'in' in for loop");
+    let loop: ForStmt = ForStmt { line, indexName, varName: valueName, iterable: expression(parser) } in default;
+    if (parser.optional(TokenType.DotDot)) { loop.rangeEnd = coalesce(parser); }
+    parser.expect(TokenType.RParen, "Expected ')' after for header");
+    loop.body = block(parser, "for body");
+    if (loop.indexName != "" && loop.rangeEnd != null) { parser.error(line, "A range loop has a single variable: for (i in a..b)"); }
+    return loop;
+}
+
+/** (after `try`) block ( catch ( qualified NAME NAME ) block )+ */
+function tryStatement(parser: Parser in default, line: int32): TryStmt {
+    let statement: TryStmt = TryStmt { line, body: block(parser, "try body") } in default;
+    while (parser.at(TokenType.Catch)) {
+        let catchToken: Token = parser.advance();
+        parser.expect(TokenType.LParen, "Expected '(' after 'catch'");
+        let typeName: String = qualifiedName(parser, "Expected the error type in catch");
+        let variableName: String = parser.expect(TokenType.Ident, "Expected a variable name after the error type").text;
+        parser.expect(TokenType.RParen, "Expected ')' after catch");
+        statement.catches.push(CatchClause { line: catchToken.line, typeName, varName: variableName, body: block(parser, "catch body") } in default);
+    }
+    if (statement.catches.length == 0) { parser.error(line, "A 'try' needs at least one 'catch'"); }
+    return statement;
+}

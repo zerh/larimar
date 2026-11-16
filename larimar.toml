@@ -1,7 +1,7 @@
 [project]
 name = "larimarc"
-version = "1.7.0"
-main = "src/main.lar"
+version = "1.11.0"
+main = "src/compiler/main.lar"
 
 [c]
 flags = ["-O2"]

@@ -1,0 +1,101 @@
+// std.os.sharedmemory.windows: the shared memory of Windows (a named file mapping), and its clock.
+
+import std.os.sharedmemory.common;
+import std.platform { WindowsPlatform };
+
+/** Shared memory on Windows: a mapping of the paging file, by name; it goes when no program has it open. */
+public class WindowsSharedMemory implements WindowsPlatform {
+    cinclude "<windows.h>";
+
+    ccode {
+        #if defined(__TINYC__)
+        ULONGLONG WINAPI GetTickCount64(void);
+        #endif
+
+        static void lar_shared_sys_name(LarSharedMemory* s, const char* name) { snprintf(s->name, sizeof s->name, "Local\\lar.%s", name); }
+
+        static void lar_shared_sys_text(LarSharedMemory* s) {
+            DWORD e = GetLastError();
+            snprintf(s->text, sizeof s->text, "system error %lu", (unsigned long)e);
+        }
+
+        static int lar_shared_sys_map(LarSharedMemory* s, HANDLE m, size_t size) {
+            void* p = MapViewOfFile(m, FILE_MAP_ALL_ACCESS, 0, 0, size);
+            if (!p) {
+                lar_shared_sys_text(s);
+                CloseHandle(m);
+                return -5;
+            }
+            s->sys = (intptr_t)m;
+            s->head = (LarSharedHeader*)p;
+            return 0;
+        }
+
+        static int lar_shared_sys_create(LarSharedMemory* s) {
+            unsigned long long size = (unsigned long long)s->size;
+            HANDLE m = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, (DWORD)(size >> 32), (DWORD)size, s->name);
+            if (!m) {
+                lar_shared_sys_text(s);
+                return -5;
+            }
+            if (GetLastError() == ERROR_ALREADY_EXISTS) {
+                CloseHandle(m);
+                return -6;
+            }
+            return lar_shared_sys_map(s, m, s->size);
+        }
+
+        static int lar_shared_sys_open(LarSharedMemory* s) {
+            HANDLE m = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, s->name);
+            if (!m) {
+                if (GetLastError() == ERROR_FILE_NOT_FOUND) return -4;
+                lar_shared_sys_text(s);
+                return -5;
+            }
+            int r = lar_shared_sys_map(s, m, 0);                 /* 0: all of it */
+            if (r != 0) return r;
+            MEMORY_BASIC_INFORMATION info;
+            s->size = VirtualQuery((void*)s->head, &info, sizeof info) ? (size_t)info.RegionSize : 0;
+            return 0;
+        }
+
+        static void lar_shared_sys_unlink(LarSharedMemory* s) { (void)s; }     /* the name goes with the last handle */
+
+        static void lar_shared_sys_unmap(LarSharedMemory* s) {
+            if (s->head) UnmapViewOfFile((void*)s->head);
+            if (s->sys != -1) CloseHandle((HANDLE)s->sys);
+            s->head = NULL;
+            s->data = NULL;
+            s->sys = -1;
+        }
+
+        static int64_t lar_shared_sys_pid(void) { return (int64_t)GetCurrentProcessId(); }
+
+        static int lar_shared_sys_alive(int64_t pid) {
+            HANDLE p = OpenProcess(SYNCHRONIZE, FALSE, (DWORD)pid);
+            if (!p) return GetLastError() == ERROR_ACCESS_DENIED;
+            DWORD r = WaitForSingleObject(p, 0);
+            CloseHandle(p);
+            return r == WAIT_TIMEOUT;
+        }
+
+        static void lar_shared_sys_nap(int step) {
+            if (step < 500) {
+                SwitchToThread();
+            } else {
+                Sleep(1);
+            }
+        }
+
+        static long long lar_shared_sys_now(void) { return (long long)GetTickCount64(); }
+
+        static long long lar_shared_sys_micros(void) {
+            static LARGE_INTEGER frequency;
+            LARGE_INTEGER now;
+            if (frequency.QuadPart == 0) QueryPerformanceFrequency(&frequency);
+            QueryPerformanceCounter(&now);
+            return (long long)(now.QuadPart / frequency.QuadPart * 1000000 + now.QuadPart % frequency.QuadPart * 1000000 / frequency.QuadPart);
+        }
+    }
+
+}

@@ -1,0 +1,230 @@
+// codegen.gen.types: the C of the types of a program.
+
+import semantics.types {
+    ArrayKind, ClassInfo, classOf, EnumInfo, enumOf, escapeName, externInfoOf, ExternTypeInfo, hasBigCaptures,
+    FieldInfo, FunctionInfo, functions, globals, isClass, isExternT, isMemParam, isOpt, isResource, LambdaInfo,
+    lambdaList, MethodInfo, NamedKind, optIsPointer, optionalOf, StructInfo, structOf, Symbol, syncField, T_ANY, T_STRING,
+    T_VOID, TypeKind, Type
+};
+import std.text { isDigit, isIdentifierPart };
+import codegen.expressions { cType, structName, typeCName };
+import codegen.gen.classes { functionHeader, returnsData };
+
+/** C functions receive String as a NUL-terminated const char*. */
+public function externPrototype(functionInfo: FunctionInfo in default): String {
+    let paramTexts: String[*] = [] in default;
+    for (i, p in functionInfo.sig!.params) {
+        if (isMemParam(functionInfo.memParams, i)) {
+            paramTexts.push("LarMemory*");
+        } else if (p.kind == TypeKind.Array && p.arrayKind == ArrayKind.Slice) {
+            paramTexts.push("${cType(p.elem!)}*");             // T[]: the elements and their count
+            paramTexts.push("int32_t");
+        } else {
+            paramTexts.push(functionInfo.releases == "String" ? "void*" : externCType(p));     // it releases texts: free(void*), sqlite3_free(void*)
+        }
+    }
+    if (functionInfo.varargs) { paramTexts.push("..."); }
+    if (paramTexts.length == 0) { paramTexts.push("void"); }
+    // char*, not const char*: it also matches the standard headers the runtime already includes (getenv, strerror).
+    let ret: String = externCType(functionInfo.sig!.elem!);
+    if (functionInfo.sig!.elem! == T_STRING) { ret = "char*"; }
+    return "${ret} ${functionInfo.cName}(${paramTexts.join(", ")})";
+}
+
+/** The header of the C function of a C body, with its parameters named as in Larimar (a T[] is name and name_length). */
+public function externDefinition(functionInfo: FunctionInfo in default): String {
+    let paramTexts: String[*] = [] in default;
+    for (i, p in functionInfo.sig!.params) {
+        let name: String = functionInfo.ext!.params[i].name;
+        if (isMemParam(functionInfo.memParams, i)) {
+            paramTexts.push("LarMemory* ${name}");
+        } else if (p.kind == TypeKind.Array && p.arrayKind == ArrayKind.Slice) {
+            paramTexts.push("${cType(p.elem!)}* ${name}");
+            paramTexts.push("int32_t ${name}_length");
+        } else {
+            paramTexts.push("${externCType(p)} ${name}");
+        }
+    }
+    if (paramTexts.length == 0) { paramTexts.push("void"); }
+    let ret: String = externCType(functionInfo.sig!.elem!);
+    return "${ret} ${functionInfo.cName}(${paramTexts.join(", ")})";
+}
+
+/** ccode with lar"name" (the linker gave the linked name): the C name of that function, type or global. */
+public function larInC(code: String): String {
+    let out: StringBuilder = {};
+    let i: int32 = 0;
+    while (i < code.length) {
+        let at: int32? = code.indexOf("lar\"", i);
+        let close: int32? = at != null ? code.indexOf("\"", at! + 4) : null;
+        if (at == null || close == null) {
+            out.add(code.substring(i));
+            break;
+        }
+        out.add(code.substring(i, at!));
+        out.add(cNameOf(code.substring(at! + 4, close!)));
+        i = close! + 1;
+    }
+    return out.toString();
+}
+
+/** The prototypes of the Larimar functions a ccode names (those with C types the runtime already has). */
+public function larPrototypes(code: String, out: StringBuilder): void {
+    let i: int32 = 0;
+    while (i < code.length) {
+        let at: int32? = code.indexOf("lar\"", i);
+        let close: int32? = at != null ? code.indexOf("\"", at! + 4) : null;
+        if (at == null || close == null) { return; }
+        let name: String = code.substring(at! + 4, close!);
+        for (f in functions) {
+            if (f.name == name && !f.isExtern && f.sig != null && plainSig(f.sig!)) { out.add("${functionHeader(f)};\n"); }
+        }
+        i = close! + 1;
+    }
+}
+
+/** Only numbers, bool, String and void: C types the runtime declares before any ccode. */
+function plainSig(signature: Type): bool {
+    let all: Type[*] = [signature.elem!];
+    for (p in signature.params) { all.push(p); }
+    for (t in all) {
+        if (!(t.kind == TypeKind.Prim && t != T_ANY)) { return false; }
+    }
+    return true;
+}
+
+function cNameOf(name: String): String {
+    for (f in functions) {
+        if (f.name == name) { return f.cName; }
+    }
+    if (structOf(name) != null || classOf(name) != null || enumOf(name) != null) { return typeCName(name); }
+    if (externInfoOf(name) != null) { return "LarNative_${name}"; }
+    for (g in globals) {
+        if (g.name == name && g.symbol != null) { return g.symbol!.cName; }
+    }
+    return name;
+}
+
+/** A plain C name (a function a prototype can declare), not C text. */
+public function isCName(n: String): bool {
+    if (n.isEmpty() || isDigit(n[0])) { return false; }
+    for (b in n.bytes()) {
+        if (!isIdentifierPart(b)) { return false; }
+    }
+    return true;
+}
+
+public function externCType(type: Type): String {
+    if (type == T_STRING || (isOpt(type) && type.elem! == T_STRING)) { return "const char*"; }
+    if (isResource(type)) { return "LarNative_${type.name}"; }                              // the C value itself
+    if (isOpt(type) && isResource(type.elem!)) { return "LarNative_${type.elem!.name}"; }
+    return type == T_VOID ? "void" : cType(type);
+}
+
+/** A C struct (extern type X = struct { ... }): C defines it, Larimar does not. */
+function cStruct(type: Type): bool {
+    if (type.kind != TypeKind.Named || type.namedKind != NamedKind.Struct) { return false; }
+    let structInfo: StructInfo? = structOf(type.name);
+    return structInfo != null && structInfo.decl.cName != "";
+}
+
+public function forward(out: StringBuilder, type: Type): void {
+    if (type.kind == TypeKind.Opt && optIsPointer(type)) { return; }
+    if (type.kind == TypeKind.Named) {
+        if (type.namedKind == NamedKind.Extern || cStruct(type)) { return; }
+        let name: String = typeCName(type.name);
+        out.add("typedef struct ${name} ${name};\n");
+        if (type.namedKind == NamedKind.Class) { out.add("typedef struct ${name}_VTable ${name}_VTable;\n"); }
+        if (type.namedKind == NamedKind.Interface) { out.add("typedef struct ${name}_Table ${name}_Table;\n"); }
+        return;
+    }
+    let name: String = structName(type);
+    out.add("typedef struct ${name} ${name};");
+    if (type.kind == TypeKind.Func) { out.add("  /* ${type.text} */"); }
+    out.add("\n");
+}
+
+public function define(out: StringBuilder, t: Type): void {
+    if (cStruct(t)) { return; }
+    if (t.kind == TypeKind.Named) {
+        if (t.namedKind == NamedKind.Struct) {
+            let s: StructInfo = structOf(t.name)!;
+            out.add("struct ${typeCName(s.name)} {\n");
+            for (f in s.fields) { out.add("    ${cType(f.type)} ${escapeName(f.name)};\n"); }
+            if (s.fields.length == 0) { out.add("    char _none;\n"); }
+            out.add("};\n\n");
+        } else if (t.namedKind == NamedKind.Enum) {
+            let e: EnumInfo = enumOf(t.name)!;
+            out.add("enum ${e.name}_Tag { ");            // named, so a debugger shows the variant's name
+            for (i, v in e.variants) {
+                if (i > 0) { out.add(", "); }
+                out.add("${e.name}_${v.name} = ${v.index}");
+            }
+            out.add(" };\n");
+            out.add("struct ${typeCName(e.name)} {\n    enum ${e.name}_Tag tag;\n    union {");
+            for (v in e.variants) {
+                if (!v.hasPayload || v.fields.length == 0) { continue; }
+                out.add(" struct {");
+                for (f in v.fields) { out.add(" ${cType(f.type)} ${escapeName(f.name)};"); }
+                out.add(" } ${v.name};");
+            }
+            out.add(" char _none; } as;\n};\n\n");
+        } else if (t.namedKind == NamedKind.Class) {
+            let classInfo: ClassInfo = classOf(t.name)!;
+            out.add("struct ${typeCName(classInfo.name)} {\n");
+            if (classInfo.superName == "") {
+                out.add("    LarObjectHeader header;\n");
+            } else {
+                out.add("    ${typeCName(classInfo.superName)} _super;\n");
+            }
+            if (classInfo.sync && syncField(classInfo) == "_sync") { out.add("    LarSync* _sync;\n"); }     // a child uses its parent's
+            for (f in classInfo.fields) { out.add("    ${cType(f.type)} ${escapeName(f.name)};\n"); }
+            if (classInfo.thread) { out.add("    LarThread _thread;\n"); }
+            if (classInfo.builder) { out.add("    LarTextBuilder _sb;\n"); }
+            out.add("};\n\n");
+        } else if (t.namedKind == NamedKind.Interface) {
+            let i: String = typeCName(t.name);
+            out.add("struct ${i} { void* obj; const ${i}_Table* t; };\n\n");
+        }
+        return;
+    }
+    if (t.kind == TypeKind.Func) {
+        let id: int32 = t.funcId;
+        let withEnv: LambdaInfo[*] = [] in default;
+        for (l in lambdaList) {
+            if (l.type == t && l.captures.length > 0) { withEnv.push(l); }
+        }
+        for (l in withEnv) {
+            out.add("typedef struct Env_${l.id} {");
+            for (s in l.captures) { out.add(" ${cType(s.type)} ${envField(s)};"); }
+            out.add(" } Env_${l.id};\n");
+        }
+        out.add("struct Closure_${id} {  /* ${t.text} */\n");
+        out.add("    ${cType(t.elem!)} (*fn)(void* env");
+        if (returnsData(t.elem!)) { out.add(", LarMemory*"); }
+        for (p in t.params) { out.add(", ${cType(p)}"); }
+        out.add(");\n    union {");
+        for (l in withEnv) { out.add(hasBigCaptures(l) ? " Env_${l.id}* l_${l.id};" : " Env_${l.id} l_${l.id};"); }
+        out.add(" char _none; } env;\n};\n\n");
+        return;
+    }
+    if (t.kind == TypeKind.Array) {
+        let name: String = structName(t);
+        let e: String = cType(t.elem!);
+        if (t.arrayKind == ArrayKind.Fixed) {
+            let n: int64 = t.size;
+            if (n < 1) { n = 1; }
+            out.add("struct ${name} { int32_t length; ${e} items[${n}]; };\n");
+        } else if (t.arrayKind == ArrayKind.Slice) {
+            out.add("struct ${name} { ${e}* items; int32_t length; };\n");
+        } else {
+            out.add("struct ${name} { ${e}* items; int32_t length; int32_t capacity; LarMemory* mem; };\n");
+        }
+        return;
+    }
+    if (t.kind == TypeKind.Opt && !optIsPointer(t)) {
+        out.add("struct ${structName(t)} { bool has; ${cType(t.elem!)} value; };\n");
+    }
+}
+
+public function envField(symbol: Symbol): String { return "${symbol.name}_${symbol.id}"; }

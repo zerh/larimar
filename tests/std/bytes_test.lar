@@ -1,0 +1,36 @@
+// std.io.bytes: binary messages, written and read back in the same order.
+import std.io { IoError };
+import std.io.bytes { ByteWriter, ByteReader };
+import std.test { check, checkText, checkInt };
+
+test function whatIsWrittenIsReadBack(): void throws IoError {
+    let out: ByteWriter = {};
+    out.putInt32(-7);
+    out.putInt64(1 << 40);
+    out.putFloat64(-2.5);
+    out.putBool(true);
+    out.putString("hola, mar");
+    out.putByte(200 as byte);
+    checkInt(4 + 8 + 8 + 1 + 4 + 9 + 1, out.length());
+    let input: ByteReader = { data: out.bytes };
+    checkInt(-7, input.getInt32());
+    check(input.getInt64() == 1 << 40, "an int64");
+    check(input.getFloat64() == -2.5, "a float64");
+    check(input.getBool(), "a bool");
+    checkText("hola, mar", input.getString());
+    checkInt(200, input.getByte() as int32);
+    checkInt(0, input.remaining());
+}
+
+test function aCutMessageIsAnError(): void {
+    let out: ByteWriter = {};
+    out.putInt32(3);
+    let input: ByteReader = { data: out.bytes };
+    let failed: bool = false;
+    try {
+        input.getInt64();
+    } catch (IoError e) {
+        failed = true;
+    }
+    check(failed, "IoError when the bytes run out");
+}

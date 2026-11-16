@@ -1,13 +1,13 @@
 # The Larimar Language Specification
 
-**Version 1.3**
+**Version 1.4**
 
 This document defines the Larimar programming language. It is normative: a program means what this
 document says, and an implementation is correct when it does what this document says. The
 [Manual](manual.md) teaches the language with examples; when the two disagree, this document wins.
 
 The compiler has its own version, independent of this one. `larimar --version` shows both:
-`larimar 1.10.0 (language 1.3)`. A compiler release may add to the standard library and to the tools
+`larimar 1.11.0 (language 1.4)`. A compiler release may add to the standard library and to the tools
 without changing the language; a change to anything in this document is a new language version.
 
 ## Contents
@@ -30,7 +30,7 @@ without changing the language; a change to anything in this document is a new la
 16. [Errors and panics](#16-errors-and-panics)
 17. [Any](#17-any)
 18. [Threads](#18-threads)
-19. [Libraries, services and tasks](#19-libraries-services-and-tasks)
+19. [Libraries and tasks](#19-libraries-and-tasks)
 20. [Platforms](#20-platforms)
 21. [Modules](#21-modules)
 22. [Tests](#22-tests)
@@ -53,7 +53,7 @@ might not foresee:
   conversions, no constructors, no overloading. What a program does can be read in its text.
 - **No undefined behavior.** Every operation of the language either has a defined result or stops the
   program with a message ([§16.3](#163-panics)). A program has no C of its own: what Larimar does not
-  have runs in another process ([§19](#19-libraries-services-and-tasks)). Only the C of the standard
+  have runs in another process ([§19](#19-libraries-and-tasks)). Only the C of the standard
   library ([Appendix D](#appendix-d-the-c-of-the-standard-library)) is outside this guarantee.
 - **Memory without a collector and without dangling references.** Every value that needs storage lives
   in a *memory* that is freed whole at a point that can be seen in the code ([§14](#14-memory)), and the
@@ -743,7 +743,8 @@ them. Its type is a function type, or an interface with one method.
 - In a method of a class, a lambda can use `self`. In a method of a struct it cannot.
 - A lambda cannot throw errors.
 - A lambda cannot capture another lambda of its own type.
-- A lambda can be returned and stored: it carries its copies.
+- A lambda can be returned and stored: it carries its copies. When its captures take more than 64 bytes,
+  they are kept in the memory where the lambda is placed (like a `String`), and the lambda lives there.
 
 ### 10.14 Function references: `::`
 
@@ -1403,12 +1404,12 @@ between synchronized objects.
 
 ---
 
-## 19. Libraries, services and tasks
+## 19. Libraries and tasks
 
 A program has no C of its own, and loads no code the compiler did not check
 ([Appendix D](#appendix-d-the-c-of-the-standard-library)). Code written in Larimar is shared as source
-(libraries, §19.1); what must not share the program's memory runs in another process: a service
-(§19.2), or a task of the program itself (§19.3).
+(libraries, §19.1); what must not share the program's memory runs in another process: another program
+(`std.os.process`, `std.os.rpc`), or a task of the program itself (§19.2).
 
 ### 19.1 Libraries
 
@@ -1420,40 +1421,18 @@ an error. The `[dependencies]` of a library are read too, relative to its folder
 same name in different folders are an error. The library's modules are compiled with the program's, as
 modules of the same program: every rule of this document applies across them.
 
-### 19.2 Services
+The kinds of a project are `program` (the default) and `library`; any other `kind` is an error.
 
-A project with `kind = "service"` is a service: its main module is `NAME` (`NAME.lar`), and its
-**public functions** (top level, not `test`) are what it gives. Their parameters and results are of the
-**types that cross**: the numbers, `bool`, `String`, their optionals and `T[*]` lists of them, and `Any`
-(results may also be `void`). A public function with another type, or with `throws`, is an error when
-the service is built. Its other declarations stay inside it.
-
-Its executable answers calls (`std.os.rpc`) with those functions: a call names the function and gives
-its arguments by the names of its parameters, as a table; the answer is its result.
-
-A program that names the service in `[dependencies]` does not compile its modules: `import NAME` is a module
-written for it, with one public class whose name is `NAME` in UpperCamelCase (`image_tools` →
-`ImageTools`), and in it:
-
-- `static function start(): C throws RpcError`: starts the service's executable (the one in the folder
-  of this program's, or else the one where the service was built) and connects to it through shared
-  memory; `static function startAt(program: String): C throws RpcError`, another executable;
-- for each function of the service, a method with the same name, parameters and result, which
-  `throws RpcError`;
-- `setTimeout(ms)` and `close()`.
-
-The service's executable runs while that object lives. Importing a part of a service (`NAME.PART`) is an
-error.
-
-### 19.3 Tasks: `Task`
+### 19.2 Tasks: `Task`
 
 A class that implements `std.os.process.Task` (it names it in its `implements`, imported from
 `std.os.process` by name or through an alias of that module) is a **task**: an object of it can be run in
 another process of the same program, by a `Process` (`Process { run: task }`, then `start()` and
 `join()`) or a `ProcessPool` (`submit(task)`, then `wait()`). Such a class extends no class, and each of
-its fields is of a type that crosses (§19.2), without `Any`; otherwise it is a compile error. Its object
-arrives there with the values of its fields, `run()` runs there, and what it returns comes back as an
-`Any` (an object in it arrives as `null`). An interface called `Task` of another module is not this one.
+its fields is of a **type that crosses**: the numbers, `bool`, `String`, their optionals and `T[*]` lists
+of them; otherwise it is a compile error. Its object arrives there with the values of its fields, `run()`
+runs there, and what it returns comes back as an `Any` (an object in it arrives as `null`). An interface
+called `Task` of another module is not this one.
 
 A process started this way runs the initialization of the globals ([§24](#24-program-execution)) and then
 the tasks it is sent, not `main`.
@@ -1510,6 +1489,15 @@ Through a prefix every public name is reached: functions, constants, variables, 
 - A module is loaded once, however many modules import it.
 - Names of different modules do not conflict: `geo.shapes.square` and `util.text.square` are different.
 - A local name hides an imported one in its block.
+- **`internal`.** A module whose path has a part `internal` (`tools.internal.cache`) is imported only by
+  the modules of the folder above it: `tools` and `tools.x...`. Of the main folder (`internal.x`), by
+  every module of the program. Otherwise it is a compile error (`error[internal-import]`). The parts of
+  std that are std's own follow the rule of [Appendix D](#appendix-d-the-c-of-the-standard-library).
+
+The rules about modules and what they declare are checked after the modules are linked, each by an object
+of the compiler's `src/semantics/rules.lar` (`languageRules()`); each error says its rule:
+`error[std-own-import]`, `error[internal-import]`, `error[no-c-outside-std]`, `error[body-needed]`,
+`error[language-type]`.
 
 ---
 
@@ -1738,12 +1726,12 @@ These belong to the tools and the library, which have their own versions and doc
 [Manual](manual.md)):
 
 - the modules of the standard library other than `std.lang` (`std.io`, `std.io.files`, `std.os`,
-  `std.os.process`, `std.os.rpc`, `std.os.shared`, `std.time`, `std.crypto`, `std.encoding.json`,
-  `std.net`, `std.test`, ...), except what §19.3 says of `Task`;
+  `std.os.process`, `std.os.rpc`, `std.os.sharedmemory`, `std.time`, `std.crypto`, `std.encoding.json`,
+  `std.net`, `std.test`, ...), except what §19.2 says of `Task`;
 - the commands `larimar build`, `run`, `check`, `test`, `lsp`, `dap`, the plugins, and the file
   `larimar.toml` (with `[dependencies]`);
 - the names and the shape of the generated C, other than what [Appendix D](#appendix-d-the-c-of-the-standard-library) defines
-  (`RtMem*`, `rt_mem_alloc`, `lar"..."`, the names of native functions);
+  (`LarMemory*`, `lar_memory_alloc`, `lar"..."`, the names of native functions);
 - the text of compile errors.
 
 ## Appendix D. The C of the standard library
@@ -1752,10 +1740,10 @@ The standard library talks to the operating system in C, with the declarations o
 native interfaces (§D.0), `cinclude`, `ccode`, the other `native` declarations, the functions with a body
 of C (also inside classes) and the classes for one system. `native` always means C. They are allowed
 only in the modules of the standard library (and in `std.lang`). In any other module, of a program, a
-library or a service, each one is a compile error: a program has no C of its own
-([§19](#19-libraries-services-and-tasks)), with one door:
+library, each one is a compile error: a program has no C of its own
+([§19](#19-libraries-and-tasks)), with one door:
 
-- A project whose `[project]` says **`unsafe_c = true`** (a program, a library or a service) may declare
+- A project whose `[project]` says **`unsafe_c = true`** (a program or a library) may declare
   **native interfaces** (§D.0) in its modules, and nothing else of this appendix. A program that uses such
   a library is built with that C: every build says where it comes from (*unsafe C (native interface)
   from: NAME*), and names the pointer types of those interfaces that nothing releases (no `released by`).
@@ -1833,7 +1821,7 @@ not a Larimar `String`. Without `=`, the C name is the same.
 - A `public native function` keeps its C name inside a module.
 - A memory as the **first** parameter is not written in the call: the function receives the memory of
   the call, so its result lives where the caller says ([§14.7](#147-results-of-functions)). In C it is an
-  `RtMem*`, and `rt_mem_alloc(m, bytes, 0)` reserves zeroed bytes in it. The C may use the memory only
+  `LarMemory*`, and `lar_memory_alloc(m, bytes, 0)` reserves zeroed bytes in it. The C may use the memory only
   during the call. A memory in another position is passed explicitly.
 - When the module has no `cinclude` and no `ccode`, neither it nor its parts (the modules in the folder
   of its name, `net/posix.lar` for `net.lar`), the compiler writes the C prototype of each native

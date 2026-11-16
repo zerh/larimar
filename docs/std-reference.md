@@ -2,9 +2,9 @@
 
 Every module of `std` a program can import, and everything it makes public: types (with their members, as visible as their type), functions, constants and variables, as they are in the code, with the comment above each one.
 
-> This file is **generated** from `std/` with `tools/std_reference.py`; it is not edited by hand. The [manual](manual.md#25-standard-library) explains the library with examples. The parts of std for std itself (`*.posix`, `*.windows`, `*.macos`, `*.common`, `*.internal`) are not here: a program cannot import them.
+> This file is **generated** from `src/std/` with `tools/std_reference.py`; it is not edited by hand. The [manual](manual.md#25-standard-library) explains the library with examples. The parts of std for std itself (`*.posix`, `*.windows`, `*.macos`, `*.common`, `*.internal`) are not here: a program cannot import them.
 
-**28 modules, 194 public names.**
+**29 modules, 198 public names.**
 
 ## Modules
 
@@ -15,6 +15,7 @@ Every module of `std` a program can import, and everything it makes public: type
 - [`std.encoding.toml`](#stdencodingtoml): TOML text to Any, and Any to TOML text.
 - [`std.encoding.url`](#stdencodingurl): percent-encoding (RFC 3986) and query strings.
 - [`std.io`](#stdio): what every input and output shares: the error (IoError), the streams (bytes from anywhere and
+- [`std.io.bytes`](#stdiobytes): binary messages. A ByteWriter puts numbers, texts and bytes one after another; a ByteReader
 - [`std.io.console`](#stdioconsole): the standard input, output and error.
 - [`std.io.files`](#stdiofiles): files and folders: whole files in one call, like Java's Files, and an open File to read
 - [`std.io.path`](#stdiopath): paths as text, with / or \ between folders.
@@ -29,7 +30,7 @@ Every module of `std` a program can import, and everything it makes public: type
 - [`std.os`](#stdos): the environment the program runs in.
 - [`std.os.process`](#stdosprocess): processes. A Process runs another program, or a task of this one in a copy of it; a
 - [`std.os.rpc`](#stdosrpc): calls to another program, and a program that answers them (JSON-RPC 2.0).
-- [`std.os.shared`](#stdosshared): streams of bytes from one program to another, through memory that both see.
+- [`std.os.sharedmemory`](#stdossharedmemory): memory that several programs see. A stream is a queue (each message once, in
 - [`std.platform`](#stdplatform): the system the program is built for, and the marks of the classes that are for one.
 - [`std.test`](#stdtest): the checks that test functions use (larimar test runs them).
 - [`std.text`](#stdtext): helpers for reading text byte by byte (lexers, parsers).
@@ -55,7 +56,7 @@ SHA-1 is broken for signatures: it is here for protocols that need it (the WebSo
 anything new, SHA-256. The results are new lists, created where the caller puts them.
 ```
 
-`std/crypto.lar`
+`src/std/crypto.lar`
 
 `function randomBytes(n: int32): byte[*]`  
 n bytes from the system's secure random source (it panics if there is none: it never gives weak bytes).
@@ -85,7 +86,7 @@ bytes as base64 text (RFC 4648), and back.
   let bytes: byte[*]? = Base64.decode("aG9sYQ==");
 ```
 
-`std/encoding/base64.lar`
+`src/std/encoding/base64.lar`
 
 `function encode(bytes: byte[]): String`  
 Base64 with + and /, padded with '='.
@@ -111,7 +112,7 @@ bytes as hexadecimal text, and back.
   let bytes: byte[*]? = Hex.decode("686F6C61");          // upper or lower case
 ```
 
-`std/encoding/hex.lar`
+`src/std/encoding/hex.lar`
 
 `function encode(bytes: byte[]): String`  
 Two lowercase hex digits per byte.
@@ -136,7 +137,7 @@ fit are int64, the rest float64. A table with named entries is written as an obj
 positions, as an array; an empty table, as {}.
 ```
 
-`std/encoding/json.lar`
+`src/std/encoding/json.lar`
 
 ### enum `JsonError`
 The text is not valid JSON: where (byte position) and why.
@@ -170,7 +171,7 @@ A section becomes a table with named entries; a list, a table with positions. Th
 order of the file.
 ```
 
-`std/encoding/toml.lar`
+`src/std/encoding/toml.lar`
 
 ### enum `TomlError`
 The text is not valid TOML: the line (from 1) and why.
@@ -198,7 +199,7 @@ percent-encoding (RFC 3986) and query strings.
   println(Url.query({ city: "La Romana", page: 2 }));                 // city=La%20Romana&page=2
 ```
 
-`std/encoding/url.lar`
+`src/std/encoding/url.lar`
 
 `function encode(text: String): String`  
 Everything but letters, digits and - _ . ~ as %XX (UTF-8 bytes): for a part of a path or a query value.
@@ -226,8 +227,8 @@ to anywhere), text on top of them (Reader), and streams in memory.
   let lines: Reader = { from: open("notes.txt") };          // a File is an InputStream
   let line: String? = lines.readLine();
 
-  let out: MemoryOutputStream = {};
-  copy(MemoryInputStream { data: "hello" }, out);
+  let out: BytesOutputStream = {};
+  copy(BytesInputStream { data: "hello" }, out);
   println(out.toString());
 
 Files (std.io.files), sockets (std.net), the body of an HTTP response (std.net.http) and the console
@@ -246,7 +247,7 @@ result. So reading a file of any size line by line can use a fixed buffer on the
   }
 ```
 
-`std/io.lar`
+`src/std/io.lar`
 
 ### enum `IoError`
 What went wrong reading or writing: a file, a folder, a socket, the console.
@@ -277,7 +278,7 @@ Something that holds a resource of the system and can let it go before its memor
 
 - `function close(): void throws IoError`
 
-### class `MemoryInputStream implements InputStream`
+### class `BytesInputStream implements InputStream`
 Reads bytes (or UTF-8 text) already in memory. A String is bytes, so it serves for both.
 
 - `data: String`
@@ -286,8 +287,8 @@ Reads bytes (or UTF-8 text) already in memory. A String is bytes, so it serves f
 
 - `override function read(buffer: byte[]): int32 throws IoError`
 
-### class `MemoryOutputStream implements OutputStream`
-Collects what is written, in its own memory (it must grow: collecting is its job).
+### class `BytesOutputStream implements OutputStream`
+BytesOutputStream: collects what is written, in its own memory (it must grow: collecting is its job).
 
 - `data: byte[*]`
 
@@ -337,6 +338,92 @@ Copies everything from input to output, then flushes output. Closes neither. One
 
 ---
 
+## std.io.bytes
+
+```
+binary messages. A ByteWriter puts numbers, texts and bytes one after another; a ByteReader
+takes them back in the same order. For what goes over a stream or a segment of shared memory when JSON
+would cost too much (frames, samples, commands of drawing).
+
+  import std.io.bytes { ByteWriter, ByteReader };
+
+  let out: ByteWriter = {};
+  out.putInt32(7);
+  out.putFloat64(2.5);
+  out.putString("hola");
+  stream.write(out.bytes);                  // or segment.putBytes(0, out.bytes)
+
+  let input: ByteReader = { data: received };
+  let n: int32 = input.getInt32();          // 7, then 2.5, then "hola"
+
+Numbers are little-endian, the order of the processors Larimar runs on; a String is its length (an
+int32) and its bytes. A ByteReader that runs out of bytes throws IoError.Failed: the message came cut,
+or it is not what the reader thought.
+```
+
+`src/std/io/bytes.lar`
+
+### class `ByteWriter`
+Writes values one after another into `bytes`, which grows.
+
+- `bytes: byte[*]`
+
+- `function putByte(value: byte): void`
+
+- `function putBool(value: bool): void`
+
+- `function putInt32(value: int32): void`
+
+- `function putInt64(value: int64): void`
+
+- `function putFloat64(value: float64): void`
+
+- `function putString(value: String): void`  
+  Its length (an int32), then its bytes.
+
+- `function putBytes(value: byte[]): void`  
+  The bytes as they are (the reader must know how many: write the count first).
+
+- `function length(): int32`  
+  How many bytes were written.
+
+- `function clear(): void`  
+  Empties it, to write the next message in the same memory.
+
+- `function putInteger(value: int64, count: int32): void`
+
+### class `ByteReader`
+Reads values from `data` in the order a ByteWriter wrote them.
+
+- `data: byte[*]`
+
+- `position: int32`
+
+- `function getByte(): byte throws IoError`
+
+- `function getBool(): bool throws IoError`
+
+- `function getInt32(): int32 throws IoError`
+
+- `function getInt64(): int64 throws IoError`
+
+- `function getFloat64(): float64 throws IoError`
+
+- `function getString(): String throws IoError`  
+  A String that putString wrote.
+
+- `function getBytes(into: byte[]): void throws IoError`  
+  Fills `into` with the next bytes (as many as it has).
+
+- `function remaining(): int32`  
+  How many bytes are left to read.
+
+- `function getInteger(count: int32): int64 throws IoError`
+
+- `function need(count: int32): void throws IoError`
+
+---
+
 ## std.io.console
 
 ```
@@ -349,7 +436,7 @@ the standard input, output and error.
 input, output and error are also streams, for code that takes any InputStream or OutputStream.
 ```
 
-`std/io/console.lar`
+`src/std/io/console.lar`
 
 `function readLine(): String?`  
 The next line of the standard input, without its end, or null at its end.
@@ -368,6 +455,12 @@ Sends what was written to the standard output now.
 
 `function binaryMode(): void`  
 Input and output byte by byte, as they are (on Windows, without turning \n into \r\n).
+
+`function unbufferInput(): void`  
+The standard input without a buffer of this program: call it before reading anything, when the program waits for input with waitForInput (so that what was read ahead is never hidden from it).
+
+`function waitForInput(ms: int32): bool`  
+Whether something arrives on the standard input within ms milliseconds (-1: as long as it takes).
 
 `function printError(text: String): void`  
 Writes a line to the standard error.
@@ -404,7 +497,7 @@ the memory of the block that keeps it. Everything that can fail throws IoError. 
 over C's stdio; folders over each system's own functions (opendir, mkdir; FindFirstFile, _mkdir).
 ```
 
-`std/io/files.lar`
+`src/std/io/files.lar`
 
 `function message(e: IoError): String`  
 A message for the error (the same as std.io's): "not found: notes.txt"...
@@ -496,7 +589,7 @@ paths as text, with / or \ between folders.
 The paths these functions create are short and go to the default memory.
 ```
 
-`std/io/path.lar`
+`src/std/io/path.lar`
 
 `function parent(path: String): String`  
 "a/b/c.lar" -> "a/b"; "" when there is no folder.
@@ -532,7 +625,7 @@ Without "." and "folder/.." parts, with / between folders; "." when nothing is l
 the part of the language written in Larimar. Every program sees its public names
 without an import, and only what a program mentions (and what that needs) reaches the C.
 
-`std/lang.lar`
+`src/std/lang.lar`
 
 ### interface `Runnable`
 What a Thread runs.
@@ -682,7 +775,7 @@ The functions are C's (<math.h>, through its native interface LibM), by their na
 games and simulations: for secrets, std.crypto.randomBytes.
 ```
 
-`std/math.lar`
+`src/std/math.lar`
 
 `const PI: float64`
 
@@ -768,7 +861,7 @@ A memory with threads, synchronized objects or C resources in it stops the progr
 not keep pointers it was given after a call returns (the rule of every extern function).
 ```
 
-`std/memory.lar`
+`src/std/memory.lar`
 
 `function limit(memory: byte[*], bytes: int64): void`  
 The most bytes `memory` may obtain from the system; past it the program stops with a message that names it. 0: no limit. Only for memories that grow (byte[*] in heap): a fixed one already has its size.
@@ -814,7 +907,7 @@ Written in Larimar over the C functions of the system (BSD sockets, Winsock on W
 declarations and a few small functions, and the TLS servers (OpenSSL, loaded at run time).
 ```
 
-`std/net.lar`
+`src/std/net.lar`
 
 ### interface `Connection`
 A connection both ways: a TcpSocket and a TlsSocket are one, and so is what a TlsProvider (std.net.tls) gives. Whoever speaks a protocol (std.net.http, a server's onConnect) works on a Connection, so it does not care whether it is encrypted.
@@ -1124,7 +1217,7 @@ Memory: a Response, its headers and its connection live where the caller puts th
 Each request has its own connection (Connection: close). A Client is not shared between threads.
 ```
 
-`std/net/http.lar`
+`src/std/net/http.lar`
 
 ### enum `HttpError`
 Why there was no response.
@@ -1256,7 +1349,7 @@ A request with a Client {}.
 the TLS servers on Unix, over OpenSSL loaded at run time (std.net.tls's client on
 Linux uses it too).
 
-`std/net/openssl.lar`
+`src/std/net/openssl.lar`
 
 ### class `LinuxOpenSslNames implements LinuxPlatform`
 Where OpenSSL is on Linux, and what to say when it is not there.
@@ -1290,7 +1383,7 @@ Everything blocks, like a TcpSocket: there are no threads inside. A connection c
 memory it lives in is freed.
 ```
 
-`std/net/tls.lar`
+`src/std/net/tls.lar`
 
 ### interface `TlsProvider`
 What gives encrypted connections.
@@ -1311,7 +1404,7 @@ The TLS of the system: Network.framework (macOS), SChannel (Windows), OpenSSL (L
 
 the TLS client on Linux, over the OpenSSL of std.net's servers.
 
-`std/net/tls/openssl.lar`
+`src/std/net/tls/openssl.lar`
 
 ### class `OpenSslTls implements LinuxPlatform`
 Linux: OpenSSL, loaded at run time (std.net's, shared with its TLS servers).
@@ -1330,7 +1423,7 @@ The system is std.platform's Platform.current(); what differs between systems is
 std/os/posix.lar, macos.lar and windows.lar.
 ```
 
-`std/os.lar`
+`src/std/os.lar`
 
 `function processId(): int64`  
 The number the system gives this running program (its process id).
@@ -1341,8 +1434,8 @@ The value of an environment variable, or null if it is not set.
 `function cwd(): String`  
 The folder the program runs in.
 
-`function run(command: String): int32`  
-Runs a command with the system's shell (sh, or cmd.exe on Windows) and gives its exit code.
+`function runCommand(command: String): int32`  
+Runs a command line with the system's shell (sh, or cmd.exe on Windows), waits for it, and gives its exit code. To run a program and talk to it, std.os.process.Process.
 
 `function programPath(): String`  
 This program's executable (its full path), or "" if it cannot be known.
@@ -1402,7 +1495,7 @@ ProcessError here.
   let all: Any = pool.wait();               // what each run() gave, in the order they were submitted
 ```
 
-`std/os/process.lar`
+`src/std/os/process.lar`
 
 ### enum `ProcessError`
 Why a process could not be used.
@@ -1479,6 +1572,9 @@ A process: another program (`program`, with `args`), or a task of this program (
 - `function started(): bool`  
   Whether it was started (and not given up when it could not start).
 
+- `function hasTask(): bool`  
+  True when what it runs is a task of this program, not a program (a Process with `run`).
+
 - `run: Task?`  
   The task to run in a copy of this program (instead of a program).
 
@@ -1487,6 +1583,8 @@ A process: another program (`program`, with `args`), or a task of this program (
 - `call: int64`
 
 - `joined: bool`
+
+- `override function hasTask(): bool`
 
 - `function start(): void throws ProcessError`  
   Starts it. Throws ProcessError.CannotStart when it cannot (not found, not allowed, nothing to run).
@@ -1548,11 +1646,12 @@ What a copy of this program started for tasks does instead of its main (the comp
 calls to another program, and a program that answers them (JSON-RPC 2.0).
 
   import std.os.rpc { Rpc, RpcCall, RpcError, serve };
+  import std.os.process { Process };
 
   // the program that calls
-  let calc: Rpc = Rpc.startShared("./calc", []);       // a Larimar program that serves: shared memory
-  let sum: Any = calc.call("add", { a: 2, b: 3 });     // 5
-  calc.close();                                        // it ends when it sees the end
+  let calc: Rpc = Rpc.startShared(Process { program: "./calc" });   // a Larimar program that serves
+  let sum: Any = calc.call("add", { a: 2, b: 3 });                   // 5
+  calc.close();                                                      // it ends when it sees the end
 
   // the program that answers (./calc)
   function main(): int32 {
@@ -1564,10 +1663,11 @@ calls to another program, and a program that answers them (JSON-RPC 2.0).
       return 0;
   }
 
-Each message is JSON with a Content-Length header before it, as in LSP. Rpc.start talks to any program
+The Process says what runs (program, args, env, quiet...), and Rpc starts it and talks to it. Each
+message is JSON with a Content-Length header before it, as in LSP. Rpc.start talks to any program
 through its standard input and output (the program writes nothing else there); Rpc.startShared talks to
-a Larimar program through two streams of shared memory (std.os.shared), so its own output stays its own
-and the bytes do not go through the system. serve() answers on the shared streams it was started with,
+a Larimar program through two streams of shared memory (std.os.sharedmemory), so its own output stays its
+own and the bytes do not go through the system. serve() answers on the shared streams it was started with,
 or else on its standard input and output; it returns when the caller closes. Rpc.over and serveOver do
 the same on any pair of streams (a socket, for example).
 
@@ -1575,7 +1675,7 @@ A call waits for its answer (timeout: how long, 0 for as long as it takes). If t
 the call throws RpcError.Ended with its exit code instead of waiting.
 ```
 
-`std/os/rpc.lar`
+`src/std/os/rpc.lar`
 
 ### enum `RpcError`
 What went wrong with a call.
@@ -1611,11 +1711,11 @@ A connection to a program that answers calls. It closes when its memory is freed
 - `timeout: int32`  
   How long a call may wait for its answer, in ms (0: as long as it takes).
 
-- `static function start(program: String, args: String[*]): Rpc throws RpcError`  
-  Starts a program that answers JSON-RPC on its standard input and output (any program).
+- `static function start(process: Child): Rpc throws RpcError`  
+  Starts the program of a Process (std.os.process), which answers JSON-RPC on its standard input and output (any program): Rpc reads and writes them.
 
-- `static function startShared(program: String, args: String[*]): Rpc throws RpcError`  
-  Starts a Larimar program that answers with serve(): the calls go through shared memory, and its standard output stays this console's.
+- `static function startShared(process: Child): Rpc throws RpcError`  
+  Starts the program of a Process, a Larimar program that answers with serve(): the calls go through shared memory (it adds LARIMAR_RPC to the Process's env), and its standard output stays this console's.
 
 - `static function over(input: InputStream, output: OutputStream): Rpc`  
   Calls over two streams that already exist (a socket, for example).
@@ -1638,9 +1738,6 @@ A connection to a program that answers calls. It closes when its memory is freed
 - `function stop(): void`  
   Ends the other program now, if this one started it.
 
-`function startSharedWith(program: String, args: String[*], env: String[*]): Rpc throws RpcError`  
-Rpc.startShared with variables for the program's environment ("NAME=value").
-
 `function serve(handler: (RpcCall) -> Any): void`  
 Answers the calls that come, one after another, with `handler`, until the caller closes: on the shared streams this program was started with (Rpc.startShared), or else on its standard input and output.
 
@@ -1649,20 +1746,22 @@ Answers the calls that come on two streams that already exist, until the input e
 
 ---
 
-## std.os.shared
+## std.os.sharedmemory
 
 ```
-streams of bytes from one program to another, through memory that both see.
+memory that several programs see. A stream is a queue (each message once, in
+order, from one writer to one reader); a segment is a board (bytes at offsets, the latest value written
+there, which any program that opens it reads).
 
-  import std.os.shared { SharedOutputStream, SharedInputStream };
+  import std.os.sharedmemory { SharedMemoryOutputStream, SharedMemoryInputStream, SharedMemorySegment };
 
   // one program
-  let out: SharedOutputStream = SharedOutputStream.create("frames", 1 << 20);   // 1 MB of shared memory
+  let out: SharedMemoryOutputStream = SharedMemoryOutputStream.create("frames", 1 << 20);   // 1 MB of shared memory
   out.write(frame);                       // waits while it is full: the other one reads at its pace
   out.close();                            // the reader sees the end after what was written
 
   // another program
-  let input: SharedInputStream = SharedInputStream.open("frames", 5000);        // waits up to 5 s for it
+  let input: SharedMemoryInputStream = SharedMemoryInputStream.open("frames", 5000);        // waits up to 5 s for it
   let n: int32 = input.read(buffer);      // 0: the writer closed it and everything was read
 
 A name is the meeting point: one program creates it (as writer or as reader), the other opens it; each
@@ -1672,17 +1771,28 @@ wait spins for a moment and then sleeps in short steps. If the other program end
 waiting side gets IoError.Closed instead of waiting forever. The name is freed as soon as the other side
 opens it (or when the creator closes it). A stream closes itself when its memory is freed.
 
-They are streams like a file or a socket: a Reader, copy(), and anything that takes an InputStream or an
+  // a segment: one program creates it, others open it
+  let board: SharedMemorySegment = SharedMemorySegment.create("scores", 4096);
+  board.putInt64(0, 42);
+  let seen: SharedMemorySegment = SharedMemorySegment.open("scores", 5000);    // in another program
+  let n: int64 = seen.getInt64(0);                                             // 42
+
+Every get and put is checked against the segment's size (outside it: a panic, as an index of a list).
+An int64 at an offset that is a multiple of 8 is read and written whole: whoever reads a value with
+getInt64 also sees what was written before it was put (a number of frame, a flag of "ready"). The name
+stays while its creator has it open.
+
+The streams are streams like a file or a socket: a Reader, copy(), and anything that takes an InputStream or an
 OutputStream works with them. Names: letters, digits, '.', '_' and '-', at most 26 of them;
 uniqueName("rpc") gives one that no other program uses.
 ```
 
-`std/os/shared.lar`
+`src/std/os/sharedmemory.lar`
 
 `function uniqueName(prefix: String): String`  
 A name for a new stream that no other program uses: the prefix (at most 8 bytes), this program's id, a count.
 
-### class `SharedOutputStream implements OutputStream, Closeable`
+### class `SharedMemoryOutputStream implements OutputStream, Closeable`
 The writing side of a stream between two programs.
 
 - `name: String`
@@ -1692,10 +1802,10 @@ The writing side of a stream between two programs.
 - `timeout: int32`  
   How long a write may wait for room, in ms (0: as long as it takes).
 
-- `static function create(name: String, capacity: int32): SharedOutputStream throws IoError`  
+- `static function create(name: String, capacity: int32): SharedMemoryOutputStream throws IoError`  
   Creates the stream `name` with room for `capacity` bytes (at least 4096); the other program opens it as a reader.
 
-- `static function open(name: String, ms: int32): SharedOutputStream throws IoError`  
+- `static function open(name: String, ms: int32): SharedMemoryOutputStream throws IoError`  
   Opens the stream `name` that a reader created, waiting up to `ms` for it to exist (0: only now).
 
 - `override function write(bytes: byte[]): void throws IoError`  
@@ -1710,7 +1820,7 @@ The writing side of a stream between two programs.
 - `function capacity(): int64`  
   How many bytes the ring holds.
 
-### class `SharedInputStream implements InputStream, Closeable`
+### class `SharedMemoryInputStream implements InputStream, Closeable`
 The reading side of a stream between two programs.
 
 - `name: String`
@@ -1720,10 +1830,10 @@ The reading side of a stream between two programs.
 - `timeout: int32`  
   How long a read may wait for bytes, in ms (0: as long as it takes); then IoError.TimedOut.
 
-- `static function create(name: String, capacity: int32): SharedInputStream throws IoError`  
+- `static function create(name: String, capacity: int32): SharedMemoryInputStream throws IoError`  
   Creates the stream `name` with room for `capacity` bytes (at least 4096); the other program opens it as a writer.
 
-- `static function open(name: String, ms: int32): SharedInputStream throws IoError`  
+- `static function open(name: String, ms: int32): SharedMemoryInputStream throws IoError`  
   Opens the stream `name` that a writer created, waiting up to `ms` for it to exist (0: only now).
 
 - `override function read(buffer: byte[]): int32 throws IoError`  
@@ -1734,6 +1844,52 @@ The reading side of a stream between two programs.
 
 - `override function close(): void throws IoError`  
   Stops reading: the writer's next write gets IoError.Closed.
+
+### class `SharedMemorySegment implements Closeable`
+Memory that several programs see, by name: bytes at offsets, read and written with get and put. One program creates it; the others open it. It closes itself when its memory is freed.
+
+- `name: String`
+
+- `handle: SharedHandle?`
+
+- `bytes: int64`
+
+- `static function create(name: String, size: int32): SharedMemorySegment throws IoError`  
+  Creates the segment `name` with `size` bytes (all 0); other programs open it by its name.
+
+- `static function open(name: String, ms: int32): SharedMemorySegment throws IoError`  
+  Opens the segment `name` that another program created, waiting up to `ms` for it to exist (0: only now).
+
+- `function size(): int64`  
+  How many bytes it has.
+
+- `function getInt64(offset: int64): int64`
+
+- `function putInt64(offset: int64, value: int64): void`
+
+- `function getInt32(offset: int64): int32`
+
+- `function putInt32(offset: int64, value: int32): void`
+
+- `function getFloat64(offset: int64): float64`
+
+- `function putFloat64(offset: int64, value: float64): void`
+
+- `function getByte(offset: int64): byte`
+
+- `function putByte(offset: int64, value: byte): void`
+
+- `function getBytes(offset: int64, into: byte[]): void`  
+  Copies into `into` the bytes from `offset` on (as many as `into` has).
+
+- `function putBytes(offset: int64, bytes: byte[]): void`  
+  Writes `bytes` from `offset` on.
+
+- `override function close(): void throws IoError`  
+  Lets it go: the name is freed when its creator closes it; what other programs mapped stays theirs.
+
+- `function at(offset: int64, count: int64): SharedHandle`  
+  The handle, when `count` bytes from `offset` are inside the segment; a panic when they are not.
 
 ---
 
@@ -1751,7 +1907,7 @@ reaches only that system's build. A switch on Platform.current() chooses the one
 --target, the compiler chooses it). This module imports nothing: every part of std can mark its classes.
 ```
 
-`std/platform.lar`
+`src/std/platform.lar`
 
 ### enum `OS`
 The systems Larimar runs on (Unix: another Unix, a BSD).
@@ -1791,7 +1947,7 @@ A check that fails prints why, and the test goes on (to stop there, `return`). T
 any of its checks failed. Each test runs alone, in its own process, so nothing is shared between tests.
 ```
 
-`std/test.lar`
+`src/std/test.lar`
 
 `function check(condition: bool, message: String): void`  
 Fails when the condition is false, with this message.
@@ -1841,7 +1997,7 @@ Bytes are ASCII-aware: letters with accents are several bytes in UTF-8 and are n
 letters here; use String.codePoints() for those.
 ```
 
-`std/text.lar`
+`src/std/text.lar`
 
 `function isDigit(b: byte): bool`
 
@@ -1895,7 +2051,7 @@ The classes (\d, \w, [a-z]...) are ASCII; a letter with an accent is one charact
 It checks each place of the text once per instruction at most: no pattern makes it take forever.
 ```
 
-`std/text/regex.lar`
+`src/std/text/regex.lar`
 
 ### enum `RegexError`
 A pattern that cannot be compiled: why, and where (the byte of the pattern).
@@ -2061,7 +2217,7 @@ requests of a test), made where the batch is. For a server that runs forever, st
 own workers, which take values and keep nothing.
 ```
 
-`std/thread.lar`
+`src/std/thread.lar`
 
 ### class `ThreadPool`
 Runs tasks on up to `threads` threads: let pool: ThreadPool = { threads: 8 }; pool.submit(() -> { ... }); queue > 0: submit waits while that many tasks have not started.
@@ -2100,7 +2256,7 @@ now() is the wall clock (it can jump when the system's clock is set); monotonic(
 so it is the one for measuring time and for deadlines. Dates are UTC.
 ```
 
-`std/time.lar`
+`src/std/time.lar`
 
 `function now(): int64`  
 Milliseconds since 1970-01-01 00:00 UTC (the wall clock).

@@ -67,7 +67,8 @@ function visit(g: Graph, at: String, state: Any, path: String[*]): String {
 test function stdHasNoCycles(): void throws IoError {
     let home: String = os.env("LARIMAR_HOME") ?? ".";
     let g: Graph = {};
-    read(Paths.join(home, "std"), "std", g);
+    let std: String = Files.isFile(Paths.join(home, "std/lang.lar")) ? Paths.join(home, "std") : Paths.join(home, "src/std");
+    read(std, "std", g);
     check(g.names.length > 40, "std's modules were read (${g.names.length})");
     let state: Any = {};
     for (name in g.names) {

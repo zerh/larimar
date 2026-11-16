@@ -1,9 +1,9 @@
 // C que crea texto en la memoria de la llamada (su primer parámetro).
 ccode {
     #include <ctype.h>
-    static const char* shout(RtMem* m, const char* text) {
+    static const char* shout(LarMemory* m, const char* text) {
         size_t n = strlen(text);
-        char* out = (char*)rt_mem_alloc(m, n + 2, 0);
+        char* out = (char*)lar_memory_alloc(m, n + 2, 0);
         for (size_t i = 0; i < n; i++) out[i] = (char)toupper((unsigned char)text[i]);
         out[n] = '!';
         return out;

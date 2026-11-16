@@ -1,0 +1,324 @@
+// semantics.analyzer: semantic analysis (Analyzer.java), part 1: declarations, statements, regions
+// and the final passes. Expressions are in checkexpr.lar.
+//
+//  - Types: declarations, expressions with expected types, implicit conversions.
+//  - Regions: every value that references memory carries the region of that memory;
+//    storing it somewhere that outlives the region is an error (fix: .clone()).
+//  - Captures: a lambda captures by value; captured variables cannot change.
+//  - Errors: throws/try/catch are checked; every throwing call is handled.
+//  - Switch: patterns resolved, enums covered completely.
+
+import syntax.ast { Expr, Param, Program, VarDecl };
+import semantics.types {
+    classes, classOf, EnumInfo, enumOf, enums, escapeName, Frame, FrameKind, functions, globals, interfaceOf,
+    isExternTypeName, isMemory, isStruct, LambdaInfo, named, NamedKind, nativeMethods, nativeOwner, newOwner, newScope,
+    Owner, R_STATIC, Region, Scope, structOf, structs, SwitchInfo, Symbol, SymbolKind, T_ERROR, Type
+};
+import semantics.linker { target };
+import semantics.analyzer.classes { checkFieldDefaults, checkMain, validateClasses, validateInterfaces };
+import semantics.analyzer.compact { resolveRegions };
+import semantics.analyzer.declarations { collect, constants, signatures };
+import semantics.analyzer.flow { flowSummaries };
+import semantics.analyzer.narrowing { hasSymbol };
+import semantics.analyzer.order { checkGlobalOrder, computeTypeOrder };
+import semantics.analyzer.statements { analyzeFunction, analyzeMethod, analyzeVarDecl };
+import semantics.analyzer.threads { checkSynchronizedClasses, checkThreads };
+
+// =====================================================================================
+// State
+// =====================================================================================
+
+public class Diag {
+    let line: int32;
+    let msg: String;
+}
+
+public let diags: Diag[*] = [] in default;
+
+public function error(line: int32, msg: String): void {
+    diags.push(Diag { line, msg: "Semantic Error [Line ${line}]: ${msg}" } in default);
+}
+
+/** Reports an error where a type is expected: the result is the error type. */
+public function wrong(line: int32, msg: String): Type {
+    error(line, msg);
+    return T_ERROR;
+}
+
+/** A symbol for the name after `is`, declared later where the test is true (see narrow). */
+public function bindingSymbol(name: String in default, type: Type in default, line: int32, region: Region in default): Symbol {
+    let symbol: Symbol = Symbol { name, kind: SymbolKind.Local, type, line, frame: frame(), scope, id: symbolIds, cName: "${escapeName(name)}_${symbolIds}", region } in default;
+    symbolIds += 1;
+    allSymbols.push(symbol);
+    symbol.immutable = true;
+    symbol.binding = true;
+    return symbol;
+}
+
+public class HandledSet { let enums: EnumInfo[*] = []; }
+
+public class FrameState {
+    let loopDepth: int32 = 0;
+    let handled: HandledSet[*] = [];
+    let yields: SwitchInfo[*] = [];
+    let exprSwitchDepth: int32 = 0;
+    let reassigned: Any;
+    /** Locals whose value is returned: they are created where the caller says (PlaceK.Result). */
+    let returned: Any;
+}
+
+let globalFrame: Frame = Frame { kind: FrameKind.Global } in default;
+public let frames: Frame[*] = [] in default;
+public let frameTop: int32 = 0;                  // frames in use
+public let scope: Scope = newScope(null, globalFrame);
+public let globalScope: Scope = scope;
+public let states: FrameState[*] = [] in default;
+public let stateTop: int32 = 0;
+let symbolIds: int32 = 0;
+public let allSymbols: Symbol[*] = [] in default;
+
+public enum MutK { Reassign, Field, Push }
+
+public class Mutation {
+    let line: int32;
+    let root: Symbol;
+    let frame: int32;
+    let kind: MutK;
+}
+
+public let mutations: Mutation[*] = [] in default;
+public let varSyms: Symbol[*] = [] in default;     // reassigned locals with a Var region
+
+public enum DefK { Outlives, ReturnLocal }
+
+public class Deferred {
+    let line: int32;
+    let kind: DefK;
+    let value: Region;
+    let storage: Region;
+    let msg: String;
+    let frame: Frame? = null;
+    /** The message when the storage lives forever and the value in a block or a statement. */
+    let forever: String = "";
+    /** The value checked, to name what lives too little in the message ("" role: stored in `target`). */
+    let expr: Expr? = null;
+    let target: String = "";
+    let role: String = "";              // "", "field <name>", "throw", "return"
+}
+
+public let deferred: Deferred[*] = [] in default;
+
+/** for (k, v in table.fields): the member being iterated. */
+public let anyFieldsLoop: Expr? = null;
+
+public class ThreadRun {
+    let lambda: LambdaInfo;
+    let line: int32;
+    let safe: bool = false;          // a lambda given as a `thread safe` function, not the run of a Thread
+}
+
+public let threadRuns: ThreadRun[*] = [] in default;
+
+public function frame(): Frame { return frames[frameTop - 1]; }
+public function state(): FrameState { return states[stateTop - 1]; }
+
+// =====================================================================================
+// Entry point
+// =====================================================================================
+
+/** Analyzes the program; the errors (sorted by line, without repeats) go to analysisErrors. */
+public let analysisErrors: String[*] = [] in default;
+
+public function analyze(program: Program in default): void {
+    frames.push(globalFrame);
+    frameTop = 1;
+    globalFrame.root = scope;
+    states.push(FrameState { reassigned: {} in default, returned: {} in default } in default);
+    stateTop = 1;
+
+    collect(program);
+    constants(program);
+    signatures(program);
+    validateClasses();
+    validateInterfaces();
+    checkSynchronizedClasses();
+    flowSummaries();          // before the field defaults: a call there must know if it creates its result
+    checkFieldDefaults();
+
+    let initializers: Owner[*] = [] in default;       // what the initial value of each global calls and reads
+    for (d in program.decls) {
+        if (d is VarDecl v) {
+            globals.push(v);
+            let o: Owner = newOwner();
+            globalFrame.owner = o;
+            analyzeVarDecl(v);
+            globalFrame.owner = null;
+            initializers.push(o);
+        }
+    }
+    for (f in functions) {
+        if (!f.isExtern && f.sig != null) { analyzeFunction(f); }
+    }
+    for (s in structs) {
+        for (m in s.methods) {
+            if (m.sig != null) { analyzeMethod(m, named(s.name, NamedKind.Struct)); }
+        }
+    }
+    for (c in classes) {
+        for (m in c.methods) {
+            if (m.sig != null && m.decl.hasBody) { analyzeMethod(m, named(c.name, NamedKind.Class)); }
+        }
+    }
+    for (m in nativeMethods) {
+        if (m.sig != null && m.decl.hasBody) { analyzeMethod(m, nativeOwner(m.owner)); }
+    }
+
+    resolveRegions();
+    checkThreads();
+    checkGlobalOrder(initializers);
+    checkMutations();
+    checkMemoryUses();
+    checkMain();
+    computeTypeOrder();
+
+    // sorted by line (stable), each message once
+    let sorted: Diag[*] = [] in default;
+    for (d in diags) {
+        let i: int32 = sorted.length;
+        sorted.push(d);
+        while (i > 0 && sorted[i - 1].line > d.line) {
+            sorted[i] = sorted[i - 1];
+            i -= 1;
+        }
+        sorted[i] = d;
+    }
+    let seen: Any = {} in default;
+    for (d in sorted) {
+        if (!seen.contains(d.msg)) {
+            seen[d.msg] = true;
+            analysisErrors.push(d.msg);
+        }
+    }
+}
+
+// =====================================================================================
+// Scopes, frames and symbols
+// =====================================================================================
+
+public function pushFrame(kind: FrameKind, ret: Type? in default, throwsType: Type? in default, lambda: LambdaInfo? in default,
+                          selfType: Type? in default, parent: Scope in default, owner: Owner? in default): Frame {
+    let frameOf: Frame = Frame { kind, owner, returnType: ret, throwsType, lambda, selfType, index: frameTop } in default;
+    if (frameTop < frames.length) { frames[frameTop] = frameOf; } else { frames.push(frameOf); }
+    frameTop += 1;
+    scope = newScope(parent, frameOf);
+    frameOf.root = scope;
+    let state: FrameState = FrameState { reassigned: {} in default, returned: {} in default } in default;
+    if (stateTop < states.length) { states[stateTop] = state; } else { states.push(state); }
+    stateTop += 1;
+    if (lambda != null) { lambda.frame = frameOf; }
+    return frameOf;
+}
+
+public function popFrame(restore: Scope in default): void {
+    frameTop -= 1;
+    stateTop -= 1;
+    scope = restore;
+}
+
+public function pushScope(): void { scope = newScope(scope, frame()); }
+
+public function popScope(): void { scope = scope.parent!; }
+
+/** The block the current statement is in (names are declared there, not in the statement). */
+public function block(): Scope { return scope.statement ? scope.parent! : scope; }
+
+public function declare(name: String in default, kind: SymbolKind, type: Type in default, line: int32): Symbol {
+    let target: Scope = block();
+    let symbol: Symbol = Symbol { name, kind, type, line, frame: frame(), scope: target, id: symbolIds, cName: escapeName(name), region: R_STATIC } in default;
+    symbolIds += 1;
+    allSymbols.push(symbol);
+    let ei: int32 = target.names[name] as int32 ?? -1;
+    if (ei >= 0) {
+        let existing: Symbol = allSymbols[ei];
+        let what: String = existing.kind == SymbolKind.Function ? "as a function" : "in this scope";
+        error(line, "'${name}' is already declared ${what} (line ${existing.line}).");
+        return symbol;
+    }
+    if (kind != SymbolKind.Function && lookup(name) != null) { symbol.cName = "${escapeName(name)}_${symbol.id}"; }
+    if ((structOf(name) != null || classOf(name) != null || enumOf(name) != null || interfaceOf(name) != null || isExternTypeName(name))
+        && kind != SymbolKind.Function) {
+        symbol.cName = "${escapeName(name)}_v${symbol.id}";
+    }
+    target.names[name] = allSymbols.length - 1;
+    return symbol;
+}
+
+public function lookup(name: String): Symbol? {
+    let c: Scope? = scope;
+    while (c != null) {
+        let i: int32 = c.names[name] as int32 ?? -1;
+        if (i >= 0) { return allSymbols[i]; }
+        c = c.parent;
+    }
+    return null;
+}
+
+public function narrowedType(symbol: Symbol): Type? {
+    let c: Scope? = scope;
+    while (c != null) {
+        for (i, ns in c.narrowSyms) {
+            if (ns == symbol) { return c.narrowTypes[i]; }
+        }
+        if (c == symbol.scope) { break; }
+        c = c.parent;
+    }
+    return null;
+}
+
+/** Records that the current lambda (and every lambda in between) captures `s`. */
+public function noteCapture(symbol: Symbol in default, line: int32): void {
+    let cur: int32 = frameTop - 1;
+    let capturable: bool = symbol.kind == SymbolKind.Local || symbol.kind == SymbolKind.Param || symbol.kind == SymbolKind.Self;
+    if (!capturable || symbol.frame.index >= cur) { return; }
+    if (isMemory(symbol)) {
+        error(line, "Lambdas can only use global memories or memories created inside them ('${symbol.name}' belongs to the enclosing function).");
+        return;
+    }
+    if (symbol.kind == SymbolKind.Self && isStruct(symbol.type)) {
+        error(line, "'self' cannot be used inside a lambda in a struct method: the struct may be copied or disappear. Copy the fields you need into local variables first.");
+        return;
+    }
+    let i: int32 = symbol.frame.index + 1;
+    while (i <= cur) {
+        let lambdaInfo: LambdaInfo? = frames[i].lambda;
+        if (lambdaInfo != null && !hasSymbol(lambdaInfo.captures, symbol)) { lambdaInfo.captures.push(symbol); }
+        i += 1;
+    }
+    if (symbol.capturedAt < 0) {
+        let first: LambdaInfo? = frames[symbol.frame.index + 1].lambda;
+        symbol.capturedAt = first != null ? first.node.line : line;
+    }
+}
+
+// =====================================================================================
+// Final passes
+// =====================================================================================
+
+function checkMutations(): void {
+    for (m in mutations) {
+        let symbol: Symbol = m.root;
+        if (m.frame > symbol.frame.index) {
+            let verb: String = m.kind == MutK.Reassign ? "reassign" : "modify";
+            error(m.line, "Cannot ${verb} outer variable '${symbol.name}' (declared at line ${symbol.line}) inside a lambda body. Captured variables are immutable.");
+        } else if (symbol.capturedAt >= 0) {
+            let what: String = m.kind == MutK.Reassign ? "reassigned" : "modified";
+            error(m.line, "Variable '${symbol.name}' (declared at line ${symbol.line}) is captured by the lambda at line ${symbol.capturedAt} and cannot be ${what}.");
+        }
+    }
+}
+
+function checkMemoryUses(): void {
+    for (s in allSymbols) {
+        if (isMemory(s) && s.dataUseLine >= 0) { error(s.dataUseLine, "'${s.name}' is used as a memory, so it cannot also be used as plain bytes."); }
+    }
+}

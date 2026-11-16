@@ -1,6 +1,7 @@
 // std.os.rpc: calls to another program (JSON-RPC), through shared memory or through its pipes.
 import std.os.rpc { Rpc, RpcCall, RpcError, message, serveOver };
-import std.io { MemoryInputStream, MemoryOutputStream };
+import std.os.process { Process, ProcessError, Task };
+import std.io { BytesInputStream, BytesOutputStream };
 import std.test { check, checkText, checkInt, fail };
 import tests.support.compiler { built, caseFile };
 
@@ -54,7 +55,7 @@ function talk(calc: Rpc): void throws RpcError {
 test function callsThroughSharedMemory(): void throws RpcError {
     let exe: String = server();
     if (exe == "") { return; }
-    let calc: Rpc = Rpc.startShared(exe, []);
+    let calc: Rpc = Rpc.startShared(Process { program: exe });
     talk(calc);
     calc.close();
 }
@@ -63,7 +64,7 @@ test function callsThroughSharedMemory(): void throws RpcError {
 test function callsThroughPipes(): void throws RpcError {
     let exe: String = server();
     if (exe == "") { return; }
-    let calc: Rpc = Rpc.start(exe, []);
+    let calc: Rpc = Rpc.start(Process { program: exe });
     talk(calc);
     calc.close();
 }
@@ -72,7 +73,7 @@ test function callsThroughPipes(): void throws RpcError {
 test function aProgramThatEndsIsAnError(): void throws RpcError {
     let exe: String = server();
     if (exe == "") { return; }
-    let shared: Rpc = Rpc.startShared(exe, []);
+    let shared: Rpc = Rpc.startShared(Process { program: exe });
     let why: String = "";
     try {
         shared.call("die", null);
@@ -80,7 +81,7 @@ test function aProgramThatEndsIsAnError(): void throws RpcError {
         why = message(e).clone();
     }
     checkText("ended: the program ended (exit 101)", why);
-    let pipes: Rpc = Rpc.start(exe, []);
+    let pipes: Rpc = Rpc.start(Process { program: exe });
     why = "";
     try {
         pipes.call("die", null);
@@ -94,7 +95,7 @@ test function aProgramThatEndsIsAnError(): void throws RpcError {
 test function aCallWaitsOnlyItsTimeout(): void throws RpcError {
     let exe: String = server();
     if (exe == "") { return; }
-    let calc: Rpc = Rpc.startShared(exe, []);
+    let calc: Rpc = Rpc.startShared(Process { program: exe });
     calc.timeout = 100;
     let late: bool = false;
     try {
@@ -116,10 +117,42 @@ test function servesOnAnyStreams(): void {
     let requests: String = "Content-Length: 46\r\n\r\n{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"twice\",\"params\":21}"
         .replace("46", "${"{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"twice\",\"params\":21}".length}");
     let all: String = "${requests}Content-Length: 3\r\n\r\n{x}";
-    let input: MemoryInputStream = { data: all };
-    let out: MemoryOutputStream = {};
+    let input: BytesInputStream = { data: all };
+    let out: BytesOutputStream = {};
     serveOver(input, out, (call) -> { return (call.params as int64 ?? 0) * 2; });
     let text: String = out.toString();
     check(text.contains("{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":42}"), "the answer: ${text}");
     check(text.contains("\"code\":-32700"), "and the error of what is not JSON: ${text}");
+}
+
+class Nothing implements Task {
+    override function run(): Any { return null; }
+}
+
+/** What Rpc says when it does not start the Process: "" when it started it. */
+function refusal(p: Process): String {
+    try {
+        let rpc: Rpc = Rpc.start(p);
+        rpc.stop();
+    } catch (RpcError e) {
+        return message(e).clone();
+    }
+    return "";
+}
+
+// Rpc starts a program: not a task, not nothing, and not what was started already.
+test function rpcStartsOnlyAProgram(): void {
+    checkText("ended: the Process has a task, not a program: start it with start() and wait for it with join()",
+        refusal(Process { run: Nothing {} }));
+    checkText("ended: the Process has no program", refusal(Process {}));
+    let exe: String = server();
+    if (exe == "") { return; }
+    let p: Process = { program: exe, quiet: true };
+    try {
+        p.start();
+    } catch (ProcessError e) {
+        fail("cannot start ${exe}");
+    }
+    checkText("ended: the Process was started already: Rpc starts it", refusal(p));
+    p.kill();
 }

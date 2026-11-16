@@ -1,0 +1,21 @@
+// Lambdas that capture a lot: their captures go in the memory where the lambda lives, so the other lambdas
+// of the same type stay small.
+function makeBig(): int64[25000] {
+    let b: int64[25000] = [];
+
+    return b;
+}
+function main(): void {
+    let big: int64[25000] = makeBig();
+    let small: int32 = 2;
+    let f: () -> int64 = () -> { return (big.length as int64 + 7) + small as int64; };
+    let g: () -> int64 = () -> { return small as int64; };
+    println("${f()} ${g()}");
+    let kept: byte[*] = [] in heap;
+    let fs: (() -> int64)[*] = [] in kept;
+    for (i in 0..3) {
+        let n: int64 = i as int64;
+        fs.push((() -> { return (big.length as int64 + 7) * n; }) in kept);
+    }
+    for (h in fs) { println("${h()}"); }
+}

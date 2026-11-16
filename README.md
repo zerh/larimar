@@ -28,26 +28,28 @@ their own C compiler (tcc), so `larimar hello.lar` runs a file at once.
 ## Documentation
 
 - [Manual](docs/manual.md) ([en español](docs/manual.es.md)): the language with examples, projects,
-  other programs, libraries and services, the editor and the tests.
-- [Specification](docs/spec.md) (language 1.3): when it and the manual disagree, it wins.
+  other programs, libraries, the editor and the tests.
+- [Specification](docs/spec.md) (language 1.4): when it and the manual disagree, it wins.
 - [Bibliotecas en Larimar](docs/libraries.es.md) (in Spanish): every scenario of writing, publishing and
   using a library, each with its code and the output it gave.
 - [Changelog](CHANGELOG.md) and [how to contribute](CONTRIBUTING.md): how the compiler is organized, with
   [every function of it](docs/compiler-reference.md), [every public name of std](docs/std-reference.md),
-  [how libraries and services are made inside](docs/compiler-libraries.es.md) (in Spanish) and
+  [how libraries and tasks are made inside](docs/compiler-libraries.es.md) (in Spanish) and
   [the C of the standard library](docs/std-c.md).
 
 ## No C of its own: other programs instead
 
 Larimar becomes C, and the standard library talks to the operating system through it (files, sockets,
-threads, TLS). That C is std's: **a program, a library and a service written in Larimar have no C of their
-own**, so all the C a program runs is part of Larimar, written and tested with it, and nobody's library
+threads, TLS). That C is std's: **a program and a library written in Larimar have no C of their own**, so all the C a program runs is part of Larimar, written and tested with it, and nobody's library
 can bring C that the compiler does not check. What Larimar does not have runs in another process:
 
-- **`std.os.rpc`**: calls to another program (JSON-RPC). `Rpc.startShared` talks to a Larimar program
-  through shared memory, in a few microseconds per call; `Rpc.start` to any program, through its pipes.
-- **`std.os.shared`**: streams of bytes between two programs through shared memory, with no system call
-  while there is something to read.
+- **`std.os.rpc`**: calls to another program (JSON-RPC). A `Process` says what runs;
+  `Rpc.startShared(process)` talks to a Larimar program through shared memory, in a few microseconds per
+  call; `Rpc.start(process)` to any program, through its pipes. Any program that answers with `serve()` is
+  a service.
+- **`std.os.sharedmemory`**: streams of bytes between two programs through shared memory (a queue), with no
+  system call while there is something to read, and segments (a board: numbers at offsets, the latest
+  value); `std.io.bytes` writes and reads binary messages.
 - **`Process { run: task }` and `ProcessPool`**: a `Task` of the program runs in a copy of it, used as a
   thread is (`start`, `join`; `submit`, `wait`); a panic there is a `ProcessError` here.
 
@@ -59,18 +61,15 @@ For one C header, a project can say `[project] unsafe_c = true` and declare a **
 reaches libc the same way. Every build of a program with that C says where it comes from
 ([chapter 27](docs/manual.md#c-of-its-own-unsafe_c--true)).
 
-## Libraries and services
+## Libraries
 
-A project with `kind = "library"` is a library. A program names its folder in `[dependencies]` and writes
-`import <name>`: the library's source is compiled with the program, with one runtime and the whole
-language on both sides (interfaces the program implements, lists, enums, `throws`). Its modules are
-`<name>` and `<name>.<part>`, so they never meet the program's, and the libraries it uses come with it.
-
-A project with `kind = "service"` is a service: its public functions run in its own process. A program
-names it in `[dependencies]` too, and imports a class with the same functions, each one a call to the
-service's executable (`let c: Calc = Calc.start(); c.add(2, 40)`). `larimar build` of the program builds
-its services first. See [chapter 27 of the manual](docs/manual.md#27-libraries-and-services-written-in-larimar)
-and the [manual of libraries](docs/libraries.es.md) (in Spanish).
+A project with `kind = "library"` is a library (the other kind is a program, the default). A program names
+its folder in `[dependencies]` and writes `import <name>`: the library's source is compiled with the
+program, with one runtime and the whole language on both sides (interfaces the program implements, lists,
+enums, `throws`). Its modules are `<name>` and `<name>.<part>`, so they never meet the program's, and the
+libraries it uses come with it. What should not share the program's memory is another program, started
+with a `Process` ([chapter 27 of the manual](docs/manual.md#27-libraries-written-in-larimar), and the
+[manual of libraries](docs/libraries.es.md), in Spanish).
 
 ## Building from source
 
@@ -85,28 +84,32 @@ LARIMAR_PREFIX=/opt/larimar ./bootstrap/build.sh   # install somewhere else
 ```
 
 On Windows, `.\bootstrap\build.ps1 -verify` (with MinGW's gcc). `bootstrap/larimarc.c` is the compiler
-already translated to C. After changing `src/`, `--verify` says whether it is older than `src/`; then:
+already translated to C. After changing `src/compiler`, `--verify` says whether it is older than it; then:
 
 ```sh
 cp build/stage2.c bootstrap/larimarc.c
 ```
 
-`std/` can only use what the compiler that compiles it already understands: something new in the
-language goes into the compiler first, the bootstrap is regenerated, and then `std/` may use it.
+`src/std/` can only use what the compiler that compiles it already understands: something new in the
+language goes into the compiler first, the bootstrap is regenerated, and then `src/std/` may use it. To
+run the compiler of the repository by hand: `LARIMAR_HOME=src bin/larimarc file.lar` (or
+`LARIMAR_HOME=$PWD`: the compiler finds `src/std` there too).
 
 ## Repository layout
 
 ```
 larimar/
-├── src/                 the compiler (Larimar), one folder per stage
-│   ├── main.lar         the commands
-│   ├── syntax/          lexer, parser, ast
-│   ├── semantics/       linker (modules), types, analyzer, expressions
-│   ├── codegen/         gen, expressions, prune, debugmap
-│   ├── editor/          session (larimar check), lsp, ide, docstore, dap
-│   └── project/         cc (the C compiler), testing (larimar test), libraries, services
-├── std/                 the standard library (io, os, net, thread, encoding, text, time...)
-├── runtime/             the runtime: the C under every program
+├── src/
+│   ├── compiler/        the compiler (Larimar), one folder per stage, each with a README.md (its API)
+│   │   ├── main.lar     the commands
+│   │   ├── pipeline.lar a compilation as passes: Link, CheckRules, Assemble, Analyze, EmitC, NameC, Prune
+│   │   ├── syntax/      lexer, parser, ast
+│   │   ├── semantics/   linker (modules), rules, types, analyzer, expressions
+│   │   ├── codegen/     gen, expressions, localnames, prune, debugmap
+│   │   ├── editor/      session (larimar check), lsp, ide, opendocuments, dap
+│   │   └── project/     cc (the C compiler), testing (larimar test), libraries
+│   ├── std/             the standard library (io, os, net, thread, encoding, text, time...)
+│   └── runtime/         the runtime: the C under every program
 ├── tests/               the tests (tests/run-tests.sh)
 ├── bootstrap/           larimarc.c (the compiler in C), build.sh, build.ps1
 ├── bin/                 the launchers installed as larimar/bin/larimar(.cmd)
@@ -144,15 +147,16 @@ the debuggers and a client as other programs (`std.os.process`) and talk to them
 ## Plugins and dependencies
 
 Other programs of `$LARIMAR_HOME/bin` answer commands of `larimar`, declared in `$LARIMAR_HOME/plugins/<name>.toml`
-(a tool can add `larimar hello` that way). The libraries and services written in Larimar that a project
+(a tool can add `larimar hello` that way). The libraries written in Larimar that a project
 uses are named in `[dependencies]`, each with the folder of its project. ([manual, chapter 26](docs/manual.md#26-projects-larimartoml-and-larimar-build).)
 
 ## Editor support
 
 `larimar check [file|folder] [--json]` reports the errors without generating C. `larimar lsp` is the
 language server (see "The editor" in chapter 26 of the [manual](docs/manual.md)): the server keeps the open documents
-(`editor/docstore.lar`) and answers each request in a forked process that links and analyzes the program
-(`editor/session.lar`) and answers from the analysis (`editor/ide.lar`).
+(in a memory it compacts; `editor/opendocuments.lar` for the worker) and answers each request with a
+`larimarc lsp-worker`, a process that links and analyzes the program (`editor/session.lar`) and answers
+from the analysis (`editor/ide.lar`).
 
 `larimar test --list --json` lists the tests and `larimar test --json [file] [--test <name>]` runs them,
 one JSON object per line: that is how the VS Code extension shows them in its Testing view.
@@ -167,34 +171,32 @@ checks all of it.
 
 ## Source Files Overview
 
+Each folder of `src/compiler` has a README.md: what it does, and its API (written by
+`tools/reference.py` from the code). Every function: [docs/compiler-reference.md](docs/compiler-reference.md).
+
 | File | Purpose |
 |------|---------|
 | main.lar | CLI, project management |
-| syntax/lexer.lar | Tokenization |
-| syntax/parser.lar | The class Parser (tokens, where it reads) and `parseProgram` |
-| syntax/parser/ | The grammar, above each function: declarations, natives, types, statements, expressions |
-| syntax/ast.lar | AST node definitions |
+| pipeline.lar | One compilation (`Compilation`) and its passes |
+| syntax/ | Lexer, parser (its grammar, by theme), the tree (`ast.lar`) |
 | semantics/linker.lar | Modules and imports, native interfaces (and what tasks need) |
+| semantics/rules.lar | The rules about modules, one object each (`languageRules()`; `error[rule-id]`) |
 | semantics/types.lar | Type system, symbol tables |
-| semantics/analyzer.lar | Semantic analysis: its state, its entry, scopes and symbols |
-| semantics/analyzer/ | declarations, classes, statements, flow (what a result points to), compact, narrowing, threads, order |
-| semantics/expressions.lar | Expression type checking: types as written, names, members, indexes |
-| semantics/expressions/ | constants, conversions, literals, operators, calls, switches |
-| codegen/gen.lar | C code generation: the context of a function, the assembly of the output |
-| codegen/gen/ | types, classes, statements |
-| codegen/expressions.lar | C code generation for expressions: names, C types, values |
-| codegen/expressions/ | strings, operators, calls, clone, lambdas, patterns |
-| codegen/prune.lar | Only the C the program reaches: of what it generates, and of the runtime (runtime/) |
+| semantics/analyzer.lar, analyzer/ | Semantic analysis: declarations, classes, statements, flow, compact, narrowing, threads, order |
+| semantics/expressions.lar, expressions/ | Expressions: constants, conversions, literals, operators, calls, switches |
+| codegen/gen.lar, gen/ | C generation: the file, types, classes, statements |
+| codegen/expressions.lar, expressions/ | C of expressions: strings, operators, calls, clone, lambdas, patterns |
+| codegen/localnames.lar | The names of the compiler's variables in the C |
+| codegen/prune.lar | Only the C the program reaches: of what it generates, and of the runtime (src/runtime/) |
 | codegen/debugmap.lar | Debug map: C names and types of every variable, for the debugger |
 | editor/session.lar | One analysis without C; larimar check |
-| editor/lsp.lar | Language server: JSON-RPC, documents, forked analyses |
+| editor/lsp.lar | Language server: JSON-RPC, documents, workers |
 | editor/ide.lar | Editor answers: hover, definition, references, symbols, completion |
-| editor/docstore.lar | The editor's open documents (freeable C memory) |
+| editor/opendocuments.lar | The editor's open documents, which the linker reads before the disk |
 | editor/dap.lar | Debugger: DAP adapter over lldb-dap, values shown as Larimar |
 | project/cc.lar | Calling the C compiler and other programs |
 | project/testing.lar | Test runner: larimar test and test functions |
-| project/libraries.lar | Libraries and services of [dependencies]: their folders and their checks |
-| project/services.lar | Services: what they give, the module a program imports, the main of their executable |
+| project/libraries.lar | Libraries of [dependencies]: their folders and their checks |
 
 ## License
 

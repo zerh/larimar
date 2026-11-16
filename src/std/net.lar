@@ -1,0 +1,999 @@
+// std.net: TCP and UDP. A TcpSocket is read and written directly (read, write), like a socket in C,
+// and it is also an InputStream and an OutputStream, so Reader and copy() work on it as on a file.
+// TcpServer and UdpServer are the loop of a server, written for you: you give what to do with each
+// connection (or datagram), as a `thread safe` function, and run() serves them with the threads you say.
+//
+// TCP connections. A TcpSocket is read and written directly (read, write), like a socket in C,
+// and it is also an InputStream and an OutputStream, so Reader and copy() work on it as on a file.
+//
+//   import std.net { TcpSocket, TcpListener, NetError };
+//   import std.io { Reader };
+//
+//   let socket: TcpSocket = TcpSocket.connect("example.com", 80);
+//   socket.writeText("GET / HTTP/1.0\r\nHost: example.com\r\n\r\n");
+//   let lines: Reader = { from: socket };
+//   println(lines.readLine() ?? "");                  // HTTP/1.0 200 OK
+//
+//   let server: TcpListener = TcpListener.bind("127.0.0.1", 8080);
+//   while (true) {
+//       let client: TcpSocket = server.accept();      // closed when the turn's memory is freed
+//       ...
+//   }
+//
+// Sockets block (read waits for data; setTimeout limits the wait). A socket closes itself when the memory
+// it lives in is freed, so one accepted in a loop is never left open. On Windows (Winsock) the program
+// is linked with ws2_32 by larimar build.
+//
+// An EventLoop waits on many sockets at once (poll): TcpServer's own thread is one, watching the listener
+// and the kept connections; it is there for a server of your own too.
+//
+// Written in Larimar over the C functions of the system (BSD sockets, Winsock on Windows): the C here is
+// declarations and a few small functions, and the TLS servers (OpenSSL, loaded at run time).
+
+import std.io { IoError };
+import std.io { InputStream, OutputStream, Closeable, buffer };
+import std.time as Time;
+import std.os;
+import std.platform { Platform, OS };
+import std.net.internal { Socket };
+import std.net.posix { PosixNet };
+import std.net.windows { WindowsNet, WindowsTlsServers };
+import std.net.openssl { LinuxOpenSslNames, MacOSOpenSslNames, OpenSslServers };
+
+/**
+ * A connection both ways: a TcpSocket and a TlsSocket are one, and so is what a TlsProvider (std.net.tls)
+ * gives. Whoever speaks a protocol (std.net.http, a server's onConnect) works on a Connection, so it does
+ * not care whether it is encrypted.
+ */
+public interface Connection {
+    /** Reads what has arrived, up to the length of buffer; 0 when the other side closed. */
+    function read(buffer: byte[]): int32 throws IoError;
+    /** Writes all the bytes, or throws. */
+    function write(bytes: byte[]): void throws IoError;
+    /** Writes a text (its UTF-8 bytes). */
+    function writeText(text: String): void throws IoError;
+    function flush(): void throws IoError;
+    function close(): void throws IoError;
+    /** The connection as an InputStream: for a Reader, or copy(). */
+    function input(): InputStream;
+    /** The connection as an OutputStream. */
+    function output(): OutputStream;
+}
+
+/** Why something of the network failed. */
+public enum NetError {
+    HostNotFound(host: String),
+    Refused,
+    Timeout,
+    Closed,
+    Reset,
+    AddressInUse,
+    /** The encrypted part failed: a bad certificate, a failed handshake. */
+    Tls(reason: String),
+    /** There is no TLS to use: what is missing (the system's library was not found, say). */
+    TlsUnavailable(what: String),
+    Other(code: int32)
+}
+
+/** "connection refused", "host not found: example.org"... */
+public function message(e: NetError): String {
+    return switch (e) {
+        case HostNotFound { host } -> "host not found: ${host}";
+        case Refused -> "connection refused";
+        case Timeout -> "timed out";
+        case Closed -> "connection closed";
+        case Reset -> "connection reset";
+        case AddressInUse -> "address already in use";
+        case Tls { reason } -> "tls: ${reason}";
+        case TlsUnavailable { what } -> "tls not available: ${what}";
+        case Other { code } -> "network error ${code}";
+    };
+}
+
+// ---- the C of the system ---------------------------------------------------------------------
+//
+// BSD sockets and Winsock are almost the same functions (declared below once). What differs is in a
+// class for each system: its headers, what a Socket is in C, and the few things done differently.
+
+
+native struct AddrInfo = struct addrinfo {
+    let ai_flags: int32;
+    let ai_family: int32;
+    let ai_socktype: int32;
+    let ai_protocol: int32;
+    let ai_addrlen: uint32;
+    let ai_addr: SockAddr*;
+    let ai_next: AddrInfo*;
+};
+native struct SockAddr = struct sockaddr { let sa_family: uint16; };
+/** Big enough for an IPv4 or IPv6 address; the port is at the same place in both. */
+native struct SockAddrIn6 = struct sockaddr_in6 { let sin6_port: uint16; };
+/** What setsockopt and getsockname take as "a pointer to anything". */
+native type Untyped;
+native const AF_UNSPEC: int32;
+native const SOCK_STREAM: int32;
+native const SOCK_DGRAM: int32;
+native const NI_NUMERICHOST: int32;
+native const NI_NUMERICSERV: int32;
+native const AI_PASSIVE: int32;
+native const IPPROTO_TCP: int32;
+native const TCP_NODELAY: int32;
+native const SOL_SOCKET: int32;
+native const SO_REUSEADDR: int32;
+native const SO_RCVTIMEO: int32;
+native const SO_SNDTIMEO: int32;
+native const SOCKADDR_IN6_SIZE: uint32 = c"(unsigned)sizeof(struct sockaddr_in6)";
+native function getaddrinfo(host: String, service: String, hints: AddrInfo*, list: AddrInfo**): int32;
+native function freeaddrinfo(list: AddrInfo*): void;
+native function socket(family: int32, kind: int32, protocol: int32): Socket?;
+native function connect(s: Socket, addr: SockAddr*, length: uint32): int32;
+native function bind(s: Socket, addr: SockAddr*, length: uint32): int32;
+native function listen(s: Socket, backlog: int32): int32;
+native function accept(s: Socket, addr: SockAddr*, length: Untyped?): Socket?;
+native function recv(s: Socket, buffer: byte[], flags: int32): int64;
+native function send(s: Socket, bytes: byte[], flags: int32): int64;
+native function shutdown(s: Socket, how: int32): int32;
+native function setsockopt(s: Socket, level: int32, name: int32, value: Untyped, length: int32): int32;
+native function getsockname(s: Socket, addr: SockAddr*, length: Untyped): int32;
+native function ntohs(n: uint16): uint16;
+native function sendto(s: Socket, bytes: byte[], flags: int32, to: SockAddr*, length: uint32): int64;
+native function recvfrom(s: Socket, buffer: byte[], flags: int32, from: SockAddr*, length: Untyped): int64;
+native function getnameinfo(addr: SockAddr*, length: uint32, host: byte[], service: byte[], flags: int32): int32;
+
+// For the servers: a copy of a socket (another descriptor for the same connection, which a worker thread
+// owns and closes), taking one back as a Socket, and waiting a while for something to read.
+native function lar_net_dup(s: Socket): int64;
+native function lar_net_adopt(n: int64): Socket?;
+native function lar_net_readable(s: Socket, ms: int32): int32;
+native function lar_net_number(s: Socket): int64;
+native function lar_net_poll(fds: int64[], ready: int32[], ms: int32): int32;
+
+// What std.net does differently on each system: the static functions of PosixNet and WindowsNet
+// (std/net/posix.lar, windows.lar), chosen by the system.
+
+/** Before a connection: Winsock started (it counts the calls); on Unix, a closed peer is an error, not a SIGPIPE. */
+function start(): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixNet.start();
+        case Windows -> WindowsNet.start();
+    }
+}
+
+/** Why the last call failed, as a code: 2 refused, 3 timeout, 5 reset, 6 address in use, 100+ other. */
+function lastError(): int32 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixNet.lastError();
+        case Windows -> WindowsNet.lastError();
+    };
+}
+
+/** The call was interrupted by a signal: try it again. */
+function interrupted(): bool {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixNet.interrupted();
+        case Windows -> WindowsNet.interrupted();
+    };
+}
+
+/** Nothing more will be written to this socket. */
+function finishWriting(s: Socket): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixNet.finishWriting(s);
+        case Windows -> WindowsNet.finishWriting(s);
+    }
+}
+
+/** How long reads (SO_RCVTIMEO) or writes (SO_SNDTIMEO) wait: ms, 0 for no limit. */
+function setSocketTimeout(s: Socket, which: int32, ms: int32): void {
+    switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixNet.setTimeout(s, which, ms);
+        case Windows -> WindowsNet.setTimeout(s, which, ms);
+    }
+}
+
+// error codes, as NetError: 1 host not found, 2 refused, 3 timeout, 4 closed, 5 reset, 6 address in use, 100+ other
+
+
+/** The NetError of a code. */
+function raise(code: int32, host: String): void throws NetError {
+    switch (code) {
+        case 0 -> {}
+        case 1 -> throw NetError.HostNotFound(host.clone());
+        case 2 -> throw NetError.Refused;
+        case 3 -> throw NetError.Timeout;
+        case 4 -> throw NetError.Closed;
+        case 5 -> throw NetError.Reset;
+        case 6 -> throw NetError.AddressInUse;
+        default -> throw NetError.Other(code);
+    }
+}
+
+/** For the stream interfaces, which throw IoError: what failed, as a path-like text. */
+function ioFailure(code: int32): void throws IoError {
+    switch (code) {
+        case 3 -> throw IoError.TimedOut;
+        case 4 -> throw IoError.Closed;
+        case 5 -> throw IoError.Closed;              // reset by the other side
+        default -> throw IoError.Failed("socket: error ${code}");
+    }
+}
+
+/** A bool option of a socket (TCP_NODELAY, SO_REUSEADDR). */
+function option(s: Socket, level: int32, name: int32): void {
+    let one: int32 = 1;
+    setsockopt(s, level, name, &one as Untyped, 4);
+}
+
+/** A TCP connection. */
+public class TcpSocket implements InputStream, OutputStream, Closeable, Connection {
+    let socket: Socket? = null;
+    let readLimit: int32 = 0;          // ms a read may wait (0: no limit)
+    let writeLimit: int32 = 0;         // ms a write may wait (0: no limit)
+    let deadline: int64 = 0;           // Time.monotonic() after which reads and writes fail (0: none)
+
+    /** Connects to host:port (a name or an IP, v4 or v6). */
+    static function connect(host: String, port: int32): TcpSocket throws NetError {
+        start();
+        let hints: AddrInfo = { ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM };
+        let list: AddrInfo* = null;
+        if (getaddrinfo(host, "${port}", &hints, &list) != 0 || list == null) { throw NetError.HostNotFound(host.clone()); }
+        let s: TcpSocket = {};
+        let code: int32 = 2;
+        let a: AddrInfo* = list;
+        while (a != null && s.socket == null) {
+            s.socket = socket(a.ai_family, a.ai_socktype, a.ai_protocol);
+            if (s.socket == null) {
+                code = lastError();
+            } else if (connect(s.socket!, a.ai_addr, a.ai_addrlen) != 0) {
+                code = lastError();
+                release(s.socket);
+                s.socket = null;
+            }
+            a = a.ai_next;
+        }
+        freeaddrinfo(list);
+        if (s.socket == null) { raise(code, host); }
+        option(s.socket!, IPPROTO_TCP, TCP_NODELAY);      // small writes go out now
+        return s;
+    }
+
+    /** The socket, or an IoError when it is closed. */
+    function live(): Socket throws IoError {
+        if (self.socket == null) { throw IoError.Closed; }
+        return self.socket!;
+    }
+
+    /**
+     * Before a read or a write: with a deadline, the wait is what is left of it (or the limit, when shorter),
+     * and past it the call fails with IoError.TimedOut. A client that sends one byte at a time cannot keep
+     * the connection longer than its deadline.
+     */
+    function prepare(writing: bool): void throws IoError {
+        if (self.deadline == 0 || self.socket == null) { return; }
+        let left: int64 = self.deadline - Time.monotonic();
+        if (left <= 0) { throw IoError.TimedOut; }
+        let limit: int64 = (writing ? self.writeLimit : self.readLimit) as int64;
+        let ms: int32 = (limit > 0 && limit < left ? limit : left) as int32;
+        if (writing) { sendTimeout(self.socket!, ms); } else { receiveTimeout(self.socket!, ms); }
+    }
+
+    /** Reads what has arrived, up to the length of buffer; 0 when the other side closed. */
+    override function read(buffer: byte[]): int32 throws IoError {
+        let s: Socket = self.live();
+        self.prepare(false);
+        if (buffer.length == 0) { return 0; }
+        while (true) {
+            let n: int64 = recv(s, buffer, 0);
+            if (n >= 0) { return n as int32; }
+            if (!interrupted()) { ioFailure(lastError()); }
+        }
+        return 0;
+    }
+
+    /** Writes all the bytes, or throws. */
+    override function write(bytes: byte[]): void throws IoError {
+        let s: Socket = self.live();
+        self.prepare(true);
+        let n: int64 = 0;
+        while (true) {
+            n = send(s, bytes, 0);
+            if (n >= 0 || !interrupted()) { break; }
+        }
+        if (n < 0) { ioFailure(lastError()); }
+        if (n < bytes.length as int64) {           // part of it (a timeout, a signal): the rest, from a copy
+            let rest: byte[*] = [];
+            for (i in n as int32..bytes.length) { rest.push(bytes[i]); }
+            self.write(rest);
+        }
+    }
+
+    /** Writes a text (its UTF-8 bytes). */
+    override function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+
+    override function input(): InputStream { return self; }
+    override function output(): OutputStream { return self; }
+
+    /** Nothing to do: what is written goes to the system at once (TCP_NODELAY). */
+    override function flush(): void throws IoError {}
+
+    /** How long read and write wait before failing with a timeout (0: no limit). */
+    function setTimeout(ms: int32): void {
+        self.readLimit = ms;
+        self.writeLimit = ms;
+        if (self.socket != null) { timeout(self.socket!, ms); }
+    }
+
+    /** Says that nothing more will be written: the other side reads the end, and can still answer. */
+    function finishWriting(): void {
+        if (self.socket == null) { return; }
+        finishWriting(self.socket!);
+    }
+
+    function isOpen(): bool { return self.socket != null; }
+
+    /**
+     * The socket of the system, for a C library that works on an open connection (a TLS library): an
+     * extern function that takes a Socket receives the descriptor (a SOCKET on Windows). It stays this
+     * object's: it is closed with it.
+     */
+    function handle(): Socket? { return self.socket; }
+
+    /** Its number for the system (the descriptor): what an EventLoop watches; -1 once closed. */
+    function number(): int64 { return self.socket != null ? lar_net_number(self.socket!) : -1; }
+
+    /** The local port of the connection. */
+    function localPort(): int32 { return portOf(self.socket); }
+
+    /** Closes it now; otherwise it closes when its memory is freed. */
+    override function close(): void throws IoError {
+        release(self.socket);
+        self.socket = null;
+    }
+}
+
+/** How long reads and writes of a socket wait before failing with a timeout (0: no limit). */
+function timeout(s: Socket, ms: int32): void {
+    receiveTimeout(s, ms);
+    sendTimeout(s, ms);
+}
+
+function receiveTimeout(s: Socket, ms: int32): void { socketTimeout(s, SO_RCVTIMEO, ms); }
+function sendTimeout(s: Socket, ms: int32): void { socketTimeout(s, SO_SNDTIMEO, ms); }
+
+function socketTimeout(s: Socket, which: int32, ms: int32): void {
+    setSocketTimeout(s, which, ms > 0 ? ms : 0);
+}
+
+/** The local port of a socket (a listener bound to port 0 gets one from the system). */
+function portOf(s: Socket?): int32 {
+    if (s == null) { return 0; }
+    let a: SockAddrIn6 = {};
+    let length: uint32 = SOCKADDR_IN6_SIZE;
+    if (getsockname(s!, &a as SockAddr*, &length as Untyped) != 0) { return 0; }
+    return ntohs(a.sin6_port) as int32;
+}
+
+/** Waits for connections on a port. */
+public class TcpListener implements Closeable {
+    let socket: Socket? = null;
+
+    /** Listens on host:port ("0.0.0.0" or "::" for every address; port 0: one the system chooses). */
+    static function bind(host: String, port: int32): TcpListener throws NetError {
+        start();
+        let hints: AddrInfo = { ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM, ai_flags: AI_PASSIVE };
+        let list: AddrInfo* = null;
+        let at: String = host == "" ? "0.0.0.0" : host;
+        if (getaddrinfo(at, "${port}", &hints, &list) != 0 || list == null) { throw NetError.HostNotFound(host.clone()); }
+        let l: TcpListener = {};
+        l.socket = socket(list.ai_family, list.ai_socktype, list.ai_protocol);
+        let code: int32 = 0;
+        if (l.socket == null) {
+            code = lastError();
+        } else {
+            option(l.socket!, SOL_SOCKET, SO_REUSEADDR);
+            if (bind(l.socket!, list.ai_addr, list.ai_addrlen) != 0 || listen(l.socket!, 128) != 0) {
+                code = lastError();
+                release(l.socket);
+                l.socket = null;
+            }
+        }
+        freeaddrinfo(list);
+        raise(code, host);
+        return l;
+    }
+
+    /** Waits for the next connection. */
+    function accept(): TcpSocket throws NetError {
+        if (self.socket == null) { throw NetError.Closed; }
+        let s: TcpSocket = {};
+        while (s.socket == null) {
+            s.socket = accept(self.socket!, null, null);
+            if (s.socket == null && !interrupted()) { raise(lastError(), ""); }
+        }
+        option(s.socket!, IPPROTO_TCP, TCP_NODELAY);
+        return s;
+    }
+
+    /** The port it listens on (the one the system chose, after bind with port 0). */
+    function port(): int32 { return portOf(self.socket); }
+
+    /** Its number for the system (the descriptor): what an EventLoop watches; -1 once closed. */
+    function number(): int64 { return self.socket != null ? lar_net_number(self.socket!) : -1; }
+
+    override function close(): void throws IoError {
+        release(self.socket);
+        self.socket = null;
+    }
+}
+
+// ---- servers -----------------------------------------------------------------------------
+
+/**
+ * Tells a server to stop: give one to its literal (stop: quit) and call quit.stop() from anywhere, the
+ * handler included. The server notices within a fifth of a second and run() returns after the requests
+ * being served.
+ */
+public synchronized class StopSignal {
+    let stopped: bool = false;
+    function stop(): void { self.stopped = true; }
+    function isStopped(): bool { return self.stopped; }
+}
+
+/** The server's StopSignal, or a new one that nobody stops. */
+function signalOf(given: StopSignal?): StopSignal {
+    if (given != null) { return given!; }
+    return {};
+}
+
+/**
+ * Connections waiting for a worker, as copies of their sockets (numbers). It holds at most `limit`: when
+ * every worker is busy and it is full, put says no and the server closes the connection at once, instead
+ * of piling up connections that would time out anyway.
+ */
+synchronized class Handoff {
+    let items: int64[*] = [];
+    let head: int32 = 0;
+    let closed: bool = false;
+    let limit: int32 = 100;
+
+    function setLimit(n: int32): void { self.limit = n > 0 ? n : 1; }
+
+    function put(n: int64): bool {
+        if (self.items.length - self.head >= self.limit) { return false; }
+        self.items.push(n);
+        return true;
+    }
+
+    function close(): void { self.closed = true; }
+
+    /** The next one, waiting for it; -1 when closed and empty. */
+    function take(): int64 wait until (self.head < self.items.length || self.closed) {
+        if (self.head == self.items.length) { return -1; }
+        let n: int64 = self.items[self.head];
+        self.head += 1;
+        if (self.head == self.items.length) {
+            self.items.clear();
+            self.head = 0;
+        }
+        return n;
+    }
+}
+
+/** Connections a worker gives back to wait for their next request (keepAlive), as socket numbers. */
+synchronized class Returns {
+    let items: int64[*] = [];
+    let head: int32 = 0;
+
+    function put(n: int64): void { self.items.push(n); }
+
+    /** The next one, or -1 when there is none (it does not wait). */
+    function next(): int64 {
+        if (self.head == self.items.length) {
+            self.items.clear();
+            self.head = 0;
+            return -1;
+        }
+        let n: int64 = self.items[self.head];
+        self.head += 1;
+        return n;
+    }
+}
+
+/**
+ * A TCP server, plain or with TLS (https): it listens on host:port and gives each connection to onConnect,
+ * in one of its threads.
+ *
+ *   let server: TcpServer = {
+ *       port: 8080,                                     // host: "127.0.0.1" unless you say "0.0.0.0"
+ *       threads: 16,                                    // connections served at the same time
+ *       stop: quit,                                     // a StopSignal (also Ctrl+C and SIGTERM, after os.catchTermination())
+ *       onConnect: (client: Connection) -> { ... }      // thread safe: checked like the run of a Thread
+ *   };
+ *   server.run();
+ *
+ * With `tls: OpenSslProvider.load("fullchain.pem", "privkey.pem")` it is https: onConnect gets the
+ * connection already decrypted (a TlsSocket). Without keepAlive, the connection closes when onConnect
+ * returns. With keepAlive, it stays open, and when the client sends again onConnect is called again with
+ * it; onConnect ends it with close(). When a kept client closes, onConnect is called once more and its first
+ * read gives 0 (a Reader's readLine, null): close it then. A plain connection that waits for its next request does not hold a
+ * thread: one thread (the one of run) watches all of them with poll. (A TLS one keeps its thread while it
+ * waits, for now.)
+ *
+ * The limits, with the values of servers like nginx and Tomcat:
+ *   - readTimeout, writeTimeout (30 s): how long one read or one write may wait;
+ *   - requestTimeout (60 s): how long one call of onConnect may read and write in all: a client that sends
+ *     one byte at a time cannot keep a thread longer;
+ *   - idleTimeout (75 s): how long a kept connection may wait for its next request;
+ *   - maxQueue (100): connections waiting for a free thread; more are closed at once.
+ * A limit of 0 means none. When one is passed, reads and writes fail with IoError.TimedOut.
+ */
+public class TcpServer {
+    let host: String = "127.0.0.1";
+    let port: int32 = 0;
+    let threads: int32 = 1;
+    let stop: StopSignal? = null;
+    let tls: OpenSslProvider? = null;
+    /** How long a client has to finish the TLS handshake (ms). */
+    let handshakeTimeout: int32 = 10000;
+    let readTimeout: int32 = 30000;
+    let writeTimeout: int32 = 30000;
+    let requestTimeout: int32 = 60000;
+    let idleTimeout: int32 = 75000;
+    let maxQueue: int32 = 100;
+    let keepAlive: bool = false;
+    let onConnect: (Connection) -> void thread safe;
+
+    /** Listens and serves until its StopSignal says stop (or os.catchTermination() saw Ctrl+C or SIGTERM). Throws when it cannot listen. */
+    function run(): void throws NetError {
+        let listener: TcpListener = TcpListener.bind(self.host, self.port);
+        let handler: (Connection) -> void thread safe = self.onConnect;
+        let signal: StopSignal = signalOf(self.stop);
+        let limits: Limits = {
+            read: self.readTimeout, write: self.writeTimeout, request: self.requestTimeout, idle: self.idleTimeout,
+            handshake: self.handshakeTimeout, keepAlive: self.keepAlive
+        };
+        let provider: OpenSslProvider? = self.tls;
+        let queue: Handoff = {};
+        queue.setLimit(self.maxQueue);
+        let returns: Returns = {};
+        {
+            let workers: byte[*] = [] in heap;            // freed at the '}': it waits for the threads
+            for (i in 0..(self.threads > 1 ? self.threads : 1)) {
+                let t: Thread = { run: () -> { serveConnections(queue, returns, limits, provider, handler); } } in workers;
+                t.start();
+            }
+            acceptInto(listener, signal, queue, returns, limits);
+        }
+    }
+}
+
+/** The limits of a server, for its threads (a value: each thread has a copy). */
+struct Limits {
+    let read: int32;
+    let write: int32;
+    let request: int32;
+    let idle: int32;
+    let handshake: int32;
+    let keepAlive: bool;
+}
+
+/**
+ * Waits on many sockets at once, by their numbers (TcpSocket.number()): watch them, wait, and see which
+ * are ready to read (or were closed). It is the loop of TcpServer's own thread: the listener and the kept
+ * connections that wait for their next request.
+ *
+ *   let loop: EventLoop = {};
+ *   loop.watch(listener.number());
+ *   while (true) {
+ *       loop.wait(200);                                  // ms at most
+ *       for (i in 0..loop.count()) { if (loop.isReady(i)) { ... loop.socket(i) ... } }
+ *   }
+ *
+ * unwatch(i) puts the last one in place i: walk the sockets from the end when taking some out. It uses
+ * poll (WSAPoll on Windows): enough for thousands of connections; epoll and kqueue would be its next step.
+ */
+public class EventLoop {
+    let fds: int64[*] = [];
+    let since: int64[*] = [];          // Time.monotonic() when each was watched
+    let ready: int32[*] = [];
+
+    /** Watches one more socket (its number); it is the last one, count() - 1. */
+    function watch(number: int64): void {
+        self.fds.push(number);
+        self.since.push(Time.monotonic());
+        self.ready.push(0);
+    }
+
+    /** Stops watching the one in place i (the last one takes its place). */
+    function unwatch(i: int32): void {
+        let last: int32 = self.fds.length - 1;
+        self.fds[i] = self.fds[last];
+        self.since[i] = self.since[last];
+        self.ready[i] = self.ready[last];
+        self.fds.pop();
+        self.since.pop();
+        self.ready.pop();
+    }
+
+    function count(): int32 { return self.fds.length; }
+    function socket(i: int32): int64 { return self.fds[i]; }
+    /** ms since the one in place i was watched. */
+    function waited(i: int32): int64 { return Time.monotonic() - self.since[i]; }
+    /** After wait: the one in place i can be read without waiting (or was closed). */
+    function isReady(i: int32): bool { return self.ready[i] != 0; }
+
+    /** Waits until one of them is ready, or ms pass; how many are ready (0: none, -1: error). */
+    function wait(ms: int32): int32 {
+        for (i in 0..self.ready.length) { self.ready[i] = 0; }
+        if (self.fds.length == 0) {
+            Time.sleep(ms as int64);
+            return 0;
+        }
+        return lar_net_poll(self.fds, self.ready, ms);
+    }
+}
+
+/**
+ * The loop of a server's own thread: it accepts connections and gives them to the workers (copies of their
+ * sockets, which the workers own), and it watches the kept connections that wait for their next request:
+ * one that sends goes back to the workers, one that waits longer than idleTimeout is closed. It ends when
+ * the signal says stop (or the program was asked to end), and closes the handoff, so the workers end too.
+ */
+function acceptInto(listener: TcpListener, signal: StopSignal, queue: Handoff, returns: Returns, limits: Limits): void throws NetError {
+    let loop: EventLoop = {};                           // 0: the listener; then the kept connections
+    loop.watch(lar_net_number(listener.socket!));
+    try {
+        while (!signal.isStopped() && !os.terminating()) {
+            while (true) {                              // what the workers gave back
+                let n: int64 = returns.next();
+                if (n < 0) { break; }
+                loop.watch(n);
+            }
+            loop.wait(200);
+            if (loop.isReady(0)) {
+                let client: TcpSocket = listener.accept();
+                let n: int64 = lar_net_dup(client.socket!);
+                if (n >= 0 && !queue.put(n)) { closeNumber(n); }    // every worker busy and the queue full
+            }                                           // this copy closes; the worker has its own
+            let i: int32 = loop.count() - 1;
+            while (i >= 1) {
+                let wake: bool = loop.isReady(i);
+                if (wake || (limits.idle > 0 && loop.waited(i) > limits.idle as int64)) {
+                    let n: int64 = loop.socket(i);
+                    if (!wake || !queue.put(n)) { closeNumber(n); }
+                    loop.unwatch(i);
+                }
+                i -= 1;
+            }
+        }
+    } catch (NetError e) {
+        queue.close();
+        closeKept(loop);
+        throw e;
+    }
+    queue.close();
+    closeKept(loop);
+}
+
+/** Closes the kept connections a server's loop still watches (all but the listener, in place 0). */
+function closeKept(loop: EventLoop): void {
+    for (i in 1..loop.count()) { closeNumber(loop.socket(i)); }
+}
+
+/** Closes a socket known only by its number. */
+function closeNumber(n: int64): void {
+    let s: Socket? = lar_net_adopt(n);
+    release(s);
+}
+
+/** A worker of a TcpServer: it serves connections until the server closes the handoff. */
+function serveConnections(queue: Handoff, returns: Returns, limits: Limits, provider: OpenSslProvider?, handler: (Connection) -> void thread safe): void {
+    let context: int64 = provider != null ? provider!.contextNumber() : 0;
+    while (true) {
+        let n: int64 = queue.take();
+        if (n < 0) { return; }
+        let client: TcpSocket = {};
+        client.socket = lar_net_adopt(n);
+        if (client.socket == null) { continue; }
+        client.readLimit = limits.read;
+        client.writeLimit = limits.write;
+        if (provider == null) {
+            client.deadline = limits.request > 0 ? Time.monotonic() + (limits.request as int64) : 0;
+            handler(client);
+            if (limits.keepAlive && client.isOpen()) {   // it waits for its next request in the server's thread
+                let copy: int64 = lar_net_dup(client.socket!);
+                if (copy >= 0) { returns.put(copy); }
+            }
+            continue;
+        }
+        client.setTimeout(limits.handshake);
+        let secure: TlsSocket = { tcp: client };
+        secure.session = lar_tls_server_accept(context, client.socket!);
+        if (lar_openssl_conn_error(secure.session!) != 0) { continue; }     // not TLS, or too slow: dropped
+        client.readLimit = limits.read;
+        client.writeLimit = limits.write;
+        while (true) {
+            client.deadline = limits.request > 0 ? Time.monotonic() + (limits.request as int64) : 0;
+            handler(secure);
+            if (!limits.keepAlive || !secure.isOpen()) { break; }
+            let wait: int32 = limits.idle > 0 ? limits.idle : -1;
+            if (lar_net_readable(client.socket!, wait) == 0) { break; }   // idle too long: closed
+        }
+    }
+}
+
+// ---- UDP -----------------------------------------------------------------------------------
+
+/** Where a datagram comes from or goes to: an IP (or a name, to send) and a port. */
+public struct Address {
+    let host: String;
+    let port: int32;
+}
+
+/** What receive() got: how many bytes of the buffer, and from where. */
+public struct Datagram {
+    let length: int32;
+    let from: Address;
+}
+
+/**
+ * A UDP socket: datagrams, each one whole, with no connection. Bound to a port to receive (a server), or
+ * to any port the system chooses (open(), a client); both send with sendTo.
+ *
+ *   let socket: UdpSocket = UdpSocket.open();
+ *   socket.sendTo("ping".bytes(), Address { host: "127.0.0.1", port: 9000 });
+ *   let data: byte[*] = buffer(1500);
+ *   let got: Datagram = socket.receive(data);         // waits for one
+ */
+public class UdpSocket implements Closeable {
+    let socket: Socket? = null;
+    let family: int32 = 0;
+
+    /** Receives on host:port ("0.0.0.0" or "::" for every address; port 0: one the system chooses). */
+    static function bind(host: String, port: int32): UdpSocket throws NetError {
+        start();
+        let hints: AddrInfo = { ai_family: AF_UNSPEC, ai_socktype: SOCK_DGRAM, ai_flags: AI_PASSIVE };
+        let list: AddrInfo* = null;
+        let at: String = host == "" ? "0.0.0.0" : host;
+        if (getaddrinfo(at, "${port}", &hints, &list) != 0 || list == null) { throw NetError.HostNotFound(host.clone()); }
+        let u: UdpSocket = { family: list.ai_family };
+        u.socket = socket(list.ai_family, list.ai_socktype, list.ai_protocol);
+        let code: int32 = 0;
+        if (u.socket == null) {
+            code = lastError();
+        } else if (bind(u.socket!, list.ai_addr, list.ai_addrlen) != 0) {
+            code = lastError();
+            release(u.socket);
+            u.socket = null;
+        }
+        freeaddrinfo(list);
+        raise(code, host);
+        return u;
+    }
+
+    /** A socket to send from (IPv4), on a port the system chooses; the answers come back to it. */
+    static function open(): UdpSocket throws NetError { return UdpSocket.bind("0.0.0.0", 0); }
+
+    /** Sends bytes as one datagram (it may be lost: UDP does not resend). */
+    function sendTo(bytes: byte[], to: Address): void throws NetError {
+        if (self.socket == null) { throw NetError.Closed; }
+        let hints: AddrInfo = { ai_family: self.family, ai_socktype: SOCK_DGRAM };
+        let list: AddrInfo* = null;
+        if (getaddrinfo(to.host, "${to.port}", &hints, &list) != 0 || list == null) { throw NetError.HostNotFound(to.host.clone()); }
+        let n: int64 = -1;
+        while (true) {
+            n = sendto(self.socket!, bytes, 0, list.ai_addr, list.ai_addrlen);
+            if (n >= 0 || !interrupted()) { break; }
+        }
+        let code: int32 = n < 0 ? lastError() : 0;
+        freeaddrinfo(list);
+        raise(code, to.host);
+    }
+
+    /** Waits for one datagram, into buffer (what does not fit is lost), and says its length and sender. */
+    function receive(buffer: byte[]): Datagram throws NetError {
+        if (self.socket == null) { throw NetError.Closed; }
+        let a: SockAddrIn6 = {};
+        let length: uint32 = SOCKADDR_IN6_SIZE;
+        let n: int64 = -1;
+        while (true) {
+            n = recvfrom(self.socket!, buffer, 0, &a as SockAddr*, &length as Untyped);
+            if (n >= 0 || !interrupted()) { break; }
+        }
+        if (n < 0) { raise(lastError(), ""); }
+        let host: byte[64] = [];
+        let service: byte[16] = [];
+        for (i in 0..64) { host.push(0 as byte); }
+        for (i in 0..16) { service.push(0 as byte); }
+        getnameinfo(&a as SockAddr*, length, host, service, NI_NUMERICHOST | NI_NUMERICSERV);
+        let end: int32 = 0;
+        while (end < host.length && host[end] != 0 as byte) { end += 1; }
+        return Datagram { length: n as int32, from: Address { host: stringOfRange(host, 0, end), port: ntohs(a.sin6_port) as int32 } };
+    }
+
+    /** How long receive and sendTo wait before failing with NetError.Timeout (0: no limit). */
+    function setTimeout(ms: int32): void {
+        if (self.socket != null) { timeout(self.socket!, ms); }
+    }
+
+    function isOpen(): bool { return self.socket != null; }
+
+    /** The local port (the one the system chose, after open() or bind with port 0). */
+    function port(): int32 { return portOf(self.socket); }
+
+    /** Closes it now; otherwise it closes when its memory is freed. */
+    override function close(): void throws IoError {
+        release(self.socket);
+        self.socket = null;
+    }
+}
+
+// ---- UdpServer -----------------------------------------------------------------------------
+
+/**
+ * A UDP server: it receives on host:port and gives each datagram to onReceive (the socket to answer
+ * with, the bytes, who sent them), in one of its threads. Each thread has its own copy of the socket,
+ * on the same port, so the answers come from the port the client wrote to.
+ *
+ *   let quit: StopSignal = {};
+ *   let server: UdpServer = {
+ *       port: 9000,
+ *       threads: 4,
+ *       stop: quit,
+ *       onReceive: (socket: UdpSocket, data: byte[], from: Address) -> { socket.sendTo(data, from); }
+ *   };
+ *   server.run();                                     // until quit.stop()
+ */
+public class UdpServer {
+    let host: String = "127.0.0.1";
+    let port: int32 = 0;
+    let threads: int32 = 1;
+    let stop: StopSignal? = null;
+    /** The largest datagram it takes whole (bytes); the rest of a bigger one is lost. */
+    let maxSize: int32 = 65507;
+    let onReceive: (UdpSocket, byte[], Address) -> void thread safe;
+
+    /** Receives and serves until its StopSignal says stop. Throws when it cannot bind. */
+    function run(): void throws NetError {
+        let socket: UdpSocket = UdpSocket.bind(self.host, self.port);
+        socket.setTimeout(200);                           // the copies too: they look at the signal
+        let handler: (UdpSocket, byte[], Address) -> void thread safe = self.onReceive;
+        let signal: StopSignal = signalOf(self.stop);
+        let family: int32 = socket.family;
+        let maxSize: int32 = self.maxSize;
+        let workers: byte[*] = [] in heap;                // freed when run returns: it waits for the threads
+        for (i in 0..(self.threads > 1 ? self.threads : 1)) {
+            let n: int64 = lar_net_dup(socket.socket!);
+            let t: Thread = { run: () -> { serveDatagrams(n, family, maxSize, signal, handler); } } in workers;
+            t.start();
+        }
+    }
+}
+
+/** A worker of a UdpServer, on its own copy (n) of the server's socket. */
+function serveDatagrams(n: int64, family: int32, maxSize: int32, signal: StopSignal,
+                        handler: (UdpSocket, byte[], Address) -> void thread safe): void {
+    let socket: UdpSocket = { family: family };
+    socket.socket = lar_net_adopt(n);
+    let data: byte[*] = buffer(maxSize);
+    while (socket.isOpen() && !signal.isStopped()) {
+        try {
+            let got: Datagram = socket.receive(data);
+            let bytes: byte[*] = [];
+            for (i in 0..got.length) { bytes.push(data[i]); }
+            handler(socket, bytes, got.from);
+        } catch (NetError e) {}                           // a timeout: look at the signal again
+    }
+}
+
+// ---- TLS servers ---------------------------------------------------------------------------
+
+// OpenSSL, for the servers here and for the client of std.net.tls on Linux: loaded the first time
+// it is needed (libssl 3 or 1.1: Linux, and macOS with Homebrew's openssl@3), so nothing is loaded by a
+// program that never uses it. The functions are the same in OpenSSL 1.1 and 3, and no headers are
+// needed to compile. A TLS server is not available on Windows yet: OpenSslProvider.load throws
+// NetError.TlsUnavailable there.
+
+native type TlsContextHandle = LarTlsCtx*;
+native type TlsSessionHandle = LarOpenSslConn*;
+native function lar_tls_server_context(m: byte[*], certificate: String, key: String): TlsContextHandle;
+native function lar_tls_server_context_number(c: TlsContextHandle): int64;
+native function lar_tls_server_context_error(c: TlsContextHandle): int32 { return c->error; }
+native function lar_tls_server_context_text(c: TlsContextHandle): String { return c->text; }
+native function lar_tls_server_accept(m: byte[*], context: int64, s: Socket): TlsSessionHandle;
+native function lar_openssl_conn_error(t: TlsSessionHandle): int32 { return t->error; }
+native function lar_openssl_conn_text(t: TlsSessionHandle): String { return t->text; }
+native function lar_openssl_read(t: TlsSessionHandle, buffer: byte[]): int32;
+native function lar_openssl_write(t: TlsSessionHandle, bytes: byte[]): int32;
+native function lar_openssl_close(t: TlsSessionHandle): void;
+
+/**
+ * The certificate and the key of a TLS server, loaded with OpenSSL. Load it once and give it to as many
+ * servers as you want: their threads share it.
+ *
+ *   let tls: OpenSslProvider = OpenSslProvider.load("/etc/letsencrypt/live/example.com/fullchain.pem",
+ *                                                   "/etc/letsencrypt/live/example.com/privkey.pem");
+ */
+public synchronized class OpenSslProvider {
+    let context: TlsContextHandle? = null;
+    let number: int64 = 0;
+
+    /**
+     * Loads the certificate (with its chain: Let's Encrypt's fullchain.pem) and its private key (PEM files).
+     * Throws NetError.Tls when a file cannot be used or the key is not the certificate's, and
+     * NetError.TlsUnavailable when there is no OpenSSL.
+     */
+    static function load(certificate: String, key: String): OpenSslProvider throws NetError {
+        let p: OpenSslProvider = {};
+        p.open(certificate, key);
+        return p;
+    }
+
+    function open(certificate: String, key: String): void throws NetError {
+        self.context = lar_tls_server_context(certificate, key);
+        let code: int32 = lar_tls_server_context_error(self.context!);
+        if (code == 51) { throw NetError.TlsUnavailable(lar_tls_server_context_text(self.context!).clone()); }
+        if (code != 0) { throw NetError.Tls(lar_tls_server_context_text(self.context!).clone()); }
+        self.number = lar_tls_server_context_number(self.context!);
+    }
+
+    /** What a worker gives OpenSSL for each connection (the context, shared by every thread). */
+    function contextNumber(): int64 { return self.number; }
+}
+
+/**
+ * A connection of a TcpServer with tls, already decrypted: used like a TcpSocket (read, write, writeText, Reader,
+ * copy). It closes when its memory is freed.
+ */
+public class TlsSocket implements InputStream, OutputStream, Closeable, Connection {
+    let tcp: TcpSocket? = null;
+    let session: TlsSessionHandle? = null;
+
+    /** Reads what has arrived, up to the length of buffer; 0 when the other side closed. */
+    override function read(buffer: byte[]): int32 throws IoError {
+        if (self.session == null) { throw IoError.Closed; }
+        if (self.tcp != null) { self.tcp!.prepare(false); }
+        let n: int32 = lar_openssl_read(self.session!, buffer);
+        if (n < 0) { tlsFailure(self.session!); }
+        return n;
+    }
+
+    /** Writes all the bytes, or throws. */
+    override function write(bytes: byte[]): void throws IoError {
+        if (self.session == null) { throw IoError.Closed; }
+        if (self.tcp != null) { self.tcp!.prepare(true); }
+        if (lar_openssl_write(self.session!, bytes) < 0) { tlsFailure(self.session!); }
+    }
+
+    /** Writes a text (its UTF-8 bytes). */
+    override function writeText(text: String): void throws IoError { self.write(text.bytes()); }
+
+    override function input(): InputStream { return self; }
+    override function output(): OutputStream { return self; }
+
+    override function flush(): void throws IoError {}
+
+    /** How long read and write wait before failing with a timeout (0: no limit). */
+    function setTimeout(ms: int32): void {
+        if (self.tcp != null) { self.tcp!.setTimeout(ms); }
+    }
+
+    function isOpen(): bool { return self.session != null && self.tcp != null && self.tcp!.isOpen(); }
+
+    /** Closes it now (it tells the client); otherwise it closes when its memory is freed. */
+    override function close(): void throws IoError {
+        if (self.session != null) { lar_openssl_close(self.session!); }
+        self.session = null;
+        if (self.tcp != null) { self.tcp!.close(); }
+    }
+}
+
+function tlsFailure(t: TlsSessionHandle): void throws IoError {
+    switch (lar_openssl_conn_error(t)) {
+        case 3 -> throw IoError.TimedOut;
+        case 4 -> throw IoError.Closed;
+        case 5 -> throw IoError.Closed;
+        default -> throw IoError.Failed("tls: ${lar_openssl_conn_text(t)}");
+    }
+}
+

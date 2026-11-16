@@ -1,6 +1,6 @@
 // std.net: a server and a client (in a thread) on 127.0.0.1, lines both ways with Reader, a block with copy().
 import std.net { TcpSocket, TcpListener, NetError, message };
-import std.io { Reader, MemoryInputStream, copy };
+import std.io { Reader, BytesInputStream, copy };
 import std.io { IoError };
 
 synchronized class Result {
@@ -15,7 +15,7 @@ function client(port: int32, result: Result): void throws NetError {
     try {
         socket.writeText("hello\n");
         socket.writeText("ñandú 2\n");
-        copy(MemoryInputStream { data: "x".repeat(5000) }, socket);
+        copy(BytesInputStream { data: "x".repeat(5000) }, socket);
         socket.finishWriting();
         let lines: Reader = { from: socket };
         let a: String = lines.readLine() ?? "";

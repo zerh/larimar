@@ -1,0 +1,158 @@
+// editor.session: one analysis of a program, without generating C (larimar check, larimar lsp).
+// It links and analyzes like a compilation; the errors stay in linkErrors and analysisErrors (with the
+// line numbers that also say the file), and the analyzed program stays in `program` for the questions
+// of the editor (ide.lar).
+
+import std.os;
+import std.io.path as Paths;
+import std.io.files as Files;
+import std.encoding.json as Json;
+import std.io.console as Console;
+import syntax.ast { Program };
+import semantics.linker { linkErrors, fileNames, filePaths, decode, showFrom, readSource, FILE_LINES };
+import pipeline { analysisPasses, assembledProgram, Compilation, run };
+import semantics.types { files };
+import semantics.analyzer { analysisErrors };
+import std.encoding.toml as Toml;
+import std.encoding.toml { TomlError };
+
+/** The program of the last analysis (empty when it could not be linked). */
+public let program: Program = Program { line: 1 } in default;
+
+/** Errors found before analyzing (a file that cannot be read). */
+public let readErrors: String[*] = [] in default;
+
+/** Where `import a.b` looks for a/b.lar: "" means next to the main file (larimar test sets the project's). */
+public let sourceRoot: String = "";
+
+/** Links and analyzes a main file (pipeline.analysisPasses). true: no errors. Messages name files relative to `shownFrom`. */
+public function analyzeFile(main: String, shownFrom: String): bool {
+    let unit: Compilation = compilationOf(main, shownFrom);
+    let ok: bool = run(unit, analysisPasses());
+    if (unit.unread != "") { readErrors.push(unit.unread.clone() in default); }
+    if (unit.assembled) { program = assembledProgram(); }
+    for (f in fileNames) { files.push(f); }
+    return ok;
+}
+
+/** A compilation of a main file, with this session's std and source root. */
+public function compilationOf(main: String, shownFrom: String): Compilation {
+    return Compilation { main: main.clone(), shownFrom: shownFrom.clone(), std: stdDir().clone(), sourceRoot: sourceRoot.clone() };
+}
+
+/** Where std/ is: $LARIMAR_HOME/std, or next to the tool (bin/larimar -> std/). */
+public function stdDir(): String {
+    let home: String = os.env("LARIMAR_HOME") ?? "";
+    if (!home.isBlank()) { return Paths.normalize(Paths.absolute(stdIn(home) ?? Paths.join(home, "std"))); }
+    // next to the tool, one folder up (bin/) or two (build/ while developing)
+    let dir: String = os.programDir();
+    while (dir != "") {
+        let found: String? = stdIn(dir);
+        if (found != null) { return found!; }
+        dir = Paths.parent(dir);
+    }
+    return "std";
+}
+
+/** The std of a folder: std/ of an installation, or src/std of the repository. */
+function stdIn(home: String): String? {
+    let installed: String = Paths.join(home, "std");
+    if (Files.isFile(Paths.join(installed, "lang.lar"))) { return installed; }
+    let repository: String = Paths.join(Paths.join(home, "src"), "std");
+    if (Files.isFile(Paths.join(repository, "lang.lar"))) { return repository; }
+    return null;
+}
+
+/** An error of the analysis, with its file and line. */
+public class Diagnostic {
+    let file: String;          // absolute path ("" when unknown)
+    let line: int32;           // from 1 (0 when unknown)
+    let message: String;
+    let kind: String;          // "Syntax Error", "Semantic Error", ...
+}
+
+/** The errors of the last analysis. */
+public function diagnostics(): Diagnostic[*] {
+    let out: Diagnostic[*] = [];
+    for (e in readErrors) { out.push(Diagnostic { file: "", line: 0, message: e.clone(), kind: "Error" }); }
+    for (e in linkErrors) { out.push(diagnostic(e)); }
+    for (e in analysisErrors) { out.push(diagnostic(e)); }
+    return out;
+}
+
+/** "Semantic Error [Line 1000012]: message" -> file 1, line 12. */
+function diagnostic(raw: String): Diagnostic {
+    let at: int32? = raw.indexOf(" [Line ");
+    let close: int32? = at != null ? raw.indexOf("]: ", at!) : null;
+    if (at == null || close == null) { return Diagnostic { file: "", line: 0, message: decode(raw).clone(), kind: "Error" }; }
+    let encoded: int64 = raw.substring(at! + 7, close!).toInt() ?? 0;
+    let index: int32 = (encoded / (FILE_LINES as int64)) as int32;
+    let file: String = index >= 0 && index < filePaths.length ? filePaths[index] : "";
+    return Diagnostic {
+        file: file.clone(),
+        line: (encoded % (FILE_LINES as int64)) as int32,
+        message: decode(raw.substring(close! + 3)).clone(),
+        kind: raw.substring(0, at!).clone()
+    };
+}
+
+/** The main file of the project a file belongs to (larimar.toml above it), or the file itself. */
+public function projectMain(file: String): String {
+    let dir: String = Paths.parent(file);
+    while (dir != "") {
+        let toml: String = Paths.join(dir, "larimar.toml");
+        if (Files.isFile(toml)) {
+            let main: String = tomlMain(toml);
+            if (main != "") { return Paths.normalize(Paths.join(dir, main)); }
+        }
+        let up: String = Paths.parent(dir);
+        if (up == dir) { break; }
+        dir = up;
+    }
+    return file;
+}
+
+/** [project] main of a larimar.toml ("src/main.lar" when it does not say). */
+function tomlMain(path: String): String {
+    let source: String? = readSource(path);
+    if (source == null) { return ""; }
+    try {
+        let config: Any = Toml.parse(source!);
+        return (config.project.main as String ?? "src/main.lar").clone();
+    } catch (TomlError e) {
+        return "";
+    }
+}
+
+/**
+ * larimar check [file.lar | folder] [--json]: the errors of a program, without generating C.
+ * A folder means its larimar.toml. With --json, a list of { file, line, message, kind }. Exit code 1
+ * when there are errors.
+ */
+public function checkCommand(rest: String[*]): int32 {
+    let json: bool = false;
+    let target: String = ".";
+    for (a in rest) {
+        if (a == "--json") { json = true; } else { target = a; }
+    }
+    let main: String = Paths.normalize(Paths.absolute(target));
+    if (Files.isDirectory(main)) { main = projectMain(Paths.join(main, "larimar.toml")); }
+    let ok: bool = analyzeFile(main, os.cwd());
+    let found: Diagnostic[*] = diagnostics();
+    if (json) {
+        let builder: StringBuilder = {};
+        builder.add("[");
+        for (i, d in found) {
+            if (i > 0) { builder.add(","); }
+            builder.add("{\"file\":${Json.quote(d.file)},\"line\":${d.line},\"message\":${Json.quote(d.message)},\"kind\":${Json.quote(d.kind)}}");
+        }
+        builder.add("]");
+        println(builder.toString());
+    } else {
+        for (e in readErrors) { Console.printError(e); }
+        for (e in linkErrors) { Console.printError(decode(e)); }
+        for (e in analysisErrors) { Console.printError(decode(e)); }
+        if (ok) { Console.printError("no errors"); }
+    }
+    return ok ? 0 : 1;
+}

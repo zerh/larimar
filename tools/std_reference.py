@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes docs/std-reference.md from std/ (run from the repository: tools/std_reference.py).
+"""Writes docs/std-reference.md from src/std/ (run from the repository: tools/std_reference.py).
 
 Every module a program can import, with what it makes public: its types (and their members, which are
 as visible as their type), functions, constants and variables, each with the comment above it. The parts
@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from reference import strip_strings, doc_above, signature  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+STD = 'src/std' if os.path.isdir(os.path.join(ROOT, 'src/std')) else 'std'
 OWN = {'posix', 'windows', 'macos', 'common', 'internal'}
 
 TYPE_RE = re.compile(r'^public\s+(synchronized\s+)?(class|interface|struct|enum|type|native\s+type|native\s+interface)\s+(\w+)([^{;]*)')
@@ -22,12 +23,12 @@ TOP_VALUE_RE = re.compile(r'^public\s+(const|let)\s+(\w+)\s*:\s*([^=;]+)')
 
 def modules():
     out = []
-    for dirpath, _, names in os.walk(os.path.join(ROOT, 'std')):
+    for dirpath, _, names in os.walk(os.path.join(ROOT, STD)):
         for n in names:
             if not n.endswith('.lar'):
                 continue
             rel = os.path.relpath(os.path.join(dirpath, n), ROOT)
-            path = 'std.' + rel[len('std/'):-len('.lar')].replace('/', '.')
+            path = 'std.' + rel[len(STD) + 1:-len('.lar')].replace('/', '.')
             parts = path.split('.')
             if OWN & set(parts) or path == 'std.os.process.tasks':
                 continue
@@ -80,7 +81,7 @@ def read(rel):
         elif in_type and depth == 1:
             f = FUNC_RE.match(stripped)
             m = MEMBER_LET_RE.match(stripped)
-            if f and not stripped.startswith('native function lm_'):
+            if f and not stripped.startswith('native function lar_'):
                 entries.append(('func', signature(stripped), doc_above(lines, i), True))
             elif m and not m.group(1).startswith('_'):
                 entries.append(('value', f"{m.group(1)}: {m.group(2).strip()}", doc_above(lines, i), True))
@@ -101,10 +102,10 @@ INHERITED = {}
 
 
 def own_classes():
-    for dirpath, _, names in os.walk(os.path.join(ROOT, 'std')):
+    for dirpath, _, names in os.walk(os.path.join(ROOT, STD)):
         for n in names:
             rel = os.path.relpath(os.path.join(dirpath, n), ROOT)
-            parts = set(rel[len('std/'):-len('.lar')].split('/'))
+            parts = set(rel[len(STD) + 1:-len('.lar')].split('/'))
             if not n.endswith('.lar') or not (OWN & parts):
                 continue
             head, entries = read(rel)
@@ -127,7 +128,7 @@ def main():
     out.append('Every module of `std` a program can import, and everything it makes public: types (with their '
                'members, as visible as their type), functions, constants and variables, as they are in the code, '
                'with the comment above each one.\n')
-    out.append('> This file is **generated** from `std/` with `tools/std_reference.py`; it is not edited by hand. '
+    out.append('> This file is **generated** from `src/std/` with `tools/std_reference.py`; it is not edited by hand. '
                'The [manual](manual.md#25-standard-library) explains the library with examples. The parts of std for '
                'std itself (`*.posix`, `*.windows`, `*.macos`, `*.common`, `*.internal`) are not here: a program '
                'cannot import them.\n')

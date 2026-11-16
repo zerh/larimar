@@ -1,0 +1,358 @@
+// std.os.sharedmemory.common: the ring both systems share: one writer, one reader, in memory both programs map.
+// Its own module so that its C comes before the classes of each system, which give it the memory, the
+// clock and whether a program still runs (lar_shared_sys_*).
+//
+// The memory starts with a head (the counts and the state of each side), then the bytes. `head` is how
+// many bytes were ever written and `tail` how many were ever read: only the writer moves head and only the
+// reader moves tail, each with a release store that the other reads with an acquire load, so no lock is
+// needed. What is between them is what can be read; capacity minus that is the room to write.
+
+ccode {
+    #define LAR_SHARED_MEMORY 1                  /* larimar build: -lrt on Linux (shm_open) */
+
+    #if defined(__GNUC__) || defined(__clang__)
+    #define LAR_SHARED_LOAD(p) __atomic_load_n((p), __ATOMIC_ACQUIRE)
+    #define LAR_SHARED_STORE(p, v) __atomic_store_n((p), (v), __ATOMIC_RELEASE)
+    #if defined(__x86_64__) || defined(__i386__)
+    #define LAR_SHARED_PAUSE() __asm__ __volatile__("pause" ::: "memory")
+    #elif defined(__aarch64__) || defined(__arm__)
+    #define LAR_SHARED_PAUSE() __asm__ __volatile__("yield" ::: "memory")
+    #else
+    #define LAR_SHARED_PAUSE() __asm__ __volatile__("" ::: "memory")
+    #endif
+    #else                                   /* tcc (x86): its loads and stores keep their order; a fence for the rest */
+    static void lar_shared_fence(void) { __asm__ __volatile__("mfence" ::: "memory"); }
+    static int64_t lar_shared_load(volatile int64_t* p) { int64_t v = *p; lar_shared_fence(); return v; }
+    static void lar_shared_store(volatile int64_t* p, int64_t v) { lar_shared_fence(); *p = v; lar_shared_fence(); }
+    #define LAR_SHARED_LOAD(p) lar_shared_load((volatile int64_t*)(p))
+    #define LAR_SHARED_STORE(p, v) lar_shared_store((volatile int64_t*)(p), (v))
+    #define LAR_SHARED_PAUSE() lar_shared_fence()
+    #endif
+
+    #define LAR_SHARED_MAGIC 0x5352414c          /* "LARS" */
+    #define LAR_SHARED_HEAD 256                  /* the bytes start after the head */
+
+    typedef struct LarSharedHeader {
+        int32_t magic;
+        int32_t version;
+        int64_t capacity;
+        int64_t creator;                     /* the id of the program that created it */
+        char pad0[40];
+        volatile int64_t head;               /* bytes written, ever: only the writer moves it */
+        char pad1[56];
+        volatile int64_t tail;               /* bytes read, ever: only the reader moves it */
+        char pad2[56];
+        volatile int64_t state[2];           /* writer, reader: 0 not there yet, 1 open, 2 closed */
+        volatile int64_t pid[2];             /* their programs */
+        volatile int64_t ready;              /* 1 once the creator wrote the head */
+    } LarSharedHeader;
+
+    typedef struct LarSharedMemory {
+        int error;                           /* 0, or what lar_shared_create/open met (the codes of read and write) */
+        char text[160];
+        int reader;                          /* the side of this program: 1 reader, 0 writer */
+        int creator;                         /* this program created the name (and frees it) */
+        int closed;
+        int unlinked;
+        char name[64];                       /* the system's name of the memory */
+        LarSharedHeader* head;
+        unsigned char* data;
+        int64_t capacity;
+        size_t size;
+        intptr_t sys;                        /* the system's handle of the memory */
+        long long checked;                   /* when the other side was last seen running */
+    } LarSharedMemory;
+
+    /* What each system gives (std.os.sharedmemory.posix, std.os.sharedmemory.windows). */
+    static int lar_shared_sys_create(LarSharedMemory* s);          /* 0, -6 when the name exists, -5 (text) */
+    static int lar_shared_sys_open(LarSharedMemory* s);            /* 0, -4 when it does not exist, -5 (text) */
+    static void lar_shared_sys_unlink(LarSharedMemory* s);
+    static void lar_shared_sys_unmap(LarSharedMemory* s);
+    static int64_t lar_shared_sys_pid(void);
+    static int lar_shared_sys_alive(int64_t pid);
+    static void lar_shared_sys_nap(int step);               /* a short sleep, longer as step grows */
+    static long long lar_shared_sys_now(void);              /* ms from a fixed moment */
+    static long long lar_shared_sys_micros(void);           /* µs from a fixed moment */
+    static void lar_shared_sys_name(LarSharedMemory* s, const char* name);
+
+    static LarSharedMemory* lar_shared_new(const char* name, int reader) {
+        LarSharedMemory* s = (LarSharedMemory*)calloc(1, sizeof(LarSharedMemory));
+        if (!s) return NULL;
+        s->reader = reader;
+        s->sys = -1;
+        lar_shared_sys_name(s, name);
+        return s;
+    }
+
+    /* The other side's state: 0 not there yet, 1 open, 2 closed, 3 its program ended without closing. */
+    static int lar_shared_peer(LarSharedMemory* s, int force) {
+        int other = s->reader ? 0 : 1;
+        int st = (int)LAR_SHARED_LOAD(&s->head->state[other]);
+        if (st != 1) return st;
+        long long now = lar_shared_sys_now();
+        if (force || now - s->checked >= 50) {
+            s->checked = now;
+            int64_t pid = LAR_SHARED_LOAD(&s->head->pid[other]);
+            if (pid > 0 && !lar_shared_sys_alive(pid)) return 3;
+        }
+        return 1;
+    }
+
+    /* The other side opened it (and freed the name): nothing is left to free if a program ends. */
+    static void lar_shared_forget(LarSharedMemory* s) {
+        if (s->creator && !s->unlinked) {
+            lar_shared_sys_unlink(s);
+            s->unlinked = 1;
+        }
+    }
+
+    static void lar_shared_attach(LarSharedMemory* s) {
+        int me = s->reader ? 1 : 0;
+        LAR_SHARED_STORE(&s->head->pid[me], lar_shared_sys_pid());
+        LAR_SHARED_STORE(&s->head->state[me], 1);
+        s->data = (unsigned char*)s->head + LAR_SHARED_HEAD;
+        s->capacity = s->head->capacity;
+        s->checked = lar_shared_sys_now();
+    }
+
+    /* version 1: a stream (a ring, one writer and one reader); version 2: a segment (bytes at offsets). */
+    static LarSharedMemory* lar_shared_make(const char* name, long long capacity, int reader, int version) {
+        LarSharedMemory* s = lar_shared_new(name, reader);
+        if (!s) return NULL;
+        s->size = (size_t)(LAR_SHARED_HEAD + capacity);
+        int r = lar_shared_sys_create(s);
+        if (r == -6) {                       /* the name is there: a stream of a program that ended is taken back */
+            size_t wanted = s->size;
+            if (lar_shared_sys_open(s) == 0) {
+                int64_t creator = LAR_SHARED_LOAD(&s->head->creator);
+                int stale = LAR_SHARED_LOAD(&s->head->ready) == 1 && creator > 0 && !lar_shared_sys_alive(creator);
+                lar_shared_sys_unmap(s);
+                if (!stale) {
+                    s->error = -5;
+                    snprintf(s->text, sizeof s->text, "the name is in use by another program");
+                    return s;
+                }
+                lar_shared_sys_unlink(s);
+            }
+            s->size = wanted;
+            r = lar_shared_sys_create(s);
+        }
+        if (r != 0) {
+            s->error = r == -6 ? -5 : r;
+            if (r == -6) snprintf(s->text, sizeof s->text, "the name is in use by another program");
+            return s;
+        }
+        s->creator = 1;
+        LarSharedHeader* h = s->head;
+        h->magic = LAR_SHARED_MAGIC;
+        h->version = version;
+        h->capacity = capacity;
+        h->creator = lar_shared_sys_pid();
+        h->head = 0;
+        h->tail = 0;
+        lar_shared_attach(s);
+        LAR_SHARED_STORE(&h->ready, 1);
+        return s;
+    }
+
+    static LarSharedMemory* lar_shared_create(const char* name, long long capacity, int reader) {
+        return lar_shared_make(name, capacity, reader, 1);
+    }
+
+    /* Maps the memory of `name` once its creator wrote its head: 0, or the error (in s). */
+    static int lar_shared_wait_open(LarSharedMemory* s, int ms) {
+        long long until = lar_shared_sys_now() + ms;
+        int step = 0;
+        for (;;) {
+            int r = lar_shared_sys_open(s);
+            if (r == 0 && LAR_SHARED_LOAD(&s->head->ready) == 1) return 0;
+            if (r == 0) lar_shared_sys_unmap(s);
+            if (r != 0 && r != -4) { s->error = r; return r; }
+            if (lar_shared_sys_now() >= until) { s->error = -4; return -4; }
+            lar_shared_sys_nap(step++);
+        }
+    }
+
+    /* A segment: `capacity` bytes that every program that opens its name reads and writes at any offset. */
+    static LarSharedMemory* lar_shared_segment_create(const char* name, long long capacity) {
+        LarSharedMemory* s = lar_shared_make(name, capacity, 0, 2);
+        if (s && s->error == 0) memset(s->data, 0, (size_t)capacity);
+        return s;
+    }
+
+    static LarSharedMemory* lar_shared_segment_open(const char* name, int ms) {
+        LarSharedMemory* s = lar_shared_new(name, 1);
+        if (!s) return NULL;
+        if (lar_shared_wait_open(s, ms) != 0) return s;
+        if (s->head->magic != LAR_SHARED_MAGIC || s->head->version != 2) {
+            lar_shared_sys_unmap(s);
+            s->error = -5;
+            snprintf(s->text, sizeof s->text, "it is not a segment of Larimar");
+            return s;
+        }
+        s->data = (unsigned char*)s->head + LAR_SHARED_HEAD;
+        s->capacity = s->head->capacity;
+        s->closed = 0;
+        return s;
+    }
+
+    /* Reads and writes of a segment; the offsets were checked against its size. An int64 at a multiple of 8
+       is read with acquire and written with release: whoever reads a value sees what was written before it. */
+    static int64_t lar_shared_get_int64(LarSharedMemory* s, long long at) {
+        if (at % 8 == 0) return LAR_SHARED_LOAD((int64_t*)(s->data + at));
+        int64_t v; memcpy(&v, s->data + at, 8); return v;
+    }
+    static void lar_shared_put_int64(LarSharedMemory* s, long long at, int64_t v) {
+        if (at % 8 == 0) { LAR_SHARED_STORE((int64_t*)(s->data + at), v); return; }
+        memcpy(s->data + at, &v, 8);
+    }
+    static int32_t lar_shared_get_int32(LarSharedMemory* s, long long at) { int32_t v; memcpy(&v, s->data + at, 4); return v; }
+    static void lar_shared_put_int32(LarSharedMemory* s, long long at, int32_t v) { memcpy(s->data + at, &v, 4); }
+    static double lar_shared_get_float64(LarSharedMemory* s, long long at) { double v; memcpy(&v, s->data + at, 8); return v; }
+    static void lar_shared_put_float64(LarSharedMemory* s, long long at, double v) { memcpy(s->data + at, &v, 8); }
+    static uint8_t lar_shared_get_byte(LarSharedMemory* s, long long at) { return s->data[at]; }
+    static void lar_shared_put_byte(LarSharedMemory* s, long long at, uint8_t v) { s->data[at] = v; }
+    static void lar_shared_get_bytes(LarSharedMemory* s, long long at, char* into, int count) { memcpy(into, s->data + at, (size_t)count); }
+    static void lar_shared_put_bytes(LarSharedMemory* s, long long at, const char* bytes, int count) { memcpy(s->data + at, bytes, (size_t)count); }
+
+    static LarSharedMemory* lar_shared_open(const char* name, int reader, int ms) {
+        LarSharedMemory* s = lar_shared_new(name, reader);
+        if (!s) return NULL;
+        long long until = lar_shared_sys_now() + ms;
+        int step = 0;
+        for (;;) {
+            int r = lar_shared_sys_open(s);
+            if (r == 0 && LAR_SHARED_LOAD(&s->head->ready) == 1) break;
+            if (r == 0) lar_shared_sys_unmap(s);                 /* created, but its head is not written yet */
+            if (r != 0 && r != -4) { s->error = r; return s; }
+            if (lar_shared_sys_now() >= until) { s->error = -4; return s; }
+            lar_shared_sys_nap(step++);
+        }
+        LarSharedHeader* h = s->head;
+        if (h->magic != LAR_SHARED_MAGIC || h->version != 1) {
+            lar_shared_sys_unmap(s);
+            s->error = -5;
+            snprintf(s->text, sizeof s->text, "it is not a stream of Larimar");
+            return s;
+        }
+        int me = reader ? 1 : 0;
+        if (LAR_SHARED_LOAD(&h->state[me]) != 0) {
+            lar_shared_sys_unmap(s);
+            s->error = -5;
+            snprintf(s->text, sizeof s->text, "it already has a %s", reader ? "reader" : "writer");
+            return s;
+        }
+        lar_shared_attach(s);
+        lar_shared_sys_unlink(s);                /* both sides are there: the name is not needed any more */
+        s->unlinked = 1;
+        return s;
+    }
+
+    static int lar_shared_error(LarSharedMemory* s) { return s->error; }
+    static const char* lar_shared_error_text(LarSharedMemory* s) { return s->text; }
+    static long long lar_shared_capacity(LarSharedMemory* s) { return s->head ? s->capacity : 0; }
+
+    /*
+     * Waits a little. For the first 100 µs it only spins: an answer usually comes within that, and a nap of
+     * the system costs more than it. Then naps that grow, so a side that waits long uses no processor.
+     */
+    static void lar_shared_wait(int* step, long long* since) {
+        if (*step == 0) *since = lar_shared_sys_micros();
+        if (*since >= 0) {
+            for (int i = 0; i < 64; i++) LAR_SHARED_PAUSE();
+            if (lar_shared_sys_micros() - *since < 100) {
+                *step += 1;
+                return;
+            }
+            *since = -1;
+            *step = 1;
+        }
+        lar_shared_sys_nap(*step);
+        *step += 1;
+    }
+
+    /* Writes all: 0, or -1 (the reader closed it), -2 (time ran out), -3 (the reader's program ended). */
+    static int lar_shared_write(LarSharedMemory* s, const char* bytes, long long count, int ms) {
+        if (!s->head || s->closed) return -1;
+        LarSharedHeader* h = s->head;
+        long long until = ms > 0 ? lar_shared_sys_now() + ms : 0;
+        int step = 0;
+        long long since = 0;
+        while (count > 0) {
+            int64_t written = h->head;
+            int64_t room = s->capacity - (written - LAR_SHARED_LOAD(&h->tail));
+            int peer = lar_shared_peer(s, 0);
+            if (peer == 2) return -1;
+            if (peer == 3) return -3;
+            if (peer == 1) lar_shared_forget(s);
+            if (room <= 0) {
+                if (until && lar_shared_sys_now() >= until) return -2;
+                lar_shared_wait(&step, &since);
+                continue;
+            }
+            step = 0;
+            int64_t at = written % s->capacity;
+            int64_t n = count < room ? count : room;
+            if (n > s->capacity - at) n = s->capacity - at;     /* up to the end of the ring; the rest from its start */
+            memcpy(s->data + at, bytes, (size_t)n);
+            LAR_SHARED_STORE(&h->head, written + n);
+            bytes += n;
+            count -= n;
+        }
+        return 0;
+    }
+
+    /* Reads what is there (waiting for something): the count, 0 at the end, or -2 (time), -3 (the writer ended). */
+    static int lar_shared_read(LarSharedMemory* s, char* into, int size, int ms) {
+        if (!s->head || s->closed) return 0;
+        LarSharedHeader* h = s->head;
+        long long until = ms > 0 ? lar_shared_sys_now() + ms : 0;
+        int step = 0;
+        long long since = 0;
+        for (;;) {
+            int64_t taken = h->tail;
+            int64_t ready = LAR_SHARED_LOAD(&h->head) - taken;
+            if (ready > 0) {
+                int64_t at = taken % s->capacity;
+                int64_t n = ready < size ? ready : size;
+                if (n > s->capacity - at) n = s->capacity - at;
+                memcpy(into, s->data + at, (size_t)n);
+                LAR_SHARED_STORE(&h->tail, taken + n);
+                return (int)n;
+            }
+            int peer = lar_shared_peer(s, 0);
+            if (peer == 1) lar_shared_forget(s);
+            if (peer == 2 || peer == 3) {
+                if (LAR_SHARED_LOAD(&h->head) - taken > 0) continue;     /* it wrote more before it left */
+                return peer == 2 ? 0 : -3;
+            }
+            if (until && lar_shared_sys_now() >= until) return -2;
+            lar_shared_wait(&step, &since);
+        }
+    }
+
+    static long long lar_shared_available(LarSharedMemory* s) {
+        if (!s->head || s->closed) return 0;
+        return LAR_SHARED_LOAD(&s->head->head) - s->head->tail;
+    }
+
+    static void lar_shared_close(LarSharedMemory* s) {
+        if (!s->head || s->closed) return;
+        s->closed = 1;
+        LAR_SHARED_STORE(&s->head->state[s->reader ? 1 : 0], 2);
+        if (s->creator && !s->unlinked) {
+            lar_shared_sys_unlink(s);
+            s->unlinked = 1;
+        }
+    }
+
+    /* When its memory is freed: closed, unmapped. */
+    static void lar_shared_free(LarSharedMemory* s) {
+        if (!s) return;
+        if (s->head) {
+            lar_shared_close(s);
+            lar_shared_sys_unmap(s);
+        }
+        free(s);
+    }
+}

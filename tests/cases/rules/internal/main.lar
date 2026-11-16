@@ -1,0 +1,5 @@
+// The main file is not of tools: its internal part is not for it.
+import tools;
+import tools.internal.secret as Secret;
+
+function main(): int32 { return tools.shown() + Secret.secret(); }
