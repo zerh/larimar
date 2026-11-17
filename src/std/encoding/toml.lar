@@ -47,7 +47,7 @@ public function parse(text: String): Any throws TomlError {
             }
             sectionNames.push(name.clone());
             currentName = name.clone();
-            tableAt(root, currentName, lineNumber);
+            makeSection(root, currentName, lineNumber);       // there even when nothing is written in it
             i += 1;
             continue;
         }
@@ -87,10 +87,10 @@ function fail(line: int32, why: String): void throws TomlError {
     throw TomlError.Invalid { line: line, why: why.clone() in default };
 }
 
-/** The table of a section ("a.b": the table b inside a), made when it is not there yet. */
-function tableAt(root: Any, name: String, line: int32): Any throws TomlError {
+/** Makes the table of a section ("a.b": the table b inside a) when it is not there yet. */
+function makeSection(root: Any, name: String, line: int32): void throws TomlError {
+    if (name == "") { return; }
     let table: Any = root;
-    if (name == "") { return table; }
     for (part in name.split(".")) {
         let inside: Any = table[part];
         if (inside == null) {
@@ -100,6 +100,14 @@ function tableAt(root: Any, name: String, line: int32): Any throws TomlError {
         }
         table = table[part];
     }
+}
+
+/** The table of a section, made when it is not there yet. */
+function tableAt(root: Any, name: String, line: int32): Any throws TomlError {
+    makeSection(root, name, line);
+    let table: Any = root;
+    if (name == "") { return table; }
+    for (part in name.split(".")) { table = table[part]; }
     return table;
 }
 
