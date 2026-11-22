@@ -1,0 +1,19 @@
+// std.os.library.posix: the libraries a task opens on Unix (dlopen).
+
+import std.platform { UnixPlatform };
+
+public class PosixLibraries implements UnixPlatform {
+    cinclude "<dlfcn.h>";
+
+    /** The library of that file (a name dlopen looks for, or a path), or 0 when it cannot be opened. */
+    static native function open(file: String): int64 { return (int64_t)(intptr_t)dlopen(file, RTLD_NOW | RTLD_LOCAL); }
+
+    /** Binds the functions of an interface to an opened library: false and the name of the missing one in `missing`. */
+    static native function bindTo(functions: int64, library: int64, missing: byte[]): bool {
+        const char* (*bind)(void*) = (const char* (*)(void*))(intptr_t)functions;
+        const char* name = bind((void*)(intptr_t)library);
+        if (name == NULL) return true;
+        snprintf((char*)missing, (size_t)missing_length, "%s", name);
+        return false;
+    }
+}

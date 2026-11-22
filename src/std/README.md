@@ -168,11 +168,17 @@ std's own, imported only from std (the rule `std-own-import`).
   - `function exit(code: int32): void`: Ends the program now with this exit code (memories are not freed first)
   - `function catchTermination(): void`: From now on, Ctrl+C and SIGTERM (what systemd, docker stop and kill send) do not end the program at once: they only make terminating() true, so the program can finish what it is doing and end on its own
   - `function terminating(): bool`: Whether Ctrl+C or SIGTERM arrived after catchTermination()
+- **`std.os.library`**: the C libraries an UnsafeTask opens when it runs, for the native interfaces of its class
+  - `enum LoadError`: Why a library could not be used
+  - `function message(e: LoadError): String`: What a LoadError says, as text
+  - `class LibraryLoader`: Opens the libraries of a task's native interfaces, once in each process: what it opens stays open as long as the process (a ProcessPool keeps it for the next tasks)
+  - `function fileNames(library: String): String[*]`: The files a library is looked for in, in order: a file as it is; a name as each system names its files
 - **`std.os.process`**: processes
   - `enum ProcessError`: Why a process could not be used
   - `function message(e: ProcessError): String`: A message for the error, in English
   - `interface Task`: Work that runs in another process: a copy of this program, so that a panic or a crash there is only an error here
   - `enum Received`: What a receive brings
+  - `interface UnsafeTask extends Task`: A task with C of its own: the native interfaces declared in its class are found in libraries when it runs, and their C runs only in its process, so a crash there is a ProcessError here
   - `class Channel`: Messages between a task and the program that started it: what one side sends, the other receives, in order
   - `class Process extends Child`: A process: another program (`program`, with `args`), or a task of this program (`run`) in a copy of it; one or the other
   - `function findProgram(name: String): String?`: Where a program is found in the PATH (with .exe on Windows), or null

@@ -16,43 +16,20 @@
   open there. Tested in `tests/cases/c/interface_types.lar` (a list to C, `&x` filled by C, a struct
   returned, a union by value, `struct tm` through `mktime`).
 
+- **`UnsafeTask` and `LibraryLoader`** (spec §19.2, §D.0): the interfaces of its class are opened,
+  their functions found in the library that `loader.bind(Name, "library")` opens, through pointers of
+  the header's own type (`__typeof__`), with no libffi. The compiler writes `setupTask`, as it writes
+  `encodeTask`, so that `setup` runs once in each process. Tested in `tests/std/unsafe_task_test.lar`.
+  Unlike what was planned, `unsafe_c = true` stays: it is C in the program's own process, for one header;
+  an `UnsafeTask` is the safe way, and needs no `unsafe_c`.
+
 ## To do
 
-### C only in processes apart: `UnsafeTask`
+### C only in processes apart: `UnsafeTask` (done)
 
-The C of a library is used only from a task, in a copy of the program: when it fails, the task fails,
-not the program. The process is the region of that C: what the library took and did not free goes when
-the process ends.
+See the Done list and spec §19.2. What is left of it is below: callbacks.
 
-```ts
-class Thumbnail implements UnsafeTask {
-    let file: String;
-    let width: int32;
-
-    native interface Vips "<vips/vips.h>" {
-        type VipsImage released by g_object_unref;
-        function vips_init(name: String): int32;
-        function vips_thumbnail(input: String, out: VipsImage, width: int32): int32;
-        function vips_set_log(f: (String) -> void): void;
-    }
-
-    override function setup(loader: LibraryLoader): void throws LoadError {
-        loader.bind(Vips, "vips");                      // libvips.so, libvips.dylib or vips.dll
-        let log: Callback = loader.registerCallback((text) -> { eprintln(text); });
-        Vips.vips_set_log(log);
-    }
-
-    override function run(channel: Channel): void throws ProcessError {
-        ...
-        channel.send({ done: true });
-    }
-}
-```
-
-- `interface UnsafeTask extends Task` has one more method, `setup(loader: LibraryLoader): void throws
-  LoadError`. It is called once in each process, before its first task: a `ProcessPool` keeps the
-  library loaded for the next tasks.
-- `LibraryLoader.bind(Interface, name)` opens the libra### The types of a header: `type` (done)
+### The types of a header: `type` (done)
 
 Everything of C in an interface is a `type`, opaque (`type X;`), with an owner (`type X released by
 f;`) or with fields (`type X { let ...; }`). The whole of it, with its table, is in spec §D.0; how it

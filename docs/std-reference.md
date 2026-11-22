@@ -4,7 +4,7 @@ Every module of `std` a program can import, and everything it makes public: type
 
 > This file is **generated** from `src/std/` with `tools/std_reference.py`; it is not edited by hand. The [manual](manual.md#25-standard-library) explains the library with examples. The parts of std for std itself (`*.posix`, `*.windows`, `*.macos`, `*.common`, `*.internal`) are not here: a program cannot import them.
 
-**29 modules, 200 public names.**
+**30 modules, 205 public names.**
 
 ## Modules
 
@@ -28,6 +28,7 @@ Every module of `std` a program can import, and everything it makes public: type
 - [`std.net.tls`](#stdnettls): encrypted connections, for https:// (and whatever else needs TLS).
 - [`std.net.tls.openssl`](#stdnettlsopenssl): the TLS client on Linux, over the OpenSSL of std.net's servers.
 - [`std.os`](#stdos): the environment the program runs in.
+- [`std.os.library`](#stdoslibrary): the C libraries an UnsafeTask opens when it runs, for the native interfaces of its class.
 - [`std.os.process`](#stdosprocess): processes. A Process runs another program, or a task of this one in a copy of it; a
 - [`std.os.rpc`](#stdosrpc): calls to another program, and a program that answers them (JSON-RPC 2.0).
 - [`std.os.sharedmemory`](#stdossharedmemory): memory that several programs see. A stream is a queue (each message once, in
@@ -1454,6 +1455,49 @@ Whether Ctrl+C or SIGTERM arrived after catchTermination().
 
 ---
 
+## std.os.library
+
+```
+the C libraries an UnsafeTask opens when it runs, for the native interfaces of its class.
+
+  class Thumbnail implements UnsafeTask {
+      native interface Vips "<vips/vips.h>" {
+          function vips_init(name: String): int32;
+      }
+      override function setup(loader: LibraryLoader): void throws LoadError {
+          loader.bind(Vips, "vips");          // libvips.so, libvips.dylib or vips.dll
+      }
+      override function run(channel: Channel): void throws ProcessError { Vips.vips_init("thumbnail"); ... }
+  }
+
+The header is the interface's (its types, constants and the checking of each function); the library is
+said once, at bind. Its C runs only in the task's process: when it fails, the task fails.
+```
+
+`src/std/os/library.lar`
+
+### enum `LoadError`
+Why a library could not be used.
+
+`function message(e: LoadError): String`  
+What a LoadError says, as text.
+
+### class `LibraryLoader`
+Opens the libraries of a task's native interfaces, once in each process: what it opens stays open as long as the process (a ProcessPool keeps it for the next tasks).
+
+- `opened: String[*]`
+
+- `function bind(functions: int64, library: String): void throws LoadError`  
+  Opens `library` and finds in it every function of the native interface `functions` (its name, as a value). The library is a name without "lib" and its extension ("SDL2": libSDL2.so, libSDL2.dylib, SDL2.dll), or a file. Throws LoadError when it is not found, or when a function is missing.
+
+- `function libraries(): String[*]`  
+  The libraries it has bound so far.
+
+`function fileNames(library: String): String[*]`  
+The files a library is looked for in, in order: a file as it is; a name as each system names its files.
+
+---
+
 ## std.os.process
 
 ```
@@ -1521,6 +1565,11 @@ Work that runs in another process: a copy of this program, so that a panic or a 
 
 ### enum `Received`
 What a receive brings.
+
+### interface `UnsafeTask extends Task`
+A task with C of its own: the native interfaces declared in its class are found in libraries when it runs, and their C runs only in its process, so a crash there is a ProcessError here. setup() is called once in each process, before its first task of this class; it binds each interface to its library: loader.bind(Sdl, "SDL2"). A LoadError there ends the task as a ProcessError.Failed that says it.
+
+- `function setup(loader: LibraryLoader): void throws LoadError`
 
 ### class `Channel`
 Messages between a task and the program that started it: what one side sends, the other receives, in order. A message is what a task's fields can be, or a table of them (as JSON).

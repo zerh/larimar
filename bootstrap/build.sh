@@ -22,6 +22,7 @@
 # Environment:
 #   CC              C compiler (default: cc)
 #   CFLAGS          flags (default: -std=c99 -O2)
+#   LIBS            libraries to link (default: -ldl, for dlopen on older Linux)
 #   LARIMAR_PREFIX  installation folder (default: ../out/larimar)
 
 set -e
@@ -30,6 +31,7 @@ HERE="$(pwd)"
 
 CC="${CC:-cc}"
 CFLAGS="${CFLAGS:--std=c99 -O2}"
+LIBS="${LIBS:--ldl}"
 PREFIX="${LARIMAR_PREFIX:-../out/larimar}"
 OUTPUT="bin/larimarc"
 
@@ -60,7 +62,7 @@ echo "=== Building the Larimar compiler ==="
 echo "C compiler: $CC $CFLAGS"
 echo ""
 echo "Step 1: compiling bootstrap/larimarc.c ($(wc -l < bootstrap/larimarc.c | tr -d ' ') lines)..."
-$CC $CFLAGS bootstrap/larimarc.c -o "$OUTPUT"
+$CC $CFLAGS bootstrap/larimarc.c -o "$OUTPUT" $LIBS
 echo "  -> ./$OUTPUT"
 
 if [ "$VERIFY" = 1 ]; then
@@ -69,10 +71,10 @@ if [ "$VERIFY" = 1 ]; then
     mkdir -p build
     # stage 1: src/compiler compiled by the bootstrap compiler (it may be older than src/)
     ./"$OUTPUT" src/compiler/main.lar -o build/stage1.c
-    $CC $CFLAGS build/stage1.c -o build/larimarc_stage1
+    $CC $CFLAGS build/stage1.c -o build/larimarc_stage1 $LIBS
     # stage 2 and 3: src/compiler compiled by the compiler it makes; they must be identical
     ./build/larimarc_stage1 src/compiler/main.lar -o build/stage2.c
-    $CC $CFLAGS build/stage2.c -o build/larimarc_stage2
+    $CC $CFLAGS build/stage2.c -o build/larimarc_stage2 $LIBS
     ./build/larimarc_stage2 src/compiler/main.lar -o build/stage3.c
     if cmp -s build/stage2.c build/stage3.c; then
         echo "  OK: the compiler compiles itself (stage 2 and stage 3 are identical)"

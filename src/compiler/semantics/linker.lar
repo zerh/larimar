@@ -19,6 +19,7 @@ import syntax.ast {
     ArrayLit, Placed, Pattern, SwitchExpr, PT_NAME, PT_CONSTANT, PT_NULL
 };
 import syntax.parser { parseProgram };
+import syntax.parser.natives { OPENED_BINDING };
 import editor.opendocuments { openDocument };
 
 public const FILE_LINES: int32 = 1000000;
@@ -287,6 +288,7 @@ function loadLang(): void {
 const TASKS_MODULE: String = "std.os.process.tasks";
 const PROCESS_MODULE: String = "std.os.process";
 
+
 /** The types a field of a Task can have: they go to the other process as they are. */
 const TASK_SCALARS: String = " int8 int16 int32 int64 uint8 uint16 uint32 uint64 byte float32 float64 bool String ";
 
@@ -295,15 +297,18 @@ const TASK_SCALARS: String = " int8 int16 int32 int64 uint8 uint16 uint32 uint64
  * implement it): Task imported by name, or through the alias of std.os.process.
  */
 function taskInterface(c: ClassDecl in default, p: Program in default): String {
+    let kinds: String[] = ["Task", "UnsafeTask"];            // UnsafeTask: a Task with C of its own
     for (i in c.interfaces) {
         for (im in p.imports) {
             if (im.path != "std.os.process") { continue; }
-            if (im.hasNames && i == "Task") {
-                for (n in im.names) {
-                    if (n == "Task") { return i; }
+            for (kind in kinds) {
+                if (im.hasNames && i == kind) {
+                    for (n in im.names) {
+                        if (n == kind) { return i; }
+                    }
                 }
+                if (im.alias != "" && i == "${im.alias}.${kind}") { return i; }
             }
-            if (im.alias != "" && i == "${im.alias}.Task") { return i; }
         }
     }
     return "";
@@ -362,6 +367,7 @@ function writeTasks(mainPath: String): void {
         if (m.program == null || isStd(m.path) || m.path == TASKS_MODULE) { continue; }
         let encode: StringBuilder = {} in default;
         let start: StringBuilder = {} in default;
+        let setup: StringBuilder = {} in default;
         let iface: String = "";
         let line: int32 = 0;
         for (d in m.program!.decls) {
@@ -377,6 +383,7 @@ function writeTasks(mainPath: String): void {
                 continue;
             }
             let key: String = m.path != "" ? "${m.path}.${c.name}" : c.name;
+            if (spelled.endsWith("UnsafeTask")) { setup.add("    if (task is ${c.name} t) {\n        t.setup(loader);\n        return;\n    }\n"); }
             encode.add("    if (task is ${c.name} t) {\n        let f: Any = {};\n");
             let fill: StringBuilder = {} in default;
             let literal: String[*] = [] in default;
@@ -408,6 +415,9 @@ function writeTasks(mainPath: String): void {
             start.add("        return t;\n    }\n");
         }
         if (iface == "") { continue; }
+        iface = "LarimarProcess.Task";         // Task as std.os.process says it, whatever the module imported (Task, UnsafeTask)
+        m.program!.imports.push(ImportDecl { line: 1, path: PROCESS_MODULE, alias: "LarimarProcess" } in default);
+        m.program!.imports.push(ImportDecl { line: 1, path: "std.os.library", alias: "LarimarLibraries" } in default);
         let source: String = """
             public function larimarTaskEncode(task: ${iface}): Any {
             ${encode.toString()}    return null;
@@ -416,6 +426,9 @@ function writeTasks(mainPath: String): void {
             public function larimarTaskStart(name: String, fields: Any): ${iface}? {
             ${start.toString()}    return null;
             }
+
+            public function larimarTaskSetup(task: ${iface}, loader: LarimarLibraries.LibraryLoader): void throws LarimarLibraries.LoadError {
+            ${setup.toString()}}
             """ in default;
         let p: Program = parseProgram(source, m.index * FILE_LINES + line);
         if (p.error != "") {
@@ -439,13 +452,16 @@ function writeTasks(mainPath: String): void {
     let imports: StringBuilder = {} in default;
     let encodes: StringBuilder = {} in default;
     let starts: StringBuilder = {} in default;
+    let setups: StringBuilder = {} in default;
     for (i, o in owners) {
         imports.add("import ${o} as Tasks${i};\n");
         encodes.add("    let e${i}: Any = Tasks${i}.larimarTaskEncode(task);\n    if (e${i} != null) { return e${i}; }\n");
         starts.add("    let t${i}: Task? = Tasks${i}.larimarTaskStart(name, fields);\n    if (t${i} != null) { return t${i}; }\n");
+        setups.add("    Tasks${i}.larimarTaskSetup(task, loader);\n");
     }
     let registry: String = """
         import std.os.process { Task };
+        import std.os.library { LibraryLoader, LoadError };
         ${imports.toString()}
         public function encode(task: Task): Any {
         ${encodes.toString()}    return null;
@@ -454,6 +470,9 @@ function writeTasks(mainPath: String): void {
         public function start(name: String, fields: Any): Task? {
         ${starts.toString()}    return null;
         }
+
+        public function setup(task: Task, loader: LibraryLoader): void throws LoadError {
+        ${setups.toString()}}
         """ in default;
     // std.os.process.tasks, written here; std.os.process's encodeTask and startTask then ask it (std itself
     // has no import of it: no cycle in its sources)
@@ -471,6 +490,7 @@ function writeTasks(mainPath: String): void {
     let calls: Program = parseProgram("""
         function encodeTask(task: Task): Any { return TaskRegistry.encode(task); }
         function startTask(name: String, fields: Any): Task? { return TaskRegistry.start(name, fields); }
+        function setupTask(task: Task, loader: LibraryLoader): void throws LoadError { TaskRegistry.setup(task, loader); }
         """, process.index * FILE_LINES + 1);
     for (i, d in process.program!.decls) {
         if (!(d is FunctionDecl f)) { continue; }
@@ -1236,6 +1256,10 @@ function isAlias(n: String): bool {
 function identName(id: Ident in default): void {
     let n: String = id.name;
     if (local(n)) { return; }
+    if (rm.natives[n] != null && rm.natives[n][OPENED_BINDING] != null) {     // an UnsafeTask's interface, as a value: what binds it
+        id.name = (rm.natives[n][OPENED_BINDING] as String ?? n).clone() in default;
+        return;
+    }
     let v: String = rm.values[n] as String ?? rm.types[n] as String ?? "";
     if (v != "") {
         id.name = v;

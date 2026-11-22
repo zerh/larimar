@@ -2,8 +2,8 @@
 // Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
 
 import syntax.ast {
-    BlockStmt, Call, CIncludeDecl, Expr, ExprStmt, ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, FieldDecl, FunctionDecl,
-    Ident, NativeInterfaceDecl, NativeTypeDecl, Node, Param, ReturnStmt, SelfExpr, StructDecl, TypeRefKind, typeNamed
+    BlockStmt, Call, CCodeDecl, CIncludeDecl, Expr, ExprStmt, ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, FieldDecl, FunctionDecl,
+    Ident, NativeInterfaceDecl, NativeTypeDecl, Node, Param, ReturnStmt, SelfExpr, StructDecl, TypeRef, TypeRefKind, typeNamed
 };
 import syntax.lexer { Token, TokenType };
 import syntax.parser { endedBySemicolon, lives, Parser, qualifiedName };
@@ -21,7 +21,7 @@ import syntax.parser.types { type };
  *   type NAME { ... }                                                                   (std) a type the compiler knows
  */
 public function nativeDeclaration(parser: Parser in default, line: int32): Node {
-    if (parser.optional(TokenType.Interface)) { return nativeInterface(parser, ""); }
+    if (parser.optional(TokenType.Interface)) { return nativeInterface(parser, "", false); }
     if (parser.optional(TokenType.Function)) { return nativeFunctionOfC(parser); }
     if (parser.at(TokenType.Const) || parser.at(TokenType.Let)) { return nativeValue(parser); }
     if (parser.optional(TokenType.Struct)) { return nativeStruct(parser, "native struct"); }
@@ -39,11 +39,12 @@ public function nativeDeclaration(parser: Parser in default, line: int32): Node 
  * (after `native interface`) NAME STRING ( , STRING )* [ extends NAME ( , NAME )* ]
  *     { ( function ... ; | type NAME ... ( ; | { fields } ) | const ... ; | let ... )* }
  * What C headers give, under one name: Name.f(...) calls the C function f. In a class (`owner`) it is its
- * own, static: only on the class's system.
+ * own, static: only on the class's system. In a class that implements UnsafeTask (`opened`) its functions
+ * are found when the task runs, in the library that loader.bind(Name, "library") opens.
  */
-public function nativeInterface(parser: Parser in default, owner: String in default): NativeInterfaceDecl {
+public function nativeInterface(parser: Parser in default, owner: String in default, opened: bool): NativeInterfaceDecl {
     let name: Token = parser.expect(TokenType.Ident, "Expected the name of the native interface");
-    let declaration: NativeInterfaceDecl = NativeInterfaceDecl { line: name.line, name: name.text, owner } in default;
+    let declaration: NativeInterfaceDecl = NativeInterfaceDecl { line: name.line, name: name.text, owner, opened } in default;
     if (parser.at(TokenType.Str)) {
         declaration.headers.push(parser.advance().text);
         while (parser.optional(TokenType.Comma)) { declaration.headers.push(parser.expect(TokenType.Str, "Expected another header after ','").text); }
@@ -114,8 +115,61 @@ public function nativeInterface(parser: Parser in default, owner: String in defa
     for (h in declaration.headers) {
         parser.nativeParts.push(CIncludeDecl { line: name.line, header: h, owner, gives: gives.join(" ") in default } in default);
     }
+    if (opened) { openedFunctions(parser, declaration, functions); }
     return declaration;
 }
+
+/**
+ * The functions of an interface of an UnsafeTask are found when the task runs: each call goes through a
+ * pointer of the header's own type (so the C compiler still checks it), and a C function binds them all
+ * to an opened library. The interface's name, as a value, is that function (loader.bind(Name, "...")).
+ */
+function openedFunctions(parser: Parser in default, declaration: NativeInterfaceDecl in default, functions: ExternFunctionDecl[*] in default): void {
+    let key: String = "${declaration.owner}_${declaration.name}";
+    let pointers: StringBuilder = {} in default;
+    let binds: StringBuilder = {} in default;
+    for (f in functions) {
+        if (f.cBody != "") {
+            parser.error(f.line, "A function of the native interface of an UnsafeTask is found in its library: it has no body of C");
+            continue;
+        }
+        let symbol: String = f.cName;
+        let pointer: String = "lar_opened_${key}_${symbol}";
+        pointers.add("static __typeof__(${symbol})* ${pointer};\n");
+        binds.add("    if (!(*(void**)(&${pointer}) = lar_library_symbol(library, \"${symbol}\"))) return \"${symbol}\";\n");
+        f.cName = pointer.clone() in default;
+    }
+    let code: String = """
+        #ifndef LAR_LIBRARY_SYMBOL
+        #define LAR_LIBRARY_SYMBOL
+        #ifdef _WIN32
+        #include <windows.h>
+        static void* lar_library_symbol(void* library, const char* name) { return (void*)GetProcAddress((HMODULE)library, name); }
+        #else
+        #include <dlfcn.h>
+        static void* lar_library_symbol(void* library, const char* name) { return dlsym(library, name); }
+        #endif
+        #endif
+        """;
+    parser.nativeParts.push(CCodeDecl {
+        line: declaration.line,
+        code: "${code}${pointers.toString()}static const char* lar_bind_${key}(void* library) {\n${binds.toString()}    return 0;\n}\n" in default,
+        owner: declaration.owner,
+        ofInterface: true
+    } in default);
+    declaration.members.push(OPENED_BINDING);
+    parser.nativeParts.push(ExternValueDecl {
+        line: declaration.line,
+        name: "${declaration.name}__${OPENED_BINDING}" in default,
+        type: TypeRef { line: declaration.line, kind: TypeRefKind.Named, name: "int64" } in default,
+        isConst: true,
+        cName: "",
+        cExpr: "(int64_t)(intptr_t)&lar_bind_${key}" in default
+    } in default);
+}
+
+/** The member of an interface of an UnsafeTask that its name gives as a value: what binds its functions. */
+public const OPENED_BINDING: String = "lar_binding";
 
 /**
  * Whether the type that starts here has fields: a '{' comes before its ';'. Then it is a struct or a

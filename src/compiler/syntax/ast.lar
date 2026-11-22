@@ -99,6 +99,7 @@ public class CCodeDecl extends Node {
     let platform: String = "";          // the ccode of a class for one system: only there
     let owner: String = "";             // the class it is in ("" at the top level)
     let fromStd: bool = false;          // the standard library's: only what is used reaches the C
+    let ofInterface: bool = false;      // written by the compiler for a native interface of an UnsafeTask
 }
 /**
  * native interface Name "<h>" [extends A, B] { function...; type...; const...; let... }: what a C header
@@ -112,6 +113,7 @@ public class NativeInterfaceDecl extends Node {
     let members: String[*] = [];        // the names of its functions and values (as written: f, not Name__f)
     let types: String[*] = [];          // the names of its types and structs
     let owner: String = "";             // the class it is in ("" at the top level)
+    let opened: bool = false;           // in an UnsafeTask: its functions are found in a library when it runs
 }
 
 /** native type X;  = T*;  = c"C TYPE";  ... released by f; */

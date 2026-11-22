@@ -232,7 +232,11 @@ function classDeclaration(parser: Parser in default, isSynchronized: bool): Clas
             }
         } else if (parser.optional(TokenType.Native)) {
             if (parser.optional(TokenType.Interface)) {
-                parser.nativeParts.push(nativeInterface(parser, declaration.name));
+                let opened: bool = false;           // an UnsafeTask's: its functions are found in a library when it runs
+                for (i in declaration.interfaces) {
+                    if (i == "UnsafeTask" || i.endsWith(".UnsafeTask")) { opened = true; }
+                }
+                parser.nativeParts.push(nativeInterface(parser, declaration.name, opened));
             } else if (parser.optional(TokenType.Let)) {
                 let property: FunctionDecl = nativeProperty(parser, parser.previous().line);
                 if (!property.hasBody) { parser.error(property.line, "A native let of a class needs its value: native let ${property.name}: T = expression;"); }

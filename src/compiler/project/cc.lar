@@ -40,6 +40,7 @@ public function systemLibraries(c: String): String[*] {
     }
     if (c.contains("#define LAR_NET_TLS_SERVER") && !windows() && !mac()) { out.push("-ldl"); }    // std.net: OpenSSL, when first used
     if (c.contains("#define LAR_SHARED_MEMORY") && !windows() && !mac()) { out.push("-lrt"); }      // std.os.sharedmemory: shm_open
+    if (c.contains("#include <dlfcn.h>") && !windows() && !mac()) { out.push("-ldl"); }          // dlopen: std.os.library, an UnsafeTask
     if (c.contains("#include <math.h>") && !windows() && !mac()) { out.push("-lm"); }          // C's math (std.math, a native interface)
     return out;
 }

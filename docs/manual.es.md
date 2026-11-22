@@ -2634,6 +2634,32 @@ function main(): int32 {
 
   `receive(ms)` no es un sleep: espera *como mucho* `ms` (como `poll(ms)` de una `BlockingQueue` de Java).
 - **Solo la `Task` de `std.os.process` es esto**: una interfaz tuya que se llame `Task` es solo tuya.
+- **`UnsafeTask`: C propio, en su propio proceso.** Una tarea que usa una librería de C implementa
+  `UnsafeTask`, declara la native interface de la librería en su clase y la enlaza en `setup`, que corre
+  una vez en cada proceso. Las funciones se buscan en la librería cuando la tarea corre, y un crash en
+  ellas es un `ProcessError` aquí, no el final del programa. No necesita `unsafe_c`.
+
+  ```ts
+  import std.os.process { Channel, UnsafeTask, ProcessError };
+  import std.os.library { LibraryLoader, LoadError };
+
+  class Root implements UnsafeTask {
+      let x: float64;
+      native interface LibM "<math.h>" {               // el header: tipos, constantes, el tipo de cada función
+          function sqrt(x: float64): float64;
+      }
+      override function setup(loader: LibraryLoader): void throws LoadError {
+          loader.bind(LibM, "m");                      // la librería: libm.so, libm.dylib o m.dll
+      }
+      override function run(channel: Channel): void throws ProcessError {
+          channel.send(LibM.sqrt(self.x));
+      }
+  }
+  ```
+
+  Una librería que no está, o una función que no tiene, termina la tarea con un `ProcessError.Failed` que
+  dice cuál (`cannot open the library SDL2 (tried libSDL2.so, ...)`, `the library z has no function
+  sqrt`). Un `ProcessPool` prepara la librería una vez en cada uno de sus procesos.
 - **La única diferencia con un hilo**: un `Runnable` puede ser una lambda que captura variables, porque
   el hilo comparte la memoria de este programa; una `Task` es un objeto cuyos campos se copian, porque el
   otro proceso no la ve.
@@ -4067,8 +4093,8 @@ public function side(volume: float64): float64 { return LibM.cbrt(volume); }
   que nada libera (`type Cell (int*) has no 'released by'`).
 - **Las garantías del lenguaje terminan ahí.** El compilador revisa el Larimar alrededor de la llamada,
   no lo que hace el C: una native interface es para una cabecera, para algo puntual. Para una biblioteca
-  de C entera, otro programa ([capítulo 23](#23-otros-programas-llamadas-memoria-compartida-y-procesos)) deja sus
-  fallos en otro proceso.
+  de C entera, una `UnsafeTask` ([capítulo 23](#23-otros-programas-llamadas-memoria-compartida-y-procesos)) deja
+  sus fallos en otro proceso, y no necesita `unsafe_c`.
 - `ccode`, `cinclude` y las funciones con cuerpo de C siguen siendo de la biblioteca estándar, con o sin
   `unsafe_c`.
 

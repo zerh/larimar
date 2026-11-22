@@ -1,0 +1,109 @@
+// std.os.library: the C libraries an UnsafeTask opens when it runs, for the native interfaces of its class.
+//
+//   class Thumbnail implements UnsafeTask {
+//       native interface Vips "<vips/vips.h>" {
+//           function vips_init(name: String): int32;
+//       }
+//       override function setup(loader: LibraryLoader): void throws LoadError {
+//           loader.bind(Vips, "vips");          // libvips.so, libvips.dylib or vips.dll
+//       }
+//       override function run(channel: Channel): void throws ProcessError { Vips.vips_init("thumbnail"); ... }
+//   }
+//
+// The header is the interface's (its types, constants and the checking of each function); the library is
+// said once, at bind. Its C runs only in the task's process: when it fails, the task fails.
+
+import std.platform { Platform };
+import std.os.library.posix { PosixLibraries };
+import std.os.library.windows { WindowsLibraries };
+
+/** Why a library could not be used. */
+public enum LoadError {
+    /** No file of the library was found (`tried`: the names looked for). */
+    NotFound(library: String, tried: String),
+    /** The library has no function of that name. */
+    Missing(library: String, name: String)
+}
+
+/** What a LoadError says, as text. */
+public function message(e: LoadError): String {
+    return switch (e) {
+        case NotFound { library, tried } -> "cannot open the library ${library} (tried ${tried})";
+        case Missing { library, name } -> "the library ${library} has no function ${name}";
+    };
+}
+
+/**
+ * Opens the libraries of a task's native interfaces, once in each process: what it opens stays open as
+ * long as the process (a ProcessPool keeps it for the next tasks).
+ */
+public class LibraryLoader {
+    let opened: String[*] = [];
+
+    /**
+     * Opens `library` and finds in it every function of the native interface `functions` (its name, as
+     * a value). The library is a name without "lib" and its extension ("SDL2": libSDL2.so, libSDL2.dylib,
+     * SDL2.dll), or a file. Throws LoadError when it is not found, or when a function is missing.
+     */
+    function bind(functions: int64, library: String): void throws LoadError {
+        let handle: int64 = 0;
+        let names: String[*] = fileNames(library);
+        for (n in names) {
+            handle = openFile(n);
+            if (handle != 0) { break; }
+        }
+        if (handle == 0) { throw LoadError.NotFound(library.clone(), names.join(", ").clone()); }
+        let missing: byte[*] = [];
+        for (i in 0..256) { missing.push(0); }
+        if (!bindFunctions(functions, handle, missing)) {
+            let size: int32 = 0;
+            while (size < missing.length && missing[size] != 0) { size += 1; }
+            throw LoadError.Missing(library.clone(), stringOfRange(missing, 0, size).clone());
+        }
+        self.opened.push(library.clone());
+    }
+
+    /** The libraries it has bound so far. */
+    function libraries(): String[*] { return self.opened; }
+}
+
+/** The files a library is looked for in, in order: a file as it is; a name as each system names its files. */
+public function fileNames(library: String): String[*] {
+    let names: String[*] = [];
+    if (library.contains("/") || library.contains("\\") || library.endsWith(".so") || library.contains(".so.")
+            || library.endsWith(".dylib") || library.endsWith(".dll")) {
+        names.push(library);
+        return names;
+    }
+    switch (Platform.current()) {
+        case Windows -> {
+            names.push("${library}.dll");
+            names.push("lib${library}.dll");
+        }
+        case MacOS -> {
+            names.push("lib${library}.dylib");
+            names.push("/opt/homebrew/lib/lib${library}.dylib");
+            names.push("/usr/local/lib/lib${library}.dylib");
+            names.push("${library}.framework/${library}");
+        }
+        case Linux, Unix -> {
+            names.push("lib${library}.so");
+            for (version in 0..30) { names.push("lib${library}.so.${version}"); }
+        }
+    }
+    return names;
+}
+
+function openFile(file: String): int64 {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixLibraries.open(file);
+        case Windows -> WindowsLibraries.open(file);
+    };
+}
+
+function bindFunctions(functions: int64, library: int64, missing: byte[]): bool {
+    return switch (Platform.current()) {
+        case Linux, MacOS, Unix -> PosixLibraries.bindTo(functions, library, missing);
+        case Windows -> WindowsLibraries.bindTo(functions, library, missing);
+    };
+}

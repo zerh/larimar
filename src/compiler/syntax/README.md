@@ -117,7 +117,7 @@ per kind of node, and the errors of syntax. Nothing here knows about other files
   - `function optionalFollows(next: TokenType): bool`: After `as T`, a '?' makes T optional only when what follows can come after a type (x as int64? ?? 0, (x as T?), x as T?;)
 - **`syntax.parser.natives`**: what comes from C (native functions, types, structs and values; cinclude and ccode)
   - `function nativeDeclaration(parser: Parser in default, line: int32): Node`: (after `native`) function NAME ( [ parameter ( , parameter )* [ , 
-  - `function nativeInterface(parser: Parser in default, owner: String in default): NativeInterfaceDecl`: (after `native interface`) NAME STRING ( , STRING )* [ extends NAME ( , NAME )* ] { ( function 
+  - `function nativeInterface(parser: Parser in default, owner: String in default, opened: bool): NativeInterfaceDecl`: (after `native interface`) NAME STRING ( , STRING )* [ extends NAME ( , NAME )* ] { ( function 
   - `function languageType(parser: Parser in default, line: int32): NativeTypeDecl`: (after `type`) NAME { ( static 
   - `function nativeFunction(parser: Parser in default, line: int32): FunctionDecl`: (after `native function`) NAME parameters [ : Type ] [ in lives ] [ throws Type ] [ = expression ] ;
   - `function nativeProperty(parser: Parser in default, line: int32): FunctionDecl`: (after `native let`) NAME : Type [ = expression ] ; A value read without parentheses and never assigned (s.length)

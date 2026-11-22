@@ -1,0 +1,72 @@
+// std.os.process: an UnsafeTask has native interfaces of its own, found in libraries when it runs, in its
+// own process (std.os.library).
+import std.os;
+import std.os.process { Channel, Process, ProcessPool, Received, UnsafeTask, ProcessError, message };
+import std.os.library { LibraryLoader, LoadError, fileNames };
+import std.test { check, checkText };
+
+/** C's square root, from the math library opened when the task runs. */
+class SquareRoot implements UnsafeTask {
+    let x: float64;
+    let library: String = "m";
+
+    native interface LibM "<math.h>" {
+        function sqrt(x: float64): float64;
+    }
+
+    override function setup(loader: LibraryLoader): void throws LoadError {
+        loader.bind(LibM, self.library);
+    }
+
+    override function run(channel: Channel): void throws ProcessError {
+        channel.send({ root: LibM.sqrt(self.x), pid: os.processId() });
+    }
+}
+
+function valueOf(r: Received): Any {
+    return switch (r) {
+        case Message { value } -> value;
+        default -> null;
+    };
+}
+
+/** What a task sent, or the message of its failure. */
+function outcome(task: SquareRoot): String {
+    try {
+        let p: Process = { run: task };
+        p.start();
+        p.join();
+        return "${valueOf(p.channel().receive(0)).root}".clone();
+    } catch (ProcessError e) {
+        return message(e).clone();
+    }
+}
+
+// bind opens the library and finds the interface's functions in it: the call goes to the library's sqrt.
+test function anUnsafeTaskCallsItsLibrary(): void {
+    checkText("3.0", outcome(SquareRoot { x: 9.0 }));
+}
+
+// A library that is not there, or a function it does not have, ends the task with a message that says it.
+test function aLibraryThatIsNotThereEndsTheTask(): void {
+    let why: String = outcome(SquareRoot { x: 8.0, library: "no-such-library-of-larimar" });
+    check(why.startsWith("the task failed: cannot open the library no-such-library-of-larimar (tried "), why);
+    checkText("the task failed: the library z has no function sqrt", outcome(SquareRoot { x: 8.0, library: "z" }));
+}
+
+// A pool sets the library up once in each of its processes, and runs the next tasks with it.
+test function aPoolKeepsTheLibrary(): void throws ProcessError {
+    let pool: ProcessPool = { processes: 2 };
+    let channels: Channel[*] = [];
+    for (i in 1..7) { channels.push(pool.submit(SquareRoot { x: (i * i) as float64 })); }
+    pool.wait();
+    let roots: String[*] = [];
+    for (c in channels) { roots.push("${valueOf(c.receive(0)).root}"); }
+    checkText("1.0 2.0 3.0 4.0 5.0 6.0", roots.join(" "));
+}
+
+// A name is looked for as each system names its files; a file is used as it is.
+test function theFilesOfALibrary(): void {
+    check(fileNames("SDL2").length > 0, "some names");
+    checkText("/opt/lib/libx.so.3", fileNames("/opt/lib/libx.so.3").join(","));
+}

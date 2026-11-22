@@ -1439,6 +1439,17 @@ what `ProcessPool.submit` returns are its other end; `Process.onMessage(handler)
 message while `join()` waits. An interface called
 `Task` of another module is not this one.
 
+**`UnsafeTask`** (`std.os.process`) is a `Task` with C of its own: `setup(loader: LibraryLoader): void
+throws LoadError`, called once in each process before its first task of that class. A native interface
+declared in a class that implements it is **opened**: its header still gives its types, constants and
+the type of each function, but its functions are found when the task runs, in the library that
+`loader.bind(Name, "library")` opens (`std.os.library`; the interface's name, as a value, is what binds
+it). Each call goes through a pointer of the header's own type, so the C compiler checks it as before.
+The library is a name without `lib` and its extension (`"SDL2"`: `libSDL2.so`, `libSDL2.dylib`,
+`SDL2.dll`), or a file. It needs no `unsafe_c` (§D.0): its C runs only in the task's process, where a crash
+is a `ProcessError.Failed` for the program. A library not found, or a function it does not have, is a
+`LoadError`, and ends the task with what it says.
+
 A process started this way runs the initialization of the globals ([§24](#24-program-execution)) and then
 the tasks it is sent, not `main`.
 
@@ -1777,6 +1788,10 @@ the members are declared as in §D.3 to §D.5. Its functions and values are reac
 `LibM.cbrt(x)` calls the C function `cbrt`, `LibC.errno` reads `errno`. Its types and structs keep their
 names in the module (`type FILE released by fclose;`); a `type` without `=` is a pointer to the C type of
 its name (`FILE*`). A `released by` names a function of the same interface.
+
+In a class that implements `UnsafeTask` (§19.2) an interface is **opened**: its functions are found in a
+library when the task runs (`loader.bind(Name, "library")`), it has no functions with a body of C, and it
+needs no `unsafe_c`, because its C runs in the task's process only.
 
 Everything of C in an interface is a **`type`**, in one of three forms:
 

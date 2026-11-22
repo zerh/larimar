@@ -55,6 +55,8 @@ import std.encoding.json { JsonError };
 import std.time as Time;
 import std.os.internal.frames { Frames, framed };
 import std.os.sharedmemory { SharedMemoryInputStream, SharedMemoryOutputStream, uniqueName };
+import std.os.library { LibraryLoader, LoadError };
+import std.os.library as Libraries;
 
 /** Why a process could not be used. */
 public enum ProcessError {
@@ -94,6 +96,16 @@ public enum Received {
     Nothing,
     /** The task has finished, and everything it sent was received. */
     Finished
+}
+
+/**
+ * A task with C of its own: the native interfaces declared in its class are found in libraries when it
+ * runs, and their C runs only in its process, so a crash there is a ProcessError here. setup() is called
+ * once in each process, before its first task of this class; it binds each interface to its library:
+ * loader.bind(Sdl, "SDL2"). A LoadError there ends the task as a ProcessError.Failed that says it.
+ */
+public interface UnsafeTask extends Task {
+    function setup(loader: LibraryLoader): void throws LoadError;
 }
 
 /**
@@ -290,7 +302,7 @@ function startCopy(): TaskWire throws ProcessError {
     return wire!;
 }
 
-// The compiler writes these two for a program with Task classes (they ask std.os.process.tasks, which it
+// The compiler writes these three for a program with Task classes (they ask std.os.process.tasks, which it
 // writes too); without them there is no task to send.
 
 /** The class and fields of a task, as a table: { name, fields }; null when it is not a Task class of the program. */
@@ -298,6 +310,9 @@ function encodeTask(task: Task): Any { return null; }
 
 /** The task of class `name` with these fields; null when the program has no such class. */
 function startTask(name: String, fields: Any): Task? { return null; }
+
+/** For a task of a class that implements UnsafeTask, its setup(loader); nothing for another task. */
+function setupTask(task: Task, loader: LibraryLoader): void throws LoadError {}
 
 /** What goes to the copy for a task: { kind: "task", name, fields }. */
 function encoded(task: Task): Any throws ProcessError {
@@ -508,6 +523,8 @@ public function serveTasks(): int32 {
     } catch (IoError e) {
         return 2;
     }
+    let loader: LibraryLoader = {};
+    let ready: String[*] = [];                  // the UnsafeTask classes set up in this process
     while (true) {
         let m: Any = wire!.read(-1);
         if (m == null) { return 0; }
@@ -516,6 +533,16 @@ public function serveTasks(): int32 {
         if (task == null) {
             wire!.write({ kind: "fail", why: "this program has no Task class ${m.name}" });
             continue;
+        }
+        let name: String = m.name as String ?? "";
+        if (!ready.contains(name)) {                 // an UnsafeTask: its libraries, once in this process
+            try {
+                setupTask(task!, loader);
+            } catch (LoadError e) {
+                wire!.write({ kind: "fail", why: Libraries.message(e) });
+                continue;
+            }
+            ready.push(name.clone());
         }
         let channel: Channel = { wire: wire! };
         try {

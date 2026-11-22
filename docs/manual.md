@@ -2634,6 +2634,32 @@ function main(): int32 {
 
   `receive(ms)` is not a sleep: it waits *up to* `ms` (as `poll(ms)` of a Java `BlockingQueue`).
 - **Only the `Task` of `std.os.process` is this**: an interface of your own called `Task` is just yours.
+- **`UnsafeTask`: C of its own, in its own process.** A task that uses a C library implements
+  `UnsafeTask`, declares the library's native interface in its class, and binds it in `setup`, which
+  runs once in each process. The functions are found in the library when the task runs, and a crash in
+  them is a `ProcessError` here, not the end of the program. It needs no `unsafe_c`.
+
+  ```ts
+  import std.os.process { Channel, UnsafeTask, ProcessError };
+  import std.os.library { LibraryLoader, LoadError };
+
+  class Root implements UnsafeTask {
+      let x: float64;
+      native interface LibM "<math.h>" {               // the header: types, constants, the type of each function
+          function sqrt(x: float64): float64;
+      }
+      override function setup(loader: LibraryLoader): void throws LoadError {
+          loader.bind(LibM, "m");                      // the library: libm.so, libm.dylib or m.dll
+      }
+      override function run(channel: Channel): void throws ProcessError {
+          channel.send(LibM.sqrt(self.x));
+      }
+  }
+  ```
+
+  A library that is not there, or a function it does not have, ends the task with a `ProcessError.Failed`
+  that says which (`cannot open the library SDL2 (tried libSDL2.so, ...)`, `the library z has no function
+  sqrt`). A `ProcessPool` sets the library up once in each of its processes.
 - **The one difference with a thread**: a `Runnable` can be a lambda that captures variables, because a
   thread shares this program's memory; a `Task` is an object whose fields are copied, because the other
   process does not see it.
@@ -4061,9 +4087,9 @@ public function side(volume: float64): float64 { return LibM.cbrt(volume); }
   says it: `note: unsafe C (native interface) from: cubes`. It also names the pointer types of those
   interfaces that nothing releases (`type Cell (int*) has no 'released by'`).
 - **The language's guarantees stop there.** The compiler checks the Larimar around the call, not what the
-  C does: a native interface is for one header, for something specific. For a whole C library, another
-  program ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)) keeps its failures in
-  another process.
+  C does: a native interface is for one header, for something specific. For a whole C library, an
+  `UnsafeTask` ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)) keeps its failures in
+  another process, and needs no `unsafe_c`.
 - `ccode`, `cinclude` and functions with a body of C stay the standard library's, with or without
   `unsafe_c`.
 

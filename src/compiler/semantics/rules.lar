@@ -8,7 +8,7 @@
 // what must have a body.
 
 import syntax.ast { CCodeDecl, CIncludeDecl, ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, FunctionDecl, NativeInterfaceDecl,
-    NativeTypeDecl, Node, StructDecl };
+    NativeTypeDecl, Node, StructDecl, declName };
 import semantics.linker {
     declarationsOf, importsOf, isLanguage, isStd, linkedMainFile, linking, Module, ruleError, sourceOf,
     stdFileOpened, trusted, unsafeModule
@@ -120,6 +120,19 @@ function interfaceTypes(module: Module in default): String[*] {
     return names;
 }
 
+/** Whether the module takes UnsafeTask from std.os.process (by name, or through an alias). */
+function importsUnsafeTask(module: Module in default): bool {
+    if (module.program == null) { return false; }
+    for (im in module.program!.imports) {
+        if (im.path != "std.os.process") { continue; }
+        if (im.alias != "" || !im.hasNames) { return true; }
+        for (n in im.names) {
+            if (n == "UnsafeTask") { return true; }
+        }
+    }
+    return false;
+}
+
 /**
  * C is only the standard library's: a program, and a library written in Larimar, use what std gives (and,
  * for the rest, other programs). With [project] unsafe_c = true, native interfaces (and nothing else of
@@ -133,12 +146,25 @@ class NoCOutsideStd implements Rule {
         let interfaces: bool = unsafeModule(module);
         let declared: String[*] = interfaceTypes(module);
         let parts: Any = {};                     // what native interfaces declare: said once, at the interface
+        let opened: Any = {};                    // what the interfaces of an UnsafeTask declare: C of its own process
         for (d in declarationsOf(module)) {
             if (d is NativeInterfaceDecl nativeInterface) {
                 for (n in nativeInterface.members) { parts["${nativeInterface.name}__${n}"] = 1; }
+                if (nativeInterface.opened) {
+                    for (n in nativeInterface.members) { opened["${nativeInterface.name}__${n}"] = 1; }
+                    for (n in nativeInterface.types) { opened[n] = 1; }
+                }
             }
         }
         for (d in declarationsOf(module)) {
+            if (d is NativeInterfaceDecl ni && ni.opened) {         // an UnsafeTask's: its C runs in a process of its own
+                if (!importsUnsafeTask(module)) {
+                    ruleError(ni.line, self.id(), "Native interface '${ni.name}' is in a class that implements an UnsafeTask that is not std.os.process's: import it from std.os.process.");
+                }
+                continue;
+            }
+            if (d is CCodeDecl cc && cc.ofInterface) { continue; }
+            if (!(d is NativeInterfaceDecl) && opened[declName(d)] != null) { continue; }
             if (interfaces && d is NativeInterfaceDecl) {          // unsafe_c: allowed, and said at build
                 let from: String = sourceOf(module);
                 if (!linking.unsafeSources.contains(from)) { linking.unsafeSources.push(from.clone() in default); }

@@ -12,6 +12,12 @@ Each version of the compiler (`larimar --version`) and the version of the langua
   `Process.channel()` is the channel of its task and `join()` gives an `int32` (the exit code of a
   program, 0 for a task); `ProcessPool.submit` gives the channel of each task and `wait()` gives nothing.
   A panic there is `Failed: "the program ended (exit 101)"`.
+- **`UnsafeTask`: C of its own, in its own process** (`std.os.process`, `std.os.library`). A task
+  that implements it declares native interfaces in its class and binds them in `setup(loader)`, once in
+  each process: `loader.bind(Sdl, "SDL2")` opens `libSDL2.so`, `libSDL2.dylib` or `SDL2.dll` and finds
+  each function there, through a pointer of the header's own type. It needs no `unsafe_c`: a crash in
+  that C is a `ProcessError` for the program. A missing library or function is a `LoadError` that ends
+  the task saying which. `bootstrap/build.sh` links `-ldl` (`LIBS`), for older Linux.
 - **A `type` with fields in a native interface is a struct or a union of C**, by value: `type Point { let
   x: int32; let y: int32; }`, with only the fields used (the header gives the layout, so a union is
   written as a struct). There is no `struct` member in an interface any more (`std.io.files` now says
