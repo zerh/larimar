@@ -9,7 +9,7 @@ import syntax.ast {
 import semantics.types {
     ArrayKind, ClassInfo, classOf, ConstantKind, declared, EnumInfo, enumOf, escapeName, externInfoOf,
     ExternTypeInfo, FieldInfo, findMethod, FunctionInfo, functionOf, functionTypeOf, InterfaceInfo,
-    interfaceMethod, interfaceOf, isArray, isClass, isCValue, isEnumT, isError, isExternTypeName, isFloat,
+    interfaceMethod, interfaceOf, isArray, isClass, isCValue, isEnumT, isError, isExternStruct, isExternTypeName, isFloat,
     isInteger, isOpt, isPrimName, isResource, maxText, MethodInfo, minOf, named, NamedKind, newOwner,
     optionalOf, platformCondition, primByName, StructInfo, structMethod, structOf, Symbol, SymbolKind,
     T_ANY, T_BOOL, T_BYTE, T_ERROR, T_STRING, T_VOID, Type, TypeKind, VariantInfo, variantOf
@@ -503,8 +503,8 @@ public function signatures(program: Program in default): void {
                     f.memParams.push(true);       // a memory: C receives LarMemory* and can create things in it
                 } else if (isArray(paramType, ArrayKind.Slice)) {
                     f.memParams.push(false);      // T[]: C receives a pointer to the elements and their count
-                    if (!isError(paramType.elem!) && !isPlainNumber(paramType.elem!)) {
-                        error(p.line, "Parameter '${p.name}' of native function '${f.name}': a T[] passed to C must be of numbers or bool (byte[], int32[], float64[]...).");
+                    if (!isError(paramType.elem!) && !isPlainNumber(paramType.elem!) && !isExternStruct(paramType.elem!)) {
+                        error(p.line, "Parameter '${p.name}' of native function '${f.name}': a T[] passed to C must be of numbers, bool or C structs (byte[], int32[], Point[]...).");
                     }
                 } else {
                     f.memParams.push(false);

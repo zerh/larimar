@@ -28,7 +28,7 @@ per kind of node, and the errors of syntax. Nothing here knows about other files
   - `class ImportDecl extends Node`: import a.b; import a.b as x; import a.b { n1, n2 };
   - `class CIncludeDecl extends Node`: platform: "" (every one), "windows", "macos", "linux" or "unix": that of the class it is in (the analyzer sets it)
   - `class CCodeDecl extends Node`
-  - `class NativeInterfaceDecl extends Node`: native interface Name "<h>" [extends A, B] { function...; type...; const...; struct
+  - `class NativeInterfaceDecl extends Node`: native interface Name "<h>" [extends A, B] { function...; type...; const...; let
   - `class ExternTypeDecl extends Node`: native type X; = T*; = c"C TYPE"; 
   - `class ExternFunctionDecl extends Node`: cName: the C function called (it stays when a module renames the declaration); prototype: no cinclude
   - `class ExternValueDecl extends Node`: native const NAME: T [= c_name | = "C"]; native let NAME: T [= c_name]; a C constant (or macro) or a C global variable

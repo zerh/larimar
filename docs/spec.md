@@ -1768,15 +1768,36 @@ whoever maintains the standard library is [std-c.md](std-c.md).
 native interface NAME STRING ( , STRING )* [ extends NAME ( , NAME )* ] { member* }
 member = function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;
        | type NAME [ = CTYPE ] [ released by NAME ] ;
+       | type NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static function ... )* }
        | ( const | let ) NAME : Type [ = C ] ;
-       | struct NAME [ = C ] { ... }
 ```
 
 A native interface is what C headers give, under one name: each STRING is a header (`"<math.h>"`), and
 the members are declared as in §D.3 to §D.5. Its functions and values are reached through its name:
 `LibM.cbrt(x)` calls the C function `cbrt`, `LibC.errno` reads `errno`. Its types and structs keep their
 names in the module (`type FILE released by fclose;`); a `type` without `=` is a pointer to the C type of
-its name (`FILE*`). A `released by` names a function of the same interface. An interface that `extends`
+its name (`FILE*`). A `released by` names a function of the same interface.
+
+Everything of C in an interface is a **`type`**, in one of three forms:
+
+| Form | What it is in C | What a program does with it |
+|---|---|---|
+| `type X;` | a pointer the library gives and takes (`X*`) | passes it from one function to another |
+| `type X released by f;` | the same, with an owner (§D.7) | the same; `f` frees it when its memory goes |
+| `type X [ = C ] { fields }` | a **struct or a union**, by value | makes it, copies it, reads and writes its fields |
+
+A type with fields is what `native struct` is (§D.5), and is used the same way. It declares **only the
+fields the program uses**, in any order: the C that Larimar writes includes the header, so the C compiler
+knows the layout, finds each field by its name, and stops the build on a field that is not there or has
+another type. For the same reason **a struct and a union are written the same**: `e.key.keysym.sym` is
+written to C as it is (reading a member of a union that C did not write gives meaningless numbers, as in
+C). After `=` comes its C name when it is another (`type Moment = struct tm { ... }`). A type with fields
+has no `released by`: it is a value, not something C owns. There is no `struct` member in an interface.
+
+It goes to C **by value** as a parameter of its type, and **by pointer** as a parameter `T*`, with `&x`
+(§D.6): then what C writes stays in `x` (`SDL_PollEvent(&event)`). A `T[]` of them is an array of C
+(§D.3). A pointer inside it (a `char*`, a pointer to another struct) is declared as a `type` without
+fields, or as a `String`, read-only. An interface that `extends`
 others has their members too (imported by name, or of the same module). Imported by name
 (`import m { LibC }`), it brings its members with it.
 
@@ -1814,9 +1835,10 @@ the C one: a name, or C text, `c"..."`, when it is not a plain name (`c"(fio_sta
 not a Larimar `String`. Without `=`, the C name is the same.
 
 - Parameter and result types: numbers, `bool`, `String` (a `const char*`), `String?` parameters (`null`
-  is `NULL`), native types and their optionals, C structs, pointers, `T[]` of numbers or `bool`, and
-  `byte[*]` memories. `...` allows variable arguments.
-- A `T[]` of numbers or `bool` is passed as two C arguments: a pointer to the elements and their count.
+  is `NULL`), native types and their optionals, C structs, pointers, `T[]` of numbers, `bool` or C
+  structs, and `byte[*]` memories. `...` allows variable arguments.
+- A `T[]` of numbers, `bool` or C structs is passed as two C arguments: a pointer to the elements, laid
+  out one after another as in a C array, and their count.
 - A result of type `String` must be a zero-terminated text that keeps existing (static, or created in a
   memory the function receives). `String?` turns `NULL` into `null`.
 - **`released by r`** after a result of type `String` or `String?`: the text belongs to the caller (C made

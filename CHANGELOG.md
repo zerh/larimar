@@ -12,6 +12,10 @@ Each version of the compiler (`larimar --version`) and the version of the langua
   `Process.channel()` is the channel of its task and `join()` gives an `int32` (the exit code of a
   program, 0 for a task); `ProcessPool.submit` gives the channel of each task and `wait()` gives nothing.
   A panic there is `Failed: "the program ended (exit 101)"`.
+- **A `type` with fields in a native interface is a struct or a union of C**, by value: `type Point { let
+  x: int32; let y: int32; }`, with only the fields used (the header gives the layout, so a union is
+  written as a struct). There is no `struct` member in an interface any more (`std.io.files` now says
+  `type Stat = struct stat { ... }`). A `T[]` of C structs goes to C as an array, with its count.
 - **Tasks no longer go through `std.os.rpc`**: they have their own messages over shared memory.
   `std.os.rpc` stays, to talk JSON-RPC with other programs; the framing both use is
   `std.os.internal.frames`.

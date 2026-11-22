@@ -101,9 +101,9 @@ public class CCodeDecl extends Node {
     let fromStd: bool = false;          // the standard library's: only what is used reaches the C
 }
 /**
- * native interface Name "<h>" [extends A, B] { function...; type...; const...; struct... }: what a C header
- * gives, under one name. Its functions and values become Name__f (called Name.f); its types and structs
- * keep their names. The header reaches the C only when something of it is used.
+ * native interface Name "<h>" [extends A, B] { function...; type...; const...; let... }: what a C header
+ * gives, under one name. Its functions and values become Name__f (called Name.f); its types keep their
+ * names (a type with fields is a struct or a union of C, by value). The header reaches the C only when something of it is used.
  */
 public class NativeInterfaceDecl extends Node {
     let name: String;

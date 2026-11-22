@@ -8,6 +8,24 @@ test function callsWhatTheHeaderGives(): void {
     runs("tests/cases/c/native_interface.lar", ["65 66 -1"]);
 }
 
+// A type with fields is a struct or a union of C, by value, with the fields used: it is made with a
+// literal, passed by value or by pointer (&x), returned, and a list of them goes to C as an array.
+test function typesWithFields(): void {
+    runs("tests/cases/c/interface_types.lar", ["40 7,8 1065353216 2/1"]);
+}
+
+// A struct of C in an interface is a type with fields, and such a type has no owner.
+test function typesWithFieldsAreChecked(): void {
+    failsWith(raw"""
+        native interface T "<time.h>" { struct Moment = struct tm { let tm_year: int32; } }
+        function main(): int32 { return 0; }
+        """, "In a native interface a struct or a union of C is a type with its fields");
+    failsWith(raw"""
+        native interface T "<time.h>" { type Moment = struct tm released by free { let tm_year: int32; } }
+        function main(): int32 { return 0; }
+        """, "a type with fields has no 'released by'");
+}
+
 // A header reaches the C only when something it gives is used.
 test function onlyUsedHeaders(): void {
     let c: String = generatedC("tests/cases/c/native_interface.lar");

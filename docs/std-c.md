@@ -52,10 +52,15 @@ function main(): int32 {
 ```
 
 - **`Name.f(...)` calls the C function `f`**, and `Name.N` reads a constant or a variable. The members
-  are declared as below (`function`, `type`, `const`, `let`, `struct`), without `native` in front: the
-  interface already is.
+  are declared as below (`function`, `type`, `const`, `let`), without `native` in front: the interface
+  already is.
 - **A `type` keeps its name** in the module (`FILE`); without `=` it is a pointer to the C type of its
   name (`FILE*`). `released by` names a function of the same interface.
+- **A `type` with fields is a struct or a union of C, by value**, and lists only the fields used:
+  `type Stat = struct stat { let st_mode: uint32; let st_size: int64; }`. The header gives the layout,
+  so a struct and a union are written the same, and a wrong field stops the C compiler. It goes by value,
+  by pointer with `&x` (C's changes stay in `x`), and in a `T[]` as a C array. The three forms, opaque,
+  with an owner and with fields, are in [§D.0 of the spec](spec.md#d0-native-interfaces).
 - **Several headers** go in one interface: `native interface LibC "<stdio.h>", "<errno.h>" { ... }`; one
   can extend others: `native interface Posix "<unistd.h>" extends LibC { ... }` has their members too.
 - **The header reaches the C only when something of it is used**: an interface of fifty functions costs

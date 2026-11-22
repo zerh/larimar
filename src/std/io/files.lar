@@ -26,7 +26,7 @@ native interface LibC "<stdio.h>", "<string.h>", "<errno.h>", "<sys/stat.h>" {
     /** A C FILE*, closed when its memory is freed. */
     type FileHandle = FILE* released by fclose;
     type Untyped = c"void*";
-    struct Stat = struct stat { let st_mode: uint32; let st_size: int64; let st_mtime: int64; };
+    type Stat = struct stat { let st_mode: uint32; let st_size: int64; let st_mtime: int64; };
     function fclose(f: FileHandle): int32;
     function fopen(path: String, mode: String): FileHandle?;
     function fread(into: byte*, size: uint64, count: uint64, f: FileHandle): uint64;

@@ -16,6 +16,7 @@ import syntax.parser.types { type };
  *   function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;  a C function
  *   const NAME : Type [ = C ] ;      let NAME : Type [ = NAME ] ;                        a C constant, macro or global
  *   struct NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static ... )* }  a C struct, by value
+ *   (in a native interface: type NAME [ = C ] { ... }, a struct or a union of C, by value)
  *   type NAME [ = CTYPE | = ( Type, ... ) -> Type ] [ released by NAME ] ( ; | { member* } )   a C type
  *   type NAME { ... }                                                                   (std) a type the compiler knows
  */
@@ -23,7 +24,7 @@ public function nativeDeclaration(parser: Parser in default, line: int32): Node 
     if (parser.optional(TokenType.Interface)) { return nativeInterface(parser, ""); }
     if (parser.optional(TokenType.Function)) { return nativeFunctionOfC(parser); }
     if (parser.at(TokenType.Const) || parser.at(TokenType.Let)) { return nativeValue(parser); }
-    if (parser.optional(TokenType.Struct)) { return nativeStruct(parser); }
+    if (parser.optional(TokenType.Struct)) { return nativeStruct(parser, "native struct"); }
     if (!parser.atWord("type")) {
         parser.error(parser.current().line, "Expected 'function', 'type', 'struct', 'const' or 'let' after 'native' (got '${parser.current().text}')");
         return BlockStmt { line } in default;
@@ -36,7 +37,7 @@ public function nativeDeclaration(parser: Parser in default, line: int32): Node 
 
 /**
  * (after `native interface`) NAME STRING ( , STRING )* [ extends NAME ( , NAME )* ]
- *     { ( function ... ; | type NAME ... ; | const ... ; | let ... ; | struct ... )* }
+ *     { ( function ... ; | type NAME ... ( ; | { fields } ) | const ... ; | let ... )* }
  * What C headers give, under one name: Name.f(...) calls the C function f. In a class (`owner`) it is its
  * own, static: only on the class's system.
  */
@@ -77,8 +78,12 @@ public function nativeInterface(parser: Parser in default, owner: String in defa
                 v.name = "${name.text}__${v.name}" in default;
                 parser.nativeParts.push(v);
             }
-        } else if (parser.optional(TokenType.Struct)) {
-            let st: StructDecl = nativeStruct(parser);
+        } else if (parser.at(TokenType.Struct)) {
+            parser.error(parser.current().line, "In a native interface a struct or a union of C is a type with its fields: type NAME { let x: int32; }");
+            parser.advance();
+        } else if (parser.atWord("type") && typeWithFields(parser)) {
+            parser.advance();                   // type Point { let x: int32; }: a struct or a union of C, by value
+            let st: StructDecl = nativeStruct(parser, "type");
             cNames(st.cName, gives);
             declaration.types.push(st.name);
             parser.nativeParts.push(st);
@@ -94,7 +99,7 @@ public function nativeInterface(parser: Parser in default, owner: String in defa
             }
             parser.nativeParts.push(n);
         } else {
-            parser.error(parser.current().line, "A native interface has what its header gives: function, type, const, let or struct (got '${parser.current().text}')");
+            parser.error(parser.current().line, "A native interface has what its header gives: function, type, const or let (got '${parser.current().text}')");
             parser.advance();
         }
     }
@@ -110,6 +115,21 @@ public function nativeInterface(parser: Parser in default, owner: String in defa
         parser.nativeParts.push(CIncludeDecl { line: name.line, header: h, owner, gives: gives.join(" ") in default } in default);
     }
     return declaration;
+}
+
+/**
+ * Whether the type that starts here has fields: a '{' comes before its ';'. Then it is a struct or a
+ * union of C, by value; without fields it is a pointer (type FILE: a FILE*).
+ */
+function typeWithFields(parser: Parser in default): bool {
+    let i: int32 = parser.position;
+    while (i < parser.tokens.length) {
+        let kind: TokenType = parser.tokens[i].kind;
+        if (kind == TokenType.LBrace) { return true; }
+        if (kind == TokenType.Semi || kind == TokenType.RBrace) { return false; }
+        i += 1;
+    }
+    return false;
 }
 
 /** The C names in C text (struct tm*: struct, tm), added to `into`. */
@@ -201,12 +221,12 @@ function nativeValue(parser: Parser in default): Node {
 }
 
 /** (after `native struct`) NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static ... )* } */
-function nativeStruct(parser: Parser in default): StructDecl {
-    let name: Token = parser.expect(TokenType.Ident, "Expected the struct's name after 'native struct'");
+function nativeStruct(parser: Parser in default, what: String): StructDecl {
+    let name: Token = parser.expect(TokenType.Ident, "Expected the name after '${what}'");
     let declaration: StructDecl = StructDecl { line: name.line, name: name.text, cName: name.text } in default;
-    let target: String = cTarget(parser, "native struct '${name.text}'");
+    let target: String = cTarget(parser, "${what} '${name.text}'");
     if (target != "") { declaration.cName = target; }
-    parser.expect(TokenType.LBrace, "Expected '{' with the fields of the C struct");
+    parser.expect(TokenType.LBrace, "Expected '{' with the fields of the C ${what == "type" ? "struct or union" : "struct"} (a type with fields has no 'released by')");
     while (!parser.at(TokenType.RBrace) && !parser.atEnd() && !parser.hasFailed()) {
         if (parser.at(TokenType.Let)) {
             declaration.fields.push(cField(parser));

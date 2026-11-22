@@ -9,6 +9,12 @@
   `finished()`. `Process.onMessage(handler)` gives each message to `handler` while `join()` waits, for a
   program that only waits. `kill()` stays on the `Process`: it knows whether its child still runs, and a
   pid can be given to another program once it ends.
+- **A `type` with fields is a struct or a union of C**, by value (spec §D.0): only the fields used, a
+  union written as a struct, no `struct` member in an interface, and a `T[]` of them to C as an array.
+  What was planned as "by pointer, with what C changes coming back" is what `T*` and `&x` already do
+  (§D.6), written where it happens; and by value is simply a parameter of the type, so nothing is left
+  open there. Tested in `tests/cases/c/interface_types.lar` (a list to C, `&x` filled by C, a struct
+  returned, a union by value, `struct tm` through `mktime`).
 
 ## To do
 
@@ -46,62 +52,33 @@ class Thumbnail implements UnsafeTask {
 - `interface UnsafeTask extends Task` has one more method, `setup(loader: LibraryLoader): void throws
   LoadError`. It is called once in each process, before its first task: a `ProcessPool` keeps the
   library loaded for the next tasks.
-- `LibraryLoader.bind(Interface, name)` opens the library (`dlopen`, `LoadLibrary`) and looks up each
-  function of the interface (`dlsym`, `GetProcAddress`), keeping a pointer of its exact C type: the
-  calls are typed C, with no libffi. The name is written once, without `lib` or the extension, and is
-  made the name of each system. A missing library or function is a `LoadError` that names it, before
-  `run()`.
-- **The rule** (`rules.lar`): a `native interface` outside std is declared only in a class that
-  implements `UnsafeTask`.
-- C pointers never leave the process: what crosses is what crosses through a channel.
+- `LibraryLoader.bind(Interface, name)` opens the libra### The types of a header: `type` (done)
 
-### The types of a header: `type`
-
-Inside a `native interface` everything from C is a **`type`**. There is no `struct` and no `union`
-there: the C that Larimar writes includes the header itself, so the C compiler knows the true layout of
-every struct and union. Larimar only needs to know which fields the program uses, and of what type.
+Everything of C in an interface is a `type`, opaque (`type X;`), with an owner (`type X released by
+f;`) or with fields (`type X { let ...; }`). The whole of it, with its table, is in spec §D.0; how it
+looks for SDL:
 
 ```ts
 native interface Sdl "<SDL2/SDL.h>" {
-    type SDL_Window released by SDL_DestroyWindow;      // opaque, with an owner
-    type SDL_Surface;                                   // opaque, without an owner
-    type SDL_Rect { x: int32; y: int32; w: int32; h: int32; }
-    type SDL_Keysym { sym: int32; mod: uint16; }
-    type SDL_KeyboardEvent { keysym: SDL_Keysym; }
-    type SDL_Event { type: uint32; key: SDL_KeyboardEvent; }    // a union in C: it does not matter
+    type SDL_Window released by SDL_DestroyWindow;
+    type SDL_Surface;
+    type SDL_Rect { let x: int32; let y: int32; let w: int32; let h: int32; }
+    type SDL_Keysym { let sym: int32; let mod: uint16; }
+    type SDL_KeyboardEvent { let keysym: SDL_Keysym; }
+    type SDL_Event { let type: uint32; let key: SDL_KeyboardEvent; }   // a union in C
 
-    function SDL_FillRect(s: SDL_Surface, r: SDL_Rect, color: uint32): int32;
-    function SDL_PollEvent(event: SDL_Event): int32;
-    function SDL_RenderFillRects(r: SDL_Renderer, rects: SDL_Rect[], count: int32): int32;
+    function SDL_FillRect(s: SDL_Surface, r: SDL_Rect*, color: uint32): int32;
+    function SDL_PollEvent(event: SDL_Event*): int32;
+    function SDL_RenderFillRects(r: SDL_Renderer, rects: SDL_Rect[]): int32;   // the pointer and the count
+}
+
+let e: SDL_Event = {};
+while (Sdl.SDL_PollEvent(&e) != 0) {
+    if (e.type == SDL_KEYDOWN) { println("${e.key.keysym.sym}"); }
 }
 ```
 
-The three forms:
-
-| Form | What it is | What a program does with it |
-|---|---|---|
-| `type X;` | opaque: a pointer the library gives and takes | passes it from one function to another |
-| `type X released by f;` | opaque, with an owner | the same; `f` frees it when its memory goes |
-| `type X { fields }` | a struct or a union of C, whose fields it uses | makes it with a literal, reads and writes its fields |
-
-The rules of `type X { fields }`:
-
-1. **Only the fields used.** A `type` lists the fields the program reads or writes, not all of them:
-   `SDL_Event` has dozens, the interface names two. Their order does not matter, because C finds each
-   one by its name.
-2. **A struct and a union are written the same.** `e.key.keysym.sym` is written to C as it is, and the C
-   compiler knows that `key` is a member of a union. Reading a member that is not the one C wrote gives
-   numbers without meaning, not a crash: they are plain data, and the task's process holds the worst
-   case.
-3. **A wrong field is a compile error of C**: a field that does not exist, or has another type, stops
-   the build; it never runs.
-4. **It goes by pointer, and what C changes comes back.** A parameter of such a type is passed as a
-   pointer to a copy, and after the call the copy goes back to the program's variable. One rule covers a
-   `const SDL_Rect*` that C only reads and an `SDL_Event*` that C fills:
-   ```ts
-   let e: Sdl.SDL_Event = {};
-   while (Sdl.SDL_PollEvent(e) != 0) {
-       if (e.type == SDL_KEYDOWN) { println("${e.key.keysym.sym}"); }
+DL_KEYDOWN) { println("${e.key.keysym.sym}"); }
    }
    ```
 5. **A list of them is laid out as C lays out an array**, one after another, and goes as a pointer to

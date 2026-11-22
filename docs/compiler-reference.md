@@ -6,7 +6,7 @@ Cada módulo de `src/`, con su descripción y **todas** sus funciones, clases y 
 
 Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver la guía de mantenimiento. Aquí está el detalle.
 
-**52 módulos, 1119 funciones y métodos** (574 con comentario, 545 sin él).
+**52 módulos, 1120 funciones y métodos** (575 con comentario, 545 sin él).
 
 ## Módulos
 
@@ -17,7 +17,7 @@ Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver
 - [`src/compiler/syntax/parser.lar`](#syntax-parser) — 21 funciones
 - [`src/compiler/syntax/parser/declarations.lar`](#syntax-parser-declarations) — 15 funciones
 - [`src/compiler/syntax/parser/expressions.lar`](#syntax-parser-expressions) — 22 funciones
-- [`src/compiler/syntax/parser/natives.lar`](#syntax-parser-natives) — 17 funciones
+- [`src/compiler/syntax/parser/natives.lar`](#syntax-parser-natives) — 18 funciones
 - [`src/compiler/syntax/parser/statements.lar`](#syntax-parser-statements) — 8 funciones
 - [`src/compiler/syntax/parser/types.lar`](#syntax-parser-types) — 2 funciones
 - [`src/compiler/semantics/analyzer.lar`](#semantics-analyzer) — 19 funciones
@@ -383,7 +383,7 @@ platform: "" (every one), "windows", "macos", "linux" or "unix": that of the cla
 ### class `CCodeDecl extends Node`
 
 ### class `NativeInterfaceDecl extends Node`
-native interface Name "<h>" [extends A, B] { function...; type...; const...; struct... }: what a C header gives, under one name. Its functions and values become Name__f (called Name.f); its types and structs keep their names. The header reaches the C only when something of it is used.
+native interface Name "<h>" [extends A, B] { function...; type...; const...; let... }: what a C header gives, under one name. Its functions and values become Name__f (called Name.f); its types keep their names (a type with fields is a struct or a union of C, by value). The header reaches the C only when something of it is used.
 
 ### class `ExternTypeDecl extends Node`
 native type X; = T*; = c"C TYPE"; ... released by f;
@@ -903,77 +903,81 @@ a, a.b, a.b.c (only names), or "".
 
 ## syntax.parser.natives
 
-`src/compiler/syntax/parser/natives.lar` · 497 líneas · 17 funciones
+`src/compiler/syntax/parser/natives.lar` · 517 líneas · 18 funciones
 syntax.parser.natives: what comes from C (native functions, types, structs and values; cinclude and ccode).
 Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
 
 `public function nativeDeclaration(parser: Parser in default, line: int32): Node`  
-(after `native`) function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ; a C function const NAME : Type [ = C ] ; let NAME : Type [ = NAME ] ; a C constant, macro or global struct NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static ... )* } a C struct, by value type NAME [ = CTYPE | = ( Type, ... ) -> Type ] [ released by NAME ] ( ; | { member* } ) a C type type NAME { ... } (std) a type the compiler knows  
-<sub>línea 22</sub>
+(after `native`) function NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ; a C function const NAME : Type [ = C ] ; let NAME : Type [ = NAME ] ; a C constant, macro or global struct NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static ... )* } a C struct, by value (in a native interface: type NAME [ = C ] { ... }, a struct or a union of C, by value) type NAME [ = CTYPE | = ( Type, ... ) -> Type ] [ released by NAME ] ( ; | { member* } ) a C type type NAME { ... } (std) a type the compiler knows  
+<sub>línea 23</sub>
 
 `public function nativeInterface(parser: Parser in default, owner: String in default): NativeInterfaceDecl`  
-(after `native interface`) NAME STRING ( , STRING )* [ extends NAME ( , NAME )* ] { ( function ... ; | type NAME ... ; | const ... ; | let ... ; | struct ... )* } What C headers give, under one name: Name.f(...) calls the C function f. In a class (`owner`) it is its own, static: only on the class's system.  
-<sub>línea 43</sub>
+(after `native interface`) NAME STRING ( , STRING )* [ extends NAME ( , NAME )* ] { ( function ... ; | type NAME ... ( ; | { fields } ) | const ... ; | let ... )* } What C headers give, under one name: Name.f(...) calls the C function f. In a class (`owner`) it is its own, static: only on the class's system.  
+<sub>línea 44</sub>
+
+`function typeWithFields(parser: Parser in default): bool`  
+Whether the type that starts here has fields: a '{' comes before its ';'. Then it is a struct or a union of C, by value; without fields it is a pointer (type FILE: a FILE*).  
+<sub>línea 124</sub>
 
 `function cNames(text: String, into: String[*] in default): void`  
 The C names in C text (struct tm*: struct, tm), added to `into`.  
-<sub>línea 116</sub>
+<sub>línea 136</sub>
 
 `function atCText(parser: Parser in default): bool`  
 At C text: c"...".  
-<sub>línea 130</sub>
+<sub>línea 150</sub>
 
 `function cTarget(parser: Parser in default, what: String): String`  
 [ = NAME | = struct NAME | = c"C" ]: what a native declaration is in C; "" without '='.  
-<sub>línea 133</sub>
+<sub>línea 153</sub>
 
 `function nativeFunctionOfC(parser: Parser in default): ExternFunctionDecl`  
 (after `native function`) NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;  
-<sub>línea 147</sub>
+<sub>línea 167</sub>
 
 `function nativeValue(parser: Parser in default): Node`  
 (after `native`) ( const NAME : Type [ = C ] | let NAME : Type [ = NAME ] ) ;  
-<sub>línea 185</sub>
+<sub>línea 205</sub>
 
-`function nativeStruct(parser: Parser in default): StructDecl`  
+`function nativeStruct(parser: Parser in default, what: String): StructDecl`  
 (after `native struct`) NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static ... )* }  
-<sub>línea 204</sub>
+<sub>línea 224</sub>
 
 `function cField(parser: Parser in default): FieldDecl`  
 let NAME : Type [ = NAME ] ; a field of a C struct (after '=': its name in C)  
-<sub>línea 227</sub>
+<sub>línea 247</sub>
 
 `function nativeCType(parser: Parser in default, name: Token in default): Node`  
 (after `native type NAME`) [ = CTYPE ] [ released by NAME ] ( ; | { member* } ) CTYPE: [ struct ] NAME *... or c"C TYPE"; without '=' it is opaque (void*)  
-<sub>línea 243</sub>
+<sub>línea 263</sub>
 
 `function nativeMembers(parser: Parser in default, declaration: ExternTypeDecl in default): void`  
 { ( let NAME : Type [ = NAME ] ; | native function ... | native let ... | function ... | static ... )* } The members of a C type: its fields (when it is a pointer to a C struct), functions of C that take it first (self), and functions written in Larimar.  
-<sub>línea 277</sub>
+<sub>línea 297</sub>
 
 `function nativeMember(p: Parser in default, owner: String in default, line: int32, property: bool, isStatic: bool): FunctionDecl`  
 (after `native function` or `native let`, in a native type) NAME parameters [ : Type ] [ in lives ] [ throws Type ] = ( C | expression ) ; (let: NAME : Type = ...) With `= C` (a name, or "C text"), the method calls that C function with self first: before it only the memory of the call, when the first parameter is one (m: byte[*]). Any other expression is Larimar.  
-<sub>línea 329</sub>
+<sub>línea 349</sub>
 
 `public function languageType(parser: Parser in default, line: int32): NativeTypeDecl`  
 (after `type`) NAME { ( static ... | let NAME : Type [ = expression ] ; | operator ... ; | function ... ( ; | block ) )* } A type of the language (String, Any), in std.lang: what has no body the compiler writes.  
-<sub>línea 396</sub>
+<sub>línea 416</sub>
 
 `function nativeType(parser: Parser in default, line: int32, name: Token in default): NativeTypeDecl`  
 (after `native type NAME`) { ( static ... | native function ... | native let ... | native operator ... | function ... )* } The methods of a type the compiler knows (String, Any): only in the standard library.  
-<sub>línea 407</sub>
+<sub>línea 427</sub>
 
 `public function nativeFunction(parser: Parser in default, line: int32): FunctionDecl`  
 (after `native function`) NAME parameters [ : Type ] [ in lives ] [ throws Type ] [ = expression ] ;  
-<sub>línea 440</sub>
+<sub>línea 460</sub>
 
 `public function nativeProperty(parser: Parser in default, line: int32): FunctionDecl`  
 (after `native let`) NAME : Type [ = expression ] ; A value read without parentheses and never assigned (s.length). Without `= expression` the compiler gives it; with it, it is that expression.  
-<sub>línea 470</sub>
+<sub>línea 490</sub>
 
 `function nativeOperator(parser: Parser in default, line: int32): FunctionDecl`  
 (after `native operator`) ( [ ] | SYMBOL ) parameters : Type ;  
-<sub>línea 483</sub>
+<sub>línea 503</sub>
 
 ---
 

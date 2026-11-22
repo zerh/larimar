@@ -1,0 +1,40 @@
+// A type with fields in a native interface: a struct or a union of C, by value, with only the fields
+// the program uses (the header gives the layout). Lists of them go to C as arrays.
+ccode {
+    typedef struct Point { int x; int y; int hidden; } Point;
+    typedef union Value { int i; float f; } Value;
+    static int sum_points(const Point* points, long long count) {
+        int s = 0;
+        for (long long i = 0; i < count; i++) { s += points[i].x + points[i].y; }
+        return s;
+    }
+    static void fill_point(Point* p) { p->x = 7; p->y = 8; }
+    static Point make_point(int x, int y) { Point p = { x, y, 0 }; return p; }
+    static int bits_of(Value v) { return v.i; }
+}
+
+native interface Shapes "<stdlib.h>" {
+    type Point { let x: int32; let y: int32; }
+    type Value { let i: int32; let f: float32; }
+    function sum_points(points: Point[]): int32;
+    function fill_point(p: Point*): void;
+    function make_point(x: int32, y: int32): Point;
+    function bits_of(v: Value): int32;
+}
+
+native interface Time "<time.h>" {
+    type Moment = struct tm { let tm_year: int32; let tm_mon: int32; let tm_mday: int32; }
+    function mktime(t: Moment*): int64;
+}
+
+function main(): int32 {
+    let points: Point[] = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }, Shapes.make_point(10, 20)];
+    let filled: Point = {};
+    Shapes.fill_point(&filled);
+    let v: Value = { f: 1.0 };
+    let day: Moment = { tm_year: 126, tm_mon: 0, tm_mday: 31 };
+    day.tm_mday += 1;                                   // 32 of January: mktime makes it February 1
+    Time.mktime(&day);
+    println("${Shapes.sum_points(points)} ${filled.x},${filled.y} ${Shapes.bits_of(v)} ${day.tm_mon + 1}/${day.tm_mday}");
+    return 0;
+}
