@@ -1432,8 +1432,11 @@ another process of the same program, by a `Process` (`Process { run: task }`, th
 its fields is of a **type that crosses**: the numbers, `bool`, `String`, their optionals and `T[*]` lists
 of them; otherwise it is a compile error. Its object arrives there with the values of its fields, `run()`
 runs there as `run(channel: Channel): void throws ProcessError`. The **channel** carries values both
-ways while it runs (`send(value)`, `receive(ms)`), as `Any` crosses to JSON (an object in it arrives as
-`null`); `Process.channel()` and what `ProcessPool.submit` returns are its other end. An interface called
+ways while it runs, as `Any` crosses to JSON (an object in it arrives as `null`): `send(value)`, and
+`receive(ms)`, which waits up to `ms` and gives a `Received`: `Message(value)`, `Nothing` (nothing came in
+that time) or `Finished` (the task ended and everything it sent was received). `Process.channel()` and
+what `ProcessPool.submit` returns are its other end; `Process.onMessage(handler)` gives `handler` each
+message while `join()` waits. An interface called
 `Task` of another module is not this one.
 
 A process started this way runs the initialization of the globals ([§24](#24-program-execution)) and then

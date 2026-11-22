@@ -172,6 +172,7 @@ std's own, imported only from std (the rule `std-own-import`).
   - `enum ProcessError`: Why a process could not be used
   - `function message(e: ProcessError): String`: A message for the error, in English
   - `interface Task`: Work that runs in another process: a copy of this program, so that a panic or a crash there is only an error here
+  - `enum Received`: What a receive brings
   - `class Channel`: Messages between a task and the program that started it: what one side sends, the other receives, in order
   - `class Process extends Child`: A process: another program (`program`, with `args`), or a task of this program (`run`) in a copy of it; one or the other
   - `function findProgram(name: String): String?`: Where a program is found in the PATH (with .exe on Windows), or null

@@ -2591,8 +2591,8 @@ function main(): int32 {
         let p: Process = { run: Resize { file: "casa.jpg", width: 800 } };
         p.start();
         drawLoading();                                  // this program goes on meanwhile
-        let one: Any = p.channel().receive(-1);         // what run() sent there
-        p.join();                                       // run() ended
+        p.onMessage((image) -> { show(image); });       // each thing run() sends, here
+        p.join();                                       // waits for run(), giving it the messages
 
         let pool: ProcessPool = { processes: 4 };
         let a: Channel = pool.submit(Resize { file: "1.jpg", width: 800 });
@@ -2620,9 +2620,20 @@ function main(): int32 {
   them. A field of another type is a compile error (*Field 'box' of Task 'Bad' goes to another
   process...*), and so is a class that extends another. What goes through the channel crosses the way
   `Any` crosses to JSON: numbers, `bool`, `String` and tables (an object arrives as `null`).
-  `receive(ms)` waits up to `ms` (negative: as long as it takes) and gives `null` when nothing came;
-  `finished()` says that the task ended and everything it sent was received. Only the `Task` of
-  `std.os.process` is this: an interface of your own called `Task` is just yours.
+- **Two ways to receive**. `onMessage(handler)` and `join()`, when the program just waits: no times.
+  `receive(ms)`, when the program has a loop of its own (a game, a window) or a limit of time: it waits
+  up to `ms` (0: it looks and goes on), and comes back as soon as something comes, with a `Received`:
+
+  ```ts
+  switch (c.receive(0)) {
+      case Message { value } -> { showProgress(value); }
+      case Nothing -> {}                             // nothing came: the loop goes on
+      case Finished -> { running = false; }          // it ended, and everything it sent was received
+  }
+  ```
+
+  `receive(ms)` is not a sleep: it waits *up to* `ms` (as `poll(ms)` of a Java `BlockingQueue`).
+- **Only the `Task` of `std.os.process` is this**: an interface of your own called `Task` is just yours.
 - **The one difference with a thread**: a `Runnable` can be a lambda that captures variables, because a
   thread shares this program's memory; a `Task` is an object whose fields are copied, because the other
   process does not see it.
@@ -4486,7 +4497,8 @@ class Job implements Task {
 }
 let job: Process = { run: Job { n: 21 } };
 job.start();
-let r: Any = job.channel().receive(-1);               // in another process: 42
+job.onMessage((r) -> { println("${r}"); });           // in another process: 42
+job.join();
 let pool: ProcessPool = { processes: 4 };
 let c: Channel = pool.submit(Job { n: 1 });           // its channel
 pool.wait();                                          // every task ended

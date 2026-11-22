@@ -2591,8 +2591,8 @@ function main(): int32 {
         let p: Process = { run: Resize { file: "casa.jpg", width: 800 } };
         p.start();
         dibujarCargando();                              // este programa sigue mientras tanto
-        let una: Any = p.channel().receive(-1);         // lo que run() mandó allí
-        p.join();                                       // run() terminó
+        p.onMessage((imagen) -> { mostrar(imagen); });  // cada cosa que run() manda, aquí
+        p.join();                                       // espera a run() y le da los mensajes
 
         let pool: ProcessPool = { processes: 4 };
         let a: Channel = pool.submit(Resize { file: "1.jpg", width: 800 });
@@ -2619,10 +2619,21 @@ function main(): int32 {
 - **Lo que va con la tarea** son sus campos: números, `bool`, `String`, sus opcionales y listas de
   ellos. Un campo de otro tipo es un error de compilación (*Field 'box' of Task 'Bad' goes to another
   process...*), y también una clase que extiende otra. Lo que pasa por el canal cruza como `Any` cruza a
-  JSON: números, `bool`, `String` y tablas (un objeto llega como `null`). `receive(ms)` espera hasta `ms`
-  (negativo: lo que haga falta) y da `null` si no llegó nada; `finished()` dice que la tarea terminó y
-  que se recibió todo lo que mandó. Solo la `Task` de `std.os.process` es
-  esto: una interfaz tuya que se llame `Task` es solo tuya.
+  JSON: números, `bool`, `String` y tablas (un objeto llega como `null`).
+- **Dos formas de recibir**. `onMessage(handler)` y `join()`, cuando el programa solo espera: sin tiempos.
+  `receive(ms)`, cuando el programa tiene su propio bucle (un juego, una ventana) o un límite de tiempo:
+  espera hasta `ms` (0: mira y sigue) y vuelve en cuanto llega algo, con un `Received`:
+
+  ```ts
+  switch (c.receive(0)) {
+      case Message { value } -> { mostrarProgreso(value); }
+      case Nothing -> {}                             // no llegó nada: el bucle sigue
+      case Finished -> { corriendo = false; }        // terminó, y se recibió todo lo que mandó
+  }
+  ```
+
+  `receive(ms)` no es un sleep: espera *como mucho* `ms` (como `poll(ms)` de una `BlockingQueue` de Java).
+- **Solo la `Task` de `std.os.process` es esto**: una interfaz tuya que se llame `Task` es solo tuya.
 - **La única diferencia con un hilo**: un `Runnable` puede ser una lambda que captura variables, porque
   el hilo comparte la memoria de este programa; una `Task` es un objeto cuyos campos se copian, porque el
   otro proceso no la ve.
@@ -4490,7 +4501,8 @@ class Job implements Task {
 }
 let job: Process = { run: Job { n: 21 } };
 job.start();
-let r: Any = job.channel().receive(-1);               // en otro proceso: 42
+job.onMessage((r) -> { println("${r}"); });           // en otro proceso: 42
+job.join();
 let pool: ProcessPool = { processes: 4 };
 let c: Channel = pool.submit(Job { n: 1 });           // su canal
 pool.wait();                                          // todas terminaron

@@ -1,6 +1,6 @@
 // std.os.process: tasks (Task) that run in copies of the program: one in a Process, many in a ProcessPool.
 import std.os;
-import std.os.process { Channel, Process, ProcessPool, Task, ProcessError, message };
+import std.os.process { Channel, Process, ProcessPool, Received, Task, ProcessError, message };
 import std.test { check, checkText, checkInt };
 import tests.support.compiler { failsInAProgram, runs, caseFile };
 
@@ -29,11 +29,28 @@ class Square implements Task {
 class Doubler implements Task {
     override function run(channel: Channel): void throws ProcessError {
         while (true) {
-            let n: int64 = channel.receive(-1) as int64 ?? 0;
+            let n: int64 = valueOf(channel.receive(10000)) as int64 ?? 0;
             if (n == 0) { return; }
             channel.send(n * 2);
         }
     }
+}
+
+/** The value of a message; null for Nothing or Finished. */
+function valueOf(r: Received): Any {
+    return switch (r) {
+        case Message { value } -> value;
+        default -> null;
+    };
+}
+
+/** The name of what came. */
+function kindOf(r: Received): String {
+    return switch (r) {
+        case Message { value } -> "message";
+        case Nothing -> "nothing";
+        case Finished -> "finished";
+    };
 }
 
 // A Process with a task runs it in a copy of this program, as a thread runs a Runnable: start, then join.
@@ -42,11 +59,11 @@ test function aTaskRunsInAnotherProcess(): void throws ProcessError {
     p.start();
     checkInt(0, p.join());
     let c: Channel = p.channel();
-    let r: Any = c.receive(0);
+    let r: Any = valueOf(c.receive(0));
     checkText("98.0", "${r.value}");
     checkText("casa:a+b:n", r.text as String ?? "");
     check((r.pid as int64 ?? 0) != os.processId(), "it ran in another process");
-    check(c.finished(), "everything it sent was received");
+    checkText("finished", kindOf(c.receive(0)));
 }
 
 // The channel goes both ways: the task receives what this program sends, while it runs.
@@ -58,11 +75,22 @@ test function aTaskAndItsProgramTalk(): void throws ProcessError {
     let numbers: int64[] = [3, 5, 21];
     for (n in numbers) {
         c.send(n);
-        got.push("${c.receive(10000)}");
+        got.push("${valueOf(c.receive(10000))}");
     }
+    checkText("nothing", kindOf(c.receive(0)));     // it waits for the next one: nothing came
     c.send(0);
     p.join();
     checkText("6 10 42", got.join(" "));
+}
+
+// onMessage: join() gives it each message while it waits.
+test function joinGivesTheMessagesToOnMessage(): void throws ProcessError {
+    let got: String[*] = [];
+    let p: Process = { run: Square { n: 4, label: "x" } };
+    p.onMessage((m) -> { got.push("${m.value} ${m.text}"); });
+    p.start();
+    p.join();
+    checkText("16.0 x::-", got.join(","));
 }
 
 // A Process runs a program or a task, not both; join before start is NotRunning.
@@ -94,7 +122,7 @@ test function manyTasksAtOnce(): void throws ProcessError {
     let values: String[*] = [];
     let pids: Any = {};
     for (c in channels) {
-        let r: Any = c.receive(0);
+        let r: Any = valueOf(c.receive(0));
         values.push("${r.value}");
         pids["${r.pid}"] = true;
     }
@@ -103,7 +131,7 @@ test function manyTasksAtOnce(): void throws ProcessError {
     for (k, v in pids.fields) { used += 1; }
     check(used > 1 && used <= 3, "the tasks ran in up to 3 processes (${used})");
     let again: Channel = pool.submit(Square { n: 5 });
-    checkText("25.0", "${again.receive(10000).value}");
+    checkText("25.0", "${valueOf(again.receive(10000)).value}");
 }
 
 // A panic in a task is a ProcessError here; the pool starts new processes for what comes next.
@@ -128,7 +156,7 @@ test function aPanicThereIsAnErrorHere(): void throws ProcessError {
     checkText("the task failed: the program ended (exit 101)", inPool);
     let next: Channel = pool.submit(Square { n: 3 });
     pool.wait();
-    checkText("9.0", "${next.receive(0).value}");
+    checkText("9.0", "${valueOf(next.receive(0)).value}");
 }
 
 // What a task carries is checked: values that can go to another process, and no class above it.

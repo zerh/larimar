@@ -1943,6 +1943,7 @@ typedef struct semantics__analyzer__DefK semantics__analyzer__DefK;
 typedef struct std__encoding__json__JsonError std__encoding__json__JsonError;
 typedef struct std__encoding__toml__TomlError std__encoding__toml__TomlError;
 typedef struct std__os__process__ProcessError std__os__process__ProcessError;
+typedef struct std__os__process__Received std__os__process__Received;
 typedef struct StringBuilder StringBuilder;
 typedef struct StringBuilder_VTable StringBuilder_VTable;
 typedef struct std__io__InputStream std__io__InputStream;
@@ -2237,6 +2238,8 @@ typedef struct std__os__process__TaskWire_VTable std__os__process__TaskWire_VTab
 typedef struct std__os__process__Task std__os__process__Task;
 typedef struct std__os__process__Task_Table std__os__process__Task_Table;
 typedef struct Opt_std__os__process__Task Opt_std__os__process__Task;
+typedef struct Closure_1 Closure_1;  /* (Any) -> void */
+typedef struct Opt_F1 Opt_F1;
 typedef struct std__os__process__Process std__os__process__Process;
 typedef struct std__os__process__Process_VTable std__os__process__Process_VTable;
 typedef struct std__os__process__ProcessPool std__os__process__ProcessPool;
@@ -2327,7 +2330,7 @@ typedef struct List_codegen__gen__ArmCtx List_codegen__gen__ArmCtx;
 typedef struct List_std__os__process__TaskWire List_std__os__process__TaskWire;
 typedef struct List_std__os__process__Channel List_std__os__process__Channel;
 typedef struct List_project__libraries__LarimarLibrary List_project__libraries__LarimarLibrary;
-typedef struct Closure_1 Closure_1;  /* () -> void */
+typedef struct Closure_2 Closure_2;  /* () -> void */
 typedef struct List_semantics__types__Place List_semantics__types__Place;
 typedef struct List_semantics__rules__Rule List_semantics__rules__Rule;
 typedef struct List_codegen__prune__Piece List_codegen__prune__Piece;
@@ -2500,6 +2503,12 @@ enum std__os__process__ProcessError_Tag { std__os__process__ProcessError_CannotS
 struct std__os__process__ProcessError {
     enum std__os__process__ProcessError_Tag tag;
     union { struct { LarString program; LarString why; } CannotStart; struct { LarString why; } Failed; char _none; } as;
+};
+
+enum std__os__process__Received_Tag { std__os__process__Received_Message = 0, std__os__process__Received_Nothing = 1, std__os__process__Received_Finished = 2 };
+struct std__os__process__Received {
+    enum std__os__process__Received_Tag tag;
+    union { struct { LarAny value; } Message; char _none; } as;
 };
 
 struct StringBuilder {
@@ -3765,11 +3774,18 @@ struct std__os__process__TaskWire {
 struct std__os__process__Task { void* obj; const std__os__process__Task_Table* t; };
 
 struct Opt_std__os__process__Task { bool has; std__os__process__Task value; };
+struct Closure_1 {  /* (Any) -> void */
+    void (*fn)(void* env, LarAny);
+    union { char _none; } env;
+};
+
+struct Opt_F1 { bool has; Closure_1 value; };
 struct std__os__process__Process {
     std__os__process__internal__Child _super;
     Opt_std__os__process__Task run;
     std__os__process__Channel* messages;
     bool joined;
+    Opt_F1 handler;
 };
 
 struct std__os__process__ProcessPool {
@@ -3949,7 +3965,7 @@ typedef struct Env_4 { syntax__parser__Parser* parser_2146; syntax__ast__Pattern
 typedef struct Env_5 { List_syntax__ast__Param* list_2300; syntax__parser__Parser* parser_2299; } Env_5;
 typedef struct Env_6 { syntax__parser__Parser* parser_2346; syntax__ast__EnumDecl* declaration_2348; } Env_6;
 typedef struct Env_7 { syntax__ast__ImportDecl* declaration_2387; syntax__parser__Parser* parser_2383; } Env_7;
-struct Closure_1 {  /* () -> void */
+struct Closure_2 {  /* () -> void */
     void (*fn)(void* env);
     union { Env_0 l_0; Env_1 l_1; Env_2 l_2; Env_3 l_3; Env_4 l_4; Env_5 l_5; Env_6 l_6; Env_7 l_7; char _none; } env;
 };
@@ -4427,8 +4443,8 @@ struct std__os__sharedmemory__SharedMemoryInputStream_VTable {
 struct std__os__process__Channel_VTable {
     LarMethodTable header_;    /* with an underscore: a method may be called header */
     void (*send)(std__os__process__Channel*, LarAny, LarError*);
-    LarAny (*receive)(std__os__process__Channel*, LarMemory*, int32_t, LarError*);
-    bool (*finished)(std__os__process__Channel*);
+    std__os__process__Received (*receive)(std__os__process__Channel*, LarMemory*, int32_t, LarError*);
+    void (*deliver)(std__os__process__Channel*, Closure_1);
     void (*check)(std__os__process__Channel*, LarError*);
     void (*pump)(std__os__process__Channel*, int32_t, LarError*);
 };
@@ -4599,6 +4615,7 @@ struct syntax__ast__SwitchCase_VTable {
 
 struct std__os__process__Process_VTable {
     std__os__process__internal__Child_VTable _super;
+    void (*onMessage)(std__os__process__Process*, Closure_1);
     void (*start)(std__os__process__Process*, LarError*);
     std__os__process__Channel* (*channel)(std__os__process__Process*, LarMemory*, LarError*);
     int32_t (*join)(std__os__process__Process*, LarError*);
@@ -5296,8 +5313,8 @@ syntax__ast__FieldDecl* syntax__parser__declarations__field(LarMemory* lar_resul
 syntax__ast__Program* syntax__parser__parseProgram(LarMemory* lar_result_memory, LarString source, int32_t startLine);
 syntax__ast__Node* syntax__parser__endedBySemicolon(LarMemory* lar_result_memory, syntax__parser__Parser* parser, syntax__ast__Node* node, LarString what);
 LarString syntax__parser__qualifiedName(LarMemory* lar_result_memory, syntax__parser__Parser* parser, LarString message);
-void syntax__parser__strictList(syntax__parser__Parser* parser, syntax__lexer__TokenType close_, Closure_1 readItem);
-void syntax__parser__looseList(syntax__parser__Parser* parser, syntax__lexer__TokenType close_, Closure_1 readItem);
+void syntax__parser__strictList(syntax__parser__Parser* parser, syntax__lexer__TokenType close_, Closure_2 readItem);
+void syntax__parser__looseList(syntax__parser__Parser* parser, syntax__lexer__TokenType close_, Closure_2 readItem);
 LarString syntax__parser__lives(LarMemory* lar_result_memory, syntax__parser__Parser* parser);
 syntax__ast__Program* syntax__parser__program(LarMemory* lar_result_memory, syntax__parser__Parser* parser, int32_t startLine);
 syntax__ast__ImportDecl* syntax__parser__importDeclaration(LarMemory* lar_result_memory, syntax__parser__Parser* parser);
@@ -6422,8 +6439,8 @@ static int64_t std__os__sharedmemory__SharedMemoryInputStream_available(std__os_
 static void std__os__sharedmemory__SharedMemoryInputStream_close(std__os__sharedmemory__SharedMemoryInputStream* self_, LarError* err_out);
 static void* std__os__sharedmemory__SharedMemoryInputStream__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
 static void std__os__process__Channel_send(std__os__process__Channel* self_, LarAny value, LarError* err_out);
-static LarAny std__os__process__Channel_receive(std__os__process__Channel* self_, LarMemory* lar_result_memory, int32_t ms, LarError* err_out);
-static bool std__os__process__Channel_finished(std__os__process__Channel* self_);
+static std__os__process__Received std__os__process__Channel_receive(std__os__process__Channel* self_, LarMemory* lar_result_memory, int32_t ms, LarError* err_out);
+static void std__os__process__Channel_deliver(std__os__process__Channel* self_, Closure_1 handler);
 static void std__os__process__Channel_check(std__os__process__Channel* self_, LarError* err_out);
 static void std__os__process__Channel_pump(std__os__process__Channel* self_, int32_t ms, LarError* err_out);
 static void* std__os__process__Channel__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
@@ -6469,11 +6486,12 @@ static void* syntax__ast__CatchClause__clone(void* self_, LarMemory* mem, LarClo
 static void* syntax__ast__FieldInit__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
 static void* syntax__ast__Pattern__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
 static void* syntax__ast__SwitchCase__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
+static void std__os__process__Process_onMessage(std__os__process__Process* self_, Closure_1 handler);
 static bool std__os__process__Process_hasTask(std__os__process__internal__Child* self_);
 static void std__os__process__Process_start(std__os__process__Process* self_, LarError* err_out);
 static std__os__process__Channel* std__os__process__Process_channel(std__os__process__Process* self_, LarMemory* lar_result_memory, LarError* err_out);
 static int32_t std__os__process__Process_join(std__os__process__Process* self_, LarError* err_out);
-static void std__os__process__Process_write(std__os__process__Process* self_, LarString text_8301, LarError* err_out);
+static void std__os__process__Process_write(std__os__process__Process* self_, LarString text_8304, LarError* err_out);
 static void std__os__process__Process_kill(std__os__process__internal__Child* self_);
 static void* std__os__process__Process__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
 static void* syntax__ast__VarDecl__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
@@ -7002,7 +7020,7 @@ const std__os__internal__frames__Frames_VTable methods_std__os__internal__frames
 const std__os__sharedmemory__Counter_VTable methods_std__os__sharedmemory__Counter = { .header_ = { &lar_class_std__os__sharedmemory__Counter, std__os__sharedmemory__Counter__clone }, .next = std__os__sharedmemory__Counter_next };
 const std__os__sharedmemory__SharedMemoryOutputStream_VTable methods_std__os__sharedmemory__SharedMemoryOutputStream = { .header_ = { &lar_class_std__os__sharedmemory__SharedMemoryOutputStream, std__os__sharedmemory__SharedMemoryOutputStream__clone }, .write = std__os__sharedmemory__SharedMemoryOutputStream_write, .flush = std__os__sharedmemory__SharedMemoryOutputStream_flush, .close = std__os__sharedmemory__SharedMemoryOutputStream_close, .capacity = std__os__sharedmemory__SharedMemoryOutputStream_capacity };
 const std__os__sharedmemory__SharedMemoryInputStream_VTable methods_std__os__sharedmemory__SharedMemoryInputStream = { .header_ = { &lar_class_std__os__sharedmemory__SharedMemoryInputStream, std__os__sharedmemory__SharedMemoryInputStream__clone }, .read = std__os__sharedmemory__SharedMemoryInputStream_read, .available = std__os__sharedmemory__SharedMemoryInputStream_available, .close = std__os__sharedmemory__SharedMemoryInputStream_close };
-const std__os__process__Channel_VTable methods_std__os__process__Channel = { .header_ = { &lar_class_std__os__process__Channel, std__os__process__Channel__clone }, .send = std__os__process__Channel_send, .receive = std__os__process__Channel_receive, .finished = std__os__process__Channel_finished, .check = std__os__process__Channel_check, .pump = std__os__process__Channel_pump };
+const std__os__process__Channel_VTable methods_std__os__process__Channel = { .header_ = { &lar_class_std__os__process__Channel, std__os__process__Channel__clone }, .send = std__os__process__Channel_send, .receive = std__os__process__Channel_receive, .deliver = std__os__process__Channel_deliver, .check = std__os__process__Channel_check, .pump = std__os__process__Channel_pump };
 const std__os__process__TaskWire_VTable methods_std__os__process__TaskWire = { .header_ = { &lar_class_std__os__process__TaskWire, std__os__process__TaskWire__clone }, .read = std__os__process__TaskWire_read, .write = std__os__process__TaskWire_write, .why = std__os__process__TaskWire_why, .close = std__os__process__TaskWire_close, .stop = std__os__process__TaskWire_stop };
 const editor__ide__Lines_VTable methods_editor__ide__Lines = { .header_ = { &lar_class_editor__ide__Lines, editor__ide__Lines__clone } };
 const editor__ide__Word_VTable methods_editor__ide__Word = { .header_ = { &lar_class_editor__ide__Word, editor__ide__Word__clone } };
@@ -7038,7 +7056,7 @@ const syntax__ast__CatchClause_VTable methods_syntax__ast__CatchClause = { ._sup
 const syntax__ast__FieldInit_VTable methods_syntax__ast__FieldInit = { ._super = { .header_ = { &lar_class_syntax__ast__FieldInit, syntax__ast__FieldInit__clone } } };
 const syntax__ast__Pattern_VTable methods_syntax__ast__Pattern = { ._super = { .header_ = { &lar_class_syntax__ast__Pattern, syntax__ast__Pattern__clone } } };
 const syntax__ast__SwitchCase_VTable methods_syntax__ast__SwitchCase = { ._super = { .header_ = { &lar_class_syntax__ast__SwitchCase, syntax__ast__SwitchCase__clone } } };
-const std__os__process__Process_VTable methods_std__os__process__Process = { ._super = { .header_ = { &lar_class_std__os__process__Process, std__os__process__Process__clone }, .launch = std__os__process__internal__Child_launch, .send = std__os__process__internal__Child_send, .closeInput = std__os__process__internal__Child_closeInput, .readLine = std__os__process__internal__Child_readLine, .read = std__os__process__internal__Child_read, .readAll = std__os__process__internal__Child_readAll, .fill = std__os__process__internal__Child_fill, .compact = std__os__process__internal__Child_compact, .wait = std__os__process__internal__Child_wait, .kill = std__os__process__Process_kill, .started = std__os__process__internal__Child_started, .hasTask = std__os__process__Process_hasTask }, .start = std__os__process__Process_start, .channel = std__os__process__Process_channel, .join = std__os__process__Process_join, .write = std__os__process__Process_write };
+const std__os__process__Process_VTable methods_std__os__process__Process = { ._super = { .header_ = { &lar_class_std__os__process__Process, std__os__process__Process__clone }, .launch = std__os__process__internal__Child_launch, .send = std__os__process__internal__Child_send, .closeInput = std__os__process__internal__Child_closeInput, .readLine = std__os__process__internal__Child_readLine, .read = std__os__process__internal__Child_read, .readAll = std__os__process__internal__Child_readAll, .fill = std__os__process__internal__Child_fill, .compact = std__os__process__internal__Child_compact, .wait = std__os__process__internal__Child_wait, .kill = std__os__process__Process_kill, .started = std__os__process__internal__Child_started, .hasTask = std__os__process__Process_hasTask }, .onMessage = std__os__process__Process_onMessage, .start = std__os__process__Process_start, .channel = std__os__process__Process_channel, .join = std__os__process__Process_join, .write = std__os__process__Process_write };
 const syntax__ast__VarDecl_VTable methods_syntax__ast__VarDecl = { ._super = { ._super = { .header_ = { &lar_class_syntax__ast__VarDecl, syntax__ast__VarDecl__clone } } } };
 const syntax__ast__AssignStmt_VTable methods_syntax__ast__AssignStmt = { ._super = { ._super = { .header_ = { &lar_class_syntax__ast__AssignStmt, syntax__ast__AssignStmt__clone } } } };
 const syntax__ast__ReturnStmt_VTable methods_syntax__ast__ReturnStmt = { ._super = { ._super = { .header_ = { &lar_class_syntax__ast__ReturnStmt, syntax__ast__ReturnStmt__clone } } } };
@@ -7381,6 +7399,9 @@ static inline int32_t std__os__sharedmemory__SharedMemoryInputStream_read__dispa
 static inline void std__os__sharedmemory__SharedMemoryInputStream_close__dispatch(std__os__sharedmemory__SharedMemoryInputStream* self, LarError* err_out) {
     ((const std__os__sharedmemory__SharedMemoryInputStream_VTable*)lar_object_vt(self))->close(self, err_out);
 }
+static inline void std__os__process__Channel_deliver__dispatch(std__os__process__Channel* self, Closure_1 a0) {
+    ((const std__os__process__Channel_VTable*)lar_object_vt(self))->deliver(self, a0);
+}
 static inline void std__os__process__Channel_check__dispatch(std__os__process__Channel* self, LarError* err_out) {
     ((const std__os__process__Channel_VTable*)lar_object_vt(self))->check(self, err_out);
 }
@@ -7470,12 +7491,14 @@ static int32_t std__os__sharedmemory__SharedMemoryInputStream__std__io__InputStr
 const std__io__InputStream_Table std__os__sharedmemory__SharedMemoryInputStream__std__io__InputStream_table = { &lar_class_std__os__sharedmemory__SharedMemoryInputStream, std__os__sharedmemory__SharedMemoryInputStream__std__io__InputStream__read };
 
 /* ---- Closure calls --------------------------------------------------------- */
-static inline void call_Closure_1(Closure_1 c) { c.fn(&c.env); }
+static inline void call_Closure_1(Closure_1 c, LarAny a0) { c.fn(&c.env, a0); }
+static inline void call_Closure_2(Closure_2 c) { c.fn(&c.env); }
 
 
 /* ---- Array and optional helpers -------------------------------------------- */
 static inline LarString Opt_s_unwrap(Opt_s o, int line) { if (!o.has) lar_panic("'!' used on a null value", line); return o.value; }
 static inline std__os__process__Task Opt_std__os__process__Task_unwrap(Opt_std__os__process__Task o, int line) { if (!o.has) lar_panic("'!' used on a null value", line); return o.value; }
+static inline Closure_1 Opt_F1_unwrap(Opt_F1 o, int line) { if (!o.has) lar_panic("'!' used on a null value", line); return o.value; }
 static inline List_s* List_s_new(LarMemory* mem, int line) { List_s* l = (List_s*)lar_memory_alloc(mem, sizeof(List_s), line); l->mem = mem; return l; }
 static inline bool List_s_push(List_s* l, LarString v) {
     if (l->length == l->capacity) {
@@ -11897,7 +11920,7 @@ syntax__ast__TypeRef* syntax__parser__types__type(LarMemory* lar_result_memory, 
     if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LParen }))) {
         List_syntax__ast__TypeRef* list_3 = List_syntax__ast__TypeRef_new(&lar_default_memory, LINE(23000017));
         List_syntax__ast__TypeRef* parameterTypes = list_3;
-        syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_1){ .fn = lambda_0, .env = { .l_0 = { .parameterTypes_2039 = parameterTypes, .parser_2036 = parser } } }));
+        syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_0, .env = { .l_0 = { .parameterTypes_2039 = parameterTypes, .parser_2036 = parser } } }));
         syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), lar_string("Expected ')' in type", 20));
         if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Arrow }))) {
             LarMemory* place_3 = &lar_default_memory;
@@ -12565,7 +12588,7 @@ syntax__ast__Expr* syntax__parser__expressions__postfix(LarMemory* lar_result_me
             List_syntax__ast__Expr* list_2 = List_syntax__ast__Expr_new(place_2, LINE(16000356));
             *new_syntax__ast__Call = (syntax__ast__Call){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Call, place_2 }, .line = (syntax__parser__Parser_previous__dispatch((syntax__parser__Parser*)parser, NULL))->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) } }, .callee = value, .args = list_2 };
             syntax__ast__Call* call = new_syntax__ast__Call;
-            syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_1){ .fn = lambda_1, .env = { .l_1 = { .call_2112 = call, .parser_2110 = parser } } }));
+            syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_1, .env = { .l_1 = { .call_2112 = call, .parser_2110 = parser } } }));
             syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), lar_string("Expected ')' after arguments", 28));
             value = ((syntax__ast__Expr*)(call));
         } else {
@@ -12796,7 +12819,7 @@ syntax__ast__ObjectLit* syntax__parser__expressions__objectLiteral(LarMemory* la
     *new_syntax__ast__ObjectLit = (syntax__ast__ObjectLit){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__ObjectLit, place_2 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) } }, .typeName = typeName, .fields = list_2 };
     syntax__ast__ObjectLit* literal = new_syntax__ast__ObjectLit;
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LBrace }), lar_string("Expected '{' to open object literal", 35));
-    syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_1){ .fn = lambda_2, .env = { .l_2 = { .parser_2129 = parser, .literal_2132 = literal } } }));
+    syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_2, .env = { .l_2 = { .parser_2129 = parser, .literal_2132 = literal } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), lar_string("Expected '}' to close object literal", 36));
     return literal;
 }
@@ -12834,7 +12857,7 @@ syntax__ast__Lambda* syntax__parser__expressions__lambda(LarMemory* lar_result_m
     List_syntax__ast__Stmt* list_3 = List_syntax__ast__Stmt_new(place_2, LINE(16000393));
     *new_syntax__ast__Lambda = (syntax__ast__Lambda){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Lambda, place_2 }, .line = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LParen }), lar_string("Expected '('", 12)))->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) } }, .params = list_2, .body = list_3, .ref = NULL };
     syntax__ast__Lambda* lambda = new_syntax__ast__Lambda;
-    syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_1){ .fn = lambda_3, .env = { .l_3 = { .lambda_2139 = lambda, .parser_2138 = parser } } }));
+    syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_3, .env = { .l_3 = { .lambda_2139 = lambda, .parser_2138 = parser } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), lar_string("Expected ')' after lambda parameters", 36));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Arrow }), lar_string("Expected '->' after lambda parameters", 37));
     (lambda)->body = syntax__parser__statements__block(NULL, parser, lar_string("lambda body", 11));
@@ -12947,7 +12970,7 @@ syntax__ast__Pattern* syntax__parser__expressions__pattern(LarMemory* lar_result
     }
     if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LBrace }))) {
         (pattern)->kind = 2;
-        syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_1){ .fn = lambda_4, .env = { .l_4 = { .parser_2146 = parser, .pattern_2148 = pattern } } }));
+        syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_4, .env = { .l_4 = { .parser_2146 = parser, .pattern_2148 = pattern } } }));
         syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), lar_string("Expected '}' after the fields of the pattern", 44));
         if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }))) {
             (pattern)->binding = (syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)parser, NULL))->text;
@@ -14395,7 +14418,7 @@ List_syntax__ast__Param* syntax__parser__declarations__parameters(LarMemory* lar
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LParen }), lar_string("Expected '('", 12));
     List_syntax__ast__Param* list = List_syntax__ast__Param_new(&lar_default_memory, LINE(20000106));
     List_syntax__ast__Param* list_2300 = list;
-    syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_1){ .fn = lambda_5, .env = { .l_5 = { .list_2300 = list_2300, .parser_2299 = parser } } }));
+    syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_5, .env = { .l_5 = { .list_2300 = list_2300, .parser_2299 = parser } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), lar_string("Expected ')' after parameters", 29));
     return list_2300;
 }
@@ -14840,7 +14863,7 @@ syntax__ast__EnumDecl* syntax__parser__declarations__enumDeclaration(LarMemory* 
     *new_syntax__ast__EnumDecl = (syntax__ast__EnumDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__EnumDecl, place_2 }, .line = (name)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) }, .name = (name)->text, .variants = list_2 };
     syntax__ast__EnumDecl* declaration = new_syntax__ast__EnumDecl;
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LBrace }), lar_string("Expected '{' to open enum body", 30));
-    syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_1){ .fn = lambda_6, .env = { .l_6 = { .parser_2346 = parser, .declaration_2348 = declaration } } }));
+    syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_6, .env = { .l_6 = { .parser_2346 = parser, .declaration_2348 = declaration } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), lar_string("Expected '}' to close enum body (variants are separated by commas)", 66));
     syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Semi }));
     return declaration;
@@ -14917,21 +14940,21 @@ LarString syntax__parser__qualifiedName(LarMemory* lar_result_memory, syntax__pa
     return name;
 }
 
-void syntax__parser__strictList(syntax__parser__Parser* parser, syntax__lexer__TokenType close_, Closure_1 readItem) {
+void syntax__parser__strictList(syntax__parser__Parser* parser, syntax__lexer__TokenType close_, Closure_2 readItem) {
     if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, close_)) {
         return;
     }
     while (true) {
-        call_Closure_1(readItem);
+        call_Closure_2(readItem);
         if (!(syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Comma })))) {
             break;
         }
     }
 }
 
-void syntax__parser__looseList(syntax__parser__Parser* parser, syntax__lexer__TokenType close_, Closure_1 readItem) {
+void syntax__parser__looseList(syntax__parser__Parser* parser, syntax__lexer__TokenType close_, Closure_2 readItem) {
     while ((!(syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, close_))) && (!(syntax__parser__Parser_atEnd__dispatch((syntax__parser__Parser*)parser)))) {
-        call_Closure_1(readItem);
+        call_Closure_2(readItem);
         if (!(syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Comma })))) {
             break;
         }
@@ -15038,7 +15061,7 @@ syntax__ast__ImportDecl* syntax__parser__importDeclaration(LarMemory* lar_result
         if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LBrace }))) {
             (declaration)->hasNames = true;
             (declaration)->alias = lar_string("", 0);
-            syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_1){ .fn = lambda_7, .env = { .l_7 = { .declaration_2387 = declaration, .parser_2383 = parser } } }));
+            syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_7, .env = { .l_7 = { .declaration_2387 = declaration, .parser_2383 = parser } } }));
             syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), lar_string("Expected '}' after the imported names", 37));
         }
     }
@@ -49806,14 +49829,14 @@ std__os__process__TaskWire* std__os__process__startCopy(LarMemory* lar_result_me
     LarString answers = std__os__sharedmemory__uniqueName(lar_result_memory, lar_string("ts", 2));
     std__os__process__TaskWire* wire = NULL;
     LarMemory* place = lar_result_memory;
-    std__os__process__internal__Child* new_std__os__process__internal__Child = (std__os__process__internal__Child*)lar_memory_alloc(place, sizeof(std__os__process__internal__Child), LINE(65000252));
+    std__os__process__internal__Child* new_std__os__process__internal__Child = (std__os__process__internal__Child*)lar_memory_alloc(place, sizeof(std__os__process__internal__Child), LINE(65000277));
     List_s* list = List_s_new(place, LINE(66000031));
     List_s* list_2 = List_s_new(place, LINE(66000033));
     List_u8* list_3 = List_u8_new(place, LINE(66000043));
     List_u8* list_4 = List_u8_new(place, LINE(66000045));
     *new_std__os__process__internal__Child = (std__os__process__internal__Child){ .header = { (const void*)&methods_std__os__process__internal__Child, place }, .program = std__os__programPath(lar_result_memory), .args = list, .env_ = list_2, .quiet = false, .mergeErrors = false, .shareConsole = true, .handle = NULL, .pending = list_3, .taken = 0, .chunk = list_4, .ended = false };
     std__os__process__internal__Child* copy = new_std__os__process__internal__Child;
-    LarTextBuilder text = lar_text_builder_mem(((copy)->env_)->mem, LINE(65000253));
+    LarTextBuilder text = lar_text_builder_mem(((copy)->env_)->mem, LINE(65000278));
     lar_text_builder_str(&text, lar_string("LARIMAR_PROCESS", 15));
     lar_text_builder_add(&text, "=", 1);
     lar_text_builder_str(&text, requests);
@@ -49822,7 +49845,7 @@ std__os__process__TaskWire* std__os__process__startCopy(LarMemory* lar_result_me
     List_s_push((copy)->env_, lar_text_builder_finish(&text));
     {
         LarMemory* place_2 = lar_result_memory;
-        std__os__process__TaskWire* new_std__os__process__TaskWire = (std__os__process__TaskWire*)lar_memory_alloc(place_2, sizeof(std__os__process__TaskWire), LINE(65000255));
+        std__os__process__TaskWire* new_std__os__process__TaskWire = (std__os__process__TaskWire*)lar_memory_alloc(place_2, sizeof(std__os__process__TaskWire), LINE(65000280));
         std__os__sharedmemory__SharedMemoryOutputStream* value_2 = std__os__sharedmemory__SharedMemoryOutputStream_create(lar_result_memory, requests, 1048576, &err);
         if (err.kind != 0) {
             goto try_catch;
@@ -49833,7 +49856,7 @@ std__os__process__TaskWire* std__os__process__startCopy(LarMemory* lar_result_me
             goto try_catch;
         }
         LarMemory* place_3 = place_2;
-        std__os__internal__frames__Frames* new_std__os__internal__frames__Frames = (std__os__internal__frames__Frames*)lar_memory_alloc(place_3, sizeof(std__os__internal__frames__Frames), LINE(65000174));
+        std__os__internal__frames__Frames* new_std__os__internal__frames__Frames = (std__os__internal__frames__Frames*)lar_memory_alloc(place_3, sizeof(std__os__internal__frames__Frames), LINE(65000199));
         List_u8* list_5 = List_u8_new(place_3, LINE(73000021));
         List_u8* list_6 = List_u8_new(place_3, LINE(73000023));
         *new_std__os__internal__frames__Frames = (std__os__internal__frames__Frames){ .header = { (const void*)&methods_std__os__internal__frames__Frames, place_3 }, .pending = list_5, .taken = 0, .chunk = list_6 };
@@ -49846,9 +49869,9 @@ std__os__process__TaskWire* std__os__process__startCopy(LarMemory* lar_result_me
         std__io__IoError e = err.as.e_std__io__IoError;
         (void)e;
         err.kind = 0;
-        LarMemory line65000261_temps = lar_memory_growable();
+        LarMemory line65000286_temps = lar_memory_growable();
         LarCloneMap clones = lar_clone_map();
-        LarString copy_2 = clone_s(std__os__programPath(&line65000261_temps), &lar_default_memory, &clones);
+        LarString copy_2 = clone_s(std__os__programPath(&line65000286_temps), &lar_default_memory, &clones);
         lar_clone_done(&clones);
         LarString value_5 = copy_2;
         LarCloneMap clones_2 = lar_clone_map();
@@ -49856,7 +49879,7 @@ std__os__process__TaskWire* std__os__process__startCopy(LarMemory* lar_result_me
         lar_clone_done(&clones_2);
         err.kind = 23;
         err.as.e_std__os__process__ProcessError = ((std__os__process__ProcessError){ .tag = std__os__process__ProcessError_CannotStart, .as.CannotStart = { .program = value_5, .why = copy_3 } });
-        lar_memory_free(&line65000261_temps);
+        lar_memory_free(&line65000286_temps);
         lar_memory_free(&memory);
         *err_out = err;
         return NULL;
@@ -49868,9 +49891,9 @@ std__os__process__TaskWire* std__os__process__startCopy(LarMemory* lar_result_me
     try_end: ;
     Opt_s why = std__os__process__internal__Child_launch__dispatch((std__os__process__internal__Child*)copy, &memory);
     if (!(!(why).has)) {
-        LarMemory line65000264_temps = lar_memory_growable();
+        LarMemory line65000289_temps = lar_memory_growable();
         LarCloneMap clones_3 = lar_clone_map();
-        LarString copy_4 = clone_s(std__os__programPath(&line65000264_temps), &lar_default_memory, &clones_3);
+        LarString copy_4 = clone_s(std__os__programPath(&line65000289_temps), &lar_default_memory, &clones_3);
         lar_clone_done(&clones_3);
         LarString value_6 = copy_4;
         LarCloneMap clones_4 = lar_clone_map();
@@ -49878,12 +49901,12 @@ std__os__process__TaskWire* std__os__process__startCopy(LarMemory* lar_result_me
         lar_clone_done(&clones_4);
         err.kind = 23;
         err.as.e_std__os__process__ProcessError = ((std__os__process__ProcessError){ .tag = std__os__process__ProcessError_CannotStart, .as.CannotStart = { .program = value_6, .why = copy_5 } });
-        lar_memory_free(&line65000264_temps);
+        lar_memory_free(&line65000289_temps);
         lar_memory_free(&memory);
         *err_out = err;
         return NULL;
     }
-    std__os__process__TaskWire* result = ((std__os__process__TaskWire*)lar_unwrap((void*)(wire), LINE(65000265)));
+    std__os__process__TaskWire* result = ((std__os__process__TaskWire*)lar_unwrap((void*)(wire), LINE(65000290)));
     lar_memory_free(&memory);
     return result;
 }
@@ -49911,7 +49934,7 @@ LarAny std__os__process__encoded(LarMemory* lar_result_memory, std__os__process_
         return zero_value;
     }
     LarAny value = params;
-    lar_any_set(value, lar_string("kind", 4), lar_any_s(lar_string("task", 4)), LINE(65000281));
+    lar_any_set(value, lar_string("kind", 4), lar_any_s(lar_string("task", 4)), LINE(65000306));
     return params;
 }
 
@@ -54358,7 +54381,7 @@ int32_t editor__lsp__runWorker(LarString req, LarString resp) {
     List_s* list_2 = List_s_new(place, LINE(66000033));
     List_u8* list_3 = List_u8_new(place, LINE(66000043));
     List_u8* list_4 = List_u8_new(place, LINE(66000045));
-    *new_std__os__process__Process = (std__os__process__Process){ ._super = { .header = { (const void*)&methods_std__os__process__Process, place }, .program = value_2, .args = list, .env_ = list_2, .quiet = false, .mergeErrors = false, .shareConsole = false, .handle = NULL, .pending = list_3, .taken = 0, .chunk = list_4, .ended = false }, .run = ((Opt_std__os__process__Task){ .has = false }), .messages = NULL, .joined = false };
+    *new_std__os__process__Process = (std__os__process__Process){ ._super = { .header = { (const void*)&methods_std__os__process__Process, place }, .program = value_2, .args = list, .env_ = list_2, .quiet = false, .mergeErrors = false, .shareConsole = false, .handle = NULL, .pending = list_3, .taken = 0, .chunk = list_4, .ended = false }, .run = ((Opt_std__os__process__Task){ .has = false }), .messages = NULL, .joined = false, .handler = ((Opt_F1){ .has = false }) };
     std__os__process__Process* worker = new_std__os__process__Process;
     {
         std__os__process__Process_start__dispatch((std__os__process__Process*)worker, &err);
@@ -60206,7 +60229,7 @@ int32_t runPlugin(Plugin* plugin_7650, Slice_s args) {
     List_s_add(list_3, lar_text_builder_finish(&text_3), LINE(335));
     List_u8* list_4 = List_u8_new(place, LINE(66000043));
     List_u8* list_5 = List_u8_new(place, LINE(66000045));
-    *new_std__os__process__Process = (std__os__process__Process){ ._super = { .header = { (const void*)&methods_std__os__process__Process, place }, .program = exe, .args = all, .env_ = list_3, .quiet = false, .mergeErrors = false, .shareConsole = true, .handle = NULL, .pending = list_4, .taken = 0, .chunk = list_5, .ended = false }, .run = ((Opt_std__os__process__Task){ .has = false }), .messages = NULL, .joined = false };
+    *new_std__os__process__Process = (std__os__process__Process){ ._super = { .header = { (const void*)&methods_std__os__process__Process, place }, .program = exe, .args = all, .env_ = list_3, .quiet = false, .mergeErrors = false, .shareConsole = true, .handle = NULL, .pending = list_4, .taken = 0, .chunk = list_5, .ended = false }, .run = ((Opt_std__os__process__Task){ .has = false }), .messages = NULL, .joined = false, .handler = ((Opt_F1){ .has = false }) };
     std__os__process__Process* p = new_std__os__process__Process;
     {
         std__os__process__Process_start__dispatch((std__os__process__Process*)p, &err);
@@ -64840,69 +64863,90 @@ static void std__os__process__Channel_send(std__os__process__Channel* self_, Lar
         *err_out = err;
         return;
     }
-    LarMemory line65000105_temps = lar_memory_growable();
-    std__os__process__TaskWire* value_2 = ((std__os__process__TaskWire*)lar_unwrap((void*)((self)->wire), LINE(65000105)));
-    LarTable* table = lar_table_new(&line65000105_temps, LINE(65000105));
-    lar_table_set(table, lar_string("kind", 4), lar_any_s(lar_string("message", 7)), LINE(65000105));
-    lar_table_set(table, lar_string("value", 5), value, LINE(65000105));
+    LarMemory line65000119_temps = lar_memory_growable();
+    std__os__process__TaskWire* value_2 = ((std__os__process__TaskWire*)lar_unwrap((void*)((self)->wire), LINE(65000119)));
+    LarTable* table = lar_table_new(&line65000119_temps, LINE(65000119));
+    lar_table_set(table, lar_string("kind", 4), lar_any_s(lar_string("message", 7)), LINE(65000119));
+    lar_table_set(table, lar_string("value", 5), value, LINE(65000119));
     if (!(std__os__process__TaskWire_write__dispatch((std__os__process__TaskWire*)value_2, lar_any_t(table)))) {
-        LarMemory line65000106_temps = lar_memory_growable();
+        LarMemory line65000120_temps = lar_memory_growable();
         LarCloneMap clones = lar_clone_map();
-        LarString copy = clone_s(std__os__process__TaskWire_why__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((self)->wire), LINE(65000106))), &line65000106_temps), lar_object_mem(self), &clones);
+        LarString copy = clone_s(std__os__process__TaskWire_why__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((self)->wire), LINE(65000120))), &line65000120_temps), lar_object_mem(self), &clones);
         lar_clone_done(&clones);
         (self)->failure = ((Opt_s){ .has = true, .value = copy });
-        lar_memory_free(&line65000106_temps);
+        lar_memory_free(&line65000120_temps);
         std__os__process__Channel_check__dispatch((std__os__process__Channel*)self, &err);
         if (err.kind != 0) {
-            lar_memory_free(&line65000105_temps);
+            lar_memory_free(&line65000119_temps);
             *err_out = err;
             return;
         }
     }
-    lar_memory_free(&line65000105_temps);
+    lar_memory_free(&line65000119_temps);
 }
 
-static LarAny std__os__process__Channel_receive(std__os__process__Channel* self_, LarMemory* lar_result_memory, int32_t ms, LarError* err_out) {
+static std__os__process__Received std__os__process__Channel_receive(std__os__process__Channel* self_, LarMemory* lar_result_memory, int32_t ms, LarError* err_out) {
     std__os__process__Channel* self = (std__os__process__Channel*)self_;
     (void)self;
     (void)lar_result_memory;
     LarError err;
     err.kind = 0;
-    int64_t until = ((int64_t)((uint64_t)(std__time__monotonic()) + (uint64_t)(((int64_t)(ms)))));
+    int64_t value_2 = std__time__monotonic();
+    int64_t until = ((int64_t)((uint64_t)(value_2) + (uint64_t)(((ms > 0) ? ((int64_t)(ms)) : 0LL))));
     while (true) {
         if ((self)->taken < lar_any_length((self)->inbox)) {
             (self)->taken = ((int32_t)((uint32_t)((self)->taken) + (uint32_t)(1)));
-            return lar_any_at((self)->inbox, (int64_t)(((int32_t)((uint32_t)((self)->taken) - (uint32_t)(1)))));
+            return ((std__os__process__Received){ .tag = std__os__process__Received_Message, .as.Message = { .value = lar_any_at((self)->inbox, (int64_t)(((int32_t)((uint32_t)((self)->taken) - (uint32_t)(1))))) } });
         }
         std__os__process__Channel_check__dispatch((std__os__process__Channel*)self, &err);
         if (err.kind != 0) {
             *err_out = err;
-            LarAny zero_value;
+            std__os__process__Received zero_value;
             memset(&zero_value, 0, sizeof zero_value);
             return zero_value;
         }
         if ((self)->done) {
-            return lar_any_null();
+            return ((std__os__process__Received){ .tag = std__os__process__Received_Finished });
         }
         int64_t left = ((int64_t)((uint64_t)(until) - (uint64_t)(std__time__monotonic())));
-        if ((ms >= 0) && (left <= 0LL)) {
-            return lar_any_null();
-        }
-        std__os__process__Channel_pump__dispatch((std__os__process__Channel*)self, (((ms < 0) || (left > 200LL)) ? 200 : ((int32_t)(left))), &err);
-        if (err.kind != 0) {
-            *err_out = err;
-            LarAny zero_value_2;
-            memset(&zero_value_2, 0, sizeof zero_value_2);
-            return zero_value_2;
+        if (left <= 0LL) {
+            std__os__process__Channel_pump__dispatch((std__os__process__Channel*)self, 0, &err);
+            if (err.kind != 0) {
+                *err_out = err;
+                std__os__process__Received zero_value_2;
+                memset(&zero_value_2, 0, sizeof zero_value_2);
+                return zero_value_2;
+            }
+            if (((self)->taken >= lar_any_length((self)->inbox)) && (!((self)->done))) {
+                std__os__process__Channel_check__dispatch((std__os__process__Channel*)self, &err);
+                if (err.kind != 0) {
+                    *err_out = err;
+                    std__os__process__Received zero_value_3;
+                    memset(&zero_value_3, 0, sizeof zero_value_3);
+                    return zero_value_3;
+                }
+                return ((std__os__process__Received){ .tag = std__os__process__Received_Nothing });
+            }
+        } else {
+            std__os__process__Channel_pump__dispatch((std__os__process__Channel*)self, ((left > 200LL) ? 200 : ((int32_t)(left))), &err);
+            if (err.kind != 0) {
+                *err_out = err;
+                std__os__process__Received zero_value_4;
+                memset(&zero_value_4, 0, sizeof zero_value_4);
+                return zero_value_4;
+            }
         }
     }
-    return lar_any_null();
+    return ((std__os__process__Received){ .tag = std__os__process__Received_Nothing });
 }
 
-static bool std__os__process__Channel_finished(std__os__process__Channel* self_) {
+static void std__os__process__Channel_deliver(std__os__process__Channel* self_, Closure_1 handler) {
     std__os__process__Channel* self = (std__os__process__Channel*)self_;
     (void)self;
-    return ((self)->done && ((self)->taken >= lar_any_length((self)->inbox)));
+    while ((self)->taken < lar_any_length((self)->inbox)) {
+        (self)->taken = ((int32_t)((uint32_t)((self)->taken) + (uint32_t)(1)));
+        call_Closure_1(handler, lar_any_at((self)->inbox, (int64_t)(((int32_t)((uint32_t)((self)->taken) - (uint32_t)(1))))));
+    }
 }
 
 static void std__os__process__Channel_check(std__os__process__Channel* self_, LarError* err_out) {
@@ -64912,7 +64956,7 @@ static void std__os__process__Channel_check(std__os__process__Channel* self_, La
     err.kind = 0;
     if (!(!((self)->failure).has)) {
         LarCloneMap clones = lar_clone_map();
-        LarString copy = clone_s(Opt_s_unwrap((self)->failure, LINE(65000137)), &lar_default_memory, &clones);
+        LarString copy = clone_s(Opt_s_unwrap((self)->failure, LINE(65000162)), &lar_default_memory, &clones);
         lar_clone_done(&clones);
         err.kind = 23;
         err.as.e_std__os__process__ProcessError = ((std__os__process__ProcessError){ .tag = std__os__process__ProcessError_Failed, .as.Failed = { .why = copy } });
@@ -64928,7 +64972,7 @@ static void std__os__process__Channel_pump(std__os__process__Channel* self_, int
     err.kind = 0;
     LarMemory memory = lar_memory_growable();
     if ((self)->wire == NULL) {
-        std__os__process__ProcessPool_advance__dispatch((std__os__process__ProcessPool*)((std__os__process__ProcessPool*)lar_unwrap((void*)((self)->pool), LINE(65000143))), ms, &err);
+        std__os__process__ProcessPool_advance__dispatch((std__os__process__ProcessPool*)((std__os__process__ProcessPool*)lar_unwrap((void*)((self)->pool), LINE(65000168))), ms, &err);
         if (err.kind != 0) {
             lar_memory_free(&memory);
             *err_out = err;
@@ -64937,15 +64981,15 @@ static void std__os__process__Channel_pump(std__os__process__Channel* self_, int
         lar_memory_free(&memory);
         return;
     }
-    LarAny m = std__os__process__TaskWire_read__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((self)->wire), LINE(65000146))), &memory, ms);
+    LarAny m = std__os__process__TaskWire_read__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((self)->wire), LINE(65000171))), &memory, ms);
     if (lar_any_is_null(m)) {
-        if ((((std__os__process__TaskWire*)lar_unwrap((void*)((self)->wire), LINE(65000148))))->ended) {
-            LarMemory line65000148_temps = lar_memory_growable();
+        if ((((std__os__process__TaskWire*)lar_unwrap((void*)((self)->wire), LINE(65000173))))->ended) {
+            LarMemory line65000173_temps = lar_memory_growable();
             LarCloneMap clones = lar_clone_map();
-            LarString copy = clone_s(std__os__process__TaskWire_why__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((self)->wire), LINE(65000148))), &line65000148_temps), lar_object_mem(self), &clones);
+            LarString copy = clone_s(std__os__process__TaskWire_why__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((self)->wire), LINE(65000173))), &line65000173_temps), lar_object_mem(self), &clones);
             lar_clone_done(&clones);
             (self)->failure = ((Opt_s){ .has = true, .value = copy });
-            lar_memory_free(&line65000148_temps);
+            lar_memory_free(&line65000173_temps);
         }
         lar_memory_free(&memory);
         return;
@@ -64960,9 +65004,9 @@ static void std__os__process__Channel_pump(std__os__process__Channel* self_, int
     if (lar_string_eq(kind, lar_string("message", 7))) {
         LarAny value_4 = (self)->inbox;
         LarCloneMap clones_2 = lar_clone_map();
-        LarAny copy_2 = clone_any(lar_any_get(m, lar_string("value", 5)), lar_any_mem((self)->inbox, LINE(65000153)), &clones_2);
+        LarAny copy_2 = clone_any(lar_any_get(m, lar_string("value", 5)), lar_any_mem((self)->inbox, LINE(65000178)), &clones_2);
         lar_clone_done(&clones_2);
-        lar_any_push(value_4, copy_2, LINE(65000153));
+        lar_any_push(value_4, copy_2, LINE(65000178));
     } else {
         if (lar_string_eq(kind, lar_string("done", 4))) {
             (self)->done = true;
@@ -64991,10 +65035,10 @@ static LarAny std__os__process__TaskWire_read(std__os__process__TaskWire* self_,
     err.kind = 0;
     int64_t until = ((int64_t)((uint64_t)(std__time__monotonic()) + (uint64_t)(((int64_t)(ms)))));
     while (!((self)->ended)) {
-        Opt_s text_8278 = std__os__internal__frames__Frames_next__dispatch((std__os__internal__frames__Frames*)(self)->frames, lar_result_memory);
-        if (!(!(text_8278).has)) {
+        Opt_s text_8279 = std__os__internal__frames__Frames_next__dispatch((std__os__internal__frames__Frames*)(self)->frames, lar_result_memory);
+        if (!(!(text_8279).has)) {
             {
-                LarAny value_2 = std__encoding__json__parse(lar_result_memory, text_8278.value, &err);
+                LarAny value_2 = std__encoding__json__parse(lar_result_memory, text_8279.value, &err);
                 if (err.kind != 0) {
                     goto try_catch;
                 }
@@ -65044,10 +65088,10 @@ static LarAny std__os__process__TaskWire_read(std__os__process__TaskWire* self_,
                     goto switch_end;
                 }
             }
-            lar_panic("no case of the switch matched", LINE(65000194));
+            lar_panic("no case of the switch matched", LINE(65000219));
             switch_end: ;
             bool timedOut = value_4;
-            if ((!(timedOut)) || ((!((self)->process == NULL)) && (!(!(std__os__process__internal__Child_wait__dispatch((std__os__process__internal__Child*)((std__os__process__internal__Child*)lar_unwrap((void*)((self)->process), LINE(65000198))), 0)).has)))) {
+            if ((!(timedOut)) || ((!((self)->process == NULL)) && (!(!(std__os__process__internal__Child_wait__dispatch((std__os__process__internal__Child*)((std__os__process__internal__Child*)lar_unwrap((void*)((self)->process), LINE(65000223))), 0)).has)))) {
                 (self)->ended = true;
             } else {
                 if ((ms >= 0) && (std__time__monotonic() >= until)) {
@@ -65071,15 +65115,15 @@ static bool std__os__process__TaskWire_write(std__os__process__TaskWire* self_, 
         return false;
     }
     {
-        LarMemory line65000212_temps = lar_memory_growable();
+        LarMemory line65000237_temps = lar_memory_growable();
         std__os__sharedmemory__SharedMemoryOutputStream* value = (self)->output;
-        LarString value_2 = std__os__internal__frames__framed(&line65000212_temps, std__encoding__json__stringify(&line65000212_temps, message));
+        LarString value_2 = std__os__internal__frames__framed(&line65000237_temps, std__encoding__json__stringify(&line65000237_temps, message));
         std__os__sharedmemory__SharedMemoryOutputStream_write__dispatch((std__os__sharedmemory__SharedMemoryOutputStream*)value, ((Slice_u8){ (uint8_t*)value_2.ptr, value_2.len }), &err);
         if (err.kind != 0) {
-            lar_memory_free(&line65000212_temps);
+            lar_memory_free(&line65000237_temps);
             goto try_catch;
         }
-        lar_memory_free(&line65000212_temps);
+        lar_memory_free(&line65000237_temps);
     }
     goto try_end;
     try_catch:
@@ -65099,9 +65143,9 @@ static LarString std__os__process__TaskWire_why(std__os__process__TaskWire* self
     std__os__process__TaskWire* self = (std__os__process__TaskWire*)self_;
     (void)self;
     if (!((self)->process == NULL)) {
-        Opt_i32 code = std__os__process__internal__Child_wait__dispatch((std__os__process__internal__Child*)((std__os__process__internal__Child*)lar_unwrap((void*)((self)->process), LINE(65000222))), 1000);
+        Opt_i32 code = std__os__process__internal__Child_wait__dispatch((std__os__process__internal__Child*)((std__os__process__internal__Child*)lar_unwrap((void*)((self)->process), LINE(65000247))), 1000);
         if (!(!(code).has)) {
-            LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(65000223));
+            LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(65000248));
             lar_text_builder_add(&text, "the program ended (exit ", 24);
             lar_text_builder_i64(&text, (int64_t)(code.value));
             lar_text_builder_add(&text, ")", 1);
@@ -65136,8 +65180,8 @@ static void std__os__process__TaskWire_close(std__os__process__TaskWire* self_) 
         lar_panic("uncaught error", 0);
     }
     try_end: ;
-    if ((!((self)->process == NULL)) && (!(std__os__process__internal__Child_wait__dispatch((std__os__process__internal__Child*)((std__os__process__internal__Child*)lar_unwrap((void*)((self)->process), LINE(65000234))), 5000)).has)) {
-        std__os__process__internal__Child_kill__dispatch((std__os__process__internal__Child*)((std__os__process__internal__Child*)lar_unwrap((void*)((self)->process), LINE(65000234))));
+    if ((!((self)->process == NULL)) && (!(std__os__process__internal__Child_wait__dispatch((std__os__process__internal__Child*)((std__os__process__internal__Child*)lar_unwrap((void*)((self)->process), LINE(65000259))), 5000)).has)) {
+        std__os__process__internal__Child_kill__dispatch((std__os__process__internal__Child*)((std__os__process__internal__Child*)lar_unwrap((void*)((self)->process), LINE(65000259))));
     }
 }
 
@@ -65147,7 +65191,7 @@ static void std__os__process__TaskWire_stop(std__os__process__TaskWire* self_) {
     LarError err;
     err.kind = 0;
     if (!((self)->process == NULL)) {
-        std__os__process__internal__Child_kill__dispatch((std__os__process__internal__Child*)((std__os__process__internal__Child*)lar_unwrap((void*)((self)->process), LINE(65000239))));
+        std__os__process__internal__Child_kill__dispatch((std__os__process__internal__Child*)((std__os__process__internal__Child*)lar_unwrap((void*)((self)->process), LINE(65000264))));
     }
     {
         std__os__sharedmemory__SharedMemoryOutputStream_close__dispatch((std__os__sharedmemory__SharedMemoryOutputStream*)(self)->output, &err);
@@ -65201,6 +65245,12 @@ static int32_t editor__lsp__Documents_find(editor__lsp__Documents* self_, LarStr
     return (-1);
 }
 
+static void std__os__process__Process_onMessage(std__os__process__Process* self_, Closure_1 handler) {
+    std__os__process__Process* self = (std__os__process__Process*)self_;
+    (void)self;
+    (self)->handler = ((Opt_F1){ .has = true, .value = handler });
+}
+
 static bool std__os__process__Process_hasTask(std__os__process__internal__Child* self_) {
     std__os__process__Process* self = (std__os__process__Process*)self_;
     (void)self;
@@ -65228,7 +65278,7 @@ static void std__os__process__Process_start(std__os__process__Process* self_, La
             *err_out = err;
             return;
         }
-        LarAny value_3 = std__os__process__encoded(NULL, Opt_std__os__process__Task_unwrap((self)->run, LINE(65000302)), &err);
+        LarAny value_3 = std__os__process__encoded(NULL, Opt_std__os__process__Task_unwrap((self)->run, LINE(65000331)), &err);
         if (err.kind != 0) {
             lar_memory_free(&memory);
             *err_out = err;
@@ -65236,26 +65286,26 @@ static void std__os__process__Process_start(std__os__process__Process* self_, La
         }
         LarAny params = value_3;
         LarMemory* place = lar_object_mem(self);
-        std__os__process__Channel* new_std__os__process__Channel = (std__os__process__Channel*)lar_memory_alloc(place, sizeof(std__os__process__Channel), LINE(65000303));
+        std__os__process__Channel* new_std__os__process__Channel = (std__os__process__Channel*)lar_memory_alloc(place, sizeof(std__os__process__Channel), LINE(65000332));
         std__os__process__TaskWire* value_4 = std__os__process__startCopy(lar_object_mem(self), &err);
         if (err.kind != 0) {
             lar_memory_free(&memory);
             *err_out = err;
             return;
         }
-        LarTable* table = lar_table_new(place, LINE(65000093));
+        LarTable* table = lar_table_new(place, LINE(65000107));
         *new_std__os__process__Channel = (std__os__process__Channel){ .header = { (const void*)&methods_std__os__process__Channel, place }, .wire = value_4, .pool = NULL, .inbox = lar_any_t(table), .taken = 0, .done = false, .failure = ((Opt_s){ .has = false }) };
         (self)->messages = new_std__os__process__Channel;
-        std__os__process__TaskWire* wire = ((std__os__process__TaskWire*)lar_unwrap((void*)((((std__os__process__Channel*)lar_unwrap((void*)((self)->messages), LINE(65000304))))->wire), LINE(65000304)));
+        std__os__process__TaskWire* wire = ((std__os__process__TaskWire*)lar_unwrap((void*)((((std__os__process__Channel*)lar_unwrap((void*)((self)->messages), LINE(65000333))))->wire), LINE(65000333)));
         if (!(std__os__process__TaskWire_write__dispatch((std__os__process__TaskWire*)wire, params))) {
             std__os__process__TaskWire_stop__dispatch((std__os__process__TaskWire*)wire);
-            LarMemory line65000307_temps = lar_memory_growable();
+            LarMemory line65000336_temps = lar_memory_growable();
             LarCloneMap clones_3 = lar_clone_map();
-            LarString copy_3 = clone_s(std__os__process__TaskWire_why__dispatch((std__os__process__TaskWire*)wire, &line65000307_temps), &lar_default_memory, &clones_3);
+            LarString copy_3 = clone_s(std__os__process__TaskWire_why__dispatch((std__os__process__TaskWire*)wire, &line65000336_temps), &lar_default_memory, &clones_3);
             lar_clone_done(&clones_3);
             err.kind = 23;
             err.as.e_std__os__process__ProcessError = ((std__os__process__ProcessError){ .tag = std__os__process__ProcessError_Failed, .as.Failed = { .why = copy_3 } });
-            lar_memory_free(&line65000307_temps);
+            lar_memory_free(&line65000336_temps);
             lar_memory_free(&memory);
             *err_out = err;
             return;
@@ -65307,7 +65357,7 @@ static std__os__process__Channel* std__os__process__Process_channel(std__os__pro
         *err_out = err;
         return NULL;
     }
-    return ((std__os__process__Channel*)lar_unwrap((void*)((self)->messages), LINE(65000319)));
+    return ((std__os__process__Channel*)lar_unwrap((void*)((self)->messages), LINE(65000348)));
 }
 
 static int32_t std__os__process__Process_join(std__os__process__Process* self_, LarError* err_out) {
@@ -65323,23 +65373,29 @@ static int32_t std__os__process__Process_join(std__os__process__Process* self_, 
             return (int32_t)0;
         }
         (self)->joined = true;
-        std__os__process__Channel* c = ((std__os__process__Channel*)lar_unwrap((void*)((self)->messages), LINE(65000331)));
+        std__os__process__Channel* c = ((std__os__process__Channel*)lar_unwrap((void*)((self)->messages), LINE(65000360)));
         while ((!((c)->done)) && (!((c)->failure).has)) {
             std__os__process__Channel_pump__dispatch((std__os__process__Channel*)c, 200, &err);
             if (err.kind != 0) {
                 *err_out = err;
                 return (int32_t)0;
             }
+            if (!(!((self)->handler).has)) {
+                std__os__process__Channel_deliver__dispatch((std__os__process__Channel*)c, Opt_F1_unwrap((self)->handler, LINE(65000363)));
+            }
+        }
+        if (!(!((self)->handler).has)) {
+            std__os__process__Channel_deliver__dispatch((std__os__process__Channel*)c, Opt_F1_unwrap((self)->handler, LINE(65000365)));
         }
         if (!(!((c)->failure).has)) {
-            std__os__process__TaskWire_stop__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((c)->wire), LINE(65000334))));
+            std__os__process__TaskWire_stop__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((c)->wire), LINE(65000367))));
             std__os__process__Channel_check__dispatch((std__os__process__Channel*)c, &err);
             if (err.kind != 0) {
                 *err_out = err;
                 return (int32_t)0;
             }
         }
-        std__os__process__TaskWire_close__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((c)->wire), LINE(65000337))));
+        std__os__process__TaskWire_close__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((c)->wire), LINE(65000370))));
         return 0;
     }
     if (!(std__os__process__internal__Child_started__dispatch((std__os__process__internal__Child*)self))) {
@@ -65358,12 +65414,12 @@ static int32_t std__os__process__Process_join(std__os__process__Process* self_, 
     return value_3;
 }
 
-static void std__os__process__Process_write(std__os__process__Process* self_, LarString text_8301, LarError* err_out) {
+static void std__os__process__Process_write(std__os__process__Process* self_, LarString text_8304, LarError* err_out) {
     std__os__process__Process* self = (std__os__process__Process*)self_;
     (void)self;
     LarError err;
     err.kind = 0;
-    if (!(std__os__process__internal__Child_send__dispatch((std__os__process__internal__Child*)self, text_8301))) {
+    if (!(std__os__process__internal__Child_send__dispatch((std__os__process__internal__Child*)self, text_8304))) {
         err.kind = 23;
         err.as.e_std__os__process__ProcessError = ((std__os__process__ProcessError){ .tag = std__os__process__ProcessError_NotRunning });
         *err_out = err;
@@ -65376,7 +65432,7 @@ static void std__os__process__Process_kill(std__os__process__internal__Child* se
     (void)self;
     std__os__process__internal__Child_kill((std__os__process__internal__Child*)self);
     if (!((self)->messages == NULL)) {
-        std__os__process__TaskWire_stop__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((((std__os__process__Channel*)lar_unwrap((void*)((self)->messages), LINE(65000353))))->wire), LINE(65000353))));
+        std__os__process__TaskWire_stop__dispatch((std__os__process__TaskWire*)((std__os__process__TaskWire*)lar_unwrap((void*)((((std__os__process__Channel*)lar_unwrap((void*)((self)->messages), LINE(65000386))))->wire), LINE(65000386))));
     }
 }
 
@@ -70597,7 +70653,7 @@ static void init_globals(void) {
     List_s* list_68 = List_s_new(place_25, LINE(66000033));
     List_u8* list_69 = List_u8_new(place_25, LINE(66000043));
     List_u8* list_70 = List_u8_new(place_25, LINE(66000045));
-    *new_std__os__process__Process = (std__os__process__Process){ ._super = { .header = { (const void*)&methods_std__os__process__Process, place_25 }, .program = lar_string("", 0), .args = list_67, .env_ = list_68, .quiet = false, .mergeErrors = false, .shareConsole = false, .handle = NULL, .pending = list_69, .taken = 0, .chunk = list_70, .ended = false }, .run = ((Opt_std__os__process__Task){ .has = false }), .messages = NULL, .joined = false };
+    *new_std__os__process__Process = (std__os__process__Process){ ._super = { .header = { (const void*)&methods_std__os__process__Process, place_25 }, .program = lar_string("", 0), .args = list_67, .env_ = list_68, .quiet = false, .mergeErrors = false, .shareConsole = false, .handle = NULL, .pending = list_69, .taken = 0, .chunk = list_70, .ended = false }, .run = ((Opt_std__os__process__Task){ .has = false }), .messages = NULL, .joined = false, .handler = ((Opt_F1){ .has = false }) };
     editor__dap__backend = new_std__os__process__Process;
     editor__dap__editorEnded = false;
     editor__dap__backendEnded = false;

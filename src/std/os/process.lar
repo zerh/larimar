@@ -31,11 +31,15 @@
 //
 //   let p: Process = { run: Resize { file: "casa.jpg", width: 800 } };
 //   p.start();
-//   let c: Channel = p.channel();
-//   while (!c.finished()) {
-//       let m: Any = c.receive(100);          // what run() sent; null when nothing came in 100 ms
+//   p.onMessage((m) -> { println("${m.progress}"); });
+//   p.join();                                 // waits for run() to end, giving it each message
+//
+//   let c: Channel = p.channel();             // or, without blocking a loop of one's own:
+//   switch (c.receive(0)) {                   // 0: look and go on; 100: wait up to 100 ms
+//       case Message { value } -> { show(value); }
+//       case Nothing -> {}
+//       case Finished -> { done = true; }
 //   }
-//   p.join();                                 // waits for run() to end
 //
 //   let pool: ProcessPool = { processes: 4 };
 //   let one: Channel = pool.submit(Resize { file: "1.jpg", width: 800 });
@@ -82,6 +86,16 @@ public interface Task {
     function run(channel: Channel): void throws ProcessError;
 }
 
+/** What a receive brings. */
+public enum Received {
+    /** A value the other side sent. */
+    Message(value: Any),
+    /** Nothing came in the time given. */
+    Nothing,
+    /** The task has finished, and everything it sent was received. */
+    Finished
+}
+
 /**
  * Messages between a task and the program that started it: what one side sends, the other receives, in
  * order. A message is what a task's fields can be, or a table of them (as JSON).
@@ -109,28 +123,39 @@ public class Channel {
     }
 
     /**
-     * The next value the other side sent, waiting up to `ms` (a negative ms: as long as it takes); null
-     * when nothing came in that time, or when the task has finished and everything it sent was received.
-     * Throws ProcessError.Failed when the other side ended before finishing.
+     * What the other side sent next, waiting up to `ms` for it (0: it looks and goes on); it comes back
+     * as soon as something comes. Throws ProcessError.Failed when the other side ended before finishing.
      */
-    function receive(ms: int32): Any throws ProcessError {
-        let until: int64 = Time.monotonic() + (ms as int64);
+    function receive(ms: int32): Received throws ProcessError {
+        let until: int64 = Time.monotonic() + (ms > 0 ? ms as int64 : 0);
         while (true) {
             if (self.taken < self.inbox.length) {
                 self.taken += 1;
-                return self.inbox[self.taken - 1];
+                return Received.Message(self.inbox[self.taken - 1]);
             }
             self.check();
-            if (self.done) { return null; }
+            if (self.done) { return Received.Finished; }
             let left: int64 = until - Time.monotonic();
-            if (ms >= 0 && left <= 0) { return null; }
-            self.pump(ms < 0 || left > 200 ? 200 : left as int32);
+            if (left <= 0) {
+                self.pump(0);
+                if (self.taken >= self.inbox.length && !self.done) {
+                    self.check();
+                    return Received.Nothing;
+                }
+            } else {
+                self.pump(left > 200 ? 200 : left as int32);
+            }
         }
-        return null;
+        return Received.Nothing;
     }
 
-    /** Whether the task has finished and everything it sent was received. */
-    function finished(): bool { return self.done && self.taken >= self.inbox.length; }
+    /** Gives each value received and not taken yet to `handler`. */
+    function deliver(handler: (Any) -> void): void {
+        while (self.taken < self.inbox.length) {
+            self.taken += 1;
+            handler(self.inbox[self.taken - 1]);
+        }
+    }
 
     /** Throws the failure, if the other side ended. */
     function check(): void throws ProcessError {
@@ -292,6 +317,10 @@ public class Process extends Child {
 
     let messages: Channel? = null;
     let joined: bool = false;
+    let handler: ((Any) -> void)? = null;
+
+    /** What to do with each message of its task: join() gives them to it while it waits. */
+    function onMessage(handler: (Any) -> void in self): void { self.handler = handler; }
 
     override function hasTask(): bool { return self.run != null; }
 
@@ -320,8 +349,8 @@ public class Process extends Child {
     }
 
     /**
-     * Waits for it to end: the exit code of the program, or 0 when its task's run() ended (what it sent
-     * stays in the channel). Throws ProcessError.NotRunning when it was not started (or was joined
+     * Waits for it to end: the exit code of the program, or 0 when its task's run() ended. While it waits
+     * it gives each message of the task to onMessage, if there is one (if not, they stay in the channel). Throws ProcessError.NotRunning when it was not started (or was joined
      * already), Failed when the task did not finish.
      */
     function join(): int32 throws ProcessError {
@@ -329,7 +358,11 @@ public class Process extends Child {
             if (self.messages == null || self.joined) { throw ProcessError.NotRunning; }
             self.joined = true;
             let c: Channel = self.messages!;
-            while (!c.done && c.failure == null) { c.pump(200); }
+            while (!c.done && c.failure == null) {
+                c.pump(200);
+                if (self.handler != null) { c.deliver(self.handler!); }
+            }
+            if (self.handler != null) { c.deliver(self.handler!); }
             if (c.failure != null) {
                 c.wire!.stop();
                 c.check();

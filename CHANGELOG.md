@@ -6,8 +6,9 @@ Each version of the compiler (`larimar --version`) and the version of the langua
 
 - **A task talks through a `Channel`** (`std.os.process`): `Task` is `run(channel: Channel): void throws
   ProcessError`, and run() gives nothing back. What one side sends (`send(value)`), the other receives
-  (`receive(ms)`: `null` when nothing came in that time; negative `ms`, as long as it takes), both ways
-  and while it runs; `finished()` says the task ended and everything it sent was received.
+  (`receive(ms)`), both ways and while it runs. `receive(ms)` waits up to `ms` and gives a `Received`:
+  `Message(value)`, `Nothing` or `Finished` (the task ended and everything it sent was received).
+  `Process.onMessage(handler)` gives each message to `handler` while `join()` waits.
   `Process.channel()` is the channel of its task and `join()` gives an `int32` (the exit code of a
   program, 0 for a task); `ProcessPool.submit` gives the channel of each task and `wait()` gives nothing.
   A panic there is `Failed: "the program ended (exit 101)"`.

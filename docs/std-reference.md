@@ -4,7 +4,7 @@ Every module of `std` a program can import, and everything it makes public: type
 
 > This file is **generated** from `src/std/` with `tools/std_reference.py`; it is not edited by hand. The [manual](manual.md#25-standard-library) explains the library with examples. The parts of std for std itself (`*.posix`, `*.windows`, `*.macos`, `*.common`, `*.internal`) are not here: a program cannot import them.
 
-**29 modules, 199 public names.**
+**29 modules, 200 public names.**
 
 ## Modules
 
@@ -1490,11 +1490,15 @@ side sends, the other receives. A panic there is a ProcessError here.
 
   let p: Process = { run: Resize { file: "casa.jpg", width: 800 } };
   p.start();
-  let c: Channel = p.channel();
-  while (!c.finished()) {
-      let m: Any = c.receive(100);          // what run() sent; null when nothing came in 100 ms
+  p.onMessage((m) -> { println("${m.progress}"); });
+  p.join();                                 // waits for run() to end, giving it each message
+
+  let c: Channel = p.channel();             // or, without blocking a loop of one's own:
+  switch (c.receive(0)) {                   // 0: look and go on; 100: wait up to 100 ms
+      case Message { value } -> { show(value); }
+      case Nothing -> {}
+      case Finished -> { done = true; }
   }
-  p.join();                                 // waits for run() to end
 
   let pool: ProcessPool = { processes: 4 };
   let one: Channel = pool.submit(Resize { file: "1.jpg", width: 800 });
@@ -1515,6 +1519,9 @@ Work that runs in another process: a copy of this program, so that a panic or a 
 
 - `function run(channel: Channel): void throws ProcessError`
 
+### enum `Received`
+What a receive brings.
+
 ### class `Channel`
 Messages between a task and the program that started it: what one side sends, the other receives, in order. A message is what a task's fields can be, or a table of them (as JSON).
 
@@ -1534,11 +1541,11 @@ Messages between a task and the program that started it: what one side sends, th
 - `function send(value: Any): void throws ProcessError`  
   Sends a value to the other side. Throws ProcessError.Failed when it is not there any more.
 
-- `function receive(ms: int32): Any throws ProcessError`  
-  The next value the other side sent, waiting up to `ms` (a negative ms: as long as it takes); null when nothing came in that time, or when the task has finished and everything it sent was received. Throws ProcessError.Failed when the other side ended before finishing.
+- `function receive(ms: int32): Received throws ProcessError`  
+  What the other side sent next, waiting up to `ms` for it (0: it looks and goes on); it comes back as soon as something comes. Throws ProcessError.Failed when the other side ended before finishing.
 
-- `function finished(): bool`  
-  Whether the task has finished and everything it sent was received.
+- `function deliver(handler: (Any) -> void): void`  
+  Gives each value received and not taken yet to `handler`.
 
 - `function check(): void throws ProcessError`  
   Throws the failure, if the other side ended.
@@ -1620,6 +1627,11 @@ A process: another program (`program`, with `args`), or a task of this program (
 
 - `joined: bool`
 
+- `handler: ((Any) -> void)?`
+
+- `function onMessage(handler: (Any) -> void in self): void`  
+  What to do with each message of its task: join() gives them to it while it waits.
+
 - `override function hasTask(): bool`
 
 - `function start(): void throws ProcessError`  
@@ -1629,7 +1641,7 @@ A process: another program (`program`, with `args`), or a task of this program (
   The channel of its task. Throws ProcessError.NotRunning when it has no task or was not started.
 
 - `function join(): int32 throws ProcessError`  
-  Waits for it to end: the exit code of the program, or 0 when its task's run() ended (what it sent stays in the channel). Throws ProcessError.NotRunning when it was not started (or was joined already), Failed when the task did not finish.
+  Waits for it to end: the exit code of the program, or 0 when its task's run() ended. While it waits it gives each message of the task to onMessage, if there is one (if not, they stay in the channel). Throws ProcessError.NotRunning when it was not started (or was joined already), Failed when the task did not finish.
 
 - `function write(text: String): void throws ProcessError`  
   Writes text to its input. Throws ProcessError.NotRunning when it does not read it any more.
