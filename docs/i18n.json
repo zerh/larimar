@@ -12,7 +12,7 @@
     "hero.eyebrow": "v1.12 · language 1.4 · transpiles to C99",
     "hero.title.html": "A small language that <span class=\"gradient-text\">compiles to C</span>.",
     "hero.body": "Larimar transpiles to a single C99 file, has no garbage collector (memory is freed in blocks, at points you can see in the code), and its compiler is written in Larimar itself.",
-    "hero.status.html": "<strong>Status:</strong> 266 tests: memory, threads, network, debugger, editor and standard library. Language specification 1.4.",
+    "hero.status.html": "<strong>Status:</strong> 274 tests: memory, threads, network, debugger, editor and standard library. Language specification 1.4.",
     "hero.copy": "Copy",
     "hero.download": "Prefer to download it yourself?",
     "hero.needs": "It installs into ~/.larimar, no sudo. On Linux and Windows it comes with tcc: larimar hello.lar works right away. On macOS it uses Apple's compiler (the installer says how).",
@@ -95,7 +95,7 @@
     "i1": "The Process says what runs; Rpc starts it and talks to it.",
     "i2": "Calls to another program: JSON-RPC through shared memory, or through its pipes.",
     "i3": "Streams and segments of shared memory between programs: a queue, or a board.",
-    "i4": "A Task of the program that runs in a copy of it, like a thread.",
+    "i4": "A Task of the program that runs in a copy of it, like a thread, and talks through a Channel.",
     "i5": "The other process ended or failed: an error to catch.",
     "i6": "What each system does differently, chosen with a switch. All are checked.",
     "any.title.html": "<code style=\"color:var(--gem);\">Any</code> for free-form data",
@@ -177,11 +177,12 @@
     "footer.self": "Written in Larimar, compiled by itself",
     "proc.eyebrow": "Processes",
     "proc.title": "Processes, used like threads",
-    "proc.body": "Unix has long put the work that may fail in a process of its own: what breaks there does not break the rest. Larimar makes it as plain as a thread. A Task goes to a copy of the program with its fields, and what its run gives comes back.",
+    "proc.body": "Unix has long put the work that may fail in a process of its own: what breaks there does not break the rest. Larimar makes it as plain as a thread. A Task goes to a copy of the program with its fields, and talks to it through a Channel: what one side sends, the other receives.",
     "proc.li1.html": "The same verbs: a <code style=\"color:var(--larimar-light);\">Thread</code> runs a <code style=\"color:var(--larimar-light);\">Runnable</code>, a <code style=\"color:var(--larimar-light);\">Process</code> runs a <code style=\"color:var(--larimar-light);\">Task</code>; <code style=\"color:var(--larimar-light);\">start</code> and <code style=\"color:var(--larimar-light);\">join</code>, <code style=\"color:var(--larimar-light);\">submit</code> and <code style=\"color:var(--larimar-light);\">wait</code>.",
     "proc.li2": "What travels is checked at compile time: a field that cannot go to another process does not compile.",
     "proc.li3": "Threads share memory, checked by the compiler; processes share nothing, and a crash stays where it happened. One program uses both.",
-    "proc.out.html": "A panic in Resize ends only its copy: here it is a <span style=\"font-family:monospace; color:var(--text-main);\">ProcessError</span>, and the pool starts another."
+    "proc.out.html": "A panic in Resize ends only its copy: here it is a <span style=\"font-family:monospace; color:var(--text-main);\">ProcessError</span>, and the pool starts another.",
+    "proc.li4.html": "C of its own, kept apart: an <code style=\"color:var(--larimar-light);\">UnsafeTask</code> declares the native interface of a C library and opens it when it runs (<code style=\"color:var(--larimar-light);\">loader.bind(Sdl, \"SDL2\")</code>), so a crash in that C is a <code style=\"color:var(--larimar-light);\">ProcessError</code> here."
   },
   "es": {
     "meta.title": "Larimar: un lenguaje pequeño que compila a C",
@@ -196,7 +197,7 @@
     "hero.eyebrow": "v1.12 · lenguaje 1.4 · transpila a C99",
     "hero.title.html": "Un lenguaje pequeño que <span class=\"gradient-text\">compila a C</span>.",
     "hero.body": "Larimar transpila a un único archivo C99, no tiene recolector de basura (la memoria se libera por bloques, en puntos que se ven en el código) y su compilador está escrito en el propio Larimar.",
-    "hero.status.html": "<strong>Estado:</strong> 266 pruebas: memoria, hilos, red, depurador, editor y biblioteca estándar. Especificación del lenguaje 1.4.",
+    "hero.status.html": "<strong>Estado:</strong> 274 pruebas: memoria, hilos, red, depurador, editor y biblioteca estándar. Especificación del lenguaje 1.4.",
     "hero.copy": "Copiar",
     "hero.download": "¿Prefieres descargarlo tú?",
     "hero.needs": "Se instala en ~/.larimar, sin sudo. En Linux y Windows trae tcc: larimar hola.lar ya funciona. En macOS usa el compilador de Apple (el instalador dice cómo).",
@@ -279,7 +280,7 @@
     "i1": "El Process dice qué corre; Rpc lo arranca y le habla.",
     "i2": "Llamadas a otro programa: JSON-RPC por memoria compartida o por sus pipes.",
     "i3": "Streams y segmentos de memoria compartida entre programas: una cola, o un tablero.",
-    "i4": "Una Task del programa que corre en una copia de él, como un hilo.",
+    "i4": "Una Task del programa que corre en una copia de él, como un hilo, y habla por un Channel.",
     "i5": "El otro proceso terminó o falló: un error que se captura.",
     "i6": "Lo que cada sistema hace distinto, elegido con un switch. Se revisan todos.",
     "any.title.html": "<code style=\"color:var(--gem);\">Any</code> para datos de forma libre",
@@ -361,10 +362,11 @@
     "footer.self": "Escrito en Larimar, compilado por sí mismo",
     "proc.eyebrow": "Procesos",
     "proc.title": "Procesos, usados como hilos",
-    "proc.body": "Unix lleva décadas poniendo el trabajo que puede fallar en un proceso propio: lo que se rompe allí no rompe lo demás. Larimar lo hace tan simple como un hilo. Una Task va a una copia del programa con sus campos, y lo que da su run vuelve.",
+    "proc.body": "Unix lleva décadas poniendo el trabajo que puede fallar en un proceso propio: lo que se rompe allí no rompe lo demás. Larimar lo hace tan simple como un hilo. Una Task va a una copia del programa con sus campos, y habla con él por un Channel: lo que un lado manda, el otro lo recibe.",
     "proc.li1.html": "Los mismos verbos: un <code style=\"color:var(--larimar-light);\">Thread</code> corre un <code style=\"color:var(--larimar-light);\">Runnable</code>, un <code style=\"color:var(--larimar-light);\">Process</code> corre una <code style=\"color:var(--larimar-light);\">Task</code>; <code style=\"color:var(--larimar-light);\">start</code> y <code style=\"color:var(--larimar-light);\">join</code>, <code style=\"color:var(--larimar-light);\">submit</code> y <code style=\"color:var(--larimar-light);\">wait</code>.",
     "proc.li2": "Lo que viaja se revisa al compilar: un campo que no puede ir a otro proceso no compila.",
     "proc.li3": "Los hilos comparten memoria, revisada por el compilador; los procesos no comparten nada, y un fallo se queda donde ocurrió. Un mismo programa usa los dos.",
-    "proc.out.html": "Un panic en Resize termina solo su copia: aquí es un <span style=\"font-family:monospace; color:var(--text-main);\">ProcessError</span>, y el pool arranca otra."
+    "proc.out.html": "Un panic en Resize termina solo su copia: aquí es un <span style=\"font-family:monospace; color:var(--text-main);\">ProcessError</span>, y el pool arranca otra.",
+    "proc.li4.html": "C propio, aparte: una <code style=\"color:var(--larimar-light);\">UnsafeTask</code> declara la native interface de una librería de C y la abre al correr (<code style=\"color:var(--larimar-light);\">loader.bind(Sdl, \"SDL2\")</code>), así que un crash en ese C es un <code style=\"color:var(--larimar-light);\">ProcessError</code> aquí."
   }
 }
