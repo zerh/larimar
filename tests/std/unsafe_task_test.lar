@@ -65,8 +65,11 @@ test function aPoolKeepsTheLibrary(): void throws ProcessError {
     checkText("1.0 2.0 3.0 4.0 5.0 6.0", roots.join(" "));
 }
 
-// A name is looked for as each system names its files; a file is used as it is.
+// A name is looked for as each system names its files; a file is used as it is, next to the program
+// when it is relative.
 test function theFilesOfALibrary(): void {
     check(fileNames("SDL2").length > 0, "some names");
     checkText("/opt/lib/libx.so.3", fileNames("/opt/lib/libx.so.3").join(","));
+    let beside: String = fileNames("libs/libx.so")[0].clone();
+    check(beside.endsWith("libs/libx.so") && beside != "libs/libx.so", "a relative file is next to the program: ${beside}");
 }

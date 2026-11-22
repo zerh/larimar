@@ -2669,6 +2669,67 @@ function main(): int32 {
 - The pool's copies start when there is work for them and stay for the next tasks until the pool's memory
   goes. A copy does not run `main`: it starts its globals and runs tasks.
 
+### C libraries in a task: dynamic, static, and batching
+
+An `UnsafeTask` opens its libraries when it runs, so **a program needs no C flags to use them**: no
+`-lSDL2`, no `-L`, no `unsafe_c`. What the C compiler still needs is the **header**: when it is not in
+the usual places (Homebrew puts its headers in `/opt/homebrew/include`), `[c]` says where:
+
+```toml
+[c]
+flags = ["-O2", "-I/opt/homebrew/include"]
+```
+
+**A dynamic library** (`.so`, `.dylib`, `.dll`) is what `bind` opens, in one of two ways:
+
+| `bind(Sdl, ...)` | What it opens | When |
+|---|---|---|
+| `"SDL2"`, a name | the system's: `libSDL2.so` (or `libSDL2.so.N`), `libSDL2.dylib` (also in `/opt/homebrew/lib` and `/usr/local/lib`), `SDL2.dll` | the library is installed, and updated, by the system |
+| `"libs/libSDL2.so"`, a file | that file; a relative one is **next to the program**, not where it was started from | the program brings its own, always the same version (as games bring their `SDL2.dll`) |
+
+A file is what has a folder in it, or ends in `.so`, `.dylib` or `.dll`. What that library needs in turn
+(SDL2_image needs libpng) the system looks for by itself: on Windows next to the DLL that asks first; on
+Linux and macOS as the library was built (its `rpath`).
+
+**A static library** (`.a`, `.lib`) cannot be opened when the program runs: it is object code that only
+the linker uses, when building. Two ways:
+
+- **Make it a shared one**, and `bind` it as a file (its objects must have been built with `-fPIC`, as
+  those of package managers are):
+  ```sh
+  cc -shared -o libxyz.so -Wl,--whole-archive libxyz.a -Wl,--no-whole-archive     # Linux
+  cc -dynamiclib -o libxyz.dylib -Wl,-all_load libxyz.a                            # macOS
+  ```
+- **Link it into the program**, with `unsafe_c = true` and `flags = ["libxyz.a"]`: then its C runs in
+  the program's own process, as any native interface outside a task (see "C of its own: `unsafe_c =
+  true`"). On Linux this does not work yet: `[c]` flags go before the program's C, and the linker takes
+  from an archive only what is asked for before it. There, make it shared.
+
+**Batching: few messages, not many.** What goes through a channel is copied from one process to the
+other. One message for each small thing (each sprite of a frame, each row of a table) costs more than the
+thing itself. The task's work goes in the task, and what crosses is put together first, as libGDX's
+`SpriteBatch` puts together a frame's drawings and sends them to the GPU at once:
+
+```ts
+// in the program: the game's logic, with no C
+self.batch.begin();
+for (e in self.enemies) { self.batch.draw(self.ship, e.x, e.y); }   // only written down
+self.batch.end();                                                    // one message for the whole frame
+
+// in the UnsafeTask: SDL, and what the frame says
+switch (channel.receive(16)) {
+    case Message { value } -> { drawFrame(value); }
+    ...
+}
+```
+
+- **One message per frame**, or per batch of work, never one per item.
+- **What is big goes in shared memory**: a `SharedMemorySegment` ([std.os.sharedmemory](#25-standard-library))
+  holds the frame in bytes (`ByteWriter`), and the channel only says "frame ready". Two segments that take
+  turns let the program fill one while the task draws the other.
+- **What stays on the C side stays there**: textures, windows and handles live in the task's process; the
+  program keeps their numbers.
+
 ## 24. Modules
 
 A program can be split into several files. **Each file is a module**, and its name comes from its path

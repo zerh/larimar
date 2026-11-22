@@ -2669,6 +2669,69 @@ function main(): int32 {
 - Las copias del pool arrancan cuando hay trabajo para ellas y se quedan para las tareas siguientes hasta
   que se va la memoria del pool. Una copia no corre `main`: arranca sus globales y corre tareas.
 
+### Librerías de C en una tarea: dinámicas, estáticas y por lotes
+
+Una `UnsafeTask` abre sus librerías al correr, así que **un programa no necesita flags de C para
+usarlas**: ni `-lSDL2`, ni `-L`, ni `unsafe_c`. Lo que el compilador de C sí necesita es el **header**:
+cuando no está en los lugares de siempre (Homebrew pone los suyos en `/opt/homebrew/include`), `[c]` dice
+dónde:
+
+```toml
+[c]
+flags = ["-O2", "-I/opt/homebrew/include"]
+```
+
+**Una librería dinámica** (`.so`, `.dylib`, `.dll`) es lo que abre `bind`, de una de dos formas:
+
+| `bind(Sdl, ...)` | Qué abre | Cuándo |
+|---|---|---|
+| `"SDL2"`, un nombre | la del sistema: `libSDL2.so` (o `libSDL2.so.N`), `libSDL2.dylib` (también en `/opt/homebrew/lib` y `/usr/local/lib`), `SDL2.dll` | la librería la instala, y la actualiza, el sistema |
+| `"libs/libSDL2.so"`, un archivo | ese archivo; uno relativo está **junto al programa**, no donde se arrancó | el programa trae la suya, siempre la misma versión (como los juegos traen su `SDL2.dll`) |
+
+Un archivo es lo que tiene una carpeta, o termina en `.so`, `.dylib` o `.dll`. Lo que esa librería a su
+vez necesita (SDL2_image necesita libpng) lo busca el sistema por su cuenta: en Windows, primero junto a
+la DLL que lo pide; en Linux y macOS, según se compiló la librería (su `rpath`).
+
+**Una librería estática** (`.a`, `.lib`) no se puede abrir cuando el programa corre: es código objeto
+que solo usa el enlazador, al compilar. Dos caminos:
+
+- **Convertirla en compartida**, y hacerle `bind` como archivo (sus objetos tienen que estar compilados
+  con `-fPIC`, como los de los gestores de paquetes):
+  ```sh
+  cc -shared -o libxyz.so -Wl,--whole-archive libxyz.a -Wl,--no-whole-archive     # Linux
+  cc -dynamiclib -o libxyz.dylib -Wl,-all_load libxyz.a                            # macOS
+  ```
+- **Enlazarla dentro del programa**, con `unsafe_c = true` y `flags = ["libxyz.a"]`: entonces su C corre
+  en el propio proceso del programa, como cualquier native interface fuera de una tarea (ver "C propio:
+  `unsafe_c = true`"). En Linux esto todavía no funciona: los flags de `[c]` van antes del C del
+  programa, y el enlazador toma de un archivo `.a` solo lo que se pidió antes de él. Ahí, conviértela en
+  compartida.
+
+**Por lotes: pocos mensajes, no muchos.** Lo que pasa por un canal se copia de un proceso al otro. Un
+mensaje por cada cosa pequeña (cada sprite de un cuadro, cada fila de una tabla) cuesta más que la cosa
+misma. El trabajo de la tarea va en la tarea, y lo que cruza se junta antes, como el `SpriteBatch` de
+libGDX junta los dibujos de un cuadro y los manda juntos a la GPU:
+
+```ts
+// en el programa: la lógica del juego, sin C
+self.batch.begin();
+for (e in self.enemigos) { self.batch.draw(self.nave, e.x, e.y); }   // solo se anota
+self.batch.end();                                                     // un mensaje para todo el cuadro
+
+// en la UnsafeTask: SDL, y lo que dice el cuadro
+switch (channel.receive(16)) {
+    case Message { value } -> { dibujarCuadro(value); }
+    ...
+}
+```
+
+- **Un mensaje por cuadro**, o por lote de trabajo, nunca uno por cosa.
+- **Lo grande va en memoria compartida**: un `SharedMemorySegment` ([std.os.sharedmemory](#25-biblioteca-estándar))
+  guarda el cuadro en bytes (`ByteWriter`), y el canal solo avisa "cuadro listo". Dos segmentos que se
+  turnan dejan que el programa llene uno mientras la tarea dibuja el otro.
+- **Lo que es del lado de C se queda allí**: texturas, ventanas y handles viven en el proceso de la tarea;
+  el programa guarda sus números.
+
 ## 24. Módulos
 
 Un programa puede repartirse en varios archivos. **Cada archivo es un módulo**, y su nombre sale de

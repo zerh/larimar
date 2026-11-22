@@ -1494,7 +1494,7 @@ Opens the libraries of a task's native interfaces, once in each process: what it
   The libraries it has bound so far.
 
 `function fileNames(library: String): String[*]`  
-The files a library is looked for in, in order: a file as it is; a name as each system names its files.
+The files a library is looked for in, in order. A file (with a folder, or .so, .dylib or .dll) is that file, and a relative one is next to the program, not where it was started from: "libs/libSDL2.so" is in the folder libs beside the program. A name is looked for as each system names its files.
 
 ---
 

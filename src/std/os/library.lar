@@ -14,6 +14,8 @@
 // said once, at bind. Its C runs only in the task's process: when it fails, the task fails.
 
 import std.platform { Platform };
+import std.os;
+import std.io.path as Paths;
 import std.os.library.posix { PosixLibraries };
 import std.os.library.windows { WindowsLibraries };
 
@@ -67,12 +69,16 @@ public class LibraryLoader {
     function libraries(): String[*] { return self.opened; }
 }
 
-/** The files a library is looked for in, in order: a file as it is; a name as each system names its files. */
+/**
+ * The files a library is looked for in, in order. A file (with a folder, or .so, .dylib or .dll) is that
+ * file, and a relative one is next to the program, not where it was started from: "libs/libSDL2.so" is
+ * in the folder libs beside the program. A name is looked for as each system names its files.
+ */
 public function fileNames(library: String): String[*] {
     let names: String[*] = [];
     if (library.contains("/") || library.contains("\\") || library.endsWith(".so") || library.contains(".so.")
             || library.endsWith(".dylib") || library.endsWith(".dll")) {
-        names.push(library);
+        names.push(Paths.isAbsolute(library) ? library : Paths.join(Paths.parent(os.programPath()), library));
         return names;
     }
     switch (Platform.current()) {

@@ -172,7 +172,7 @@ std's own, imported only from std (the rule `std-own-import`).
   - `enum LoadError`: Why a library could not be used
   - `function message(e: LoadError): String`: What a LoadError says, as text
   - `class LibraryLoader`: Opens the libraries of a task's native interfaces, once in each process: what it opens stays open as long as the process (a ProcessPool keeps it for the next tasks)
-  - `function fileNames(library: String): String[*]`: The files a library is looked for in, in order: a file as it is; a name as each system names its files
+  - `function fileNames(library: String): String[*]`: The files a library is looked for in, in order
 - **`std.os.process`**: processes
   - `enum ProcessError`: Why a process could not be used
   - `function message(e: ProcessError): String`: A message for the error, in English

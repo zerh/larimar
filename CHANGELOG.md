@@ -18,6 +18,7 @@ Each version of the compiler (`larimar --version`) and the version of the langua
   each function there, through a pointer of the header's own type. It needs no `unsafe_c`: a crash in
   that C is a `ProcessError` for the program. A missing library or function is a `LoadError` that ends
   the task saying which. `bootstrap/build.sh` links `-ldl` (`LIBS`), for older Linux.
+  A relative library file (`"libs/libSDL2.so"`) is next to the program, not where it was started from.
 - **A `type` with fields in a native interface is a struct or a union of C**, by value: `type Point { let
   x: int32; let y: int32; }`, with only the fields used (the header gives the layout, so a union is
   written as a struct). There is no `struct` member in an interface any more (`std.io.files` now says
