@@ -17,29 +17,40 @@
 // killed.
 //
 // Work of the program itself runs in other processes too: a class that implements Task is work that goes
-// to a copy of this program with its fields, and what run() gives comes back; a panic there is a
-// ProcessError here.
+// to a copy of this program with its fields. Its run() talks to this program through a Channel: what one
+// side sends, the other receives. A panic there is a ProcessError here.
 //
 //   class Resize implements Task {
 //       let file: String;
 //       let width: int32;
-//       override function run(): Any { return Images.resize(self.file, self.width); }
+//       override function run(channel: Channel): void throws ProcessError {
+//           channel.send({ progress: 0 });
+//           channel.send(Images.resize(self.file, self.width));
+//       }
 //   }
 //
 //   let p: Process = { run: Resize { file: "casa.jpg", width: 800 } };
 //   p.start();
-//   let r: Any = p.join();                    // what run() gave there
+//   let c: Channel = p.channel();
+//   while (!c.finished()) {
+//       let m: Any = c.receive(100);          // what run() sent; null when nothing came in 100 ms
+//   }
+//   p.join();                                 // waits for run() to end
 //
 //   let pool: ProcessPool = { processes: 4 };
-//   pool.submit(Resize { file: "1.jpg", width: 800 });
-//   pool.submit(Resize { file: "2.jpg", width: 800 });
-//   let all: Any = pool.wait();               // what each run() gave, in the order they were submitted
+//   let one: Channel = pool.submit(Resize { file: "1.jpg", width: 800 });
+//   let two: Channel = pool.submit(Resize { file: "2.jpg", width: 800 });
+//   pool.wait();                              // every task ended; what they sent stays in their channels
 
 import std.os;
 import std.os.process.internal { Child };
 import std.os.process.internal as Internal;
-import std.os.rpc { Rpc, RpcError, serve };
-import std.os.rpc as Calls;
+import std.io { IoError };
+import std.encoding.json as Json;
+import std.encoding.json { JsonError };
+import std.time as Time;
+import std.os.internal.frames { Frames, framed };
+import std.os.sharedmemory { SharedMemoryInputStream, SharedMemoryOutputStream, uniqueName };
 
 /** Why a process could not be used. */
 public enum ProcessError {
@@ -63,23 +74,195 @@ public function message(e: ProcessError): String {
 /**
  * Work that runs in another process: a copy of this program, so that a panic or a crash there is only an
  * error here. The object goes there with its fields (numbers, bool, String, optionals and lists of them);
- * what run() gives comes back the same way (a table, a number, a String...). A class that implements it
- * says so itself (implements Task) and extends no other class.
+ * run() talks to this program through the channel (a ProcessError there, when this program is gone, ends the
+ * task). A class that implements it says so itself
+ * (implements Task) and extends no other class.
  */
 public interface Task {
-    function run(): Any;
+    function run(channel: Channel): void throws ProcessError;
 }
 
-/** The variable that makes a copy of this program run tasks instead of its main. */
-const TASKS_ENV: String = "LARIMAR_PROCESS=1";
+/**
+ * Messages between a task and the program that started it: what one side sends, the other receives, in
+ * order. A message is what a task's fields can be, or a table of them (as JSON).
+ */
+public class Channel {
+    let wire: TaskWire? = null;
+    /** The pool that runs the task (null for a Process, and in the task itself). */
+    let pool: ProcessPool? = null;
+    let inbox: Any = {};
+    let taken: int32 = 0;
+    let done: bool = false;
+    let failure: String? = null;
+
+    /** Sends a value to the other side. Throws ProcessError.Failed when it is not there any more. */
+    function send(value: Any): void throws ProcessError {
+        while (self.wire == null) {                // a task of a pool that has not started yet
+            self.check();
+            self.pump(200);
+        }
+        self.check();
+        if (!self.wire!.write({ kind: "message", value: value })) {
+            self.failure = self.wire!.why().clone();
+            self.check();
+        }
+    }
+
+    /**
+     * The next value the other side sent, waiting up to `ms` (a negative ms: as long as it takes); null
+     * when nothing came in that time, or when the task has finished and everything it sent was received.
+     * Throws ProcessError.Failed when the other side ended before finishing.
+     */
+    function receive(ms: int32): Any throws ProcessError {
+        let until: int64 = Time.monotonic() + (ms as int64);
+        while (true) {
+            if (self.taken < self.inbox.length) {
+                self.taken += 1;
+                return self.inbox[self.taken - 1];
+            }
+            self.check();
+            if (self.done) { return null; }
+            let left: int64 = until - Time.monotonic();
+            if (ms >= 0 && left <= 0) { return null; }
+            self.pump(ms < 0 || left > 200 ? 200 : left as int32);
+        }
+        return null;
+    }
+
+    /** Whether the task has finished and everything it sent was received. */
+    function finished(): bool { return self.done && self.taken >= self.inbox.length; }
+
+    /** Throws the failure, if the other side ended. */
+    function check(): void throws ProcessError {
+        if (self.failure != null) { throw ProcessError.Failed(self.failure!.clone()); }
+    }
+
+    /** Reads what came, waiting up to `ms`. */
+    function pump(ms: int32): void throws ProcessError {
+        if (self.wire == null) {
+            self.pool!.advance(ms);
+            return;
+        }
+        let m: Any = self.wire!.read(ms);
+        if (m == null) {
+            if (self.wire!.ended) { self.failure = self.wire!.why().clone(); }
+            return;
+        }
+        let kind: String = m.kind as String ?? "";
+        if (kind == "message") {
+            self.inbox.push(m["value"].clone());
+        } else if (kind == "done") {
+            self.done = true;
+        } else if (kind == "fail") {
+            self.failure = (m.why as String ?? "").clone();
+        }
+    }
+}
+
+/** The variable that makes a copy of this program run tasks instead of its main: the names of its streams. */
+const TASKS_ENV: String = "LARIMAR_PROCESS";
+
+/** How many bytes each shared stream holds. */
+const SHARED_SIZE: int32 = 1048576;
+
+/** The messages of a task, as tables (JSON), through two streams of shared memory. */
+class TaskWire {
+    let input: SharedMemoryInputStream;
+    let output: SharedMemoryOutputStream;
+    /** The copy, on the side that started it. */
+    let process: Child? = null;
+    let frames: Frames = {};
+    let ended: bool = false;
+
+    /** The next message, waiting up to `ms` (negative: as long as it takes); null when none came or it ended. */
+    function read(ms: int32): Any {
+        let until: int64 = Time.monotonic() + (ms as int64);
+        while (!self.ended) {
+            let text: String? = self.frames.next();
+            if (text != null) {
+                try {
+                    return Json.parse(text!);
+                } catch (JsonError e) {
+                    self.ended = true;
+                    return null;
+                }
+            }
+            self.input.timeout = 200;
+            try {
+                if (!self.frames.fill(self.input)) { self.ended = true; }
+            } catch (IoError e) {
+                let timedOut: bool = switch (e) {
+                    case TimedOut -> true;
+                    default -> false;
+                };
+                if (!timedOut || (self.process != null && self.process!.wait(0) != null)) {
+                    self.ended = true;
+                } else if (ms >= 0 && Time.monotonic() >= until) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Sends a message: false when the other side is not there. */
+    function write(message: Any): bool {
+        if (self.ended) { return false; }
+        try {
+            self.output.write(framed(Json.stringify(message)).bytes());
+        } catch (IoError e) {
+            self.ended = true;
+        }
+        return !self.ended;
+    }
+
+    /** Why the other side is not there. */
+    function why(): String {
+        if (self.process != null) {
+            let code: int32? = self.process!.wait(1000);
+            if (code != null) { return "the program ended (exit ${code!})"; }
+        }
+        return "the other side closed";
+    }
+
+    /** Closes the streams: the copy sees the end and ends; this one waits for it a while. */
+    function close(): void {
+        try {
+            self.output.close();
+            self.input.close();
+        } catch (IoError e) {}
+        if (self.process != null && self.process!.wait(5000) == null) { self.process!.kill(); }
+    }
+
+    /** Ends the copy now. */
+    function stop(): void {
+        if (self.process != null) { self.process!.kill(); }
+        try {
+            self.output.close();
+            self.input.close();
+        } catch (IoError e) {}
+    }
+}
 
 /** A copy of this program that runs tasks: started, and waiting for them. */
-function startCopy(): Rpc throws ProcessError {
+function startCopy(): TaskWire throws ProcessError {
+    let requests: String = uniqueName("tq");
+    let answers: String = uniqueName("ts");
+    let wire: TaskWire? = null;
+    let copy: Child = { program: os.programPath(), shareConsole: true };
+    copy.env.push("${TASKS_ENV}=${requests},${answers}");
     try {
-        return Rpc.startShared(Child { program: os.programPath(), env: [TASKS_ENV] });
-    } catch (RpcError e) {
-        throw ProcessError.CannotStart { program: os.programPath().clone(), why: Calls.message(e).clone() };
+        wire = TaskWire {
+            output: SharedMemoryOutputStream.create(requests, SHARED_SIZE),
+            input: SharedMemoryInputStream.create(answers, SHARED_SIZE),
+            process: copy
+        };
+    } catch (IoError e) {
+        throw ProcessError.CannotStart { program: os.programPath().clone(), why: "cannot make the shared streams".clone() };
     }
+    let why: String? = copy.launch();
+    if (why != null) { throw ProcessError.CannotStart { program: os.programPath().clone(), why: why!.clone() }; }
+    return wire!;
 }
 
 // The compiler writes these two for a program with Task classes (they ask std.os.process.tasks, which it
@@ -91,10 +274,11 @@ function encodeTask(task: Task): Any { return null; }
 /** The task of class `name` with these fields; null when the program has no such class. */
 function startTask(name: String, fields: Any): Task? { return null; }
 
-/** What goes to the copy for a task: { name, fields }. */
+/** What goes to the copy for a task: { kind: "task", name, fields }. */
 function encoded(task: Task): Any throws ProcessError {
     let params: Any = encodeTask(task);
     if (params == null) { throw ProcessError.Failed("the task is not of a class of this program that implements Task".clone()); }
+    params["kind"] = "task";
     return params;
 }
 
@@ -106,8 +290,7 @@ public class Process extends Child {
     /** The task to run in a copy of this program (instead of a program). */
     let run: Task? = null;
 
-    let copy: Rpc? = null;
-    let call: int64 = 0;
+    let messages: Channel? = null;
     let joined: bool = false;
 
     override function hasTask(): bool { return self.run != null; }
@@ -117,13 +300,11 @@ public class Process extends Child {
         if (self.run != null) {
             if (self.program != "") { throw ProcessError.CannotStart { program: self.program.clone(), why: "a Process runs a program or a task, not both".clone() }; }
             let params: Any = encoded(self.run!);
-            self.copy = startCopy();
-            try {
-                self.call = self.copy!.begin("run", params);
-            } catch (RpcError e) {
-                self.copy!.stop();
-                self.copy = null;
-                throw ProcessError.Failed(Calls.message(e).clone());
+            self.messages = Channel { wire: startCopy() };
+            let wire: TaskWire = self.messages!.wire!;
+            if (!wire.write(params)) {
+                wire.stop();
+                throw ProcessError.Failed(wire.why().clone());
             }
             return;
         }
@@ -132,23 +313,29 @@ public class Process extends Child {
         if (why != null) { throw ProcessError.CannotStart { program: self.program.clone(), why: why!.clone() }; }
     }
 
+    /** The channel of its task. Throws ProcessError.NotRunning when it has no task or was not started. */
+    function channel(): Channel throws ProcessError {
+        if (self.messages == null) { throw ProcessError.NotRunning; }
+        return self.messages!;
+    }
+
     /**
-     * Waits for it to end: what the task's run() gave, or the exit code of the program. Throws
-     * ProcessError.NotRunning when it was not started (or was joined already), Failed when the task did
-     * not finish.
+     * Waits for it to end: the exit code of the program, or 0 when its task's run() ended (what it sent
+     * stays in the channel). Throws ProcessError.NotRunning when it was not started (or was joined
+     * already), Failed when the task did not finish.
      */
-    function join(): Any throws ProcessError {
-        if (self.copy != null) {
-            if (self.joined) { throw ProcessError.NotRunning; }
+    function join(): int32 throws ProcessError {
+        if (self.run != null) {
+            if (self.messages == null || self.joined) { throw ProcessError.NotRunning; }
             self.joined = true;
-            try {
-                let result: Any = self.copy!.finish(self.call);
-                self.copy!.close();
-                return result;
-            } catch (RpcError e) {
-                self.copy!.stop();
-                throw ProcessError.Failed(Calls.message(e).clone());
+            let c: Channel = self.messages!;
+            while (!c.done && c.failure == null) { c.pump(200); }
+            if (c.failure != null) {
+                c.wire!.stop();
+                c.check();
             }
+            c.wire!.close();
+            return 0;
         }
         if (!self.started()) { throw ProcessError.NotRunning; }
         let code: int32? = self.wait(-1);
@@ -163,7 +350,7 @@ public class Process extends Child {
     /** Ends it now (if it still runs). */
     override function kill(): void {
         super.kill();
-        if (self.copy != null) { self.copy!.stop(); }
+        if (self.messages != null) { self.messages!.wire!.stop(); }
     }
 }
 
@@ -174,89 +361,89 @@ public function findProgram(name: String): String? { return Internal.findProgram
 
 /**
  * Runs tasks in up to `processes` copies of this program, each one a task at a time:
- * let pool: ProcessPool = { processes: 8 }; pool.submit(task); ... let all: Any = pool.wait();
+ * let pool: ProcessPool = { processes: 8 }; let c: Channel = pool.submit(task); ... pool.wait();
  * The copies start as tasks arrive and stay for the next ones until the pool's memory goes.
  */
 public class ProcessPool {
     /** How many processes at most (they start when there is work for them). */
     let processes: int32 = 4;
-    let workers: Rpc[*] = [];
-    /** For each worker, the task it runs (its place among the submitted ones), or -1. */
-    let busy: int32[*] = [];
-    let ids: int64[*] = [];
-    /** What goes for each task submitted and not sent yet. */
+    let workers: TaskWire[*] = [];
+    /** For each worker, the task it runs (its place in channels), or -1. */
+    let running: int32[*] = [];
+    /** One for each task submitted since the last wait, with what goes to start it. */
+    let channels: Channel[*] = [];
     let queued: Any = {};
     let sent: int32 = 0;
-    let results: Any = {};
-    let done: int32 = 0;
 
-    /** Runs the task in one of the processes, as soon as one is free (it does not wait for it). */
-    function submit(task: Task): void throws ProcessError {
+    /** Runs the task in one of the processes, as soon as one is free (it does not wait for it): its channel. */
+    function submit(task: Task): Channel throws ProcessError {
         let params: Any = encoded(task);
         self.queued.push(params.clone());
-        self.results.push(null);
+        self.channels.push(Channel { pool: self });
         self.dispatch();
+        return self.channels[self.channels.length - 1];
     }
 
     /**
-     * Waits until every task submitted so far has finished: what each run() gave, in the order they were
-     * submitted. Throws ProcessError.Failed when one did not finish (the others are dropped too).
+     * Waits until every task submitted so far has finished (what they sent stays in their channels).
+     * Throws ProcessError.Failed when one did not finish (the others are dropped too).
      */
-    function wait(): Any throws ProcessError {
-        while (self.done < self.results.length) {
-            self.dispatch();
-            for (k in 0..self.busy.length) {
-                if (self.busy[k] >= 0) {
-                    try {
-                        self.results[self.busy[k]] = self.workers[k].finish(self.ids[k]);
-                    } catch (RpcError e) {
-                        self.reset();
-                        throw ProcessError.Failed(Calls.message(e).clone());
-                    }
-                    self.busy[k] = -1;
-                    self.done += 1;
-                    break;
+    function wait(): void throws ProcessError {
+        for (c in self.channels) {
+            while (!c.done) {
+                if (c.failure != null) {
+                    self.reset();
+                    c.check();
                 }
+                c.pump(200);
             }
         }
-        let all: Any = self.results.clone();
+        self.dispatch();
+        self.channels.clear();
         self.queued = {};
-        self.results = {};
         self.sent = 0;
-        self.done = 0;
-        return all;
+        for (k in 0..self.running.length) { self.running[k] = -1; }
     }
 
-    /** Sends queued tasks to free workers, starting workers up to `processes`. */
+    /** Lets the running tasks go on for up to `ms`, and gives the free processes what is waiting. */
+    function advance(ms: int32): void throws ProcessError {
+        self.dispatch();
+        for (k in 0..self.running.length) {
+            let i: int32 = self.running[k];
+            if (i >= 0 && !self.channels[i].done && self.channels[i].failure == null) {
+                self.channels[i].pump(ms);
+                self.dispatch();
+                return;
+            }
+        }
+    }
+
+    /** Sends queued tasks to free workers, starting workers up to `processes` (and again for one that ended). */
     function dispatch(): void throws ProcessError {
         let limit: int32 = self.processes > 0 ? self.processes : 1;
         while (self.sent < self.queued.length) {
             let k: int32 = -1;
-            for (i in 0..self.busy.length) {
-                if (self.busy[i] < 0) {
+            for (i in 0..self.running.length) {
+                let r: int32 = self.running[i];
+                if (r < 0 || self.channels[r].done || self.channels[r].failure != null) {
                     k = i;
                     break;
                 }
             }
             if (k < 0) {
                 if (self.workers.length >= limit) { return; }
-                try {
-                    self.workers.push(startCopy());
-                } catch (ProcessError e) {
-                    self.reset();
-                    throw e;
-                }
-                self.busy.push(-1);
-                self.ids.push(0);
+                self.workers.push(startCopy());
+                self.running.push(-1);
                 k = self.workers.length - 1;
+            } else if (self.workers[k].ended || (self.running[k] >= 0 && self.channels[self.running[k]].failure != null)) {
+                self.workers[k].stop();
+                self.workers[k] = startCopy();
             }
-            try {
-                self.ids[k] = self.workers[k].begin("run", self.queued[self.sent]);
-            } catch (RpcError e) {
-                self.reset();
-                throw ProcessError.Failed(Calls.message(e).clone());
+            if (!self.workers[k].write(self.queued[self.sent])) {
+                self.channels[self.sent].failure = self.workers[k].why().clone();
             }
-            self.busy[k] = self.sent;
+            self.channels[self.sent].wire = self.workers[k];
+            self.running[k] = self.sent;
             self.sent += 1;
         }
     }
@@ -265,27 +452,46 @@ public class ProcessPool {
     function reset(): void {
         for (w in self.workers) { w.stop(); }
         self.workers.clear();
-        self.busy.clear();
-        self.ids.clear();
+        self.running.clear();
+        self.channels.clear();
         self.queued = {};
-        self.results = {};
         self.sent = 0;
-        self.done = 0;
     }
 }
 
 /**
  * What a copy of this program started for tasks does instead of its main (the compiler calls it when
- * LARIMAR_PROCESS is set): it runs the tasks it is sent until it is closed.
+ * LARIMAR_PROCESS is set): it runs the tasks it is sent, one after another, until it is closed.
  */
 public function serveTasks(): int32 {
-    serve((call) -> {
-        let task: Task? = startTask(call.params.name as String ?? "", call.params["fields"]);
+    let parts: String[*] = (os.env(TASKS_ENV) ?? "").split(",");
+    if (parts.length != 2) { return 2; }
+    let wire: TaskWire? = null;
+    try {
+        wire = TaskWire {
+            input: SharedMemoryInputStream.open(parts[0], 10000),
+            output: SharedMemoryOutputStream.open(parts[1], 10000)
+        };
+    } catch (IoError e) {
+        return 2;
+    }
+    while (true) {
+        let m: Any = wire!.read(-1);
+        if (m == null) { return 0; }
+        if ((m.kind as String ?? "") != "task") { continue; }      // a message after its task ended
+        let task: Task? = startTask(m.name as String ?? "", m["fields"]);
         if (task == null) {
-            call.fail(-32602, "this program has no Task class ${call.params.name}");
-            return null;
+            wire!.write({ kind: "fail", why: "this program has no Task class ${m.name}" });
+            continue;
         }
-        return task!.run();
-    });
+        let channel: Channel = { wire: wire! };
+        try {
+            task!.run(channel);
+        } catch (ProcessError e) {
+            wire!.write({ kind: "fail", why: message(e) });
+            continue;
+        }
+        wire!.write({ kind: "done" });
+    }
     return 0;
 }

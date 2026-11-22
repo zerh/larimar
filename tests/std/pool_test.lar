@@ -1,10 +1,10 @@
 // std.os.process: tasks (Task) that run in copies of the program: one in a Process, many in a ProcessPool.
 import std.os;
-import std.os.process { Process, ProcessPool, Task, ProcessError, message };
+import std.os.process { Channel, Process, ProcessPool, Task, ProcessError, message };
 import std.test { check, checkText, checkInt };
 import tests.support.compiler { failsInAProgram, runs, caseFile };
 
-/** A task: its fields go with it; what run gives comes back. A negative n is a panic there. */
+/** A task: its fields go with it; what it sends comes back. A negative n is a panic there. */
 class Square implements Task {
     let n: int64;
     let label: String = "";
@@ -12,16 +12,27 @@ class Square implements Task {
     let note: String? = null;
     let scale: float64 = 1.0;
 
-    override function run(): Any {
+    override function run(channel: Channel): void throws ProcessError {
         if (self.n < 0) {
             let none: int32[*] = [];
-            return none[1];
+            println("${none[1]}");
         }
-        return {
+        channel.send({
             value: (self.n * self.n) as float64 * self.scale,
             text: "${self.label}:${self.tags.join("+")}:${self.note ?? "-"}",
             pid: os.processId()
-        };
+        });
+    }
+}
+
+/** A task that answers: it doubles what it receives until it receives 0. */
+class Doubler implements Task {
+    override function run(channel: Channel): void throws ProcessError {
+        while (true) {
+            let n: int64 = channel.receive(-1) as int64 ?? 0;
+            if (n == 0) { return; }
+            channel.send(n * 2);
+        }
     }
 }
 
@@ -29,10 +40,29 @@ class Square implements Task {
 test function aTaskRunsInAnotherProcess(): void throws ProcessError {
     let p: Process = { run: Square { n: 7, label: "casa", tags: ["a", "b"], note: "n", scale: 2.0 } };
     p.start();
-    let r: Any = p.join();
+    checkInt(0, p.join());
+    let c: Channel = p.channel();
+    let r: Any = c.receive(0);
     checkText("98.0", "${r.value}");
     checkText("casa:a+b:n", r.text as String ?? "");
     check((r.pid as int64 ?? 0) != os.processId(), "it ran in another process");
+    check(c.finished(), "everything it sent was received");
+}
+
+// The channel goes both ways: the task receives what this program sends, while it runs.
+test function aTaskAndItsProgramTalk(): void throws ProcessError {
+    let p: Process = { run: Doubler {} };
+    p.start();
+    let c: Channel = p.channel();
+    let got: String[*] = [];
+    let numbers: int64[] = [3, 5, 21];
+    for (n in numbers) {
+        c.send(n);
+        got.push("${c.receive(10000)}");
+    }
+    c.send(0);
+    p.join();
+    checkText("6 10 42", got.join(" "));
 }
 
 // A Process runs a program or a task, not both; join before start is NotRunning.
@@ -55,15 +85,16 @@ test function aProcessRunsOneThing(): void {
     checkText("the process is not running", notYet);
 }
 
-// submit gives the tasks to the processes as they come; wait gives the results in the order submitted.
+// submit gives the tasks to the processes as they come, each with its channel; wait waits for them all.
 test function manyTasksAtOnce(): void throws ProcessError {
     let pool: ProcessPool = { processes: 3 };
-    for (i in 0..12) { pool.submit(Square { n: i as int64 }); }
-    let all: Any = pool.wait();
-    checkInt(12, all.length);
+    let channels: Channel[*] = [];
+    for (i in 0..12) { channels.push(pool.submit(Square { n: i as int64 })); }
+    pool.wait();
     let values: String[*] = [];
     let pids: Any = {};
-    for (i, r in all) {
+    for (c in channels) {
+        let r: Any = c.receive(0);
         values.push("${r.value}");
         pids["${r.pid}"] = true;
     }
@@ -71,8 +102,8 @@ test function manyTasksAtOnce(): void throws ProcessError {
     let used: int32 = 0;
     for (k, v in pids.fields) { used += 1; }
     check(used > 1 && used <= 3, "the tasks ran in up to 3 processes (${used})");
-    pool.submit(Square { n: 5 });
-    checkText("25.0", "${pool.wait()[0].value}");
+    let again: Channel = pool.submit(Square { n: 5 });
+    checkText("25.0", "${again.receive(10000).value}");
 }
 
 // A panic in a task is a ProcessError here; the pool starts new processes for what comes next.
@@ -85,7 +116,7 @@ test function aPanicThereIsAnErrorHere(): void throws ProcessError {
     } catch (ProcessError e) {
         why = message(e).clone();
     }
-    checkText("the task failed: ended: the program ended (exit 101)", why);
+    checkText("the task failed: the program ended (exit 101)", why);
     let pool: ProcessPool = { processes: 2 };
     let inPool: String = "";
     try {
@@ -94,27 +125,28 @@ test function aPanicThereIsAnErrorHere(): void throws ProcessError {
     } catch (ProcessError e) {
         inPool = message(e).clone();
     }
-    checkText("the task failed: ended: the program ended (exit 101)", inPool);
-    pool.submit(Square { n: 3 });
-    checkText("9.0", "${pool.wait()[0].value}");
+    checkText("the task failed: the program ended (exit 101)", inPool);
+    let next: Channel = pool.submit(Square { n: 3 });
+    pool.wait();
+    checkText("9.0", "${next.receive(0).value}");
 }
 
 // What a task carries is checked: values that can go to another process, and no class above it.
 test function whatATaskCarriesIsChecked(): void {
     failsInAProgram(raw"""
-        import std.os.process { Task };
+        import std.os.process { Channel, ProcessError, Task };
         class Box { let n: int32 = 0; }
         class Bad implements Task {
             let box: Box;
-            override function run(): Any { return null; }
+            override function run(channel: Channel): void throws ProcessError {}
         }
         function main(): int32 { return 0; }
         """, "Field 'box' of Task 'Bad' goes to another process");
     failsInAProgram(raw"""
-        import std.os.process { Task };
+        import std.os.process { Channel, ProcessError, Task };
         class Base { let n: int32 = 0; }
         class Child extends Base implements Task {
-            override function run(): Any { return null; }
+            override function run(channel: Channel): void throws ProcessError {}
         }
         function main(): int32 { return 0; }
         """, "Task 'Child' extends 'Base'");

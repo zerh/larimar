@@ -2572,16 +2572,17 @@ siguiente mensaje, en la misma memoria.
 
 Los procesos se usan como los [hilos](#22-hilos). Un hilo corre un `Runnable` con `start()` y `join()`;
 un proceso corre una **`Task`** igual, en una copia de este mismo programa. El objeto va allí con sus
-campos, su `run()` corre allí, y lo que da vuelve en `join()`:
+campos, su `run()` corre allí, y habla con este programa por un **`Channel`**: lo que un lado manda,
+el otro lo recibe:
 
 ```ts
-import std.os.process { Process, ProcessPool, Task, ProcessError };
+import std.os.process { Channel, Process, ProcessPool, Task, ProcessError };
 
 class Resize implements Task {
     let file: String;
     let width: int32;
-    override function run(): Any {
-        return Images.resize(self.file, self.width);     // en otro proceso
+    override function run(channel: Channel): void throws ProcessError {
+        channel.send(Images.resize(self.file, self.width));   // en otro proceso
     }
 }
 
@@ -2590,12 +2591,13 @@ function main(): int32 {
         let p: Process = { run: Resize { file: "casa.jpg", width: 800 } };
         p.start();
         dibujarCargando();                              // este programa sigue mientras tanto
-        let una: Any = p.join();                        // lo que dio run() allí
+        let una: Any = p.channel().receive(-1);         // lo que run() mandó allí
+        p.join();                                       // run() terminó
 
         let pool: ProcessPool = { processes: 4 };
-        pool.submit(Resize { file: "1.jpg", width: 800 });
-        pool.submit(Resize { file: "2.jpg", width: 800 });
-        let todas: Any = pool.wait();                   // lo que dio cada run(), en el orden en que se dieron
+        let a: Channel = pool.submit(Resize { file: "1.jpg", width: 800 });
+        let b: Channel = pool.submit(Resize { file: "2.jpg", width: 800 });
+        pool.wait();                                    // las dos terminaron; lo que mandaron está en a y b
     } catch (ProcessError e) {
         println("una tarea falló");
     }
@@ -2607,22 +2609,24 @@ function main(): int32 {
 |---|---|---|
 | qué corre | un `Runnable` (una lambda) | una `Task` (un objeto: sus campos viajan) |
 | uno | `Thread { run: () -> { ... } }` | `Process { run: Resize { ... } }` |
-| arrancar, esperar | `start()`, `join()` | `start()`, `join()`: da lo que dio `run()` |
+| arrancar, esperar | `start()`, `join()` | `start()`, `join()`; `channel()` para hablarle |
 | muchos | `ThreadPool { threads: 8 }` | `ProcessPool { processes: 8 }` |
-| dar trabajo, esperarlo | `submit(lambda)`, `wait()` | `submit(tarea)`, `wait()`: los resultados en orden |
+| dar trabajo, esperarlo | `submit(lambda)`, `wait()` | `submit(tarea)` da su canal, `wait()` |
 
 - **Un `Process` corre un programa o una tarea, no las dos**: `{ program, args }` es otro programa (como
   en [`std.os.process`](#stdosprocess-otros-programas)), `{ run: tarea }` una copia de este. `join()` de un
   programa espera a que termine y da su código de salida.
 - **Lo que va con la tarea** son sus campos: números, `bool`, `String`, sus opcionales y listas de
   ellos. Un campo de otro tipo es un error de compilación (*Field 'box' of Task 'Bad' goes to another
-  process...*), y también una clase que extiende otra. Lo que da `run()` vuelve como `Any` cruza a JSON:
-  números, `bool`, `String` y tablas (un objeto llega como `null`). Solo la `Task` de `std.os.process` es
+  process...*), y también una clase que extiende otra. Lo que pasa por el canal cruza como `Any` cruza a
+  JSON: números, `bool`, `String` y tablas (un objeto llega como `null`). `receive(ms)` espera hasta `ms`
+  (negativo: lo que haga falta) y da `null` si no llegó nada; `finished()` dice que la tarea terminó y
+  que se recibió todo lo que mandó. Solo la `Task` de `std.os.process` es
   esto: una interfaz tuya que se llame `Task` es solo tuya.
 - **La única diferencia con un hilo**: un `Runnable` puede ser una lambda que captura variables, porque
   el hilo comparte la memoria de este programa; una `Task` es un objeto cuyos campos se copian, porque el
   otro proceso no la ve.
-- **Un panic en una tarea es un `ProcessError` aquí** (`Failed: "ended: the program ended (exit 101)"`),
+- **Un panic en una tarea es un `ProcessError` aquí** (`Failed: "the program ended (exit 101)"`),
   y el pool arranca procesos nuevos para lo que sigue. El mensaje del panic sale en la consola: las copias
   usan la de este programa.
 - Las copias del pool arrancan cuando hay trabajo para ellas y se quedan para las tareas siguientes hasta
@@ -4276,7 +4280,7 @@ test function aFieldOfATaskCrosses(): void {
     failsWith(raw"""
         import std.os.process { Task };
         class Box { let n: int32 = 0; }
-        class Bad implements Task { let box: Box; override function run(): Any { return null; } }
+        class Bad implements Task { let box: Box; override function run(channel: Channel): void throws ProcessError {} }
         function main(): int32 { return 0; }
         """, "Field 'box' of Task 'Bad' goes to another process");
 }
@@ -4480,13 +4484,16 @@ let out: SharedMemoryOutputStream = SharedMemoryOutputStream.create("frames", 1 
 let input: SharedMemoryInputStream = SharedMemoryInputStream.open("frames", 5000);
 let tablero: SharedMemorySegment = SharedMemorySegment.create("juego", 4096);     // un tablero: putInt64(0, n)
 let msg: ByteWriter = {};                             // std.io.bytes: putInt32, putString... ByteReader
-class Job implements Task { let n: int64; override function run(): Any { return self.n * 2; } }
+class Job implements Task {
+    let n: int64;
+    override function run(channel: Channel): void throws ProcessError { channel.send(self.n * 2); }
+}
 let job: Process = { run: Job { n: 21 } };
 job.start();
-let r: Any = job.join();                              // en otro proceso: 42
+let r: Any = job.channel().receive(-1);               // en otro proceso: 42
 let pool: ProcessPool = { processes: 4 };
-pool.submit(Job { n: 1 });
-let todas: Any = pool.wait();                         // los resultados, en el orden en que se dieron
+let c: Channel = pool.submit(Job { n: 1 });           // su canal
+pool.wait();                                          // todas terminaron
 
 // Bibliotecas: [dependencies] textkit = "../textkit" (capítulo 27); [project] kind = "library"
 import textkit;                                       // se compila con el programa

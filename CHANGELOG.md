@@ -2,6 +2,19 @@
 
 Each version of the compiler (`larimar --version`) and the version of the language it implements.
 
+## Unreleased (1.13)
+
+- **A task talks through a `Channel`** (`std.os.process`): `Task` is `run(channel: Channel): void throws
+  ProcessError`, and run() gives nothing back. What one side sends (`send(value)`), the other receives
+  (`receive(ms)`: `null` when nothing came in that time; negative `ms`, as long as it takes), both ways
+  and while it runs; `finished()` says the task ended and everything it sent was received.
+  `Process.channel()` is the channel of its task and `join()` gives an `int32` (the exit code of a
+  program, 0 for a task); `ProcessPool.submit` gives the channel of each task and `wait()` gives nothing.
+  A panic there is `Failed: "the program ended (exit 101)"`.
+- **Tasks no longer go through `std.os.rpc`**: they have their own messages over shared memory.
+  `std.os.rpc` stays, to talk JSON-RPC with other programs; the framing both use is
+  `std.os.internal.frames`.
+
 ## 1.12.0 — 2026-11-16 (language 1.4)
 
 - **The state of each stage is one object**, which the `Compilation` holds: `Linking` (what linking was

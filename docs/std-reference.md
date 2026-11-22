@@ -4,7 +4,7 @@ Every module of `std` a program can import, and everything it makes public: type
 
 > This file is **generated** from `src/std/` with `tools/std_reference.py`; it is not edited by hand. The [manual](manual.md#25-standard-library) explains the library with examples. The parts of std for std itself (`*.posix`, `*.windows`, `*.macos`, `*.common`, `*.internal`) are not here: a program cannot import them.
 
-**29 modules, 198 public names.**
+**29 modules, 199 public names.**
 
 ## Modules
 
@@ -1476,23 +1476,30 @@ with the rest) with `mergeErrors: true`. A Process that is still running when it
 killed.
 
 Work of the program itself runs in other processes too: a class that implements Task is work that goes
-to a copy of this program with its fields, and what run() gives comes back; a panic there is a
-ProcessError here.
+to a copy of this program with its fields. Its run() talks to this program through a Channel: what one
+side sends, the other receives. A panic there is a ProcessError here.
 
   class Resize implements Task {
       let file: String;
       let width: int32;
-      override function run(): Any { return Images.resize(self.file, self.width); }
+      override function run(channel: Channel): void throws ProcessError {
+          channel.send({ progress: 0 });
+          channel.send(Images.resize(self.file, self.width));
+      }
   }
 
   let p: Process = { run: Resize { file: "casa.jpg", width: 800 } };
   p.start();
-  let r: Any = p.join();                    // what run() gave there
+  let c: Channel = p.channel();
+  while (!c.finished()) {
+      let m: Any = c.receive(100);          // what run() sent; null when nothing came in 100 ms
+  }
+  p.join();                                 // waits for run() to end
 
   let pool: ProcessPool = { processes: 4 };
-  pool.submit(Resize { file: "1.jpg", width: 800 });
-  pool.submit(Resize { file: "2.jpg", width: 800 });
-  let all: Any = pool.wait();               // what each run() gave, in the order they were submitted
+  let one: Channel = pool.submit(Resize { file: "1.jpg", width: 800 });
+  let two: Channel = pool.submit(Resize { file: "2.jpg", width: 800 });
+  pool.wait();                              // every task ended; what they sent stays in their channels
 ```
 
 `src/std/os/process.lar`
@@ -1504,9 +1511,40 @@ Why a process could not be used.
 A message for the error, in English.
 
 ### interface `Task`
-Work that runs in another process: a copy of this program, so that a panic or a crash there is only an error here. The object goes there with its fields (numbers, bool, String, optionals and lists of them); what run() gives comes back the same way (a table, a number, a String...). A class that implements it says so itself (implements Task) and extends no other class.
+Work that runs in another process: a copy of this program, so that a panic or a crash there is only an error here. The object goes there with its fields (numbers, bool, String, optionals and lists of them); run() talks to this program through the channel (a ProcessError there, when this program is gone, ends the task). A class that implements it says so itself (implements Task) and extends no other class.
 
-- `function run(): Any`
+- `function run(channel: Channel): void throws ProcessError`
+
+### class `Channel`
+Messages between a task and the program that started it: what one side sends, the other receives, in order. A message is what a task's fields can be, or a table of them (as JSON).
+
+- `wire: TaskWire?`
+
+- `pool: ProcessPool?`  
+  The pool that runs the task (null for a Process, and in the task itself).
+
+- `inbox: Any`
+
+- `taken: int32`
+
+- `done: bool`
+
+- `failure: String?`
+
+- `function send(value: Any): void throws ProcessError`  
+  Sends a value to the other side. Throws ProcessError.Failed when it is not there any more.
+
+- `function receive(ms: int32): Any throws ProcessError`  
+  The next value the other side sent, waiting up to `ms` (a negative ms: as long as it takes); null when nothing came in that time, or when the task has finished and everything it sent was received. Throws ProcessError.Failed when the other side ended before finishing.
+
+- `function finished(): bool`  
+  Whether the task has finished and everything it sent was received.
+
+- `function check(): void throws ProcessError`  
+  Throws the failure, if the other side ended.
+
+- `function pump(ms: int32): void throws ProcessError`  
+  Reads what came, waiting up to `ms`.
 
 ### class `Process`
 A process: another program (`program`, with `args`), or a task of this program (`run`) in a copy of it; one or the other. The literal says what to run; start() runs it, and join() waits for it to end.
@@ -1578,9 +1616,7 @@ A process: another program (`program`, with `args`), or a task of this program (
 - `run: Task?`  
   The task to run in a copy of this program (instead of a program).
 
-- `copy: Rpc?`
-
-- `call: int64`
+- `messages: Channel?`
 
 - `joined: bool`
 
@@ -1589,8 +1625,11 @@ A process: another program (`program`, with `args`), or a task of this program (
 - `function start(): void throws ProcessError`  
   Starts it. Throws ProcessError.CannotStart when it cannot (not found, not allowed, nothing to run).
 
-- `function join(): Any throws ProcessError`  
-  Waits for it to end: what the task's run() gave, or the exit code of the program. Throws ProcessError.NotRunning when it was not started (or was joined already), Failed when the task did not finish.
+- `function channel(): Channel throws ProcessError`  
+  The channel of its task. Throws ProcessError.NotRunning when it has no task or was not started.
+
+- `function join(): int32 throws ProcessError`  
+  Waits for it to end: the exit code of the program, or 0 when its task's run() ended (what it sent stays in the channel). Throws ProcessError.NotRunning when it was not started (or was joined already), Failed when the task did not finish.
 
 - `function write(text: String): void throws ProcessError`  
   Writes text to its input. Throws ProcessError.NotRunning when it does not read it any more.
@@ -1602,41 +1641,40 @@ A process: another program (`program`, with `args`), or a task of this program (
 Where a program is found in the PATH (with .exe on Windows), or null. A path with a folder is checked as it is.
 
 ### class `ProcessPool`
-Runs tasks in up to `processes` copies of this program, each one a task at a time: let pool: ProcessPool = { processes: 8 }; pool.submit(task); ... let all: Any = pool.wait(); The copies start as tasks arrive and stay for the next ones until the pool's memory goes.
+Runs tasks in up to `processes` copies of this program, each one a task at a time: let pool: ProcessPool = { processes: 8 }; let c: Channel = pool.submit(task); ... pool.wait(); The copies start as tasks arrive and stay for the next ones until the pool's memory goes.
 
 - `processes: int32`  
   How many processes at most (they start when there is work for them).
 
-- `workers: Rpc[*]`
+- `workers: TaskWire[*]`
 
-- `busy: int32[*]`  
-  For each worker, the task it runs (its place among the submitted ones), or -1.
+- `running: int32[*]`  
+  For each worker, the task it runs (its place in channels), or -1.
 
-- `ids: int64[*]`
+- `channels: Channel[*]`  
+  One for each task submitted since the last wait, with what goes to start it.
 
-- `queued: Any`  
-  What goes for each task submitted and not sent yet.
+- `queued: Any`
 
 - `sent: int32`
 
-- `results: Any`
+- `function submit(task: Task): Channel throws ProcessError`  
+  Runs the task in one of the processes, as soon as one is free (it does not wait for it): its channel.
 
-- `done: int32`
+- `function wait(): void throws ProcessError`  
+  Waits until every task submitted so far has finished (what they sent stays in their channels). Throws ProcessError.Failed when one did not finish (the others are dropped too).
 
-- `function submit(task: Task): void throws ProcessError`  
-  Runs the task in one of the processes, as soon as one is free (it does not wait for it).
-
-- `function wait(): Any throws ProcessError`  
-  Waits until every task submitted so far has finished: what each run() gave, in the order they were submitted. Throws ProcessError.Failed when one did not finish (the others are dropped too).
+- `function advance(ms: int32): void throws ProcessError`  
+  Lets the running tasks go on for up to `ms`, and gives the free processes what is waiting.
 
 - `function dispatch(): void throws ProcessError`  
-  Sends queued tasks to free workers, starting workers up to `processes`.
+  Sends queued tasks to free workers, starting workers up to `processes` (and again for one that ended).
 
 - `function reset(): void`  
   Drops the workers and the tasks: a new start for whatever comes next.
 
 `function serveTasks(): int32`  
-What a copy of this program started for tasks does instead of its main (the compiler calls it when LARIMAR_PROCESS is set): it runs the tasks it is sent until it is closed.
+What a copy of this program started for tasks does instead of its main (the compiler calls it when LARIMAR_PROCESS is set): it runs the tasks it is sent, one after another, until it is closed.
 
 ---
 

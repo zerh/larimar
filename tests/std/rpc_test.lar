@@ -1,6 +1,6 @@
 // std.os.rpc: calls to another program (JSON-RPC), through shared memory or through its pipes.
 import std.os.rpc { Rpc, RpcCall, RpcError, message, serveOver };
-import std.os.process { Process, ProcessError, Task };
+import std.os.process { Channel, Process, ProcessError, Task };
 import std.io { BytesInputStream, BytesOutputStream };
 import std.test { check, checkText, checkInt, fail };
 import tests.support.compiler { built, caseFile };
@@ -126,7 +126,7 @@ test function servesOnAnyStreams(): void {
 }
 
 class Nothing implements Task {
-    override function run(): Any { return null; }
+    override function run(channel: Channel): void throws ProcessError {}
 }
 
 /** What Rpc says when it does not start the Process: "" when it started it. */

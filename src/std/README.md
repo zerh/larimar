@@ -172,10 +172,11 @@ std's own, imported only from std (the rule `std-own-import`).
   - `enum ProcessError`: Why a process could not be used
   - `function message(e: ProcessError): String`: A message for the error, in English
   - `interface Task`: Work that runs in another process: a copy of this program, so that a panic or a crash there is only an error here
+  - `class Channel`: Messages between a task and the program that started it: what one side sends, the other receives, in order
   - `class Process extends Child`: A process: another program (`program`, with `args`), or a task of this program (`run`) in a copy of it; one or the other
   - `function findProgram(name: String): String?`: Where a program is found in the PATH (with .exe on Windows), or null
-  - `class ProcessPool`: Runs tasks in up to `processes` copies of this program, each one a task at a time: let pool: ProcessPool = { processes: 8 }; pool.submit(task); 
-  - `function serveTasks(): int32`: What a copy of this program started for tasks does instead of its main (the compiler calls it when LARIMAR_PROCESS is set): it runs the tasks it is sent until it is closed
+  - `class ProcessPool`: Runs tasks in up to `processes` copies of this program, each one a task at a time: let pool: ProcessPool = { processes: 8 }; let c: Channel = pool.submit(task); 
+  - `function serveTasks(): int32`: What a copy of this program started for tasks does instead of its main (the compiler calls it when LARIMAR_PROCESS is set): it runs the tasks it is sent, one after another, until it is closed
 - **`std.os.process.tasks`**: how the objects of a program's Task classes go to another process
   - `function encode(task: Task): Any`: The class and fields of a task, as a table: { name, fields }; null when it is not a class of the program
   - `function start(name: String, fields: Any): Task?`: The task of class `name` with these fields; null when the program has no such class

@@ -1431,8 +1431,10 @@ another process of the same program, by a `Process` (`Process { run: task }`, th
 `join()`) or a `ProcessPool` (`submit(task)`, then `wait()`). Such a class extends no class, and each of
 its fields is of a **type that crosses**: the numbers, `bool`, `String`, their optionals and `T[*]` lists
 of them; otherwise it is a compile error. Its object arrives there with the values of its fields, `run()`
-runs there, and what it returns comes back as an `Any` (an object in it arrives as `null`). An interface
-called `Task` of another module is not this one.
+runs there as `run(channel: Channel): void throws ProcessError`. The **channel** carries values both
+ways while it runs (`send(value)`, `receive(ms)`), as `Any` crosses to JSON (an object in it arrives as
+`null`); `Process.channel()` and what `ProcessPool.submit` returns are its other end. An interface called
+`Task` of another module is not this one.
 
 A process started this way runs the initialization of the globals ([§24](#24-program-execution)) and then
 the tasks it is sent, not `main`.
