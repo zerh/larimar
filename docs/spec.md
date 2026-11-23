@@ -1449,7 +1449,8 @@ it). Each call goes through a pointer of the header's own type, so the C compile
 The library is a name without `lib` and its extension (`"SDL2"`: `libSDL2.so`, `libSDL2.dylib`,
 `SDL2.dll`), or a file. Its C runs only in the task's process, where a crash
 is a `ProcessError.Failed` for the program. A library not found, or a function it does not have, is a
-`LoadError`, and ends the task with what it says. Its functions are called only in the methods of a class
+`LoadError`, and ends the task with what it says. A call to a function of an interface its process did
+not bind is a panic that names it (*LibM.sqrt is not bound in this process*). Its functions are called only in the methods of a class
 that implements `UnsafeTask` (itself, or a class it extends), and in the lambdas written in them: a call
 anywhere else is a compile error. Its types, structs and constants are data, and go anywhere.
 

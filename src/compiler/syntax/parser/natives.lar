@@ -136,8 +136,10 @@ function openedFunctions(parser: Parser in default, declaration: NativeInterface
         let symbol: String = f.cName;
         let pointer: String = "lar_opened_${key}_${symbol}";
         pointers.add("static __typeof__(${symbol})* ${pointer};\n");
+        // a task that calls it without binding its library in its process: a panic that says so, not a crash
+        pointers.add("static __typeof__(${symbol})* ${pointer}__bound(void) {\n    if (!${pointer}) lar_panic(\"${declaration.name}.${symbol} is not bound in this process: bind ${declaration.name} in the setup of the task (loader.bind(${declaration.name}, library))\", 0);\n    return ${pointer};\n}\n");
         binds.add("    if (!(*(void**)(&${pointer}) = lar_library_symbol(library, \"${symbol}\"))) return \"${symbol}\";\n");
-        f.cName = pointer.clone() in default;
+        f.cName = "(*${pointer}__bound())" in default;
         f.opened = true;
     }
     let code: String = """

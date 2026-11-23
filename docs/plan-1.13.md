@@ -161,8 +161,15 @@ native interface Sdl "<SDL2/SDL.h>" from "SDL2" { ... }
   libraries = ["/opt/local/lib"]        # besides the usual ones
   headers = ["/opt/local/include"]
   ```
-- **`loader.bind` stays** (in `PreparedUnsafeTask`) for what is decided when the task runs: plugins, a path
-  from the configuration.
+- **`from` is optional.** Without it the interface is bound in `setup`, for what is decided when the task
+  runs: a plugin, a path from the configuration, `SDL3` if it is there and `SDL2` if not, two libraries
+  of one C API. With the strict rule the compiler knows which interfaces each task class calls (those in
+  its methods and in those of the classes it extends), so: a task that calls an interface without `from`
+  must be a `PreparedUnsafeTask`, a compile error otherwise (`Users calls Sqlite, which has no 'from':
+  implement PreparedUnsafeTask and bind it in setup`); one with `from` opens it when its process starts,
+  before `run`, and a `bind` in `setup` changes the library (another path). What the compiler cannot see
+  (a `setup` that binds the wrong one, or none) is the panic of an unbound call, done: `LibM.sqrt is not
+  bound in this process`.
 - Later: `from pkg "sdl2"`, which asks `pkg-config` for paths and flags (GTK, GStreamer: libraries with
   many of their own).
 - **Where the `.h` comes from**: a library (`.dll`, `.so`, `.dylib`) has its compiled code and the names

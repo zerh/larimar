@@ -2661,6 +2661,8 @@ function main(): int32 {
   }
   ```
 
+  Each task binds, in its own `setup`, the interfaces it calls: a call to one its process did not bind is
+  a panic that says so (`LibM.sqrt is not bound in this process: bind LibM in the setup of the task`).
   A library that is not there, or a function it does not have, ends the task with a `ProcessError.Failed`
   that says which (`cannot open the library SDL2 (tried libSDL2.so, ...)`, `the library z has no function
   sqrt`). A `ProcessPool` sets the library up once in each of its processes.

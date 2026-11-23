@@ -909,7 +909,7 @@ a, a.b, a.b.c (only names), or "".
 
 ## syntax.parser.natives
 
-`src/compiler/syntax/parser/natives.lar` · 572 líneas · 19 funciones
+`src/compiler/syntax/parser/natives.lar` · 574 líneas · 19 funciones
 syntax.parser.natives: what comes from C (native functions, types, structs and values; cinclude and ccode).
 Each function reads one construction; the comment above it shows its form (the notation is in syntax.parser).
 
@@ -927,67 +927,67 @@ The functions of an interface of an UnsafeTask are found when the task runs: eac
 
 `function typeWithFields(parser: Parser in default): bool`  
 Whether the type that starts here has fields: a '{' comes before its ';'. Then it is a struct or a union of C, by value; without fields it is a pointer (type FILE: a FILE*).  
-<sub>línea 179</sub>
+<sub>línea 181</sub>
 
 `function cNames(text: String, into: String[*] in default): void`  
 The C names in C text (struct tm*: struct, tm), added to `into`.  
-<sub>línea 191</sub>
+<sub>línea 193</sub>
 
 `function atCText(parser: Parser in default): bool`  
 At C text: c"...".  
-<sub>línea 205</sub>
+<sub>línea 207</sub>
 
 `function cTarget(parser: Parser in default, what: String): String`  
 [ = NAME | = struct NAME | = c"C" ]: what a native declaration is in C; "" without '='.  
-<sub>línea 208</sub>
+<sub>línea 210</sub>
 
 `function nativeFunctionOfC(parser: Parser in default): ExternFunctionDecl`  
 (after `native function`) NAME ( [ parameter ( , parameter )* [ , ... ] ] ) [ : Type ] [ = C ] [ released by NAME ] ;  
-<sub>línea 222</sub>
+<sub>línea 224</sub>
 
 `function nativeValue(parser: Parser in default): Node`  
 (after `native`) ( const NAME : Type [ = C ] | let NAME : Type [ = NAME ] ) ;  
-<sub>línea 260</sub>
+<sub>línea 262</sub>
 
 `function nativeStruct(parser: Parser in default, what: String): StructDecl`  
 (after `native struct`) NAME [ = C ] { ( let NAME : Type [ = NAME ] ; | function ... | static ... )* }  
-<sub>línea 279</sub>
+<sub>línea 281</sub>
 
 `function cField(parser: Parser in default): FieldDecl`  
 let NAME : Type [ = NAME ] ; a field of a C struct (after '=': its name in C)  
-<sub>línea 302</sub>
+<sub>línea 304</sub>
 
 `function nativeCType(parser: Parser in default, name: Token in default): Node`  
 (after `native type NAME`) [ = CTYPE ] [ released by NAME ] ( ; | { member* } ) CTYPE: [ struct ] NAME *... or c"C TYPE"; without '=' it is opaque (void*)  
-<sub>línea 318</sub>
+<sub>línea 320</sub>
 
 `function nativeMembers(parser: Parser in default, declaration: ExternTypeDecl in default): void`  
 { ( let NAME : Type [ = NAME ] ; | native function ... | native let ... | function ... | static ... )* } The members of a C type: its fields (when it is a pointer to a C struct), functions of C that take it first (self), and functions written in Larimar.  
-<sub>línea 352</sub>
+<sub>línea 354</sub>
 
 `function nativeMember(p: Parser in default, owner: String in default, line: int32, property: bool, isStatic: bool): FunctionDecl`  
 (after `native function` or `native let`, in a native type) NAME parameters [ : Type ] [ in lives ] [ throws Type ] = ( C | expression ) ; (let: NAME : Type = ...) With `= C` (a name, or "C text"), the method calls that C function with self first: before it only the memory of the call, when the first parameter is one (m: byte[*]). Any other expression is Larimar.  
-<sub>línea 404</sub>
+<sub>línea 406</sub>
 
 `public function languageType(parser: Parser in default, line: int32): NativeTypeDecl`  
 (after `type`) NAME { ( static ... | let NAME : Type [ = expression ] ; | operator ... ; | function ... ( ; | block ) )* } A type of the language (String, Any), in std.lang: what has no body the compiler writes.  
-<sub>línea 471</sub>
+<sub>línea 473</sub>
 
 `function nativeType(parser: Parser in default, line: int32, name: Token in default): NativeTypeDecl`  
 (after `native type NAME`) { ( static ... | native function ... | native let ... | native operator ... | function ... )* } The methods of a type the compiler knows (String, Any): only in the standard library.  
-<sub>línea 482</sub>
+<sub>línea 484</sub>
 
 `public function nativeFunction(parser: Parser in default, line: int32): FunctionDecl`  
 (after `native function`) NAME parameters [ : Type ] [ in lives ] [ throws Type ] [ = expression ] ;  
-<sub>línea 515</sub>
+<sub>línea 517</sub>
 
 `public function nativeProperty(parser: Parser in default, line: int32): FunctionDecl`  
 (after `native let`) NAME : Type [ = expression ] ; A value read without parentheses and never assigned (s.length). Without `= expression` the compiler gives it; with it, it is that expression.  
-<sub>línea 545</sub>
+<sub>línea 547</sub>
 
 `function nativeOperator(parser: Parser in default, line: int32): FunctionDecl`  
 (after `native operator`) ( [ ] | SYMBOL ) parameters : Type ;  
-<sub>línea 558</sub>
+<sub>línea 560</sub>
 
 ---
 

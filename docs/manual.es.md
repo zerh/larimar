@@ -2661,6 +2661,8 @@ function main(): int32 {
   }
   ```
 
+  Cada tarea enlaza, en su propio `setup`, las interfaces que llama: una llamada a una que su proceso no
+  enlazó es un panic que lo dice (`LibM.sqrt is not bound in this process: bind LibM in the setup of the task`).
   Una librería que no está, o una función que no tiene, termina la tarea con un `ProcessError.Failed` que
   dice cuál (`cannot open the library SDL2 (tried libSDL2.so, ...)`, `the library z has no function
   sqrt`). Un `ProcessPool` prepara la librería una vez en cada uno de sus procesos.

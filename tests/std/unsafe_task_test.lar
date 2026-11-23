@@ -113,3 +113,14 @@ class Cube extends SquareRoot {
 test function aTaskMayExtendAnother(): void {
     checkText("6.0", outcome(Cube { x: 9.0, times: 2.0 }));
 }
+
+/** A task that calls the interface of SquareRoot, but binds nothing in its process. */
+class Unbound extends SquareRoot {
+    override function setup(loader: LibraryLoader): void throws LoadError { }
+}
+
+// A call to a function of an interface its process did not bind is a panic that says so (the task ends
+// with a ProcessError), not a crash through an empty pointer.
+test function anUnboundCallIsAPanic(): void {
+    checkText("the task failed: the program ended (exit 101)", outcome(Unbound { x: 4.0 }));
+}

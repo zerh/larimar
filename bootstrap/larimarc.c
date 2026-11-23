@@ -13587,62 +13587,84 @@ void syntax__parser__natives__openedFunctions(syntax__parser__Parser* parser, sy
             lar_text_builder_add(&text_4, ";\n", 2);
             StringBuilder_add__dispatch((StringBuilder*)pointers, lar_text_builder_finish(&text_4));
             lar_memory_free(&line24000138_temps);
-            LarMemory line24000139_temps = lar_memory_growable();
-            LarTextBuilder text_5 = lar_text_builder_mem(&line24000139_temps, LINE(24000139));
-            lar_text_builder_add(&text_5, "    if (!(*(void**)(&", 21);
+            LarMemory line24000140_temps = lar_memory_growable();
+            LarTextBuilder text_5 = lar_text_builder_mem(&line24000140_temps, LINE(24000140));
+            lar_text_builder_add(&text_5, "static __typeof__(", 18);
+            lar_text_builder_str(&text_5, symbol);
+            lar_text_builder_add(&text_5, ")* ", 3);
             lar_text_builder_str(&text_5, pointer);
-            lar_text_builder_add(&text_5, ") = lar_library_symbol(library, \"", 33);
+            lar_text_builder_add(&text_5, "__bound(void) {\n    if (!", 25);
+            lar_text_builder_str(&text_5, pointer);
+            lar_text_builder_add(&text_5, ") lar_panic(\"", 13);
+            lar_text_builder_str(&text_5, (declaration)->name);
+            lar_text_builder_add(&text_5, ".", 1);
             lar_text_builder_str(&text_5, symbol);
-            lar_text_builder_add(&text_5, "\"))) return \"", 13);
-            lar_text_builder_str(&text_5, symbol);
-            lar_text_builder_add(&text_5, "\";\n", 3);
-            StringBuilder_add__dispatch((StringBuilder*)binds, lar_text_builder_finish(&text_5));
-            lar_memory_free(&line24000139_temps);
-            LarCloneMap clones = lar_clone_map();
-            LarString copy = clone_s(pointer, &lar_default_memory, &clones);
-            lar_clone_done(&clones);
-            (f)->cName = copy;
+            lar_text_builder_add(&text_5, " is not bound in this process: bind ", 36);
+            lar_text_builder_str(&text_5, (declaration)->name);
+            lar_text_builder_add(&text_5, " in the setup of the task (loader.bind(", 39);
+            lar_text_builder_str(&text_5, (declaration)->name);
+            lar_text_builder_add(&text_5, ", library))\", 0);\n    return ", 29);
+            lar_text_builder_str(&text_5, pointer);
+            lar_text_builder_add(&text_5, ";\n}\n", 4);
+            StringBuilder_add__dispatch((StringBuilder*)pointers, lar_text_builder_finish(&text_5));
+            lar_memory_free(&line24000140_temps);
+            LarMemory line24000141_temps = lar_memory_growable();
+            LarTextBuilder text_6 = lar_text_builder_mem(&line24000141_temps, LINE(24000141));
+            lar_text_builder_add(&text_6, "    if (!(*(void**)(&", 21);
+            lar_text_builder_str(&text_6, pointer);
+            lar_text_builder_add(&text_6, ") = lar_library_symbol(library, \"", 33);
+            lar_text_builder_str(&text_6, symbol);
+            lar_text_builder_add(&text_6, "\"))) return \"", 13);
+            lar_text_builder_str(&text_6, symbol);
+            lar_text_builder_add(&text_6, "\";\n", 3);
+            StringBuilder_add__dispatch((StringBuilder*)binds, lar_text_builder_finish(&text_6));
+            lar_memory_free(&line24000141_temps);
+            LarTextBuilder text_7 = lar_text_builder_mem(&lar_default_memory, LINE(24000142));
+            lar_text_builder_add(&text_7, "(*", 2);
+            lar_text_builder_str(&text_7, pointer);
+            lar_text_builder_add(&text_7, "__bound())", 10);
+            (f)->cName = lar_text_builder_finish(&text_7);
             (f)->opened = true;
             lar_memory_free(&memory_2);
         }
     }
     LarString code = lar_string("#ifndef LAR_LIBRARY_SYMBOL\n#define LAR_LIBRARY_SYMBOL\n#ifdef _WIN32\n#include <windows.h>\nstatic void* lar_library_symbol(void* library, const char* name) { return (void*)GetProcAddress((HMODULE)library, name); }\n#else\n#include <dlfcn.h>\nstatic void* lar_library_symbol(void* library, const char* name) { return dlsym(library, name); }\n#endif\n#endif\n", 349);
-    LarMemory line24000155_temps = lar_memory_growable();
+    LarMemory line24000157_temps = lar_memory_growable();
     LarMemory* place_4 = &lar_default_memory;
-    syntax__ast__CCodeDecl* new_syntax__ast__CCodeDecl = (syntax__ast__CCodeDecl*)lar_memory_alloc(place_4, sizeof(syntax__ast__CCodeDecl), LINE(24000155));
+    syntax__ast__CCodeDecl* new_syntax__ast__CCodeDecl = (syntax__ast__CCodeDecl*)lar_memory_alloc(place_4, sizeof(syntax__ast__CCodeDecl), LINE(24000157));
     int32_t value_2 = (declaration)->_super.line;
     List_semantics__types__PatternInfo* list_2 = List_semantics__types__PatternInfo_new(place_4, LINE(16000048));
-    LarTextBuilder text_6 = lar_text_builder_mem(&lar_default_memory, LINE(24000157));
-    lar_text_builder_str(&text_6, code);
-    lar_text_builder_str(&text_6, StringBuilder_toString__dispatch((StringBuilder*)pointers, &line24000155_temps));
-    lar_text_builder_add(&text_6, "static const char* lar_bind_", 28);
-    lar_text_builder_str(&text_6, key);
-    lar_text_builder_add(&text_6, "(void* library) {\n", 18);
-    lar_text_builder_str(&text_6, StringBuilder_toString__dispatch((StringBuilder*)binds, &line24000155_temps));
-    lar_text_builder_add(&text_6, "    return 0;\n}\n", 16);
-    *new_syntax__ast__CCodeDecl = (syntax__ast__CCodeDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__CCodeDecl, place_4 }, .line = value_2, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_2, .computed = lar_string("", 0) }, .code = lar_text_builder_finish(&text_6), .platform = lar_string("", 0), .owner = (declaration)->owner, .fromStd = false, .ofInterface = true };
+    LarTextBuilder text_8 = lar_text_builder_mem(&lar_default_memory, LINE(24000159));
+    lar_text_builder_str(&text_8, code);
+    lar_text_builder_str(&text_8, StringBuilder_toString__dispatch((StringBuilder*)pointers, &line24000157_temps));
+    lar_text_builder_add(&text_8, "static const char* lar_bind_", 28);
+    lar_text_builder_str(&text_8, key);
+    lar_text_builder_add(&text_8, "(void* library) {\n", 18);
+    lar_text_builder_str(&text_8, StringBuilder_toString__dispatch((StringBuilder*)binds, &line24000157_temps));
+    lar_text_builder_add(&text_8, "    return 0;\n}\n", 16);
+    *new_syntax__ast__CCodeDecl = (syntax__ast__CCodeDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__CCodeDecl, place_4 }, .line = value_2, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_2, .computed = lar_string("", 0) }, .code = lar_text_builder_finish(&text_8), .platform = lar_string("", 0), .owner = (declaration)->owner, .fromStd = false, .ofInterface = true };
     List_syntax__ast__Node_push((parser)->nativeParts, ((syntax__ast__Node*)(new_syntax__ast__CCodeDecl)));
-    lar_memory_free(&line24000155_temps);
+    lar_memory_free(&line24000157_temps);
     List_s_push((declaration)->members, lar_string("lar_binding", 11));
     LarMemory* place_5 = &lar_default_memory;
-    syntax__ast__ExternValueDecl* new_syntax__ast__ExternValueDecl = (syntax__ast__ExternValueDecl*)lar_memory_alloc(place_5, sizeof(syntax__ast__ExternValueDecl), LINE(24000162));
+    syntax__ast__ExternValueDecl* new_syntax__ast__ExternValueDecl = (syntax__ast__ExternValueDecl*)lar_memory_alloc(place_5, sizeof(syntax__ast__ExternValueDecl), LINE(24000164));
     int32_t value_3 = (declaration)->_super.line;
-    LarTextBuilder text_7 = lar_text_builder_mem(&lar_default_memory, LINE(24000164));
-    lar_text_builder_str(&text_7, (declaration)->name);
-    lar_text_builder_add(&text_7, "__", 2);
-    lar_text_builder_str(&text_7, lar_string("lar_binding", 11));
-    LarString value_4 = lar_text_builder_finish(&text_7);
+    LarTextBuilder text_9 = lar_text_builder_mem(&lar_default_memory, LINE(24000166));
+    lar_text_builder_str(&text_9, (declaration)->name);
+    lar_text_builder_add(&text_9, "__", 2);
+    lar_text_builder_str(&text_9, lar_string("lar_binding", 11));
+    LarString value_4 = lar_text_builder_finish(&text_9);
     LarMemory* place_6 = &lar_default_memory;
-    syntax__ast__TypeRef* new_syntax__ast__TypeRef = (syntax__ast__TypeRef*)lar_memory_alloc(place_6, sizeof(syntax__ast__TypeRef), LINE(24000165));
+    syntax__ast__TypeRef* new_syntax__ast__TypeRef = (syntax__ast__TypeRef*)lar_memory_alloc(place_6, sizeof(syntax__ast__TypeRef), LINE(24000167));
     List_semantics__types__PatternInfo* list_3 = List_semantics__types__PatternInfo_new(place_6, LINE(16000048));
     List_syntax__ast__TypeRef* list_4 = List_syntax__ast__TypeRef_new(place_6, LINE(16000066));
     *new_syntax__ast__TypeRef = (syntax__ast__TypeRef){ ._super = { .header = { (const void*)&methods_syntax__ast__TypeRef, place_6 }, .line = (declaration)->_super.line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_3, .computed = lar_string("", 0) }, .kind = ((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Named }), .name = lar_string("int64", 5), .params = list_4, .inner = NULL, .size = NULL, .threadSafe = false };
     syntax__ast__TypeRef* value_5 = new_syntax__ast__TypeRef;
     List_semantics__types__PatternInfo* list_5 = List_semantics__types__PatternInfo_new(place_5, LINE(16000048));
-    LarTextBuilder text_8 = lar_text_builder_mem(&lar_default_memory, LINE(24000168));
-    lar_text_builder_add(&text_8, "(int64_t)(intptr_t)&lar_bind_", 29);
-    lar_text_builder_str(&text_8, key);
-    *new_syntax__ast__ExternValueDecl = (syntax__ast__ExternValueDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__ExternValueDecl, place_5 }, .line = value_3, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_5, .computed = lar_string("", 0) }, .name = value_4, .type = value_5, .isConst = true, .cName = lar_string("", 0), .cExpr = lar_text_builder_finish(&text_8), .platform = lar_string("", 0) };
+    LarTextBuilder text_10 = lar_text_builder_mem(&lar_default_memory, LINE(24000170));
+    lar_text_builder_add(&text_10, "(int64_t)(intptr_t)&lar_bind_", 29);
+    lar_text_builder_str(&text_10, key);
+    *new_syntax__ast__ExternValueDecl = (syntax__ast__ExternValueDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__ExternValueDecl, place_5 }, .line = value_3, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_5, .computed = lar_string("", 0) }, .name = value_4, .type = value_5, .isConst = true, .cName = lar_string("", 0), .cExpr = lar_text_builder_finish(&text_10), .platform = lar_string("", 0) };
     List_syntax__ast__Node_push((parser)->nativeParts, ((syntax__ast__Node*)(new_syntax__ast__ExternValueDecl)));
     lar_memory_free(&memory);
 }
@@ -13650,7 +13672,7 @@ void syntax__parser__natives__openedFunctions(syntax__parser__Parser* parser, sy
 bool syntax__parser__natives__typeWithFields(syntax__parser__Parser* parser) {
     int32_t i = (parser)->position;
     while (i < ((parser)->tokens)->length) {
-        syntax__lexer__TokenType kind = (((parser)->tokens)->items[lar_index((int64_t)(i), ((parser)->tokens)->length, LINE(24000182))])->kind;
+        syntax__lexer__TokenType kind = (((parser)->tokens)->items[lar_index((int64_t)(i), ((parser)->tokens)->length, LINE(24000184))])->kind;
         if ((kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LBrace })).tag) {
             return true;
         }
@@ -13664,11 +13686,11 @@ bool syntax__parser__natives__typeWithFields(syntax__parser__Parser* parser) {
 
 void syntax__parser__natives__cNames(LarString text_2259, List_s* into) {
     LarMemory memory = lar_memory_growable();
-    List_u8* list = List_u8_new(&memory, LINE(24000192));
+    List_u8* list = List_u8_new(&memory, LINE(24000194));
     List_u8* word = list;
-    LarMemory line24000193_temps = lar_memory_growable();
+    LarMemory line24000195_temps = lar_memory_growable();
     {
-        LarTextBuilder text = lar_text_builder_mem(&line24000193_temps, LINE(24000193));
+        LarTextBuilder text = lar_text_builder_mem(&line24000195_temps, LINE(24000195));
         lar_text_builder_str(&text, text_2259);
         lar_text_builder_add(&text, " ", 1);
         LarString text_2 = lar_text_builder_finish(&text);
@@ -13692,7 +13714,7 @@ void syntax__parser__natives__cNames(LarString text_2259, List_s* into) {
             }
         }
     }
-    lar_memory_free(&line24000193_temps);
+    lar_memory_free(&line24000195_temps);
     lar_memory_free(&memory);
 }
 
@@ -13708,40 +13730,40 @@ LarString syntax__parser__natives__cTarget(LarMemory* lar_result_memory, syntax_
     if (syntax__parser__natives__atCText(parser)) {
         syntax__lexer__Token* text_2267 = syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)parser, NULL);
         if (lar_string_eq(String_trim((text_2267)->text, NULL), lar_string("", 0))) {
-            LarMemory line24000212_temps = lar_memory_growable();
-            LarTextBuilder text_2 = lar_text_builder_mem(&line24000212_temps, LINE(24000212));
+            LarMemory line24000214_temps = lar_memory_growable();
+            LarTextBuilder text_2 = lar_text_builder_mem(&line24000214_temps, LINE(24000214));
             lar_text_builder_add(&text_2, "The C of ", 9);
             lar_text_builder_str(&text_2, what);
             lar_text_builder_add(&text_2, " is empty", 9);
             syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (text_2267)->line, lar_text_builder_finish(&text_2));
-            lar_memory_free(&line24000212_temps);
+            lar_memory_free(&line24000214_temps);
         }
         return (text_2267)->text;
     }
     if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Struct }))) {
-        LarMemory line24000216_temps = lar_memory_growable();
-        LarTextBuilder text_3 = lar_text_builder_mem(&lar_default_memory, LINE(24000216));
+        LarMemory line24000218_temps = lar_memory_growable();
+        LarTextBuilder text_3 = lar_text_builder_mem(&lar_default_memory, LINE(24000218));
         lar_text_builder_add(&text_3, "struct ", 7);
-        LarTextBuilder text_4 = lar_text_builder_mem(&line24000216_temps, LINE(24000216));
+        LarTextBuilder text_4 = lar_text_builder_mem(&line24000218_temps, LINE(24000218));
         lar_text_builder_add(&text_4, "Expected the name of the C struct after 'struct' in ", 52);
         lar_text_builder_str(&text_4, what);
-        LarTextBuilder text_5 = lar_text_builder_mem(&line24000216_temps, LINE(24000216));
+        LarTextBuilder text_5 = lar_text_builder_mem(&line24000218_temps, LINE(24000218));
         lar_text_builder_add(&text_5, "Expected the name of the C struct after 'struct' in ", 52);
         lar_text_builder_str(&text_5, what);
         lar_text_builder_str(&text_3, (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_text_builder_finish(&text_5)))->text);
         LarString result = lar_text_builder_finish(&text_3);
-        lar_memory_free(&line24000216_temps);
+        lar_memory_free(&line24000218_temps);
         return result;
     }
-    LarMemory line24000218_temps = lar_memory_growable();
-    LarTextBuilder text_6 = lar_text_builder_mem(&line24000218_temps, LINE(24000218));
+    LarMemory line24000220_temps = lar_memory_growable();
+    LarTextBuilder text_6 = lar_text_builder_mem(&line24000220_temps, LINE(24000220));
     lar_text_builder_add(&text_6, "Expected the C name, 'struct' and its name, or c\"C text\", after '=' in ", 71);
     lar_text_builder_str(&text_6, what);
-    LarTextBuilder text_7 = lar_text_builder_mem(&line24000218_temps, LINE(24000218));
+    LarTextBuilder text_7 = lar_text_builder_mem(&line24000220_temps, LINE(24000220));
     lar_text_builder_add(&text_7, "Expected the C name, 'struct' and its name, or c\"C text\", after '=' in ", 71);
     lar_text_builder_str(&text_7, what);
     LarString result_2 = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_text_builder_finish(&text_7)))->text;
-    lar_memory_free(&line24000218_temps);
+    lar_memory_free(&line24000220_temps);
     return result_2;
 }
 
@@ -13749,7 +13771,7 @@ syntax__ast__ExternFunctionDecl* syntax__parser__natives__nativeFunctionOfC(LarM
     (void)lar_result_memory;
     syntax__lexer__Token* name = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected function name", 22));
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__ExternFunctionDecl* new_syntax__ast__ExternFunctionDecl = (syntax__ast__ExternFunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__ExternFunctionDecl), LINE(24000224));
+    syntax__ast__ExternFunctionDecl* new_syntax__ast__ExternFunctionDecl = (syntax__ast__ExternFunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__ExternFunctionDecl), LINE(24000226));
     int32_t value = (name)->line;
     LarString value_2 = (name)->text;
     LarString value_3 = (name)->text;
@@ -13775,18 +13797,18 @@ syntax__ast__ExternFunctionDecl* syntax__parser__natives__nativeFunctionOfC(LarM
     if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Colon }))) {
         (declaration)->ret = syntax__parser__types__type(NULL, parser);
     }
-    LarMemory line24000238_temps = lar_memory_growable();
-    if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Assign })) && (!((((((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)parser, &line24000238_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident })).tag) || (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)parser, &line24000238_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Str })).tag)) || (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)parser, &line24000238_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_CText })).tag))))) {
+    LarMemory line24000240_temps = lar_memory_growable();
+    if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Assign })) && (!((((((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)parser, &line24000240_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident })).tag) || (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)parser, &line24000240_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Str })).tag)) || (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)parser, &line24000240_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_CText })).tag))))) {
         syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)parser, NULL))->line, lar_string("A native function of a module names its C function (= c_name;); to write it in Larimar, write a plain function", 110));
     }
-    lar_memory_free(&line24000238_temps);
-    LarMemory line24000241_temps = lar_memory_growable();
-    LarTextBuilder text_2 = lar_text_builder_mem(&line24000241_temps, LINE(24000241));
+    lar_memory_free(&line24000240_temps);
+    LarMemory line24000243_temps = lar_memory_growable();
+    LarTextBuilder text_2 = lar_text_builder_mem(&line24000243_temps, LINE(24000243));
     lar_text_builder_add(&text_2, "native function '", 17);
     lar_text_builder_str(&text_2, (name)->text);
     lar_text_builder_add(&text_2, "'", 1);
     LarString target = syntax__parser__natives__cTarget(NULL, parser, lar_text_builder_finish(&text_2));
-    lar_memory_free(&line24000241_temps);
+    lar_memory_free(&line24000243_temps);
     if (!lar_string_eq(target, lar_string("", 0))) {
         (declaration)->cName = target;
     }
@@ -13796,24 +13818,24 @@ syntax__ast__ExternFunctionDecl* syntax__parser__natives__nativeFunctionOfC(LarM
         if (!lar_string_eq((by)->text, lar_string("by", 2))) {
             syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (by)->line, lar_string("Expected 'by' after 'released': released by free", 48));
         }
-        LarMemory line24000247_temps = lar_memory_growable();
-        LarTextBuilder text_3 = lar_text_builder_mem(&line24000247_temps, LINE(24000247));
+        LarMemory line24000249_temps = lar_memory_growable();
+        LarTextBuilder text_3 = lar_text_builder_mem(&line24000249_temps, LINE(24000249));
         lar_text_builder_add(&text_3, "Expected the function that releases the result of '", 51);
         lar_text_builder_str(&text_3, (name)->text);
         lar_text_builder_add(&text_3, "' after 'released by'", 21);
-        LarTextBuilder text_4 = lar_text_builder_mem(&line24000247_temps, LINE(24000247));
+        LarTextBuilder text_4 = lar_text_builder_mem(&line24000249_temps, LINE(24000249));
         lar_text_builder_add(&text_4, "Expected the function that releases the result of '", 51);
         lar_text_builder_str(&text_4, (name)->text);
         lar_text_builder_add(&text_4, "' after 'released by'", 21);
         (declaration)->releasedBy = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_text_builder_finish(&text_4)))->text;
-        lar_memory_free(&line24000247_temps);
+        lar_memory_free(&line24000249_temps);
     }
     if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_CCode }))) {
         if (!lar_string_eq(target, lar_string("", 0))) {
             syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (name)->line, lar_string("A native function names its C function (= c_name;) or has a body of C, not both", 79));
         }
         (declaration)->cBody = (syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)parser, NULL))->text;
-        LarTextBuilder text_5 = lar_text_builder_mem(lar_object_mem(declaration), LINE(24000252));
+        LarTextBuilder text_5 = lar_text_builder_mem(lar_object_mem(declaration), LINE(24000254));
         lar_text_builder_add(&text_5, "lar_", 4);
         lar_text_builder_str(&text_5, (name)->text);
         (declaration)->cName = lar_text_builder_finish(&text_5);
@@ -13827,22 +13849,22 @@ syntax__ast__Node* syntax__parser__natives__nativeValue(LarMemory* lar_result_me
     (void)lar_result_memory;
     bool isConst = (((syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)parser, NULL))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Const })).tag);
     LarString what = (isConst ? lar_string("native const", 12) : lar_string("native let", 10));
-    LarMemory line24000263_temps = lar_memory_growable();
-    LarTextBuilder text_2 = lar_text_builder_mem(&line24000263_temps, LINE(24000263));
+    LarMemory line24000265_temps = lar_memory_growable();
+    LarTextBuilder text_2 = lar_text_builder_mem(&line24000265_temps, LINE(24000265));
     lar_text_builder_add(&text_2, "Expected a name after '", 23);
     lar_text_builder_str(&text_2, what);
     lar_text_builder_add(&text_2, "'", 1);
     syntax__lexer__Token* name = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_text_builder_finish(&text_2));
-    lar_memory_free(&line24000263_temps);
-    LarMemory line24000264_temps = lar_memory_growable();
-    LarTextBuilder text_3 = lar_text_builder_mem(&line24000264_temps, LINE(24000264));
+    lar_memory_free(&line24000265_temps);
+    LarMemory line24000266_temps = lar_memory_growable();
+    LarTextBuilder text_3 = lar_text_builder_mem(&line24000266_temps, LINE(24000266));
     lar_text_builder_add(&text_3, "Expected ':' and a type after '", 31);
     lar_text_builder_str(&text_3, (name)->text);
     lar_text_builder_add(&text_3, "'", 1);
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Colon }), lar_text_builder_finish(&text_3));
-    lar_memory_free(&line24000264_temps);
+    lar_memory_free(&line24000266_temps);
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__ExternValueDecl* new_syntax__ast__ExternValueDecl = (syntax__ast__ExternValueDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__ExternValueDecl), LINE(24000265));
+    syntax__ast__ExternValueDecl* new_syntax__ast__ExternValueDecl = (syntax__ast__ExternValueDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__ExternValueDecl), LINE(24000267));
     int32_t value = (name)->line;
     LarString value_2 = (name)->text;
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
@@ -13855,13 +13877,13 @@ syntax__ast__Node* syntax__parser__natives__nativeValue(LarMemory* lar_result_me
             }
             (declaration)->cExpr = (syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)parser, NULL))->text;
             if (lar_string_eq(String_trim((declaration)->cExpr, NULL), lar_string("", 0))) {
-                LarMemory line24000270_temps = lar_memory_growable();
-                LarTextBuilder text_4 = lar_text_builder_mem(&line24000270_temps, LINE(24000270));
+                LarMemory line24000272_temps = lar_memory_growable();
+                LarTextBuilder text_4 = lar_text_builder_mem(&line24000272_temps, LINE(24000272));
                 lar_text_builder_add(&text_4, "The C of '", 10);
                 lar_text_builder_str(&text_4, (name)->text);
                 lar_text_builder_add(&text_4, "' is empty", 10);
                 syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (name)->line, lar_text_builder_finish(&text_4));
-                lar_memory_free(&line24000270_temps);
+                lar_memory_free(&line24000272_temps);
             }
         } else {
             (declaration)->cName = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected the C name, or c\"C text\", after '='", 44)))->text;
@@ -13872,39 +13894,39 @@ syntax__ast__Node* syntax__parser__natives__nativeValue(LarMemory* lar_result_me
 
 syntax__ast__StructDecl* syntax__parser__natives__nativeStruct(LarMemory* lar_result_memory, syntax__parser__Parser* parser, LarString what) {
     (void)lar_result_memory;
-    LarMemory line24000280_temps = lar_memory_growable();
-    LarTextBuilder text_2 = lar_text_builder_mem(&line24000280_temps, LINE(24000280));
+    LarMemory line24000282_temps = lar_memory_growable();
+    LarTextBuilder text_2 = lar_text_builder_mem(&line24000282_temps, LINE(24000282));
     lar_text_builder_add(&text_2, "Expected the name after '", 25);
     lar_text_builder_str(&text_2, what);
     lar_text_builder_add(&text_2, "'", 1);
     syntax__lexer__Token* name = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_text_builder_finish(&text_2));
-    lar_memory_free(&line24000280_temps);
+    lar_memory_free(&line24000282_temps);
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__StructDecl* new_syntax__ast__StructDecl = (syntax__ast__StructDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__StructDecl), LINE(24000281));
+    syntax__ast__StructDecl* new_syntax__ast__StructDecl = (syntax__ast__StructDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__StructDecl), LINE(24000283));
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
     List_syntax__ast__FieldDecl* list_2 = List_syntax__ast__FieldDecl_new(place_2, LINE(16000199));
     List_syntax__ast__FunctionDecl* list_3 = List_syntax__ast__FunctionDecl_new(place_2, LINE(16000200));
     *new_syntax__ast__StructDecl = (syntax__ast__StructDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__StructDecl, place_2 }, .line = (name)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) }, .name = (name)->text, .cName = (name)->text, .fields = list_2, .methods = list_3 };
     syntax__ast__StructDecl* declaration = new_syntax__ast__StructDecl;
-    LarMemory line24000282_temps = lar_memory_growable();
-    LarTextBuilder text_3 = lar_text_builder_mem(&line24000282_temps, LINE(24000282));
+    LarMemory line24000284_temps = lar_memory_growable();
+    LarTextBuilder text_3 = lar_text_builder_mem(&line24000284_temps, LINE(24000284));
     lar_text_builder_str(&text_3, what);
     lar_text_builder_add(&text_3, " '", 2);
     lar_text_builder_str(&text_3, (name)->text);
     lar_text_builder_add(&text_3, "'", 1);
     LarString target = syntax__parser__natives__cTarget(NULL, parser, lar_text_builder_finish(&text_3));
-    lar_memory_free(&line24000282_temps);
+    lar_memory_free(&line24000284_temps);
     if (!lar_string_eq(target, lar_string("", 0))) {
         (declaration)->cName = target;
     }
-    LarMemory line24000284_temps = lar_memory_growable();
+    LarMemory line24000286_temps = lar_memory_growable();
     syntax__lexer__TokenType value = ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LBrace });
-    LarTextBuilder text_4 = lar_text_builder_mem(&line24000284_temps, LINE(24000284));
+    LarTextBuilder text_4 = lar_text_builder_mem(&line24000286_temps, LINE(24000286));
     lar_text_builder_add(&text_4, "Expected '{' with the fields of the C ", 38);
     lar_text_builder_str(&text_4, (lar_string_eq(what, lar_string("type", 4)) ? lar_string("struct or union", 15) : lar_string("struct", 6)));
     lar_text_builder_add(&text_4, " (a type with fields has no 'released by')", 42);
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, value, lar_text_builder_finish(&text_4));
-    lar_memory_free(&line24000284_temps);
+    lar_memory_free(&line24000286_temps);
     while (((!(syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace })))) && (!(syntax__parser__Parser_atEnd__dispatch((syntax__parser__Parser*)parser)))) && (!(syntax__parser__Parser_hasFailed__dispatch((syntax__parser__Parser*)parser)))) {
         if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Let }))) {
             List_syntax__ast__FieldDecl_push((declaration)->fields, syntax__parser__natives__cField(NULL, parser));
@@ -13915,14 +13937,14 @@ syntax__ast__StructDecl* syntax__parser__natives__nativeStruct(LarMemory* lar_re
                 if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Static }))) {
                     syntax__parser__declarations__staticFunction(parser, (declaration)->name);
                 } else {
-                    LarMemory line24000293_temps = lar_memory_growable();
+                    LarMemory line24000295_temps = lar_memory_growable();
                     int32_t value_2 = (syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)parser, NULL))->line;
-                    LarTextBuilder text_5 = lar_text_builder_mem(&line24000293_temps, LINE(24000293));
+                    LarTextBuilder text_5 = lar_text_builder_mem(&line24000295_temps, LINE(24000295));
                     lar_text_builder_add(&text_5, "A native struct has its C fields (let name: Type;) and Larimar functions (got '", 79);
                     lar_text_builder_str(&text_5, (syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)parser, NULL))->text);
                     lar_text_builder_add(&text_5, "')", 2);
                     syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, value_2, lar_text_builder_finish(&text_5));
-                    lar_memory_free(&line24000293_temps);
+                    lar_memory_free(&line24000295_temps);
                 }
             }
         }
@@ -13936,15 +13958,15 @@ syntax__ast__FieldDecl* syntax__parser__natives__cField(LarMemory* lar_result_me
     (void)lar_result_memory;
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Let }), lar_string("Expected 'let'", 14));
     syntax__lexer__Token* name = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected field name", 19));
-    LarMemory line24000305_temps = lar_memory_growable();
-    LarTextBuilder text_2 = lar_text_builder_mem(&line24000305_temps, LINE(24000305));
+    LarMemory line24000307_temps = lar_memory_growable();
+    LarTextBuilder text_2 = lar_text_builder_mem(&line24000307_temps, LINE(24000307));
     lar_text_builder_add(&text_2, "Expected ':' and a type after field '", 37);
     lar_text_builder_str(&text_2, (name)->text);
     lar_text_builder_add(&text_2, "'", 1);
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Colon }), lar_text_builder_finish(&text_2));
-    lar_memory_free(&line24000305_temps);
+    lar_memory_free(&line24000307_temps);
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__FieldDecl* new_syntax__ast__FieldDecl = (syntax__ast__FieldDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FieldDecl), LINE(24000306));
+    syntax__ast__FieldDecl* new_syntax__ast__FieldDecl = (syntax__ast__FieldDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FieldDecl), LINE(24000308));
     int32_t value_2 = (name)->line;
     LarString value_3 = (name)->text;
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
@@ -13960,7 +13982,7 @@ syntax__ast__FieldDecl* syntax__parser__natives__cField(LarMemory* lar_result_me
 syntax__ast__Node* syntax__parser__natives__nativeCType(LarMemory* lar_result_memory, syntax__parser__Parser* parser, syntax__lexer__Token* name) {
     (void)lar_result_memory;
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__ExternTypeDecl* new_syntax__ast__ExternTypeDecl = (syntax__ast__ExternTypeDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__ExternTypeDecl), LINE(24000319));
+    syntax__ast__ExternTypeDecl* new_syntax__ast__ExternTypeDecl = (syntax__ast__ExternTypeDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__ExternTypeDecl), LINE(24000321));
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
     *new_syntax__ast__ExternTypeDecl = (syntax__ast__ExternTypeDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__ExternTypeDecl, place_2 }, .line = (name)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) }, .name = (name)->text, .cType = lar_string("", 0), .releasedBy = lar_string("", 0), .platform = lar_string("", 0), .fieldsStruct = lar_string("", 0) };
     syntax__ast__ExternTypeDecl* declaration = new_syntax__ast__ExternTypeDecl;
@@ -13968,33 +13990,33 @@ syntax__ast__Node* syntax__parser__natives__nativeCType(LarMemory* lar_result_me
         if (syntax__parser__natives__atCText(parser)) {
             (declaration)->cType = (syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)parser, NULL))->text;
             if (lar_string_eq(String_trim((declaration)->cType, NULL), lar_string("", 0))) {
-                LarMemory line24000323_temps = lar_memory_growable();
-                LarTextBuilder text_2 = lar_text_builder_mem(&line24000323_temps, LINE(24000323));
+                LarMemory line24000325_temps = lar_memory_growable();
+                LarTextBuilder text_2 = lar_text_builder_mem(&line24000325_temps, LINE(24000325));
                 lar_text_builder_add(&text_2, "The C type of '", 15);
                 lar_text_builder_str(&text_2, (name)->text);
                 lar_text_builder_add(&text_2, "' is empty", 10);
                 syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (name)->line, lar_text_builder_finish(&text_2));
-                lar_memory_free(&line24000323_temps);
+                lar_memory_free(&line24000325_temps);
             }
         } else {
             LarMemory memory = lar_memory_growable();
             LarString tagged = (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Struct })) ? lar_string("struct ", 7) : lar_string("", 0));
-            LarMemory line24000326_temps = lar_memory_growable();
-            LarTextBuilder text_3 = lar_text_builder_mem(&memory, LINE(24000326));
+            LarMemory line24000328_temps = lar_memory_growable();
+            LarTextBuilder text_3 = lar_text_builder_mem(&memory, LINE(24000328));
             lar_text_builder_str(&text_3, tagged);
-            LarTextBuilder text_4 = lar_text_builder_mem(&line24000326_temps, LINE(24000326));
+            LarTextBuilder text_4 = lar_text_builder_mem(&line24000328_temps, LINE(24000328));
             lar_text_builder_add(&text_4, "Expected the C type after 'native type ", 39);
             lar_text_builder_str(&text_4, (name)->text);
             lar_text_builder_add(&text_4, " =': a name (FILE*, struct tm*) or c\"C text\"", 44);
-            LarTextBuilder text_5 = lar_text_builder_mem(&line24000326_temps, LINE(24000326));
+            LarTextBuilder text_5 = lar_text_builder_mem(&line24000328_temps, LINE(24000328));
             lar_text_builder_add(&text_5, "Expected the C type after 'native type ", 39);
             lar_text_builder_str(&text_5, (name)->text);
             lar_text_builder_add(&text_5, " =': a name (FILE*, struct tm*) or c\"C text\"", 44);
             lar_text_builder_str(&text_3, (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_text_builder_finish(&text_5)))->text);
             LarString cType = lar_text_builder_finish(&text_3);
-            lar_memory_free(&line24000326_temps);
+            lar_memory_free(&line24000328_temps);
             while (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Star }))) {
-                LarTextBuilder text_6 = lar_text_builder_mem(&memory, LINE(24000327));
+                LarTextBuilder text_6 = lar_text_builder_mem(&memory, LINE(24000329));
                 lar_text_builder_str(&text_6, cType);
                 lar_text_builder_add(&text_6, "*", 1);
                 cType = lar_text_builder_finish(&text_6);
@@ -14012,17 +14034,17 @@ syntax__ast__Node* syntax__parser__natives__nativeCType(LarMemory* lar_result_me
         if (!lar_string_eq((by)->text, lar_string("by", 2))) {
             syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (by)->line, lar_string("Expected 'by' after 'released': released by close", 49));
         }
-        LarMemory line24000335_temps = lar_memory_growable();
-        LarTextBuilder text_7 = lar_text_builder_mem(&line24000335_temps, LINE(24000335));
+        LarMemory line24000337_temps = lar_memory_growable();
+        LarTextBuilder text_7 = lar_text_builder_mem(&line24000337_temps, LINE(24000337));
         lar_text_builder_add(&text_7, "Expected the function that releases '", 37);
         lar_text_builder_str(&text_7, (declaration)->name);
         lar_text_builder_add(&text_7, "' after 'released by'", 21);
-        LarTextBuilder text_8 = lar_text_builder_mem(&line24000335_temps, LINE(24000335));
+        LarTextBuilder text_8 = lar_text_builder_mem(&line24000337_temps, LINE(24000337));
         lar_text_builder_add(&text_8, "Expected the function that releases '", 37);
         lar_text_builder_str(&text_8, (declaration)->name);
         lar_text_builder_add(&text_8, "' after 'released by'", 21);
         (declaration)->releasedBy = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_text_builder_finish(&text_8)))->text;
-        lar_memory_free(&line24000335_temps);
+        lar_memory_free(&line24000337_temps);
     } else {
         if (syntax__parser__Parser_atWord__dispatch((syntax__parser__Parser*)parser, lar_string("released_by", 11))) {
             syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)parser, NULL))->line, lar_string("Write 'released by' (two words): released by close", 50));
@@ -14039,16 +14061,16 @@ syntax__ast__Node* syntax__parser__natives__nativeCType(LarMemory* lar_result_me
 void syntax__parser__natives__nativeMembers(syntax__parser__Parser* parser, syntax__ast__ExternTypeDecl* declaration) {
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LBrace }), lar_string("Expected '{'", 12));
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__NativeTypeDecl* new_syntax__ast__NativeTypeDecl = (syntax__ast__NativeTypeDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__NativeTypeDecl), LINE(24000354));
+    syntax__ast__NativeTypeDecl* new_syntax__ast__NativeTypeDecl = (syntax__ast__NativeTypeDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__NativeTypeDecl), LINE(24000356));
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
     List_syntax__ast__FunctionDecl* list_2 = List_syntax__ast__FunctionDecl_new(place_2, LINE(16000220));
     *new_syntax__ast__NativeTypeDecl = (syntax__ast__NativeTypeDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__NativeTypeDecl, place_2 }, .line = (declaration)->_super.line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) }, .name = (declaration)->name, .methods = list_2, .language = false };
     syntax__ast__NativeTypeDecl* methods = new_syntax__ast__NativeTypeDecl;
     LarMemory* place_3 = &lar_default_memory;
-    syntax__ast__StructDecl* new_syntax__ast__StructDecl = (syntax__ast__StructDecl*)lar_memory_alloc(place_3, sizeof(syntax__ast__StructDecl), LINE(24000355));
+    syntax__ast__StructDecl* new_syntax__ast__StructDecl = (syntax__ast__StructDecl*)lar_memory_alloc(place_3, sizeof(syntax__ast__StructDecl), LINE(24000357));
     int32_t value = (declaration)->_super.line;
     List_semantics__types__PatternInfo* list_3 = List_semantics__types__PatternInfo_new(place_3, LINE(16000048));
-    LarTextBuilder text_2 = lar_text_builder_mem(&lar_default_memory, LINE(24000355));
+    LarTextBuilder text_2 = lar_text_builder_mem(&lar_default_memory, LINE(24000357));
     lar_text_builder_str(&text_2, (declaration)->name);
     lar_text_builder_add(&text_2, "__fields", 8);
     List_syntax__ast__FieldDecl* list_4 = List_syntax__ast__FieldDecl_new(place_3, LINE(16000199));
@@ -14086,14 +14108,14 @@ void syntax__parser__natives__nativeMembers(syntax__parser__Parser* parser, synt
                     if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Function }))) {
                         List_syntax__ast__FunctionDecl_push((methods)->methods, syntax__parser__declarations__functionDeclaration(NULL, parser, false, true));
                     } else {
-                        LarMemory line24000382_temps = lar_memory_growable();
+                        LarMemory line24000384_temps = lar_memory_growable();
                         int32_t value_2 = (syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)parser, NULL))->line;
-                        LarTextBuilder text_3 = lar_text_builder_mem(&line24000382_temps, LINE(24000382));
+                        LarTextBuilder text_3 = lar_text_builder_mem(&line24000384_temps, LINE(24000384));
                         lar_text_builder_add(&text_3, "Inside a native type go its C fields (let), native functions and functions (got '", 81);
                         lar_text_builder_str(&text_3, (syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)parser, NULL))->text);
                         lar_text_builder_add(&text_3, "')", 2);
                         syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, value_2, lar_text_builder_finish(&text_3));
-                        lar_memory_free(&line24000382_temps);
+                        lar_memory_free(&line24000384_temps);
                     }
                 }
             }
@@ -14103,19 +14125,19 @@ void syntax__parser__natives__nativeMembers(syntax__parser__Parser* parser, synt
     if (((fields)->fields)->length > 0) {
         LarString c = String_trim((declaration)->cType, NULL);
         if (!(String_endsWith(c, lar_string("*", 1)))) {
-            LarMemory line24000389_temps = lar_memory_growable();
-            LarTextBuilder text_4 = lar_text_builder_mem(&line24000389_temps, LINE(24000389));
+            LarMemory line24000391_temps = lar_memory_growable();
+            LarTextBuilder text_4 = lar_text_builder_mem(&line24000391_temps, LINE(24000391));
             lar_text_builder_add(&text_4, "The fields of '", 15);
             lar_text_builder_str(&text_4, (declaration)->name);
             lar_text_builder_add(&text_4, "' are reached through its pointer: its C type must be a pointer to the struct (native type ", 91);
             lar_text_builder_str(&text_4, (declaration)->name);
             lar_text_builder_add(&text_4, " = c_struct*)", 13);
-            syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (((fields)->fields)->items[lar_index((int64_t)(0), ((fields)->fields)->length, LINE(24000389))])->_super.line, lar_text_builder_finish(&text_4));
-            lar_memory_free(&line24000389_temps);
+            syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (((fields)->fields)->items[lar_index((int64_t)(0), ((fields)->fields)->length, LINE(24000391))])->_super.line, lar_text_builder_finish(&text_4));
+            lar_memory_free(&line24000391_temps);
         }
         LarString value_3 = c;
         LarCloneMap clones = lar_clone_map();
-        LarString copy = clone_s(String_trim(lar_string_sub(value_3, (int64_t)(0), (int64_t)(((int32_t)((uint32_t)((c).len) - (uint32_t)(1)))), 24000391), NULL), &lar_default_memory, &clones);
+        LarString copy = clone_s(String_trim(lar_string_sub(value_3, (int64_t)(0), (int64_t)(((int32_t)((uint32_t)((c).len) - (uint32_t)(1)))), 24000393), NULL), &lar_default_memory, &clones);
         lar_clone_done(&clones);
         (fields)->cName = copy;
         (declaration)->fieldsStruct = (fields)->name;
@@ -14130,7 +14152,7 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(LarMemory* lar_
     (void)lar_result_memory;
     syntax__lexer__Token* name = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected a name", 15));
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__FunctionDecl* new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FunctionDecl), LINE(24000406));
+    syntax__ast__FunctionDecl* new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FunctionDecl), LINE(24000408));
     LarString value_2 = (name)->text;
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
     List_syntax__ast__Param* list_2 = List_syntax__ast__Param_new(place_2, LINE(16000171));
@@ -14138,13 +14160,13 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(LarMemory* lar_
     *new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__FunctionDecl, place_2 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) }, .name = value_2, .params = list_2, .ret = syntax__ast__typeNamed(NULL, lar_string("void", 4), (name)->line), .throwsType = NULL, .body = list_3, .isOverride = false, .isOperator = false, .hasBody = false, .returnLives = lar_string("", 0), .isStatic = false, .cBodied = false, .typeName = lar_string("", 0), .isTest = false, .isProperty = property, .isNative = false, .waitUntil = NULL };
     syntax__ast__FunctionDecl* declaration = new_syntax__ast__FunctionDecl;
     if (property) {
-        LarMemory line24000408_temps = lar_memory_growable();
-        LarTextBuilder text_2 = lar_text_builder_mem(&line24000408_temps, LINE(24000408));
+        LarMemory line24000410_temps = lar_memory_growable();
+        LarTextBuilder text_2 = lar_text_builder_mem(&line24000410_temps, LINE(24000410));
         lar_text_builder_add(&text_2, "Expected ':' and the type after 'native let ", 44);
         lar_text_builder_str(&text_2, (name)->text);
         lar_text_builder_add(&text_2, "'", 1);
         syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Colon }), lar_text_builder_finish(&text_2));
-        lar_memory_free(&line24000408_temps);
+        lar_memory_free(&line24000410_temps);
         (declaration)->ret = syntax__parser__types__type(NULL, p);
     } else {
         (declaration)->params = syntax__parser__declarations__parameters(NULL, p);
@@ -14160,13 +14182,13 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(LarMemory* lar_
     }
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Assign }), lar_string("Expected '=' and its C function (= c_name;) or a Larimar expression", 67));
     syntax__ast__Expr* value = NULL;
-    LarMemory line24000418_temps = lar_memory_growable();
-    if ((syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident })) || syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_CText }))) && ((((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)p, &line24000418_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Semi })).tag) || ((((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)p, &line24000418_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident })).tag) && lar_string_eq((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)p, &line24000418_temps))->text, lar_string("released", 8))))) {
+    LarMemory line24000420_temps = lar_memory_growable();
+    if ((syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident })) || syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)p, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_CText }))) && ((((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)p, &line24000420_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Semi })).tag) || ((((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)p, &line24000420_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident })).tag) && lar_string_eq((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)p, &line24000420_temps))->text, lar_string("released", 8))))) {
         syntax__lexer__Token* c = syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)p, NULL);
         LarMemory* place_3 = &lar_default_memory;
-        syntax__ast__ExternFunctionDecl* new_syntax__ast__ExternFunctionDecl = (syntax__ast__ExternFunctionDecl*)lar_memory_alloc(place_3, sizeof(syntax__ast__ExternFunctionDecl), LINE(24000420));
+        syntax__ast__ExternFunctionDecl* new_syntax__ast__ExternFunctionDecl = (syntax__ast__ExternFunctionDecl*)lar_memory_alloc(place_3, sizeof(syntax__ast__ExternFunctionDecl), LINE(24000422));
         int32_t value_3 = (c)->line;
-        LarTextBuilder text_3 = lar_text_builder_mem(&lar_default_memory, LINE(24000421));
+        LarTextBuilder text_3 = lar_text_builder_mem(&lar_default_memory, LINE(24000423));
         lar_text_builder_str(&text_3, owner);
         lar_text_builder_add(&text_3, "__", 2);
         lar_text_builder_str(&text_3, (name)->text);
@@ -14185,28 +14207,28 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(LarMemory* lar_
             if (!lar_string_eq((by)->text, lar_string("by", 2))) {
                 syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)p, (by)->line, lar_string("Expected 'by' after 'released': released by free", 48));
             }
-            LarMemory line24000427_temps = lar_memory_growable();
-            LarTextBuilder text_4 = lar_text_builder_mem(&line24000427_temps, LINE(24000427));
+            LarMemory line24000429_temps = lar_memory_growable();
+            LarTextBuilder text_4 = lar_text_builder_mem(&line24000429_temps, LINE(24000429));
             lar_text_builder_add(&text_4, "Expected the function that releases the result of '", 51);
             lar_text_builder_str(&text_4, (name)->text);
             lar_text_builder_add(&text_4, "' after 'released by'", 21);
-            LarTextBuilder text_5 = lar_text_builder_mem(&line24000427_temps, LINE(24000427));
+            LarTextBuilder text_5 = lar_text_builder_mem(&line24000429_temps, LINE(24000429));
             lar_text_builder_add(&text_5, "Expected the function that releases the result of '", 51);
             lar_text_builder_str(&text_5, (name)->text);
             lar_text_builder_add(&text_5, "' after 'released by'", 21);
             (cFunction)->releasedBy = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)p, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_text_builder_finish(&text_5)))->text;
-            lar_memory_free(&line24000427_temps);
+            lar_memory_free(&line24000429_temps);
         }
-        List_syntax__ast__Expr* list_6 = List_syntax__ast__Expr_new(&lar_default_memory, LINE(24000429));
+        List_syntax__ast__Expr* list_6 = List_syntax__ast__Expr_new(&lar_default_memory, LINE(24000431));
         List_syntax__ast__Expr* args = list_6;
-        List_syntax__ast__Param* list_7 = List_syntax__ast__Param_new(&lar_default_memory, LINE(24000430));
+        List_syntax__ast__Param* list_7 = List_syntax__ast__Param_new(&lar_default_memory, LINE(24000432));
         List_syntax__ast__Param* kept = list_7;
         {
             List_syntax__ast__Param* list_8 = (declaration)->params;
             for (int32_t index = 0; index < list_8->length; index++) {
                 int32_t i = index;
                 syntax__ast__Param* p_2314 = list_8->items[index];
-                bool memory = (((((i == 0) && (!((p_2314)->type == NULL))) && (((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2314)->type), LINE(24000432))))->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Growable })).tag)) && (((((syntax__ast__TypeRef*)lar_unwrap((void*)((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2314)->type), LINE(24000432))))->inner), LINE(24000432))))->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Named })).tag)) && lar_string_eq((((syntax__ast__TypeRef*)lar_unwrap((void*)((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2314)->type), LINE(24000432))))->inner), LINE(24000432))))->name, lar_string("byte", 4)));
+                bool memory = (((((i == 0) && (!((p_2314)->type == NULL))) && (((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2314)->type), LINE(24000434))))->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Growable })).tag)) && (((((syntax__ast__TypeRef*)lar_unwrap((void*)((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2314)->type), LINE(24000434))))->inner), LINE(24000434))))->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Named })).tag)) && lar_string_eq((((syntax__ast__TypeRef*)lar_unwrap((void*)((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2314)->type), LINE(24000434))))->inner), LINE(24000434))))->name, lar_string("byte", 4)));
                 if (memory) {
                     LarCloneMap clones_2 = lar_clone_map();
                     syntax__ast__Param* copy_2 = clone_syntax__ast__Param(p_2314, &lar_default_memory, &clones_2);
@@ -14219,13 +14241,13 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(LarMemory* lar_
         }
         if (!(isStatic)) {
             LarMemory* place_4 = &lar_default_memory;
-            syntax__ast__Param* new_syntax__ast__Param = (syntax__ast__Param*)lar_memory_alloc(place_4, sizeof(syntax__ast__Param), LINE(24000440));
+            syntax__ast__Param* new_syntax__ast__Param = (syntax__ast__Param*)lar_memory_alloc(place_4, sizeof(syntax__ast__Param), LINE(24000442));
             int32_t value_6 = (c)->line;
             List_semantics__types__PatternInfo* list_9 = List_semantics__types__PatternInfo_new(place_4, LINE(16000048));
             *new_syntax__ast__Param = (syntax__ast__Param){ ._super = { .header = { (const void*)&methods_syntax__ast__Param, place_4 }, .line = value_6, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_9, .computed = lar_string("", 0) }, .name = lar_string("receiver", 8), .type = syntax__ast__typeNamed(NULL, owner, (c)->line), .lives = lar_string("", 0) };
             List_syntax__ast__Param_push((cFunction)->params, new_syntax__ast__Param);
             LarMemory* place_5 = &lar_default_memory;
-            syntax__ast__SelfExpr* new_syntax__ast__SelfExpr = (syntax__ast__SelfExpr*)lar_memory_alloc(place_5, sizeof(syntax__ast__SelfExpr), LINE(24000441));
+            syntax__ast__SelfExpr* new_syntax__ast__SelfExpr = (syntax__ast__SelfExpr*)lar_memory_alloc(place_5, sizeof(syntax__ast__SelfExpr), LINE(24000443));
             List_semantics__types__PatternInfo* list_10 = List_semantics__types__PatternInfo_new(place_5, LINE(16000048));
             *new_syntax__ast__SelfExpr = (syntax__ast__SelfExpr){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__SelfExpr, place_5 }, .line = (c)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_10, .computed = lar_string("", 0) } } };
             List_syntax__ast__Expr_push(args, ((syntax__ast__Expr*)(new_syntax__ast__SelfExpr)));
@@ -14239,7 +14261,7 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(LarMemory* lar_
                 lar_clone_done(&clones_3);
                 List_syntax__ast__Param_push((cFunction)->params, copy_3);
                 LarMemory* place_6 = &lar_default_memory;
-                syntax__ast__Ident* new_syntax__ast__Ident = (syntax__ast__Ident*)lar_memory_alloc(place_6, sizeof(syntax__ast__Ident), LINE(24000445));
+                syntax__ast__Ident* new_syntax__ast__Ident = (syntax__ast__Ident*)lar_memory_alloc(place_6, sizeof(syntax__ast__Ident), LINE(24000447));
                 List_semantics__types__PatternInfo* list_12 = List_semantics__types__PatternInfo_new(place_6, LINE(16000048));
                 *new_syntax__ast__Ident = (syntax__ast__Ident){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Ident, place_6 }, .line = (c)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_12, .computed = lar_string("", 0) } }, .name = (p_2316)->name };
                 List_syntax__ast__Expr_push(args, ((syntax__ast__Expr*)(new_syntax__ast__Ident)));
@@ -14248,11 +14270,11 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(LarMemory* lar_
         (declaration)->params = kept;
         List_syntax__ast__Node_push((p)->nativeParts, ((syntax__ast__Node*)(cFunction)));
         LarMemory* place_7 = &lar_default_memory;
-        syntax__ast__Call* new_syntax__ast__Call = (syntax__ast__Call*)lar_memory_alloc(place_7, sizeof(syntax__ast__Call), LINE(24000449));
+        syntax__ast__Call* new_syntax__ast__Call = (syntax__ast__Call*)lar_memory_alloc(place_7, sizeof(syntax__ast__Call), LINE(24000451));
         int32_t value_7 = (c)->line;
         List_semantics__types__PatternInfo* list_13 = List_semantics__types__PatternInfo_new(place_7, LINE(16000048));
         LarMemory* place_8 = &lar_default_memory;
-        syntax__ast__Ident* new_syntax__ast__Ident_2 = (syntax__ast__Ident*)lar_memory_alloc(place_8, sizeof(syntax__ast__Ident), LINE(24000449));
+        syntax__ast__Ident* new_syntax__ast__Ident_2 = (syntax__ast__Ident*)lar_memory_alloc(place_8, sizeof(syntax__ast__Ident), LINE(24000451));
         List_semantics__types__PatternInfo* list_14 = List_semantics__types__PatternInfo_new(place_8, LINE(16000048));
         *new_syntax__ast__Ident_2 = (syntax__ast__Ident){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Ident, place_8 }, .line = (c)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_14, .computed = lar_string("", 0) } }, .name = (cFunction)->name };
         *new_syntax__ast__Call = (syntax__ast__Call){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Call, place_7 }, .line = value_7, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_13, .computed = lar_string("", 0) } }, .callee = ((syntax__ast__Expr*)(new_syntax__ast__Ident_2)), .args = args };
@@ -14260,18 +14282,18 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(LarMemory* lar_
     } else {
         value = syntax__parser__expressions__expression(NULL, p);
     }
-    lar_memory_free(&line24000418_temps);
+    lar_memory_free(&line24000420_temps);
     if (((((declaration)->ret)->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Named })).tag) && lar_string_eq(((declaration)->ret)->name, lar_string("void", 4))) {
         LarMemory* place_9 = &lar_default_memory;
-        syntax__ast__ExprStmt* new_syntax__ast__ExprStmt = (syntax__ast__ExprStmt*)lar_memory_alloc(place_9, sizeof(syntax__ast__ExprStmt), LINE(24000454));
+        syntax__ast__ExprStmt* new_syntax__ast__ExprStmt = (syntax__ast__ExprStmt*)lar_memory_alloc(place_9, sizeof(syntax__ast__ExprStmt), LINE(24000456));
         List_semantics__types__PatternInfo* list_15 = List_semantics__types__PatternInfo_new(place_9, LINE(16000048));
-        *new_syntax__ast__ExprStmt = (syntax__ast__ExprStmt){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__ExprStmt, place_9 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_15, .computed = lar_string("", 0) }, .blockMemory = lar_string("", 0) }, .expr = ((syntax__ast__Expr*)lar_unwrap((void*)(value), LINE(24000454))) };
+        *new_syntax__ast__ExprStmt = (syntax__ast__ExprStmt){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__ExprStmt, place_9 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_15, .computed = lar_string("", 0) }, .blockMemory = lar_string("", 0) }, .expr = ((syntax__ast__Expr*)lar_unwrap((void*)(value), LINE(24000456))) };
         List_syntax__ast__Stmt_push((declaration)->body, ((syntax__ast__Stmt*)(new_syntax__ast__ExprStmt)));
     } else {
         LarMemory* place_10 = &lar_default_memory;
-        syntax__ast__ReturnStmt* new_syntax__ast__ReturnStmt = (syntax__ast__ReturnStmt*)lar_memory_alloc(place_10, sizeof(syntax__ast__ReturnStmt), LINE(24000456));
+        syntax__ast__ReturnStmt* new_syntax__ast__ReturnStmt = (syntax__ast__ReturnStmt*)lar_memory_alloc(place_10, sizeof(syntax__ast__ReturnStmt), LINE(24000458));
         List_semantics__types__PatternInfo* list_16 = List_semantics__types__PatternInfo_new(place_10, LINE(16000048));
-        *new_syntax__ast__ReturnStmt = (syntax__ast__ReturnStmt){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__ReturnStmt, place_10 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_16, .computed = lar_string("", 0) }, .blockMemory = lar_string("", 0) }, .value = ((syntax__ast__Expr*)lar_unwrap((void*)(value), LINE(24000456))) };
+        *new_syntax__ast__ReturnStmt = (syntax__ast__ReturnStmt){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__ReturnStmt, place_10 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_16, .computed = lar_string("", 0) }, .blockMemory = lar_string("", 0) }, .value = ((syntax__ast__Expr*)lar_unwrap((void*)(value), LINE(24000458))) };
         List_syntax__ast__Stmt_push((declaration)->body, ((syntax__ast__Stmt*)(new_syntax__ast__ReturnStmt)));
     }
     (declaration)->hasBody = true;
@@ -14295,7 +14317,7 @@ syntax__ast__NativeTypeDecl* syntax__parser__natives__languageType(LarMemory* la
 syntax__ast__NativeTypeDecl* syntax__parser__natives__nativeType(LarMemory* lar_result_memory, syntax__parser__Parser* parser, int32_t line, syntax__lexer__Token* name) {
     (void)lar_result_memory;
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__NativeTypeDecl* new_syntax__ast__NativeTypeDecl = (syntax__ast__NativeTypeDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__NativeTypeDecl), LINE(24000483));
+    syntax__ast__NativeTypeDecl* new_syntax__ast__NativeTypeDecl = (syntax__ast__NativeTypeDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__NativeTypeDecl), LINE(24000485));
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
     List_syntax__ast__FunctionDecl* list_2 = List_syntax__ast__FunctionDecl_new(place_2, LINE(16000220));
     *new_syntax__ast__NativeTypeDecl = (syntax__ast__NativeTypeDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__NativeTypeDecl, place_2 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) }, .name = (name)->text, .methods = list_2, .language = false };
@@ -14346,7 +14368,7 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeFunction(LarMemory* la
     (void)lar_result_memory;
     syntax__lexer__Token* name = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected function name", 22));
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__FunctionDecl* new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FunctionDecl), LINE(24000517));
+    syntax__ast__FunctionDecl* new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FunctionDecl), LINE(24000519));
     LarString value_2 = (name)->text;
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
     List_syntax__ast__Param* list_2 = List_syntax__ast__Param_new(place_2, LINE(16000171));
@@ -14371,13 +14393,13 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeFunction(LarMemory* la
         syntax__ast__Expr* value = syntax__parser__expressions__expression(NULL, parser);
         if (((((declaration)->ret)->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Named })).tag) && lar_string_eq(((declaration)->ret)->name, lar_string("void", 4))) {
             LarMemory* place_3 = &lar_default_memory;
-            syntax__ast__ExprStmt* new_syntax__ast__ExprStmt = (syntax__ast__ExprStmt*)lar_memory_alloc(place_3, sizeof(syntax__ast__ExprStmt), LINE(24000529));
+            syntax__ast__ExprStmt* new_syntax__ast__ExprStmt = (syntax__ast__ExprStmt*)lar_memory_alloc(place_3, sizeof(syntax__ast__ExprStmt), LINE(24000531));
             List_semantics__types__PatternInfo* list_4 = List_semantics__types__PatternInfo_new(place_3, LINE(16000048));
             *new_syntax__ast__ExprStmt = (syntax__ast__ExprStmt){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__ExprStmt, place_3 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_4, .computed = lar_string("", 0) }, .blockMemory = lar_string("", 0) }, .expr = value };
             List_syntax__ast__Stmt_push((declaration)->body, ((syntax__ast__Stmt*)(new_syntax__ast__ExprStmt)));
         } else {
             LarMemory* place_4 = &lar_default_memory;
-            syntax__ast__ReturnStmt* new_syntax__ast__ReturnStmt = (syntax__ast__ReturnStmt*)lar_memory_alloc(place_4, sizeof(syntax__ast__ReturnStmt), LINE(24000531));
+            syntax__ast__ReturnStmt* new_syntax__ast__ReturnStmt = (syntax__ast__ReturnStmt*)lar_memory_alloc(place_4, sizeof(syntax__ast__ReturnStmt), LINE(24000533));
             List_semantics__types__PatternInfo* list_5 = List_semantics__types__PatternInfo_new(place_4, LINE(16000048));
             *new_syntax__ast__ReturnStmt = (syntax__ast__ReturnStmt){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__ReturnStmt, place_4 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_5, .computed = lar_string("", 0) }, .blockMemory = lar_string("", 0) }, .value = value };
             List_syntax__ast__Stmt_push((declaration)->body, ((syntax__ast__Stmt*)(new_syntax__ast__ReturnStmt)));
@@ -14391,15 +14413,15 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeFunction(LarMemory* la
 syntax__ast__FunctionDecl* syntax__parser__natives__nativeProperty(LarMemory* lar_result_memory, syntax__parser__Parser* parser, int32_t line) {
     (void)lar_result_memory;
     syntax__lexer__Token* name = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected a name after 'native let'", 34));
-    LarMemory line24000547_temps = lar_memory_growable();
-    LarTextBuilder text_2 = lar_text_builder_mem(&line24000547_temps, LINE(24000547));
+    LarMemory line24000549_temps = lar_memory_growable();
+    LarTextBuilder text_2 = lar_text_builder_mem(&line24000549_temps, LINE(24000549));
     lar_text_builder_add(&text_2, "Expected ':' and the type after 'native let ", 44);
     lar_text_builder_str(&text_2, (name)->text);
     lar_text_builder_add(&text_2, "'", 1);
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Colon }), lar_text_builder_finish(&text_2));
-    lar_memory_free(&line24000547_temps);
+    lar_memory_free(&line24000549_temps);
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__FunctionDecl* new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FunctionDecl), LINE(24000548));
+    syntax__ast__FunctionDecl* new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FunctionDecl), LINE(24000550));
     LarString value_2 = (name)->text;
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
     List_syntax__ast__Param* list_2 = List_syntax__ast__Param_new(place_2, LINE(16000171));
@@ -14408,7 +14430,7 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeProperty(LarMemory* la
     syntax__ast__FunctionDecl* declaration = new_syntax__ast__FunctionDecl;
     if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Assign }))) {
         LarMemory* place_3 = &lar_default_memory;
-        syntax__ast__ReturnStmt* new_syntax__ast__ReturnStmt = (syntax__ast__ReturnStmt*)lar_memory_alloc(place_3, sizeof(syntax__ast__ReturnStmt), LINE(24000550));
+        syntax__ast__ReturnStmt* new_syntax__ast__ReturnStmt = (syntax__ast__ReturnStmt*)lar_memory_alloc(place_3, sizeof(syntax__ast__ReturnStmt), LINE(24000552));
         List_semantics__types__PatternInfo* list_4 = List_semantics__types__PatternInfo_new(place_3, LINE(16000048));
         *new_syntax__ast__ReturnStmt = (syntax__ast__ReturnStmt){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__ReturnStmt, place_3 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_4, .computed = lar_string("", 0) }, .blockMemory = lar_string("", 0) }, .value = syntax__parser__expressions__expression(NULL, parser) };
         List_syntax__ast__Stmt_push((declaration)->body, ((syntax__ast__Stmt*)(new_syntax__ast__ReturnStmt)));
@@ -14428,7 +14450,7 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeOperator(LarMemory* la
         name = (syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)parser, NULL))->text;
     }
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__FunctionDecl* new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FunctionDecl), LINE(24000566));
+    syntax__ast__FunctionDecl* new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FunctionDecl), LINE(24000568));
     List_syntax__ast__Param* value = syntax__parser__declarations__parameters(NULL, parser);
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
     List_syntax__ast__Stmt* list_2 = List_syntax__ast__Stmt_new(place_2, LINE(16000174));

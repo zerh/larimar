@@ -32,6 +32,9 @@ Each version of the compiler (`larimar --version`) and the version of the langua
   only in the methods of a class that implements `UnsafeTask` and in the lambdas written in them, and a
   call anywhere else is a compile error. A library gives the interface and a task with methods that call
   C; a program's task extends it.
+- **A call to an interface its process did not bind is a panic** that names it (`LibM.sqrt is not bound
+  in this process: bind LibM in the setup of the task`), not a crash through an empty pointer. In a pool
+  it depended on which task had run in that process before.
 - **A task may extend another class**, in any module: the fields of the classes it extends go with it
   (with the same rule: types that cross), and it runs in the other process as its own class. Before, a
   class that extended a task was taken as its parent there, without a word.
