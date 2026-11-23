@@ -124,8 +124,8 @@ function importsUnsafeTask(module: Module in default): bool {
 
 /**
  * C is the standard library's, and an UnsafeTask's: a program, and a library written in Larimar, use what
- * std gives; a C library of their own runs in a process apart, through the native interface of an
- * UnsafeTask.
+ * std gives; a C library of their own is a native interface (in a module, or in the class of a task),
+ * opened: only the methods of an UnsafeTask call it, in the task's own process (checkFunctionCall).
  */
 class NoCOutsideStd implements Rule {
     override function id(): String { return "no-c-outside-std"; }
@@ -141,7 +141,7 @@ class NoCOutsideStd implements Rule {
         }
         for (d in declarationsOf(module)) {
             if (d is NativeInterfaceDecl ni && ni.opened) {         // an UnsafeTask's: its C runs in a process of its own
-                if (!importsUnsafeTask(module)) {
+                if (ni.owner != "" && !importsUnsafeTask(module)) {
                     ruleError(ni.line, self.id(), "Native interface '${ni.name}' is in a class that implements an UnsafeTask that is not std.os.process's: import it from std.os.process.");
                 }
                 continue;
@@ -149,9 +149,7 @@ class NoCOutsideStd implements Rule {
             if (d is CCodeDecl cc && cc.ofInterface) { continue; }
             if (!(d is NativeInterfaceDecl) && parts[declName(d)] != null) { continue; }
             let what: String = cKind(d);
-            if (what == "native interface") {
-                ruleError(d.line, self.id(), "A native interface of a program goes in a class that implements UnsafeTask (std.os.process): its C runs in a process of its own, where a crash is an error of the task.");
-            } else if (what != "") {
+            if (what != "") {
                 ruleError(d.line, self.id(), "${what} is only for the standard library: C is written there, and a program uses what std gives (or an UnsafeTask, for a C library).");
             }
         }

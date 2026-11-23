@@ -139,6 +139,7 @@ public class ExternFunctionDecl extends Node {
     let releasedBy: String = "";        // ...: String = c_f released by f: C's text is copied, then f releases it
     let cBody: String = "";             // native function f(...): T { C }: the C of its body (the compiler writes the C function)
     let owner: String = "";             // the class of a method with a C body ("" for a function)
+    let opened: bool = false;           // of an opened native interface: found in a library when an UnsafeTask runs
 }
 
 /** native const NAME: T [= c_name | = "C"];  native let NAME: T [= c_name];  a C constant (or macro) or a C global variable. */

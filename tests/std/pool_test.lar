@@ -159,7 +159,8 @@ test function aPanicThereIsAnErrorHere(): void throws ProcessError {
     checkText("9.0", "${valueOf(next.receive(0)).value}");
 }
 
-// What a task carries is checked: values that can go to another process, and no class above it.
+// What a task carries is checked: values that can go to another process, also those of the classes it
+// extends.
 test function whatATaskCarriesIsChecked(): void {
     failsInAProgram(raw"""
         import std.os.process { Channel, ProcessError, Task };
@@ -172,12 +173,13 @@ test function whatATaskCarriesIsChecked(): void {
         """, "Field 'box' of Task 'Bad' goes to another process");
     failsInAProgram(raw"""
         import std.os.process { Channel, ProcessError, Task };
-        class Base { let n: int32 = 0; }
+        class Box { let n: int32 = 0; }
+        class Base { let box: Box = {}; }
         class Child extends Base implements Task {
             override function run(channel: Channel): void throws ProcessError {}
         }
         function main(): int32 { return 0; }
-        """, "Task 'Child' extends 'Base'");
+        """, "Field 'box' of 'Base', which Task 'Child' extends, goes to another process");
 }
 
 // An interface of the program's own that is called Task is not std.os.process.Task: nothing is checked.

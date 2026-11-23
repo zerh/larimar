@@ -1428,9 +1428,10 @@ The kinds of a project are `program` (the default) and `library`; any other `kin
 A class that implements `std.os.process.Task` (it names it in its `implements`, imported from
 `std.os.process` by name or through an alias of that module) is a **task**: an object of it can be run in
 another process of the same program, by a `Process` (`Process { run: task }`, then `start()` and
-`join()`) or a `ProcessPool` (`submit(task)`, then `wait()`). Such a class extends no class, and each of
-its fields is of a **type that crosses**: the numbers, `bool`, `String`, their optionals and `T[*]` lists
-of them; otherwise it is a compile error. Its object arrives there with the values of its fields, `run()`
+`join()`) or a `ProcessPool` (`submit(task)`, then `wait()`). So is a class that extends a task, in any
+module. Each of its fields, and of the fields of the classes it extends, is of a **type that crosses**: the numbers, `bool`, `String`, their optionals and `T[*]` lists
+of them; otherwise it is a compile error. Its object arrives there as an object of its own class (not of
+the class it extends) with the values of its fields, `run()`
 runs there as `run(channel: Channel): void throws ProcessError`. The **channel** carries values both
 ways while it runs, as `Any` crosses to JSON (an object in it arrives as `null`): `send(value)`, and
 `receive(ms)`, which waits up to `ms` and gives a `Received`: `Message(value)`, `Nothing` (nothing came in
@@ -1441,14 +1442,16 @@ message while `join()` waits. An interface called
 
 **`UnsafeTask`** (`std.os.process`) is a `Task` with C of its own: `setup(loader: LibraryLoader): void
 throws LoadError`, called once in each process before its first task of that class. A native interface
-declared in a class that implements it is **opened**: its header still gives its types, constants and
+of a program or a library, declared in a class that implements it or in a module, is **opened**: its header still gives its types, constants and
 the type of each function, but its functions are found when the task runs, in the library that
 `loader.bind(Name, "library")` opens (`std.os.library`; the interface's name, as a value, is what binds
 it). Each call goes through a pointer of the header's own type, so the C compiler checks it as before.
 The library is a name without `lib` and its extension (`"SDL2"`: `libSDL2.so`, `libSDL2.dylib`,
 `SDL2.dll`), or a file. Its C runs only in the task's process, where a crash
 is a `ProcessError.Failed` for the program. A library not found, or a function it does not have, is a
-`LoadError`, and ends the task with what it says.
+`LoadError`, and ends the task with what it says. Its functions are called only in the methods of a class
+that implements `UnsafeTask` (itself, or a class it extends), and in the lambdas written in them: a call
+anywhere else is a compile error. Its types, structs and constants are data, and go anywhere.
 
 A process started this way runs the initialization of the globals ([§24](#24-program-execution)) and then
 the tasks it is sent, not `main`.
@@ -1638,8 +1641,8 @@ topLevel             = const NAME : Type = expression ;
                      | native cDeclaration
 
 (type NAME { }, and functions without a body: only in std.lang, §9.6. cinclude, ccode, native declarations
-and the native members of classes: only in the standard library, Appendix D; native interfaces also in a
-class that implements UnsafeTask, §19.2.)
+and the native members of classes: only in the standard library, Appendix D; native interfaces also in a program,
+called in the methods of an UnsafeTask, §19.2.)
 
 function             = function [ NAME . ] NAME parameters [ : Type ] [ in lives ] [ throws Type ]
                            [ wait until ( expression ) ] ( block | ; )
@@ -1759,8 +1762,9 @@ only in the modules of the standard library (and in `std.lang`). In any other mo
 library, each one is a compile error: a program has no C of its own
 ([§19](#19-libraries-and-tasks)), with one door:
 
-- A class that implements **`UnsafeTask`** (§19.2) may declare **native interfaces** (§D.0), and nothing
-  else of this appendix: they are opened, and their C runs in the task's own process.
+- A program or a library may declare **native interfaces** (§D.0), in a module or in a class, and nothing
+  else of this appendix: they are opened, their functions are called only in the methods of an
+  `UnsafeTask` (§19.2), and their C runs in the task's own process.
 
 `larimarc --unsafe-c` lifts the whole rule, for tests that bring C of their own; a program built
 with it has none of the guarantees of this document.
@@ -1786,7 +1790,7 @@ the members are declared as in §D.3 to §D.5. Its functions and values are reac
 names in the module (`type FILE released by fclose;`); a `type` without `=` is a pointer to the C type of
 its name (`FILE*`). A `released by` names a function of the same interface.
 
-In a class that implements `UnsafeTask` (§19.2) an interface is **opened**: its functions are found in a
+Outside the standard library (§19.2) an interface is **opened**: its functions are found in a
 library when the task runs (`loader.bind(Name, "library")`), it has no functions with a body of C, and
 its C runs in the task's process only.
 

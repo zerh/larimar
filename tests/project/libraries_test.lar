@@ -328,27 +328,69 @@ test function aLibraryHasNoCOfItsOwn(): void throws IoError {
     check(output.join("").contains("native function is only for the standard library"), "C in a library: ${output.join("")}");
 }
 
-// A native interface of a program or a library goes in an UnsafeTask: outside one it is an error, and
-// [project] unsafe_c, which once opened it, is gone and says so.
-test function nativeInterfacesGoInAnUnsafeTask(): void throws IoError {
+// A native interface of a library is used only inside an UnsafeTask: the library gives a task with
+// methods that call C, a program extends it (its fields go with the task), and a call from outside a task
+// is an error. [project] unsafe_c, which once opened native interfaces, is gone and says so.
+test function nativeInterfacesAreUsedInAnUnsafeTask(): void throws IoError {
     if (!onlyLinuxOrMac()) { return; }
     let lib: String = writeNamedLibrary("lib-native", "cubes", raw"""
-        native interface LibM "<math.h>" { function cbrt(x: float64): float64; }
-        public function side(volume: float64): float64 { return LibM.cbrt(volume); }
+        import std.os.process { Channel, UnsafeTask, ProcessError };
+        import std.os.library { LibraryLoader, LoadError };
+
+        public native interface LibM "<math.h>" { function cbrt(x: float64): float64; }
+
+        public class CubeTask implements UnsafeTask {
+            let volume: float64 = 0.0;
+            override function setup(loader: LibraryLoader): void throws LoadError { loader.bind(LibM, "m"); }
+            function side(): float64 { return LibM.cbrt(self.volume); }
+            override function run(channel: Channel): void throws ProcessError { channel.send("${self.side()}"); }
+        }
         """, "");
     let app: String = writeProgram("lib-native-app", "[dependencies]\ncubes = \"${lib}\"\n", raw"""
-        import cubes;
-        function main(): int32 { println("${cubes.side(27.0)}"); return 0; }
+        import cubes { CubeTask };
+        import std.os.process { Channel, Process, ProcessError, Received };
+
+        class Double extends CubeTask {
+            let label: String = "";
+            override function run(channel: Channel): void throws ProcessError {
+                let twice: () -> float64 = () -> { return self.side() * 2.0; };
+                channel.send("${self.label} ${twice() > 5.9 && twice() < 6.1}");
+            }
+        }
+
+        function outcome(task: CubeTask): String {
+            try {
+                let p: Process = { run: task };
+                p.start();
+                p.join();
+                return switch (p.channel().receive(0)) {
+                    case Message { value } -> "${value}".clone();
+                    default -> "nothing";
+                };
+            } catch (ProcessError e) { return "failed"; }
+        }
+
+        function main(): int32 {
+            println(outcome(Double { volume: 27.0, label: "double" }));
+            println(outcome(CubeTask { volume: 8.0 }).substring(0, 3));
+            return 0;
+        }
         """);
     let output: String[*] = [];
-    checkInt(1, larimarc(["build", app], output));
-    check(output.join("").contains("A native interface of a program goes in a class that implements UnsafeTask"), "a library has none: ${output.join("")}");
-    let own: String = writeProgram("lib-native-own", "", raw"""
-        function main(): int32 { return 0; }
+    checkInt(0, larimarc(["run", app], output));
+    check(output.join("").endsWith("double true\n2.0\n"), "a task of the library, and one that extends it: ${output.join("")}");
+    // outside a task, its C is not called
+    let outside: String = writeProgram("lib-native-outside", "[dependencies]\ncubes = \"${lib}\"\n", raw"""
+        import cubes { LibM };
+        function main(): int32 { return LibM.cbrt(8.0) as int32; }
         """);
-    Files.writeString(Paths.join(own, "larimar.toml"), "[project]\nname = \"app\"\nunsafe_c = true\n");
     output.clear();
-    checkInt(1, larimarc(["build", own], output));
+    checkInt(1, larimarc(["build", outside], output));
+    check(output.join("").contains("'cubes.LibM.cbrt' is C of a library, which runs in the process of an UnsafeTask"), "only in a task: ${output.join("")}");
+    // and unsafe_c is gone
+    Files.writeString(Paths.join(outside, "larimar.toml"), "[project]\nname = \"app\"\nunsafe_c = true\n");
+    output.clear();
+    checkInt(1, larimarc(["build", outside], output));
     check(output.join("").contains("unsafe_c is gone"), "unsafe_c is gone: ${output.join("")}");
 }
 

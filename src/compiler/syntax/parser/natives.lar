@@ -21,7 +21,7 @@ import syntax.parser.types { type };
  *   type NAME { ... }                                                                   (std) a type the compiler knows
  */
 public function nativeDeclaration(parser: Parser in default, line: int32): Node {
-    if (parser.optional(TokenType.Interface)) { return nativeInterface(parser, "", false); }
+    if (parser.optional(TokenType.Interface)) { return nativeInterface(parser, "", parser.openInterfaces); }
     if (parser.optional(TokenType.Function)) { return nativeFunctionOfC(parser); }
     if (parser.at(TokenType.Const) || parser.at(TokenType.Let)) { return nativeValue(parser); }
     if (parser.optional(TokenType.Struct)) { return nativeStruct(parser, "native struct"); }
@@ -125,7 +125,7 @@ public function nativeInterface(parser: Parser in default, owner: String in defa
  * to an opened library. The interface's name, as a value, is that function (loader.bind(Name, "...")).
  */
 function openedFunctions(parser: Parser in default, declaration: NativeInterfaceDecl in default, functions: ExternFunctionDecl[*] in default): void {
-    let key: String = "${declaration.owner}_${declaration.name}";
+    let key: String = declaration.owner != "" ? "${declaration.owner}_${declaration.name}" : "${declaration.name}_${declaration.line}";   // a module's: its line tells it apart
     let pointers: StringBuilder = {} in default;
     let binds: StringBuilder = {} in default;
     for (f in functions) {
@@ -138,6 +138,7 @@ function openedFunctions(parser: Parser in default, declaration: NativeInterface
         pointers.add("static __typeof__(${symbol})* ${pointer};\n");
         binds.add("    if (!(*(void**)(&${pointer}) = lar_library_symbol(library, \"${symbol}\"))) return \"${symbol}\";\n");
         f.cName = pointer.clone() in default;
+        f.opened = true;
     }
     let code: String = """
         #ifndef LAR_LIBRARY_SYMBOL

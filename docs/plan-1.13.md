@@ -108,14 +108,15 @@ tested, as libc already is.
 
 1. **Done: `[project] unsafe_c` is gone.** A native interface outside a class that implements
    `UnsafeTask` is an error that says where it goes; `unsafe_c` in `larimar.toml` too.
-2. **Native interfaces at module level, used only "inside the task".** Declared in a module, so two tasks
-   or a library (`sdlkit`: the interface, a `Window` class, helpers) share them. A function or method that
-   calls `Sdl.*` is of the task, and so is everything that calls it, upwards; reaching it from outside an
-   `UnsafeTask` (from `main`, from a thread of the program) is a compile error that shows the path:
-   `main → draw → Sdl.SDL_FillRect: Sdl's C runs only in an UnsafeTask`. It is the analysis the compiler
-   already does for threads (owners and edges), with another question. Constants and structs by value of
-   the interface (`SDL_KEYDOWN`, `SDL_Rect`) are data and go anywhere; a type `released by` is of the task
-   (releasing it calls C).
+2. **Done: native interfaces at module level, called only in an `UnsafeTask`.** Declared in a module (of
+   a program or a library) they are opened like those of a task, and their functions are called only in
+   the methods of a class that implements `UnsafeTask` and in the lambdas written there (the strict
+   rule: local, exact, and the C is where it is seen; reachability through the call graph was the
+   other option, with false positives through interfaces and lambdas, and errors far from the change).
+   A library gives the interface and a task that calls it (`class SdlTask implements UnsafeTask`), and
+   a program's task extends it: **a task may extend a class now**, in any module, with the fields of
+   the whole chain (checked to cross) and run as its own class (before, a subclass of a task was taken
+   as its parent in the other process, without a word). Constants and structs of an interface are data.
 3. **`from`: the library of an interface** (below). With it the task opens, when its process starts, the
    libraries of every interface its code reaches.
 

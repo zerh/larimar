@@ -49,12 +49,18 @@ test function namesAreChecked(): void {
         """, "A native interface says its header");
 }
 
-// Outside an UnsafeTask a program has no native interface: it is said once, at the interface.
+// A native interface of a program is called only from the methods of an UnsafeTask (and the lambdas
+// written in them): its C runs in the task's own process.
 test function onlyInAnUnsafeTask(): void {
     failsInAProgram(raw"""
         native interface M "<math.h>" { function cbrt(x: float64): float64; }
         function main(): int32 { return M.cbrt(8.0) as int32; }
-        """, "A native interface of a program goes in a class that implements UnsafeTask");
+        """, "'M.cbrt' is C of a library, which runs in the process of an UnsafeTask");
+    failsInAProgram(raw"""
+        native interface M "<math.h>" { function cbrt(x: float64): float64; }
+        class Plain { function side(): float64 { return M.cbrt(8.0); } }
+        function main(): int32 { return 0; }
+        """, "call it from a method of a class that implements UnsafeTask");
 }
 
 // What the compiler writes has no body, and only std.lang has it: elsewhere a function needs its body.

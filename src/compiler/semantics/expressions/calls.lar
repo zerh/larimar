@@ -4,7 +4,7 @@ import syntax.ast {
     Call, Cast, Expr, ExternFunctionDecl, Ident, Lambda, Member, NullLit, Param, SelfExpr, SuperMember, Unary
 };
 import semantics.types {
-    allFields, ArrayKind, arrayTypeOf, BuiltinKind, CallInfo, CallK, ClassInfo, classOf, ConversionKind,
+    allFields, ArrayKind, arrayTypeOf, chain, BuiltinKind, CallInfo, CallK, ClassInfo, classOf, ConversionKind,
     declared, EnumInfo, enumOf, enumSimple, FieldInfo, findMethod, Frame, FrameKind, FunctionInfo,
     functionOf, functionTypeOf, interfaceOf, isArray, isClass, isEnumT, isError, isExternT, isInteger,
     isInterface, isMemParam, isNumeric, isOpt, isPtr, isResource, isStruct, meet, MemberInfo, MemberKind,
@@ -128,6 +128,10 @@ function checkFunctionCall(c: Call in default, functionInfo: FunctionInfo in def
     if (ext != null && ext.platform != "" && !platformWithin(platformCtx, ext.platform)) {
         error(c.line, "'${functionInfo.name}' exists only on ${ext.platform}: call it from a class for that platform.");
     }
+    if (ext != null && ext.opened && !inUnsafeTask()) {
+        let shown: String = functionInfo.name.replace("__", ".");
+        error(c.line, "'${shown}' is C of a library, which runs in the process of an UnsafeTask: call it from a method of a class that implements UnsafeTask (std.os.process). A library may give a class that does (class SdlTask implements UnsafeTask), with methods that call C, for a task to extend.");
+    }
     if (functionInfo.releases == "String") {
         error(c.line, "'${functionInfo.name}' releases the texts that C gives: the compiler calls it once it has copied them.");
     } else if (functionInfo.releases != "") {
@@ -164,6 +168,22 @@ function checkFunctionCall(c: Call in default, functionInfo: FunctionInfo in def
     let made: Region = given || functionInfo.creates ? placedResult(c, functionInfo.sig!.elem!, place) : R_STATIC;
     setRegion(c, !hasRefs(functionInfo.sig!.elem!) || (functionInfo.isExtern && !anyMem) ? R_STATIC : meet(region, made));
     return functionInfo.sig!.elem!;
+}
+
+/** Inside a method of a class that implements UnsafeTask (or inside a lambda written in one): there its C runs. */
+function inUnsafeTask(): bool {
+    let i: int32 = analysis.frameTop - 1;
+    while (i >= 0 && analysis.frames[i].kind == FrameKind.Lambda) { i -= 1; }
+    if (i < 0 || analysis.frames[i].kind != FrameKind.Method) { return false; }
+    let selfType: Type? = analysis.frames[i].selfType;
+    if (selfType == null || !isClass(selfType)) { return false; }
+    for (c in chain(selfType.name)) {
+        for (n in c.interfaces) {
+            let spelled: String = n.replace("__", ".");
+            if (spelled == "std.os.process.UnsafeTask") { return true; }
+        }
+    }
+    return false;
 }
 
 /** The arguments the result of a method call may point to. */

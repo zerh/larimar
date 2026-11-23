@@ -100,3 +100,16 @@ test function anUnsafeTaskGivesCallbacks(): void throws ProcessError {
     p.join();
     checkText("1 3 5 9", "${valueOf(p.channel().receive(0))}");
 }
+
+/** A task that extends another: it goes to its process as itself, with the fields of both. */
+class Cube extends SquareRoot {
+    let times: float64 = 1.0;
+    override function run(channel: Channel): void throws ProcessError {
+        channel.send({ root: LibM.sqrt(self.x) * self.times, pid: os.processId() });
+    }
+}
+
+// The task runs as its own class, not as the one it extends, with the fields of both.
+test function aTaskMayExtendAnother(): void {
+    checkText("6.0", outcome(Cube { x: 9.0, times: 2.0 }));
+}

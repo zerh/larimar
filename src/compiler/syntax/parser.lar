@@ -17,10 +17,16 @@ import syntax.lexer { Lexer, Token, TokenType };
 import syntax.parser.declarations { topLevelDeclaration };
 
 /** The tree of one source file; its `error` is the first lexical or syntax error. `startLine`: the number of its first line (it also says the file). */
-public function parseProgram(source: String in default, startLine: int32): Program {
+public function parseProgram(source: String in default, startLine: int32): Program { return parseModule(source, startLine, false); }
+
+/**
+ * The same, for a module of a program or a library (`openInterfaces`): its native interfaces are opened,
+ * their functions found in a library when an UnsafeTask runs, as those declared in its class.
+ */
+public function parseModule(source: String in default, startLine: int32, openInterfaces: bool): Program {
     let lexer: Lexer = { src: source, line: startLine } in default;
     lexer.run();
-    let parser: Parser = Parser { tokens: lexer.toks, failed: lexer.error } in default;
+    let parser: Parser = Parser { tokens: lexer.toks, failed: lexer.error, openInterfaces } in default;
     let tree: Program = program(parser, startLine);
     tree.error = parser.failed;
     return tree;
@@ -39,6 +45,7 @@ public class Parser {
     let cOwner: String = "";                    // the class being read ("" outside one): what its cinclude, ccode and C bodies belong to
     let staticFunctions: FunctionDecl[*] = [];  // written inside a type: they become top-level `function Type.name` declarations
     let nativeParts: Node[*] = [];              // what a type also declares at the top level: its C functions, its cinclude and ccode
+    let openInterfaces: bool = false;           // a module of a program: its native interfaces are opened (an UnsafeTask's)
 
     function error(line: int32, message: String): void {
         if (self.failed == "") { self.failed = "Syntax Error [Line ${line}]: ${message}" in default; }

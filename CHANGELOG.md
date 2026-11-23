@@ -27,6 +27,14 @@ Each version of the compiler (`larimar --version`) and the version of the langua
   library goes in the native interface of an `UnsafeTask`, whose C runs in the task's own process (a
   crash there is a `ProcessError`); a native interface outside one is an error that says so, and so is
   `unsafe_c` in `larimar.toml`. `larimarc --unsafe-c` stays, for the compiler's tests of std's C.
+- **Native interfaces in a module, called only in an `UnsafeTask`**: a program or a library declares a
+  native interface in a module (or in a class), opened like those of a task; its functions are called
+  only in the methods of a class that implements `UnsafeTask` and in the lambdas written in them, and a
+  call anywhere else is a compile error. A library gives the interface and a task with methods that call
+  C; a program's task extends it.
+- **A task may extend another class**, in any module: the fields of the classes it extends go with it
+  (with the same rule: types that cross), and it runs in the other process as its own class. Before, a
+  class that extended a task was taken as its parent there, without a word.
 - **Callbacks to C: a function and its "this"** (spec §D.10). A parameter of a native function may have
   a function type, and `void*` is a type. A call passes the same pair C asks for: a method and its object
   (`Sqlite.sqlite3_exec(db!, sql, self::onRow, self, null)`), a lambda and itself (`row, row`), or a

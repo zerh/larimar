@@ -2618,7 +2618,8 @@ function main(): int32 {
   programa espera a que termine y da su código de salida.
 - **Lo que va con la tarea** son sus campos: números, `bool`, `String`, sus opcionales y listas de
   ellos. Un campo de otro tipo es un error de compilación (*Field 'box' of Task 'Bad' goes to another
-  process...*), y también una clase que extiende otra. Lo que pasa por el canal cruza como `Any` cruza a
+  process...*). Una tarea puede extender otra clase: los campos de las clases que extiende también van,
+  con la misma regla, y allá corre como su propia clase. Lo que pasa por el canal cruza como `Any` cruza a
   JSON: números, `bool`, `String` y tablas (un objeto llega como `null`).
 - **Dos formas de recibir**. `onMessage(handler)` y `join()`, cuando el programa solo espera: sin tiempos.
   `receive(ms)`, cuando el programa tiene su propio bucle (un juego, una ventana) o un límite de tiempo:
@@ -2635,9 +2636,12 @@ function main(): int32 {
   `receive(ms)` no es un sleep: espera *como mucho* `ms` (como `poll(ms)` de una `BlockingQueue` de Java).
 - **Solo la `Task` de `std.os.process` es esto**: una interfaz tuya que se llame `Task` es solo tuya.
 - **`UnsafeTask`: C propio, en su propio proceso.** Una tarea que usa una librería de C implementa
-  `UnsafeTask`, declara la native interface de la librería en su clase y la enlaza en `setup`, que corre
-  una vez en cada proceso. Las funciones se buscan en la librería cuando la tarea corre, y un crash en
-  ellas es un `ProcessError` aquí, no el final del programa.
+  `UnsafeTask`, usa la native interface de la librería (declarada en su clase, o en un módulo) y la enlaza
+  en `setup`, que corre una vez en cada proceso. Las funciones se buscan en la librería cuando la tarea
+  corre, y un crash en ellas es un `ProcessError` aquí, no el final del programa. Solo los métodos de una
+  clase que implementa `UnsafeTask` las llaman (y las lambdas escritas en esos métodos); desde cualquier
+  otro lugar es un error de compilación. Así una biblioteca escrita en Larimar da la interfaz y una tarea
+  con métodos que llaman a C (`class SdlTask implements UnsafeTask`), y la tarea de un programa la extiende.
 
   ```ts
   import std.os.process { Channel, UnsafeTask, ProcessError };
@@ -4121,7 +4125,10 @@ function main(): int32 {
 
 Un programa o una biblioteca tiene el C de la biblioteca estándar, y ningún C propio en su proceso. Una
 biblioteca de C que necesite va en una **`UnsafeTask`** ([capítulo 23](#23-otros-programas-llamadas-memoria-compartida-y-procesos)):
-su clase declara la **native interface** de la biblioteca, lo que da una cabecera de C bajo un nombre, y
+llama a la **native interface** de la biblioteca (declarada en su clase, o en un módulo; solo los métodos
+de una `UnsafeTask` la llaman, así que una biblioteca en Larimar puede darla con una tarea que la usa,
+`class SdlTask implements UnsafeTask`, para que la tarea de un programa la extienda), lo que da una
+cabecera de C bajo un nombre, y
 ese C corre en el propio proceso de la tarea, donde un crash es un `ProcessError` que el programa captura.
 El Larimar que usa la biblioteca corre allí también, a la velocidad de C: un bucle que dibuja, un
 ordenamiento con su callback.

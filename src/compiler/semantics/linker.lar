@@ -18,7 +18,7 @@ import syntax.ast {
     BlockStmt, StringLit, Ident, Member, Index, Call, Unary, Binary, Ternary, IsExpr, Cast, Unwrap, Lambda, ObjectLit,
     ArrayLit, Placed, Pattern, SwitchExpr, PT_NAME, PT_CONSTANT, PT_NULL
 };
-import syntax.parser { parseProgram };
+import syntax.parser { parseModule, parseProgram };
 import syntax.parser.natives { OPENED_BINDING };
 import editor.opendocuments { openDocument };
 
@@ -346,6 +346,52 @@ function pathUnder(dir: String, file: String): String {
     return path.clone();
 }
 
+/** A class as the linker sees it, before the analysis: its declaration and its module. */
+class LinkedClass {
+    let decl: ClassDecl;
+    let module: Module;
+    let depth: int32 = 1;           // how many classes, it and those it extends
+}
+
+/** The class and the classes it extends, from it up; a parent may be in another module (imported). */
+function classChain(c: ClassDecl in default, m: Module in default): LinkedClass[*] {
+    let out: LinkedClass[*] = [LinkedClass { decl: c, module: m } in default] in default;
+    let decl: ClassDecl = c;
+    let module: Module = m;
+    while (decl.superName != "" && out.length < 64) {
+        let parent: LinkedClass? = classNamed(decl.superName, module);
+        if (parent == null) { break; }
+        out.push(parent!);
+        decl = parent!.decl;
+        module = parent!.module;
+    }
+    return out;
+}
+
+/** The class a module names: its own, one it imports by name, or alias.Name. */
+function classNamed(name: String in default, m: Module in default): LinkedClass? {
+    if (m.program == null) { return null; }
+    let dot: int32 = name.lastIndexOf(".") ?? -1;
+    if (dot < 0) {
+        for (d in m.program!.decls) {
+            if (d is ClassDecl c && c.name == name) { return LinkedClass { decl: c, module: m } in default; }
+        }
+    }
+    for (im in m.program!.imports) {
+        let named: bool = dot < 0 ? im.hasNames && im.names.contains(name) : im.alias != "" && im.alias == name.substring(0, dot);
+        if (!named) { continue; }
+        let index: int32 = linking.modIndex[im.path] as int32 ?? -1;
+        if (index < 0) { continue; }
+        let target: Module = linking.mods[index];
+        let simple: String = dot < 0 ? name : name.substring(dot + 1);
+        if (target.program == null) { continue; }
+        for (d in target.program!.decls) {
+            if (d is ClassDecl c && c.name == simple) { return LinkedClass { decl: c, module: target } in default; }
+        }
+    }
+    return null;
+}
+
 /**
  * For each module with classes that implement Task, two functions of its own: one gives the
  * class and fields of a task as a table, the other makes it again from them. std.os.process.tasks is
@@ -362,46 +408,73 @@ function writeTasks(mainPath: String): void {
         let setup: StringBuilder = {} in default;
         let iface: String = "";
         let line: int32 = 0;
+        let tasks: LinkedClass[*] = [] in default;        // the tasks of the module, the deepest first: `is` takes a subclass first
         for (d in m.program!.decls) {
             if (!(d is ClassDecl c)) { continue; }
-            let spelled: String = taskInterface(c, m.program!);
+            let chain: LinkedClass[*] = classChain(c, m);
+            let spelled: String = "";
+            for (k in chain) {
+                let own: String = taskInterface(k.decl, k.module.program!);
+                if (own != "" && spelled == "") { spelled = own; }
+            }
             if (spelled == "") { continue; }
+            tasks.push(LinkedClass { decl: c, module: m, depth: chain.length } in default);
+        }
+        let deepest: int32 = 0;
+        for (task in tasks) {
+            if (task.depth > deepest) { deepest = task.depth; }
+        }
+        let ordered: LinkedClass[*] = [] in default;
+        let depth: int32 = deepest;
+        while (depth > 0) {
+            for (task in tasks) {
+                if (task.depth == depth) { ordered.push(task); }
+            }
+            depth -= 1;
+        }
+        for (task in ordered) {
+            let c: ClassDecl = task.decl;
+            let chain: LinkedClass[*] = classChain(c, m);
             if (iface == "") {
-                iface = spelled;
+                iface = "LarimarProcess.Task";
                 line = c.line;
             }
-            if (c.superName != "") {
-                error(c.line, "Task '${c.name}' extends '${c.superName}': a task goes to another process with its own fields, so it extends no class.");
-                continue;
+            let unsafe: bool = false;
+            for (k in chain) {
+                let own: String = taskInterface(k.decl, k.module.program!);
+                if (own.endsWith("UnsafeTask")) { unsafe = true; }
             }
             let key: String = m.path != "" ? "${m.path}.${c.name}" : c.name;
-            if (spelled.endsWith("UnsafeTask")) { setup.add("    if (task is ${c.name} t) {\n        t.setup(loader);\n        return;\n    }\n"); }
+            if (unsafe) { setup.add("    if (task is ${c.name} t) {\n        t.setup(loader);\n        return;\n    }\n"); }
             encode.add("    if (task is ${c.name} t) {\n        let f: Any = {};\n");
             let fill: StringBuilder = {} in default;
             let literal: String[*] = [] in default;
-            for (fd in c.fields) {
-                let n: String = fd.name;
-                let typeRef: TypeRef = fd.type;
-                if (taskScalar(typeRef)) {
-                    encode.add("        f[\"${n}\"] = t.${n};\n");
-                    literal.push("${n}: ${fromTable(typeRef, "fields[\"${n}\"]")}" in default);
-                } else if (typeRef.kind == TypeRefKind.Opt && typeRef.inner != null && taskScalar(typeRef.inner!)) {
-                    encode.add("        if (t.${n} != null) { f[\"${n}\"] = t.${n}!; }\n");
-                    if (typeRef.inner!.name == "String") {
-                        literal.push("${n}: null" in default);
-                        fill.add("        if (fields[\"${n}\"] != null) { t.${n} = (fields[\"${n}\"] as String ?? \"\").clone(); }\n");
+            for (k in chain) {                       // its fields, and those of the classes it extends
+                for (fd in k.decl.fields) {
+                    let n: String = fd.name;
+                    let typeRef: TypeRef = fd.type;
+                    if (taskScalar(typeRef)) {
+                        encode.add("        f[\"${n}\"] = t.${n};\n");
+                        literal.push("${n}: ${fromTable(typeRef, "fields[\"${n}\"]")}" in default);
+                    } else if (typeRef.kind == TypeRefKind.Opt && typeRef.inner != null && taskScalar(typeRef.inner!)) {
+                        encode.add("        if (t.${n} != null) { f[\"${n}\"] = t.${n}!; }\n");
+                        if (typeRef.inner!.name == "String") {
+                            literal.push("${n}: null" in default);
+                            fill.add("        if (fields[\"${n}\"] != null) { t.${n} = (fields[\"${n}\"] as String ?? \"\").clone(); }\n");
+                        } else {
+                            literal.push("${n}: fields[\"${n}\"] as ${typeRef.inner!.name}" in default);
+                        }
+                    } else if (typeRef.kind == TypeRefKind.Growable && typeRef.inner != null && taskScalar(typeRef.inner!)) {
+                        encode.add("        let l_${n}: Any = {};\n        for (v in t.${n}) { l_${n}.push(v); }\n        f[\"${n}\"] = l_${n};\n");
+                        literal.push("${n}: []" in default);
+                        fill.add("        for (i, v in fields[\"${n}\"]) { t.${n}.push(${fromTable(typeRef.inner!, "v")}); }\n");
                     } else {
-                        literal.push("${n}: fields[\"${n}\"] as ${typeRef.inner!.name}" in default);
+                        let of: String = k.decl.name == c.name ? "Task '${c.name}'" : "'${k.decl.name}', which Task '${c.name}' extends,";
+                        error(k.module == m ? fd.line : c.line, "Field '${n}' of ${of} goes to another process: it is a number, a bool, a String, an optional of one of them, or a list of them.");
                     }
-                } else if (typeRef.kind == TypeRefKind.Growable && typeRef.inner != null && taskScalar(typeRef.inner!)) {
-                    encode.add("        let l_${n}: Any = {};\n        for (v in t.${n}) { l_${n}.push(v); }\n        f[\"${n}\"] = l_${n};\n");
-                    literal.push("${n}: []" in default);
-                    fill.add("        for (i, v in fields[\"${n}\"]) { t.${n}.push(${fromTable(typeRef.inner!, "v")}); }\n");
-                } else {
-                    error(fd.line, "Field '${n}' of Task '${c.name}' goes to another process: it is a number, a bool, a String, an optional of one of them, or a list of them.");
                 }
             }
-            encode.add("        let out: Any = { name: \"${key}\" };\n        out[\"fields\"] = f;\n        return out;\n    }\n");
+            encode.add("        let out: Any = { name: \"${key}\", depth: ${chain.length} };\n        out[\"fields\"] = f;\n        return out;\n    }\n");
             start.add("    if (name == \"${key}\") {\n        let t: ${c.name} = { ${literal.join(", ")} };\n");
             start.add(fill.toString());
             start.add("        return t;\n    }\n");
@@ -447,7 +520,7 @@ function writeTasks(mainPath: String): void {
     let setups: StringBuilder = {} in default;
     for (i, o in owners) {
         imports.add("import ${o} as Tasks${i};\n");
-        encodes.add("    let e${i}: Any = Tasks${i}.larimarTaskEncode(task);\n    if (e${i} != null) { return e${i}; }\n");
+        encodes.add("    let e${i}: Any = Tasks${i}.larimarTaskEncode(task);\n    if (e${i} != null && (found == null || (e${i}.depth as int32 ?? 0) > (found.depth as int32 ?? 0))) { found = e${i}; }\n");
         starts.add("    let t${i}: Task? = Tasks${i}.larimarTaskStart(name, fields);\n    if (t${i} != null) { return t${i}; }\n");
         setups.add("    Tasks${i}.larimarTaskSetup(task, loader);\n");
     }
@@ -456,7 +529,8 @@ function writeTasks(mainPath: String): void {
         import std.os.library { LibraryLoader, LoadError };
         ${imports.toString()}
         public function encode(task: Task): Any {
-        ${encodes.toString()}    return null;
+            let found: Any = null;          // the class of the task itself: the deepest that matches (a subclass also is its parent)
+        ${encodes.toString()}    return found;
         }
 
         public function start(name: String, fields: Any): Task? {
@@ -554,7 +628,7 @@ function cCodeUses(code: String in default, cSymbols: Any in default): bool {
 
 function parse(module: Module in default, source: String in default): void {
     addWords(source);
-    let p: Program = parseProgram(source, module.index * FILE_LINES + 1);
+    let p: Program = parseModule(source, module.index * FILE_LINES + 1, !trusted(module, linking.linkedMain));
     if (p.error != "") {
         linking.errors.push(p.error);
         return;

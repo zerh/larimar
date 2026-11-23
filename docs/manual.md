@@ -2618,7 +2618,8 @@ function main(): int32 {
   program waits for it to end and gives its exit code.
 - **What goes with the task** are its fields: numbers, `bool`, `String`, their optionals and lists of
   them. A field of another type is a compile error (*Field 'box' of Task 'Bad' goes to another
-  process...*), and so is a class that extends another. What goes through the channel crosses the way
+  process...*). A task may extend another class: the fields of the classes it extends go too, with the
+  same rule, and it runs there as its own class. What goes through the channel crosses the way
   `Any` crosses to JSON: numbers, `bool`, `String` and tables (an object arrives as `null`).
 - **Two ways to receive**. `onMessage(handler)` and `join()`, when the program just waits: no times.
   `receive(ms)`, when the program has a loop of its own (a game, a window) or a limit of time: it waits
@@ -2635,9 +2636,12 @@ function main(): int32 {
   `receive(ms)` is not a sleep: it waits *up to* `ms` (as `poll(ms)` of a Java `BlockingQueue`).
 - **Only the `Task` of `std.os.process` is this**: an interface of your own called `Task` is just yours.
 - **`UnsafeTask`: C of its own, in its own process.** A task that uses a C library implements
-  `UnsafeTask`, declares the library's native interface in its class, and binds it in `setup`, which
-  runs once in each process. The functions are found in the library when the task runs, and a crash in
-  them is a `ProcessError` here, not the end of the program.
+  `UnsafeTask`, uses the library's native interface (declared in its class, or in a module), and binds it
+  in `setup`, which runs once in each process. The functions are found in the library when the task
+  runs, and a crash in them is a `ProcessError` here, not the end of the program. Only the methods of a
+  class that implements `UnsafeTask` call them (and the lambdas written in those methods); from anywhere
+  else it is a compile error. So a library written in Larimar gives the interface and a task with methods
+  that call C (`class SdlTask implements UnsafeTask`), and a program's task extends it.
 
   ```ts
   import std.os.process { Channel, UnsafeTask, ProcessError };
@@ -4116,8 +4120,11 @@ function main(): int32 {
 
 A program or a library has the C of the standard library, and no C of its own in its process. A C library
 it needs goes in an **`UnsafeTask`** ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)):
-its class declares the library's **native interface**, what a C header gives under one name, and that C
-runs in the task's own process, where a crash is a `ProcessError` the program catches. The Larimar that
+it calls the library's **native interface**, what a C header gives under one name (declared in its class,
+or in a module), and that C runs in the task's own process, where a crash is a `ProcessError` the program
+catches. Only the methods of an `UnsafeTask` call it, so a library written in Larimar may give the
+interface with a task that calls it (`class SdlTask implements UnsafeTask`), for a program's task to
+extend. The Larimar that
 uses the library runs there too, at the speed of C: a loop that draws, a sort with its callback.
 
 ```ts

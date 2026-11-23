@@ -94,6 +94,7 @@ per kind of node, and the errors of syntax. Nothing here knows about other files
   - `function stripIndent(raw: String): String`
 - **`syntax.parser`**: tokens -> syntax tree
   - `function parseProgram(source: String in default, startLine: int32): Program`: The tree of one source file; its `error` is the first lexical or syntax error
+  - `function parseModule(source: String in default, startLine: int32, openInterfaces: bool): Program`: The same, for a module of a program or a library (`openInterfaces`): its native interfaces are opened, their functions found in a library when an UnsafeTask runs, as those declared in its class
   - `class Parser`: The tokens of a source text, read one by one
   - `function endedBySemicolon(parser: Parser in default, node: Node, what: String): Node`: The node, after its ';'
   - `function qualifiedName(parser: Parser in default, message: String): String`: NAME ( 
