@@ -118,6 +118,7 @@ public function externCType(type: Type): String {
     if (type == T_STRING || (isOpt(type) && type.elem! == T_STRING)) { return "const char*"; }
     if (isResource(type)) { return "LarNative_${type.name}"; }                              // the C value itself
     if (isOpt(type) && isResource(type.elem!)) { return "LarNative_${type.elem!.name}"; }
+    if (type.kind == TypeKind.Func) { return "void*"; }                                      // a callback: its trampoline (spec §D.10)
     return type == T_VOID ? "void" : cType(type);
 }
 

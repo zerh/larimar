@@ -10,7 +10,7 @@ import semantics.types {
     isInterface, isMemParam, isNumeric, isOpt, isPtr, isResource, isStruct, meet, MemberInfo, MemberKind,
     MemoryKind, MethodInfo, named, NamedKind, P_GLOBAL, P_TEMP, parentOf, Place, PlaceKind, platformWithin,
     R_STATIC, Region, structOf, Symbol, SymbolKind, T_ANY, T_BOOL, T_BYTE, T_ERROR, T_INT32, T_INT64,
-    T_STRING, T_VOID, Type, TypeKind, VariantInfo, variantOf
+    T_STRING, T_VOID, Type, TypeKind, VariantInfo, variantOf, isVoidPointer
 };
 import semantics.analyzer { analysis, error, frame, lookup, Mutation, MutK, noteCapture, wrong };
 import semantics.analyzer.compact {
@@ -26,6 +26,7 @@ import semantics.expressions {
 import semantics.expressions.conversions { coerce, conversionOf, hasRefs, placeRegion, regionOf, setRegion, typeOf };
 import semantics.expressions.literals { calledReference };
 import semantics.expressions.operators { externArg };
+import semantics.expressions.callbacks { checkCallbackArg, checkPairs, checkThisArg };
 
 public function checkAllArgs(call: Call in default): Type {
     for (a in call.args) { check(a, null, P_TEMP); }
@@ -146,6 +147,7 @@ function checkFunctionCall(c: Call in default, functionInfo: FunctionInfo in def
     let region: Region = checkArgsLives(c, paramTypes, functionInfo.varargs, mps, "'${functionInfo.name}'", !functionInfo.isExtern ? functionInfo.params : null, null,
         functionInfo.isExtern ? P_TEMP : place, null, functionInfo.isExtern ? all(c.args.length, !given && !makes) : functionInfo.flows);
     toC = outer;
+    if (functionInfo.isExtern) { checkPairs(c, paramTypes, "'${functionInfo.name}'"); }
     throwing(c, functionInfo.throwsType, "'${functionInfo.name}'");
     c.call = CallInfo { kind: CallK.Direct, func: functionInfo } in default;
     // A String from C is static, unless C made it in a memory it received.
@@ -438,6 +440,16 @@ function checkArgs(call: Call in default, params: Type[*] in default, varargs: b
         }
         let p: Type = params[i];
         externArg = toC && ((a is Unary au && au.op == "&") || (a is Cast ac && ac.expr is Unary acu && acu.op == "&"));
+        if (toC && p.kind == TypeKind.Func) {          // a callback: a function and its this (spec §D.10)
+            checkCallbackArg(a, p, places[i], "Argument ${i + 1} of ${name}");
+            externArg = false;
+            continue;
+        }
+        if (toC && isVoidPointer(p)) {                // the this of a callback, or any pointer (&x too)
+            checkThisArg(a, p, "Argument ${i + 1} of ${name}");
+            externArg = false;
+            continue;
+        }
         if (toC && isPtr(p) && !externArg && !(a is NullLit)) {      // an array where C takes T*: its elements, as in C
             let at: Type = check(a, null, P_TEMP);
             if (at.kind == TypeKind.Array && at.elem! == p.elem!) {

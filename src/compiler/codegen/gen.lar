@@ -91,6 +91,10 @@ public class Generation {
     let literalThunks: StringBuilder = {};
     let lambdaDefs: String[*] = [];     // by lambda id ("" until generated)
     let lambdaDone: bool[*] = [];
+    /** The trampolines of callbacks given to C (codegen.expressions.callbacks): one per pair, by name. */
+    let callbackSeen: Any = {};
+    let callbackNames: String[*] = [];
+    let callbackTexts: String[*] = [];
     let resizeHelpers: String[*] = [];
     let resizeSeen: Any = {};
     let loopBlock: Block? = null;                  // innermost loop body (per function, saved/restored)
@@ -547,6 +551,12 @@ public function emitC(): CProgram {
         for (i, d in generation.lambdaDefs) {
             if (generation.lambdaDone[i]) { program.addFunction("lambda_${i}", d); }
         }
+    }
+    if (generation.callbackNames.length > 0) {
+        section(out, "Callbacks given to C");
+        program.add(out.toString());
+        out.clear();
+        for (i, name in generation.callbackNames) { program.addFunction(name, generation.callbackTexts[i]); }
     }
     if (generation.literalThunks.length > 0 || declared.classes.length > 0) {
         section(out, "Interface thunks and cloning");

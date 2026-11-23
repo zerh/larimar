@@ -3,7 +3,7 @@
 
 import semantics.types {
     Type, Region, Conversion, Symbol, CallInfo, MemberInfo, Place, LambdaInfo, SwitchInfo, ForInfo,
-    CatchInfo, MethodInfo, VariantInfo, PatternInfo, ClassInfo
+    CatchInfo, MethodInfo, VariantInfo, PatternInfo, ClassInfo, CallbackInfo
 };
 
 /** Placements (Placed.mode) and patterns (Pattern.kind). */
@@ -38,6 +38,7 @@ public class Node {
     let catchInfo: CatchInfo? = null;
     let opMethod: MethodInfo? = null;
     let memArg: Symbol? = null;
+    let callback: CallbackInfo? = null;     // an argument given to C as a callback
     let throwing: bool = false;
     let method: MethodInfo? = null;
     let tested: ClassInfo? = null;          // IsExpr: the class tested

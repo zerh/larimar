@@ -1,0 +1,122 @@
+// codegen.expressions.callbacks: callbacks given to C (spec §D.10). C calls a C function, the trampoline,
+// with the void* it was given; the trampoline turns it back into what it is (the object of a method, or
+// the closure of a function), converts the arguments (a char* to a String, a char** and its count to a
+// String[]) and calls it. One trampoline per pair of a C signature and a method, a closure type or a
+// function without state:
+//
+//     static int32_t callback_3_Users_onRow(void* a0, int32_t a1, char** a2, char** a3) {
+//         ...
+//         int32_t result = Users_onRow__dispatch((Users*)a0, a0, a1, values, columns);
+//         ...
+//     }
+
+import syntax.ast { Expr, Lambda, NullLit };
+import semantics.types {
+    ArrayKind, CallbackInfo, CallbackKind, cSuffix, isArray, isInteger, isOpt, MethodInfo, T_STRING, T_VOID,
+    Type, TypeKind
+};
+import codegen.gen { generation };
+import codegen.gen.classes { dispatchName };
+import codegen.gen.types { externCType };
+import codegen.expressions { addrOf, cType, value };
+import codegen.expressions.lambdas { lambdaValue };
+
+/** The C of an argument given where C takes a function: its trampoline. */
+public function callbackArg(a: Expr in default, callback: CallbackInfo in default): String {
+    if (callback.kind == CallbackKind.Plain && a is Lambda l) { lambdaValue(l); }      // its C function is written
+    let name: String = switch (callback.kind) {
+        case Closure -> "callback_${callback.type.funcId}";
+        case Plain -> "callback_lambda_${callback.lambda!.id}";
+        case Method -> "callback_${callback.type.funcId}_${callback.className}_${cSuffix(callback.method!)}";
+    };
+    if (!generation.callbackSeen.contains(name)) {
+        generation.callbackSeen[name] = true;
+        let head: String = trampolineHead(name, callback.type);
+        generation.literalPrototypes.add("${head};\n");
+        generation.callbackNames.push(name.clone() in default);
+        generation.callbackTexts.push(trampoline(head, callback).clone() in default);
+    }
+    return "(void*)${name}";          // (void*): it fits the header's own type of the pointer (char* or const char*...)
+}
+
+/** The C of an argument given where C takes a void*: a function goes as a pointer to it, the rest as it is. */
+public function thisArg(a: Expr in default): String {
+    if (a is NullLit) { return "NULL"; }
+    if (a.ty != null && a.ty!.kind == TypeKind.Func) { return "(void*)${addrOf(a)}"; }
+    return "(void*)(${value(a)})";
+}
+
+/** What C gives a callback, as C: a String is a char*, a String[] a char**. */
+function callbackCType(type: Type): String {
+    if (type == T_STRING || (isOpt(type) && type.elem! == T_STRING)) { return "const char*"; }
+    if (isArray(type, ArrayKind.Slice)) { return isText(type.elem!) ? "char**" : "${cType(type.elem!)}*"; }
+    return externCType(type);
+}
+
+/** String or String?: a char* in C. */
+function isText(type: Type): bool { return type == T_STRING || (isOpt(type) && type.elem! == T_STRING); }
+
+function trampolineHead(name: String, type: Type): String {
+    let params: String[*] = [] in default;
+    for (i, p in type.params) { params.push("${callbackCType(p)} a${i}"); }
+    return "static ${externCType(type.elem!)} ${name}(${params.length > 0 ? params.join(", ") : "void"})";
+}
+
+function trampoline(head: String, callback: CallbackInfo in default): String {
+    let type: Type = callback.type;
+    let before: StringBuilder = {} in default;
+    let args: String[*] = [] in default;
+    let memory: bool = false;                    // the elements of a String[]: in a memory of the call
+    for (i, p in type.params) {
+        if (i == callback.thisIndex) {
+            args.push(callback.kind == CallbackKind.Method && callback.thisAsClass ? "(${callback.className}*)a${i}" : "a${i}");
+        } else if (p == T_STRING) {
+            args.push("lar_string_of_c(a${i})");
+        } else if (isOpt(p) && p.elem! == T_STRING) {
+            let o: String = cType(p);
+            args.push("(a${i} ? ((${o}){ .has = true, .value = lar_string_of_c(a${i}) }) : ((${o}){ .has = false }))");
+        } else if (isArray(p, ArrayKind.Slice)) {
+            let count: int32 = 0;                // the integer before it: int argc, char** argv
+            for (j in 0..i) {
+                if (isInteger(type.params[j])) { count = j; }
+            }
+            before.add("    int32_t length${i} = a${count} > 0 ? (int32_t)a${count} : 0;\n");
+            if (isText(p.elem!)) {
+                memory = true;
+                let e: String = cType(p.elem!);
+                let one: String = p.elem! == T_STRING ? "lar_string_of_c(a${i}[k])"
+                    : "(a${i}[k] ? ((${e}){ .has = true, .value = lar_string_of_c(a${i}[k]) }) : ((${e}){ .has = false }))";
+                before.add("    ${e}* items${i} = (${e}*)lar_memory_alloc(&memory, sizeof(${e}) * (size_t)(length${i} > 0 ? length${i} : 1), 0);\n");
+                before.add("    for (int32_t k = 0; k < length${i}; k++) items${i}[k] = ${one};\n");
+                args.push("((${cType(p)}){ .items = items${i}, .length = length${i} })");
+            } else {
+                args.push("((${cType(p)}){ .items = (${cType(p.elem!)}*)a${i}, .length = length${i} })");
+            }
+        } else {
+            args.push("a${i}");
+        }
+    }
+    let rest: String = args.length > 0 ? ", ${args.join(", ")}" : "";
+    let called: String = switch (callback.kind) {
+        case Closure -> "call_Closure_${type.funcId}(*(${cType(type)}*)a${callback.thisIndex}${rest})";
+        case Plain -> "lambda_${callback.lambda!.id}(NULL${rest})";
+        case Method -> {
+            let method: MethodInfo = callback.method!;
+            yield "${dispatchName(method.introducer, method)}((${method.introducer}*)a${callback.thisIndex}${rest})";
+        }
+    };
+    let out: StringBuilder = {} in default;
+    out.add("${head} {\n");
+    if (memory) { out.add("    LarMemory memory = lar_memory_growable();\n"); }
+    out.add(before.toString());
+    let ret: Type = type.elem!;
+    if (ret == T_VOID) {
+        out.add("    ${called};\n");
+    } else {
+        out.add("    ${externCType(ret)} result = ${called};\n");
+    }
+    if (memory) { out.add("    lar_memory_free(&memory);\n"); }
+    if (ret != T_VOID) { out.add("    return result;\n"); }
+    out.add("}\n\n");
+    return out.toString();
+}

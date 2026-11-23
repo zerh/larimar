@@ -154,6 +154,10 @@ and its symbol; or the errors that say why not.
   - `function describeExpr(e: Expr): String`
   - `function resolvePlacement(p: Placed in default): Place?`: The Place written after `in`, or null after reporting an error
   - `function resolveMemory(e: Expr in default): Symbol?`: `in m`: m must be a memory (a heap memory, or an empty byte[N] that becomes one)
+- **`semantics.expressions.callbacks`**: callbacks given to C (spec §D.10)
+  - `function checkCallbackArg(a: Expr in default, type: Type in default, place: Place in default, what: String in default): void`: An argument given where C takes a function (`type`, the parameter's function type)
+  - `function checkThisArg(a: Expr in default, type: Type in default, what: String in default): void`: An argument given where C takes a void*: an object, a function given as a callback, a pointer or null
+  - `function checkPairs(call: Call in default, params: Type[*] in default, name: String): void`: When C takes one void* and a callback in the same call, the void* is the callback's "this": the object of a method, the function itself, and nothing for a function without state
 - **`semantics.expressions.calls`**: calls: functions, methods, constructors and what the language has built in.
   - `function checkAllArgs(call: Call in default): Type`
   - `function checkCall(call: Call in default, expected: Type? in default, place: Place in default): Type`
@@ -317,6 +321,10 @@ and its symbol; or the errors that say why not.
   - `enum CallK`
   - `enum BuiltinKind`
   - `class CallInfo`
+  - `enum CallbackKind`: A callback given to C (spec §D.10): a function and its "this", the void* C gives back
+  - `class CallbackInfo`
+  - `function isVoidPointer(type: Type): bool`: void*: what C gives back to a callback, its "this"
+  - `function voidPointers(type: Type): int32[*]`: The parameters of a callback type that are void*
   - `enum MemberKind`
   - `class MemberInfo`
   - `enum PatK`

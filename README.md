@@ -183,9 +183,9 @@ Each folder of `src/compiler` has a README.md: what it does, and its API (writte
 | semantics/rules.lar | The rules about modules, one object each (`languageRules()`; `error[rule-id]`) |
 | semantics/types.lar | Type system, symbol tables |
 | semantics/analyzer.lar, analyzer/ | Semantic analysis: declarations, classes, statements, flow, compact, narrowing, threads, order |
-| semantics/expressions.lar, expressions/ | Expressions: constants, conversions, literals, operators, calls, switches |
+| semantics/expressions.lar, expressions/ | Expressions: constants, conversions, literals, operators, calls, callbacks to C, switches |
 | codegen/gen.lar, gen/ | C generation: the file, types, classes, statements |
-| codegen/expressions.lar, expressions/ | C of expressions: strings, operators, calls, clone, lambdas, patterns |
+| codegen/expressions.lar, expressions/ | C of expressions: strings, operators, calls, callbacks to C, clone, lambdas, patterns |
 | codegen/localnames.lar | The names of the compiler's variables in the C |
 | codegen/cprogram.lar | The C as parts: text, and each function whole (CProgram, CFunction) |
 | codegen/prune.lar | Only the C the program reaches: of what it generates, and of the runtime (src/runtime/) |

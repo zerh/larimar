@@ -1851,7 +1851,8 @@ not a Larimar `String`. Without `=`, the C name is the same.
 
 - Parameter and result types: numbers, `bool`, `String` (a `const char*`), `String?` parameters (`null`
   is `NULL`), native types and their optionals, C structs, pointers, `T[]` of numbers, `bool` or C
-  structs, and `byte[*]` memories. `...` allows variable arguments.
+  structs, and `byte[*]` memories. `...` allows variable arguments. A parameter of a function type is a
+  callback, with its "this" in a `void*` (§D.10).
 - A `T[]` of numbers, `bool` or C structs is passed as two C arguments: a pointer to the elements, laid
   out one after another as in a C array, and their count.
 - A result of type `String` must be a zero-terminated text that keeps existing (static, or created in a
@@ -1919,7 +1920,8 @@ can be a `String`. `native let` names a C variable that can be read and assigned
 
 ### D.6 Pointers
 
-`T*` is a pointer to C data: a number, `bool`, a C struct, a native type or another pointer.
+`T*` is a pointer to C data: a number, `bool`, a C struct, a native type or another pointer. `void*`
+points to nothing a program reads: it is the "this" of a callback (§D.10), or any pointer given to C.
 
 - `p.f` reads or writes a field of the struct `p` points to; on a `null` pointer it is a panic.
 - `&x` is the address of a local variable and is allowed **only** as an argument of a native function
@@ -1991,3 +1993,61 @@ public function now(): int64 {
 
 An interface type is shared by threads like a value (§18) when every class that implements it is: it
 has no fields, or it is synchronized.
+
+### D.10 Callbacks
+
+C has no methods: a C function that calls back takes **a function and its "this"**, a `void*` it gives
+back to the function. A parameter of a native function may have a function type, and `void*` is a
+pointer type (it points to nothing a program reads). What a call passes as the `void*` is the "this" of
+what it passes as the function:
+
+| Passed as the function | Passed as the `void*` | Its "this" |
+|---|---|---|
+| `object::method` (also `self::method`) | `object` | the object |
+| a variable (or field) `f` of the function type | `f` | the function: what it captures |
+| a lambda written there that captures nothing, or `::f` | anything (`null`) | none |
+
+```ts
+native interface Sqlite "<sqlite3.h>" {
+    type sqlite3 released by sqlite3_close;
+    function sqlite3_exec(db: sqlite3, sql: String, row: (void*, int32, String[], String?[]) -> int32,
+                          data: void*, error: void*): int32;
+}
+
+let names: String[*] = [];
+let row: (void*, int32, String[], String?[]) -> int32 = (data, count, values, columns) -> {
+    names.push(values[0].clone());
+    return 0;
+};
+Sqlite.sqlite3_exec(db!, "select name from users", row, row, null);
+Sqlite.sqlite3_exec(db!, "select name from users", self::onRow, self, null);
+```
+
+- **The signature is what is written**, in the native function and in the callback: the `void*` is a
+  parameter of both, and no parameter is filled in by the compiler.
+- **Where the "this" comes back**: the `void*` parameter of the function type, when it has one. When it
+  has more than one, only a method can go there, and it says which, writing that parameter with the type
+  of its class (`function free(ctx: Arena, ptr: void*)`); a method may write it so with one `void*` too.
+  When it has none, only a function without state can go there.
+- **The pair is checked** when the native function takes exactly one `void*` and the callback is in the
+  same call: that argument must be the callback's "this" (the same object, the same variable). In two
+  calls (a library that is given the function in one and the `void*` in another) it is not checked, and a
+  wrong pair is undefined behaviour.
+- A lambda with captures written in the call is an error: it has no name to be passed as its "this".
+- **What a callback receives**: numbers, `bool`, `String` (a `char*`, `NULL` arrives as `""`), `String?`
+  (`NULL` is `null`), pointers, native types that are not resources and C structs; a `T[]` of numbers,
+  `bool`, `String` or `String?` is a C array whose length is the last integer parameter before it
+  (`int argc, char** argv`). It returns `void`, a number, `bool`, a pointer or a native type, not a
+  `String`. Texts it receives are views of C's storage, valid during the call.
+- **It does not throw**: a method given to C has no `throws`; when something goes wrong, it panics.
+- **What it lives**: the method of an object lives as long as the object, a function as long as its
+  variable: enough for a callback that C calls during the call (`sqlite3_exec`, `qsort`). A callback that
+  C keeps needs its object or variable to last as long as C may call it.
+- A callback is called on the thread that called C; a call from another thread of the library is
+  undefined behaviour.
+- `void*` is given an object of a class, a function of a variable or field (a pointer to it), a C pointer,
+  an array (its elements) or `null`.
+
+The compiler writes one C function, a trampoline, for each pair of a C signature and a method, a function
+type or a function without state: it turns the `void*` back into the object or the function and calls it,
+converting the arguments. In an `UnsafeTask` (§19.2) the trampoline is in the task's process.

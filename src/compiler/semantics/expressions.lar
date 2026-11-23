@@ -83,8 +83,9 @@ public function resolveType(typeRef: TypeRef in default): Type {
         }
         case Infer -> wrong(typeRef.line, "T[] (capacity taken from the value) is only valid for parameters and for variables with an initializer.");
         case Ptr -> {
-            let inner: Type = resolveValue(typeRef.inner!, "A pointer");
+            let inner: Type = resolveType(typeRef.inner!);
             if (isError(inner)) { yield T_ERROR; }
+            if (inner == T_VOID) { yield pointerTo(T_VOID); }       // void*: the "this" C gives back to a callback
             if (!pointable(inner)) {
                 yield wrong(typeRef.line, isResource(inner)
                     ? "${inner.text} is a resource (released by ${externInfoOf(inner.name)!.decl.releasedBy}): it is passed to C as it is, not through a pointer."

@@ -1,0 +1,68 @@
+// The compiler's tests of c: callbacks, a function and its "this" (spec §D.10; the program that runs is in
+// tests/cases/c/native_callbacks.lar).
+import tests.support.compiler { failsWith, runs, generatedC };
+import std.test { check };
+
+// The three pairs: a method and its object (the this written as void* or as its class), a lambda and
+// itself, a function without state and nothing; a String[] takes its count from the integer before it.
+test function callbacksRun(): void {
+    runs("tests/cases/c/native_callbacks.lar", ["ana/31,luis/ freed 2", "1 name=ana name=luis"]);
+}
+
+// One trampoline for each pair, and the void* of a lambda is a pointer to it.
+test function trampolines(): void {
+    let c: String = generatedC("tests/cases/c/native_callbacks.lar");
+    check(c.contains("(void*)callback_1_Users_onRow, (void*)(self)"), "a method goes with its object");
+    check(c.contains("(void*)&(row)"), "a lambda goes with a pointer to itself");
+}
+
+const HEADER: String = raw"""
+    native interface C "<stdlib.h>" {
+        function each(f: (void*, int32) -> int32, data: void*): int32;
+        function plain(f: (int32) -> int32): int32;
+    }
+    enum Oops { Bad }
+    class Obj {
+        function good(d: void*, i: int32): int32 { return i; }
+        function wrong(d: void*, i: String): int32 { return 0; }
+        function fails(d: void*, i: int32): int32 throws Oops { throw Oops.Bad; }
+        function one(i: int32): int32 { return i; }
+    }
+    """;
+
+function fails(body: String, message: String): void {
+    failsWith("${HEADER}\nfunction main(): int32 { ${body} return 0; }", message);
+}
+
+// The void* of the same call is the this of its callback.
+test function thePairIsChecked(): void {
+    fails("let o: Obj = {}; let p: Obj = {}; C.each(o::good, p);", "Argument 2 of 'C.each' is the \"this\" that C gives back to o::good: pass o there");
+    fails("let f: (void*, int32) -> int32 = (d, i) -> { return 0; }; C.each(f, null);", "pass f there, the same function");
+    fails("C.each((d, i) -> { return i; }, \"text\");", "expected a void* (an object, a function given as a callback, a C pointer or null)");
+}
+
+// A lambda written in the call has no name to be passed as its this; without a void*, only a function
+// without state goes.
+test function whatHasNoThis(): void {
+    fails("let prefix: String = \"x\"; C.each((d, i) -> { println(prefix); return 0; }, null);", "give it a name (let f: (void*, int32) -> int32 = ...;) and pass it twice");
+    fails("let n: int32 = 3; C.plain((i) -> { return n; });", "has no void* to bring it back: only a function without state goes there");
+    fails("let o: Obj = {}; C.plain(o::one);", "so a method cannot go there");
+}
+
+// A method given to C has the parameters C gives, and does not throw.
+test function theMethodIsChecked(): void {
+    fails("let o: Obj = {}; C.each(o::wrong, o);", "parameter 2 of 'o::wrong' is String, but C gives int32 there");
+    fails("let o: Obj = {}; C.each(o::fails, o);", "and a callback cannot: the stack of C cannot be unwound");
+}
+
+// What a callback can receive and return.
+test function theTypeIsChecked(): void {
+    failsWith(raw"""
+        native interface C "<stdlib.h>" { function f(g: (void*) -> String): void; }
+        function main(): int32 { return 0; }
+        """, "it cannot return a String");
+    failsWith(raw"""
+        native interface C "<stdlib.h>" { function f(g: (String[]) -> void): void; }
+        function main(): int32 { return 0; }
+        """, "takes its length from an integer parameter before it");
+}

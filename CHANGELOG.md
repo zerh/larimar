@@ -23,6 +23,15 @@ Each version of the compiler (`larimar --version`) and the version of the langua
   x: int32; let y: int32; }`, with only the fields used (the header gives the layout, so a union is
   written as a struct). There is no `struct` member in an interface any more (`std.io.files` now says
   `type Stat = struct stat { ... }`). A `T[]` of C structs goes to C as an array, with its count.
+- **Callbacks to C: a function and its "this"** (spec §D.10). A parameter of a native function may have
+  a function type, and `void*` is a type. A call passes the same pair C asks for: a method and its object
+  (`Sqlite.sqlite3_exec(db!, sql, self::onRow, self, null)`), a lambda and itself (`row, row`), or a
+  function without state (a lambda that captures nothing, `::compare`) and `null`. The compiler writes a
+  trampoline for each pair, which turns the `void*` back into the object or the lambda and converts the
+  arguments (`char*` to `String`, `char**` and the count before it to `String[]` or `String?[]`), and
+  checks the pair when both are in the same call. A method given to C has no `throws`, and may write its
+  "this" with the type of its class (when the callback has more than one `void*`, it must). Also in an
+  `UnsafeTask`.
 - **Tasks no longer go through `std.os.rpc`**: they have their own messages over shared memory.
   `std.os.rpc` stays, to talk JSON-RPC with other programs; the framing both use is
   `std.os.internal.frames`.

@@ -4,7 +4,7 @@ import syntax.ast { Call, Expr, Member, NullLit, StringLit };
 import semantics.types {
     ArrayKind, BuiltinKind, CallInfo, CallK, ClassInfo, classOf, EnumInfo, escapeName, externInfoOf, ExternTypeInfo, findMethod,
     FunctionInfo, isClass, isEnumT, isOpt, isResource, MethodInfo, Place, PlaceKind, Symbol, syncField, T_FLOAT32,
-    T_STRING, T_VOID, TypeKind, Type, VariantInfo
+    T_STRING, T_VOID, TypeKind, Type, VariantInfo, CallbackInfo, isVoidPointer
 };
 import codegen.gen { generation, internalError, line, tmp };
 import codegen.gen.classes { dispatchName, ifaceCallName, methodName, returnsData };
@@ -14,6 +14,7 @@ import codegen.expressions {
     addrOf, callMem, cType, expr, hoist, hoistIfNeeded, memoryRef, paren, placeMem, structName, typeCName, value
 };
 import codegen.expressions.clone { cloneCall, compactCall };
+import codegen.expressions.callbacks { callbackArg, thisArg };
 import codegen.expressions.strings { appendPieces, printDirect };
 
 /** The object a method is called on: a in a.f(...). */
@@ -168,10 +169,19 @@ function externArgsAs(asg: Expr[*] in default, varargs: bool, params: Type[*]?):
             out.push(memoryRef(m));
             continue;
         }
+        let p: Type? = params != null && i < params!.length ? params![i] : null;
+        let callback: CallbackInfo? = a.callback;
+        if (callback != null) {                  // a function given to C: its trampoline (the this goes apart)
+            out.push(callbackArg(a, callback));
+            continue;
+        }
+        if (p != null && isVoidPointer(p!)) {
+            out.push(thisArg(a));
+            continue;
+        }
         let type: Type = a.ty!;
         let v: String = value(a);
         let returnType: Type = isOpt(type) ? type.elem! : type;
-        let p: Type? = params != null && i < params!.length ? params![i] : null;
         if (isResource(returnType)) {
             out.push("${returnType.name}__get(${v}, LINE(${a.line}))");          // the C value (a panic if it was released)
         } else if (p != null && isOpt(p!) && p!.elem! == T_STRING) {     // a String? to C: NULL when null

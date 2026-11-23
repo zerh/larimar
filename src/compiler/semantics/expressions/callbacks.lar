@@ -1,0 +1,173 @@
+// semantics.expressions.callbacks: callbacks given to C (spec §D.10). C has no methods: a library that calls
+// back takes a function and its "this", a void*, which it gives back to the function. A program passes the
+// same pair, written where it goes:
+//
+//     Sqlite.sqlite3_exec(db!, sql, self::onRow, self, null);     // a method and its object
+//     Sqlite.sqlite3_exec(db!, sql, row, row, null);               // a lambda and itself (its captures)
+//     LibC.qsort(items, count, size, ::compare);                   // a function without state, no this
+//
+// Here: what may go as the function, what as the void*, and that the two make a pair when both are in the
+// same call. The C of it (the trampolines) is in codegen.expressions.callbacks.
+
+import syntax.ast { Call, Expr, Ident, Lambda, Member, NullLit, SelfExpr };
+import semantics.types {
+    CallbackInfo, CallbackKind, ConversionKind, isClass, isError, isExternT, isPtr, isResource,
+    isVoidPointer, LambdaInfo, MethodInfo, P_TEMP, Place, Symbol, SymbolKind, Type, TypeKind, voidPointers
+};
+import semantics.analyzer { error, lookup };
+import semantics.analyzer.threads { callTargets, currentOwner, edge };
+import semantics.expressions { check, describeExpr, methodOf };
+import semantics.expressions.conversions { coerce, conversionOf, regionOf, setRegion, typeOf };
+
+/** An argument given where C takes a function (`type`, the parameter's function type). */
+public function checkCallbackArg(a: Expr in default, type: Type in default, place: Place in default, what: String in default): void {
+    if (a is Lambda l && l.ref != null && l.params.length == 0 && l.ref!.callee is Member m && isObject(m.object)) {
+        methodCallback(a, m, type, what);
+        return;
+    }
+    coerce(a, type, place, what);
+    if (isError(typeOf(a))) { return; }
+    let voids: int32[*] = voidPointers(type);
+    if (a is Lambda written && written.lambda != null) {     // written there: it can have no this
+        let info: LambdaInfo = written.lambda!;
+        if (info.captures.length == 0) {
+            a.callback = CallbackInfo { kind: CallbackKind.Plain, type, lambda: info } in default;
+            return;
+        }
+        let names: String[*] = [] in default;
+        for (s in info.captures) { names.push("'${s.name}'"); }
+        if (voids.length == 1) {
+            error(a.line, "${what}: this lambda uses ${names.join(", ")}, and what it uses goes to C as its \"this\", the void*: give it a name (let f: ${type.text} = ...;) and pass it twice, as the function and as the void*.");
+        } else {
+            error(a.line, "${what}: this lambda uses ${names.join(", ")}, but ${type.text} has ${voids.length == 0 ? "no void*" : "more than one void*"} to bring it back: only a function without state goes there (a lambda that uses nothing of outside, or ::f).");
+        }
+        return;
+    }
+    if (voids.length != 1) {
+        error(a.line, voids.length == 0
+            ? "${what}: ${type.text} has no void* where C gives back the \"this\", so only a function without state goes there: a lambda written there that uses nothing of outside, or a reference to a function (::f)."
+            : "${what}: ${type.text} has more than one void*, and a function value cannot say which is its \"this\": pass a method (self::m), whose parameter of the type of its class is the one.");
+        return;
+    }
+    if (!(a is Ident || a is Member)) {
+        error(a.line, "${what}: the \"this\" of this function is a pointer to it, so it must have a name, to be passed as the void* too: keep it in a variable first.");
+        return;
+    }
+    a.callback = CallbackInfo { kind: CallbackKind.Closure, type, thisIndex: voids[0] } in default;
+}
+
+/** Before ::, a value (self, a variable): its method, with the object as its this. A module or a type is not one. */
+function isObject(e: Expr): bool {
+    if (e is SelfExpr) { return true; }
+    if (!(e is Ident id)) { return false; }
+    let s: Symbol? = lookup(id.name);
+    return s != null && s.kind != SymbolKind.Function && s.kind != SymbolKind.Const;
+}
+
+/** object::method given to C: the same parameters, but the this may be written with the type of its class. */
+function methodCallback(a: Expr in default, m: Member in default, type: Type in default, what: String): void {
+    let shown: String = "${describeExpr(m.object)}::${m.name}";
+    let objectType: Type = check(m.object, null, P_TEMP);
+    if (isError(objectType)) { return; }
+    if (!isClass(objectType)) {
+        error(a.line, "${what}: '${shown}' is a method of ${objectType.text}; only the methods of an object of a class go to C, whose \"this\" is the object (a struct is copied, it has no place to point to).");
+        return;
+    }
+    let found: MethodInfo? = methodOf(objectType, m.name);
+    if (found == null) {
+        error(a.line, "${what}: '${objectType.text}' has no method '${m.name}'.");
+        return;
+    }
+    let method: MethodInfo = found;
+    let params: Type[*] = method.sig!.params;
+    if (params.length != type.params.length) {
+        error(a.line, "${what}: '${shown}' takes ${params.length} parameter(s), but C calls ${type.text} with ${type.params.length}.");
+        return;
+    }
+    let asClass: int32[*] = [] in default;
+    for (i, p in params) {
+        if (p == type.params[i]) { continue; }
+        if (isVoidPointer(type.params[i]) && p == objectType) {
+            asClass.push(i);
+            continue;
+        }
+        error(a.line, "${what}: parameter ${i + 1} of '${shown}' is ${p.text}, but C gives ${type.params[i].text} there (${type.text}).");
+        return;
+    }
+    if (method.sig!.elem! != type.elem!) {
+        error(a.line, "${what}: '${shown}' returns ${method.sig!.elem!.text}, but C expects ${type.elem!.text} (${type.text}).");
+        return;
+    }
+    if (method.throwsType != null) {
+        error(a.line, "${what}: '${shown}' throws ${method.throwsType!.text}, and a callback cannot: the stack of C cannot be unwound. Handle it inside the method, or panic.");
+        return;
+    }
+    let voids: int32[*] = voidPointers(type);
+    let thisIndex: int32 = -1;
+    if (asClass.length > 1) {
+        error(a.line, "${what}: '${shown}' writes more than one parameter as ${objectType.text}; only one of them is its \"this\".");
+        return;
+    } else if (asClass.length == 1) {
+        thisIndex = asClass[0];
+    } else if (voids.length == 1) {
+        thisIndex = voids[0];
+    } else if (voids.length == 0) {
+        error(a.line, "${what}: ${type.text} has no void* where C gives back the \"this\", so a method cannot go there: only a function without state (::f, or a lambda that uses nothing of outside).");
+        return;
+    } else {
+        error(a.line, "${what}: ${type.text} has ${voids.length} void*: say which one is the \"this\" of '${shown}', writing that parameter as ${objectType.text}.");
+        return;
+    }
+    for (t in callTargets(objectType, method)) { edge(currentOwner(), t.own); }
+    a.ty = type;
+    setRegion(a, regionOf(m.object));
+    a.callback = CallbackInfo {
+        kind: CallbackKind.Method, type, thisIndex, method, className: objectType.name, thisAsClass: asClass.length == 1, object: m.object
+    } in default;
+}
+
+/** An argument given where C takes a void*: an object, a function given as a callback, a pointer or null. */
+public function checkThisArg(a: Expr in default, type: Type in default, what: String in default): void {
+    if (a is NullLit) {
+        coerce(a, type, P_TEMP, what);
+        return;
+    }
+    let given: Type = check(a, null, P_TEMP);
+    if (isError(given)) { return; }
+    if (isClass(given) || isPtr(given) || (isExternT(given) && !isResource(given))) { return; }
+    if (given.kind == TypeKind.Func) {
+        if (!(a is Ident || a is Member)) {
+            error(a.line, "${what}: a function goes as a void* as a pointer to it, so it must have a name: keep it in a variable first.");
+        }
+        return;
+    }
+    if (given.kind == TypeKind.Array) {             // its elements
+        a.conversionOf = conversionOf(ConversionKind.ToPointer, given, type);
+        return;
+    }
+    error(a.line, "${what}: expected a void* (an object, a function given as a callback, a C pointer or null), but got ${given.text}.");
+}
+
+/**
+ * When C takes one void* and a callback in the same call, the void* is the callback's "this": the object of
+ * a method, the function itself, and nothing for a function without state. Given in two calls (libcurl's
+ * CURLOPT_WRITEFUNCTION and CURLOPT_WRITEDATA), the compiler cannot see the pair.
+ */
+public function checkPairs(call: Call in default, params: Type[*] in default, name: String): void {
+    let thisParams: int32[*] = [] in default;
+    for (i, p in params) {
+        if (isVoidPointer(p) && i < call.args.length) { thisParams.push(i); }
+    }
+    if (thisParams.length != 1) { return; }
+    let given: Expr = call.args[thisParams[0]];
+    for (a in call.args) {
+        let callback: CallbackInfo? = a.callback;
+        if (callback == null || callback.kind == CallbackKind.Plain) { continue; }
+        let method: bool = callback.kind == CallbackKind.Method;
+        let wanted: String = method ? describeExpr(callback.object!) : describeExpr(a);
+        if (given is NullLit || describeExpr(given) != wanted) {
+            let shown: String = method ? "${wanted}::${callback.method!.name}" : wanted;
+            error(given.line, "Argument ${thisParams[0] + 1} of ${name} is the \"this\" that C gives back to ${shown}: pass ${wanted} there, ${method ? "the object of the method" : "the same function"}.");
+        }
+    }
+}

@@ -506,6 +506,10 @@ public function signatures(program: Program in default): void {
                     if (!isError(paramType.elem!) && !isPlainNumber(paramType.elem!) && !isExternStruct(paramType.elem!)) {
                         error(p.line, "Parameter '${p.name}' of native function '${f.name}': a T[] passed to C must be of numbers, bool or C structs (byte[], int32[], Point[]...).");
                     }
+                } else if (paramType.kind == TypeKind.Func) {
+                    f.memParams.push(false);      // a callback: C receives a C function (spec §D.10)
+                    let problem: String = callbackProblem(paramType);
+                    if (problem != "") { error(p.line, "Parameter '${p.name}' of native function '${f.name}' is a callback for C: ${problem}"); }
                 } else {
                     f.memParams.push(false);
                     if (!isError(paramType) && !isCValue(paramType) && paramType != optionalOf(T_STRING)) {       // String?: null goes as NULL
@@ -646,6 +650,39 @@ function resolveSig(params: Param[*] in default, ret: TypeRef in default): Type 
 }
 
 /** A number or bool: what a T[] given to C may hold (C sees an array of them). */
+/**
+ * What a function type given to C may have ("" when it is fine): numbers, bool, String (a char*), String?,
+ * pointers (void*, the "this"), native types that are not resources and C structs; a T[] of numbers, bool
+ * or String takes its count from the integer before it (sqlite3_exec: int argc, char** argv). It returns
+ * void, a number, bool, a pointer or a native type: a text would have no memory to live in.
+ */
+function callbackProblem(type: Type): String {
+    if (type.safe) { return "C calls it on the thread that called C, so it is not 'thread safe'."; }
+    for (i, p in type.params) {
+        if (isError(p)) { return ""; }
+        if (isArray(p, ArrayKind.Slice)) {
+            if (!isPlainNumber(p.elem!) && p.elem! != T_STRING && p.elem! != optionalOf(T_STRING)) { return "a T[] it receives must be of numbers, bool, String or String?, not ${p.text}."; }
+            let counted: bool = false;
+            for (j in 0..i) {
+                if (isInteger(type.params[j])) { counted = true; }
+            }
+            if (!counted) { return "its ${p.text} takes its length from an integer parameter before it (int32 argc, String[] argv), and it has none."; }
+        } else if (p.kind == TypeKind.Func) {
+            return "a callback receives no other function.";
+        } else if (isResource(p) || (isOpt(p) && isResource(p.elem!))) {
+            return "${p.text} is a resource: a callback receives what C lends it, and a resource is owned.";
+        } else if (!isCValue(p) && p != optionalOf(T_STRING)) {
+            return "it can receive numbers, bool, String, String?, pointers (void*), native types and C structs, not ${p.text}.";
+        }
+    }
+    let ret: Type = type.elem!;
+    if (ret == T_STRING || (isOpt(ret) && ret.elem! == T_STRING)) { return "it cannot return a String: the text would have no memory to live in once it returns."; }
+    if (!isError(ret) && ret != T_VOID && (!isCValue(ret) || isResource(ret) || isExternStruct(ret))) {
+        return "it returns void, a number, bool, a pointer or a native type, not ${ret.text}.";
+    }
+    return "";
+}
+
 function isPlainNumber(type: Type): bool {
     return type.kind == TypeKind.Prim && type != T_STRING && type != T_ANY && type != T_VOID;
 }

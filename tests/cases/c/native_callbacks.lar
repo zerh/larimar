@@ -1,0 +1,56 @@
+// Callbacks given to C: a function and its "this", the void* C gives back.
+ccode {
+    typedef int32_t (*row_fn)(void* data, int32_t count, char** values, char** columns);
+    static int32_t each_row(const char* sql, row_fn row, void* data) {
+        char* columns[] = { "name", "age" };
+        char* rows[][2] = { { "ana", "31" }, { "luis", NULL } };
+        (void)sql;
+        for (int i = 0; i < 2; i++) {
+            if (row(data, 2, rows[i], columns) != 0) return 1;
+        }
+        return 0;
+    }
+    typedef int32_t (*cmp_fn)(const void* a, const void* b);
+    static void sort_ints(int32_t* items, int32_t count, cmp_fn compare) {
+        qsort(items, (size_t)count, sizeof(int32_t), compare);
+    }
+    typedef void (*free_fn)(void* ctx, void* ptr);
+    static void release_all(free_fn f, void* ctx) { f(ctx, (void*)0x10); f(ctx, (void*)0x20); }
+}
+native interface Rows "<stdlib.h>" {
+    function each_row(sql: String, row: (void*, int32, String[], String?[]) -> int32, data: void*): int32;
+    function sort_ints(items: int32[], compare: (int32*, int32*) -> int32): void;
+    function release_all(f: (void*, void*) -> void, ctx: void*): void;
+}
+
+class Users {
+    let names: String[*] = [];
+    let freed: int32 = 0;
+    function onRow(data: void*, count: int32, values: String[], columns: String?[]): int32 {
+        self.names.push("${values[0]}/${values[1]}".clone() in default);
+        return 0;
+    }
+    function free(ctx: Users, ptr: void*): void { ctx.freed += 1; }
+    function load(): void {
+        Rows.each_row("select", self::onRow, self);
+        Rows.release_all(self::free, self);
+    }
+}
+
+function compare(a: int32*, b: int32*): int32 { return 0; }
+
+function main(): int32 {
+    let users: Users = {};
+    users.load();
+    println("${users.names.join(",")} freed ${users.freed}");
+    let seen: String[*] = [];
+    let row: (void*, int32, String[], String?[]) -> int32 = (data, count, values, columns) -> {
+        seen.push("${columns[0] ?? "?"}=${values[0]}".clone() in default);
+        return seen.length >= 2 ? 1 : 0;
+    };
+    println("${Rows.each_row("x", row, row)} ${seen.join(" ")}");
+    let items: int32[] = [3, 1, 2];
+    Rows.sort_ints(items, (a, b) -> { return 0; });
+    Rows.sort_ints(items, ::compare);
+    return 0;
+}

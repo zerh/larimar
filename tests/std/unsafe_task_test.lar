@@ -73,3 +73,30 @@ test function theFilesOfALibrary(): void {
     let beside: String = fileNames("libs/libx.so")[0].clone();
     check(beside.endsWith("libs/libx.so") && beside != "libs/libx.so", "a relative file is next to the program: ${beside}");
 }
+
+/** C's qsort, from the C library opened when the task runs, with a lambda that compares. */
+class Sorter implements UnsafeTask {
+    native interface LibC "<stdlib.h>" {
+        type Number = div_t { let quot: int32; }        // a struct of stdlib.h, to sort
+        const NUMBER_SIZE: int64 = c"sizeof(div_t)";
+        function qsort(items: Number[], size: int64, compare: (Number*, Number*) -> int32): void;
+    }
+
+    override function setup(loader: LibraryLoader): void throws LoadError {
+        loader.bind(LibC, "c");
+    }
+
+    override function run(channel: Channel): void throws ProcessError {
+        let items: Number[*] = [{ quot: 5 }, { quot: 3 }, { quot: 9 }, { quot: 1 }];
+        LibC.qsort(items, LibC.NUMBER_SIZE, (a, b) -> { return a.quot - b.quot; });
+        channel.send("${items[0].quot} ${items[1].quot} ${items[2].quot} ${items[3].quot}");
+    }
+}
+
+// A callback goes to a library of the task too: the trampoline is in the task's process.
+test function anUnsafeTaskGivesCallbacks(): void throws ProcessError {
+    let p: Process = { run: Sorter {} };
+    p.start();
+    p.join();
+    checkText("1 3 5 9", "${valueOf(p.channel().receive(0))}");
+}

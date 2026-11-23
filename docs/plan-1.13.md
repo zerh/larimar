@@ -23,6 +23,16 @@
   Unlike what was planned, `unsafe_c = true` stays: it is C in the program's own process, for one header;
   an `UnsafeTask` is the safe way, and needs no `unsafe_c`.
 
+- **Callbacks: a function and its "this"** (spec §D.10): a parameter of a function type in a native
+  interface, `void*` as a type, and the three pairs: `self::onRow` with `self`, `row` with `row`, a
+  function without state (a lambda that captures nothing, `::compare`) with `null`. One trampoline per
+  pair (`codegen.expressions.callbacks`), which converts `char*` to `String` and `char**` with the
+  count before it to `String[]` or `String?[]`; the pair is checked when both are in the same call
+  (`semantics.expressions.callbacks`). Done again from scratch, not from `4292b16`: what that commit had
+  (a `Context` parameter the compiler filled in) is not what was planned (the signature is what is
+  written). Tested in `tests/c/callbacks_test.lar`, `tests/cases/c/native_callbacks.lar` and, in an
+  `UnsafeTask`, `qsort` with a lambda (`tests/std/unsafe_task_test.lar`).
+
 ## To do
 
 ### C only in processes apart: `UnsafeTask` (done)
@@ -66,90 +76,25 @@ DL_KEYDOWN) { println("${e.key.keysym.sym}"); }
 Open: the few C functions that take a struct **by value**, not by pointer (`SDL_Color` in some of them).
 They need a mark; to add no keyword, it can be C text (`c"..."`), only there.
 
-### Callbacks: the "this" of C (Thursday, in a new conversation)
+### Callbacks: the "this" of C (done)
 
-C has no methods: a library that calls back asks for **a function and its "this"**, a `void*` (`ctx`,
-`user_data`, `arg`). Larimar passes the same pair, written where it goes: what is passed as the `void*`
-is the "this" of what is passed as the function. There is no special type: `void*` is `void*`.
+See the Done list and spec §D.10. What is left of it:
 
-```ts
-native interface Sqlite "<sqlite3.h>" {
-    type sqlite3 released by sqlite3_close;
-    function sqlite3_exec(db: sqlite3, sql: String,
-                          row: (void*, int32, String[], String[]) -> int32,
-                          data: void*, error: String?*): int32;
-}
-
-function onRow(data: void*, count: int32, values: String[], columns: String[]): int32 { ... }
-
-Sqlite.sqlite3_exec(db!, "select name from users", self::onRow, self, null);   // a method and its object
-```
-
-**The three forms**, and the rule that joins them: the signature is what is written, at the call and
-in the callback (no parameter the compiler fills in by itself).
-
-| Passed as the function | Passed as the `void*` | Its "this" |
-|---|---|---|
-| `self::onRow`, a method reference | `self` | the object |
-| `row`, a lambda | `row`, the same one | its captures |
-| `Calc.compare`, a function without state | `null` | none |
-
-```ts
-let names: String[*] = [];
-let row: (void*, int32, String[], String[]) -> int32 = (data, count, values, columns) -> {
-    names.push(values[0].clone());
-    return 0;
-};
-Sqlite.sqlite3_exec(db!, sql, row, row, null);
-```
-
-- **The compiler checks the pair** when both are in the same call (`self::onRow` with `self`, `row` with
-  `row`); in two calls (libcurl: `CURLOPT_WRITEFUNCTION` and `CURLOPT_WRITEDATA`) it cannot, and a wrong
-  pair is a crash, in the task's process.
-
-**Where the "this" comes back**: each library puts it in another place (SQLite first, libcurl and GTK
-last, pthreads alone), and the compiler finds it without guessing:
-
-- **The callback has one `void*`**: it comes back there. The method may write it as `void*` or as its
-  own class.
-- **It has more than one** (an allocator's `free(void* ctx, void* ptr)`): the method says which, writing
-  it with the type of its class (`function free(ctx: Arena, ptr: void*)`); if it does not, a compile
-  error says so.
-- **It has none** (`qsort`'s `compare(const void* a, const void* b)`): a method reference or a lambda
-  with captures cannot go there; a function without state can. Later: a fixed number of C functions for
-  each signature (16), each reading its own place.
-- **Open**: a "this" that comes back inside a struct, not as a parameter (llhttp's callbacks get the
-  `llhttp_t*`, whose field `data` holds it). It needs a way to say "it is that field".
-
-**The C the compiler writes**: one trampoline for each pair of a C signature and a method (or a lambda's
-type), which turns the `void*` back into the object or the lambda and calls it, converting the
-arguments (`char*` to `String`, `char**` with its count to `String[]`). The same as C++ and Rust
-programmers write by hand (`static_cast<Users*>(self)->onRow(...)`), but checked.
-
-**What it lives**: as long as what it is. A method reference lives as long as its object, a lambda as
-long as its block: enough for the callbacks called during the call (`sqlite3_exec`, `qsort`, llhttp).
-For a callback the library keeps, the object lives longer (a field of something that lasts, or `in
-heap`); `registerCallback` is not needed unless that turns out short.
-
-**Three more rules**
-
-- A callback does not throw: the stack of C cannot be unwound. A method or lambda given to C has no
-  `throws`; when something goes wrong, it panics, and the task fails.
-- A call from a thread of the library is a panic (Larimar does not know which memory that thread is
-  in). Later: the call goes to a queue of the task's thread (audio, GStreamer, libuv).
-- Lambdas as fields of a `type` (llhttp's `settings.on_url = ...`) take the same conversion as a
-  parameter: the field gets the trampoline.
-
-**Also open**: text a library makes and the caller frees (`sqlite3_exec`'s `errmsg`, freed with
-`sqlite3_free`): a way to say it in the interface, as `released by` says it for types.
-
-**How to do it cheaply**: the trampolines and the context of the lambda were already written once, as
-callbacks with a `Context`, in commit `4292b16` (`contextArgs` in the codegen of calls, `ctxParam` and
-`ctxKeep` in the analysis, tests `tests/c/callbacks_test.lar` and `tests/cases/c/native_callbacks_with_context.lar`),
-and removed in `a532535` (1.10.0) with the `native function`s they were for. Bring them back and adapt
-them: the runtime's names (`rt_` to `lar_`, `Lar`), the folders (`src/compiler/...`), native
-interfaces (also opened ones, in an `UnsafeTask`), method references and `self`, and `void*` in place
-of `Context`. Run only `tests/c` and the tests of tasks.
+- **A callback with no `void*`** (`qsort`'s `compare`) takes only a function without state. Later: a
+  fixed number of C functions for each signature (16), each reading its own place, so that a method or
+  a lambda with captures can go there too.
+- **A "this" that comes back inside a struct**, not as a parameter (llhttp's callbacks get the
+  `llhttp_t*`, whose field `data` holds it): a way to say "it is that field". With it, **lambdas as
+  fields of a `type`** (`settings.on_url = ...`), which take the same conversion as a parameter.
+- **A call from a thread of the library** is not detected (Larimar does not know which memory that
+  thread is in): it should be a panic. Later: the call goes to a queue of the task's thread (audio,
+  GStreamer, libuv).
+- **Text a library makes and the caller frees** (`sqlite3_exec`'s `errmsg`, freed with `sqlite3_free`):
+  a way to say it in the interface, as `released by` says it for types.
+- **The C type of the trampoline** is the one written in the interface (`String` is `const char*`, a
+  `String[]` is `char**`), passed as `void*`: a header that says `char*` where Larimar writes
+  `const char*` is the same function in practice, but clang's `-fsanitize=function` can see the
+  difference.
 
 ### After that
 

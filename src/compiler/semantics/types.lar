@@ -750,6 +750,36 @@ public class CallInfo {
     let roots: Symbol[*] = [];
 }
 
+/**
+ * A callback given to C (spec §D.10): a function and its "this", the void* C gives back. Closure: a value of
+ * function type, whose this is a pointer to it; Method: object::method, whose this is the object; Plain: a
+ * function without state (a lambda that captures nothing, or a reference to a function), with no this.
+ */
+public enum CallbackKind { Closure, Method, Plain }
+
+public class CallbackInfo {
+    let kind: CallbackKind;
+    let type: Type;                  // the function type C takes
+    let thisIndex: int32 = -1;       // the parameter where the this comes back (-1: none)
+    let method: MethodInfo? = null;  // Method: the method, and the class of its object
+    let className: String = "";
+    let thisAsClass: bool = false;   // Method: the method writes the this with the type of its class
+    let object: Expr? = null;        // Method: the object written before ::
+    let lambda: LambdaInfo? = null;  // Plain: the lambda (a reference to a function is one too)
+}
+
+/** void*: what C gives back to a callback, its "this". */
+public function isVoidPointer(type: Type): bool { return type.kind == TypeKind.Ptr && type.elem! == T_VOID; }
+
+/** The parameters of a callback type that are void*. */
+public function voidPointers(type: Type): int32[*] {
+    let out: int32[*] = [];
+    for (i, p in type.params) {
+        if (isVoidPointer(p)) { out.push(i); }
+    }
+    return out;
+}
+
 public enum MemberKind { Field, EnumConst, Length, MemoryStat, AnyKey, StaticMethod, Property }
 
 public class MemberInfo {

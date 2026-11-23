@@ -4151,6 +4151,25 @@ public function side(volume: float64): float64 { return LibM.cbrt(volume); }
   C does: a native interface is for one header, for something specific. For a whole C library, an
   `UnsafeTask` ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)) keeps its failures in
   another process, and needs no `unsafe_c`.
+- **Callbacks**: a C function that calls back takes a function and its "this", a `void*`. Larimar passes
+  the same pair: a method and its object (`self::onRow, self`), a lambda and itself (`row, row`), or a
+  function without state (a lambda that captures nothing, `::compare`) and `null`. The compiler writes
+  the C function that turns the `void*` back into the object or the lambda (spec §D.10).
+
+  ```ts
+  native interface Sqlite "<sqlite3.h>" {
+      type sqlite3 released by sqlite3_close;
+      function sqlite3_exec(db: sqlite3, sql: String, row: (void*, int32, String[], String?[]) -> int32,
+                            data: void*, error: void*): int32;
+  }
+
+  let names: String[*] = [];
+  let row: (void*, int32, String[], String?[]) -> int32 = (data, count, values, columns) -> {
+      names.push(values[0].clone());       // values: as many as count
+      return 0;
+  };
+  Sqlite.sqlite3_exec(db!, "select name from users", row, row, null);
+  ```
 - `ccode`, `cinclude` and functions with a body of C stay the standard library's, with or without
   `unsafe_c`.
 

@@ -63,6 +63,9 @@ runtime it uses.
   - `function placeMem(e: Expr in default): String`: C expression of type LarMemory* for an allocation
   - `function callMem(c: Expr in default): String`: The memory a call gives for its result: none (NULL) when the callee only returns data that already exists
   - `function placeMemOf(p: Place? in default): String`
+- **`codegen.expressions.callbacks`**: callbacks given to C (spec §D.10)
+  - `function callbackArg(a: Expr in default, callback: CallbackInfo in default): String`: The C of an argument given where C takes a function: its trampoline
+  - `function thisArg(a: Expr in default): String`: The C of an argument given where C takes a void*: a function goes as a pointer to it, the rest as it is
 - **`codegen.expressions.calls`**: calls.
   - `function receiver(call: Call): Expr`: The object a method is called on: a in a.f(...)
   - `function call(c: Call in default): String`
