@@ -192,8 +192,6 @@ class PrunePass implements Pass {
 function findLibraryRoots(main: String): void {
     linking.libraryNames.clear();
     linking.libraryRoots.clear();
-    linking.libraryUnsafe.clear();
-    linking.projectUnsafe = false;
     let dir: String = Paths.parent(main);
     while (dir != "") {
         let toml: String = Paths.join(dir, "larimar.toml");
@@ -202,12 +200,10 @@ function findLibraryRoots(main: String): void {
             if (source == null) { return; }
             try {
                 let config: Any = Toml.parse(source!);
-                linking.projectUnsafe = config.project.unsafe_c as bool ?? false;
                 let ignored: String[*] = [];
                 for (l in larimarLibraries(dir, config, ignored)) {
                     linking.libraryNames.push(l.name.clone() in default);
                     linking.libraryRoots.push(l.dir.clone() in default);
-                    linking.libraryUnsafe.push(l.unsafeC);
                 }
             } catch (TomlError e) {}
             return;

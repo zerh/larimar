@@ -5,8 +5,8 @@ threads, TLS, the clock. That C is written in std, with the declarations of this
 
 **A program and a library written in Larimar have no C of their own.** `cinclude`, `ccode`, the
 `native` declarations and the functions with a body of C are only for the standard library; anywhere else
-they are an error (a project with `[project] unsafe_c = true` may declare
-[native interfaces](#what-a-header-gives-native-interface), and nothing else, and every build says so):
+they are an error (a program's C library goes in the [native interface](#what-a-header-gives-native-interface)
+of an `UnsafeTask`, in a process of its own):
 
 ```
 Module Error [src/main.lar:1]: ccode is only for the standard library: C is written there, and a program uses what std gives.
@@ -67,8 +67,8 @@ function main(): int32 {
   nothing for the ones a program does not call.
 - **Inside a class for one system** ([below](#c-for-each-system-classes-with-c-in-their-methods)) the
   interface is the class's: its C is only for that system.
-- This is how `std.math`, `std.os`, `std.io.console` and `std.io.files` reach libc. Outside std, a project
-  with `[project] unsafe_c = true` may declare them too ([chapter 27 of the manual](manual.md#c-of-its-own-unsafe_c--true)).
+- This is how `std.math`, `std.os`, `std.io.console` and `std.io.files` reach libc. Outside std, an
+  `UnsafeTask` declares them in its class ([chapter 27 of the manual](manual.md#c-of-its-own-in-an-unsafetask)).
 
 The rest of this document is the older, finer tool: one declaration at a time, with `cinclude`.
 

@@ -1446,7 +1446,7 @@ the type of each function, but its functions are found when the task runs, in th
 `loader.bind(Name, "library")` opens (`std.os.library`; the interface's name, as a value, is what binds
 it). Each call goes through a pointer of the header's own type, so the C compiler checks it as before.
 The library is a name without `lib` and its extension (`"SDL2"`: `libSDL2.so`, `libSDL2.dylib`,
-`SDL2.dll`), or a file. It needs no `unsafe_c` (§D.0): its C runs only in the task's process, where a crash
+`SDL2.dll`), or a file. Its C runs only in the task's process, where a crash
 is a `ProcessError.Failed` for the program. A library not found, or a function it does not have, is a
 `LoadError`, and ends the task with what it says.
 
@@ -1638,8 +1638,8 @@ topLevel             = const NAME : Type = expression ;
                      | native cDeclaration
 
 (type NAME { }, and functions without a body: only in std.lang, §9.6. cinclude, ccode, native declarations
-and the native members of classes: only in the standard library, Appendix D; native interfaces also with
-[project] unsafe_c = true.)
+and the native members of classes: only in the standard library, Appendix D; native interfaces also in a
+class that implements UnsafeTask, §19.2.)
 
 function             = function [ NAME . ] NAME parameters [ : Type ] [ in lives ] [ throws Type ]
                            [ wait until ( expression ) ] ( block | ; )
@@ -1759,11 +1759,8 @@ only in the modules of the standard library (and in `std.lang`). In any other mo
 library, each one is a compile error: a program has no C of its own
 ([§19](#19-libraries-and-tasks)), with one door:
 
-- A project whose `[project]` says **`unsafe_c = true`** (a program or a library) may declare
-  **native interfaces** (§D.0) in its modules, and nothing else of this appendix. A program that uses such
-  a library is built with that C: every build says where it comes from (*unsafe C (native interface)
-  from: NAME*), and names the pointer types of those interfaces that nothing releases (no `released by`).
-  What that C does is outside every guarantee of this document.
+- A class that implements **`UnsafeTask`** (§19.2) may declare **native interfaces** (§D.0), and nothing
+  else of this appendix: they are opened, and their C runs in the task's own process.
 
 `larimarc --unsafe-c` lifts the whole rule, for tests that bring C of their own; a program built
 with it has none of the guarantees of this document.
@@ -1790,8 +1787,8 @@ names in the module (`type FILE released by fclose;`); a `type` without `=` is a
 its name (`FILE*`). A `released by` names a function of the same interface.
 
 In a class that implements `UnsafeTask` (§19.2) an interface is **opened**: its functions are found in a
-library when the task runs (`loader.bind(Name, "library")`), it has no functions with a body of C, and it
-needs no `unsafe_c`, because its C runs in the task's process only.
+library when the task runs (`loader.bind(Name, "library")`), it has no functions with a body of C, and
+its C runs in the task's process only.
 
 Everything of C in an interface is a **`type`**, in one of three forms:
 
@@ -2008,19 +2005,26 @@ what it passes as the function:
 | a lambda written there that captures nothing, or `::f` | anything (`null`) | none |
 
 ```ts
-native interface Sqlite "<sqlite3.h>" {
-    type sqlite3 released by sqlite3_close;
-    function sqlite3_exec(db: sqlite3, sql: String, row: (void*, int32, String[], String?[]) -> int32,
-                          data: void*, error: void*): int32;
-}
+class Users implements UnsafeTask {                  // a native interface of a program is an UnsafeTask's
+    native interface Sqlite "<sqlite3.h>" {
+        type sqlite3 released by sqlite3_close;
+        function sqlite3_exec(db: sqlite3, sql: String, row: (void*, int32, String[], String?[]) -> int32,
+                              data: void*, error: void*): int32;
+    }
 
-let names: String[*] = [];
-let row: (void*, int32, String[], String?[]) -> int32 = (data, count, values, columns) -> {
-    names.push(values[0].clone());
-    return 0;
-};
-Sqlite.sqlite3_exec(db!, "select name from users", row, row, null);
-Sqlite.sqlite3_exec(db!, "select name from users", self::onRow, self, null);
+    function onRow(data: void*, count: int32, values: String[], columns: String?[]): int32 { ... }
+
+    function load(db: sqlite3): void {
+        let names: String[*] = [];
+        let row: (void*, int32, String[], String?[]) -> int32 = (data, count, values, columns) -> {
+            names.push(values[0].clone());
+            return 0;
+        };
+        Sqlite.sqlite3_exec(db, "select name from users", row, row, null);
+        Sqlite.sqlite3_exec(db, "select name from users", self::onRow, self, null);
+    }
+    // setup and run, as every UnsafeTask
+}
 ```
 
 - **The signature is what is written**, in the native function and in the callback: the `void*` is a
@@ -2050,4 +2054,4 @@ Sqlite.sqlite3_exec(db!, "select name from users", self::onRow, self, null);
 
 The compiler writes one C function, a trampoline, for each pair of a C signature and a method, a function
 type or a function without state: it turns the `void*` back into the object or the function and calls it,
-converting the arguments. In an `UnsafeTask` (§19.2) the trampoline is in the task's process.
+converting the arguments. The trampoline is in the task's process (§19.2), with its C.

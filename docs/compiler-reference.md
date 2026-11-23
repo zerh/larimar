@@ -6,7 +6,7 @@ Cada módulo de `src/`, con su descripción y **todas** sus funciones, clases y 
 
 Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver la guía de mantenimiento. Aquí está el detalle.
 
-**54 módulos, 1136 funciones y métodos** (588 con comentario, 548 sin él).
+**54 módulos, 1133 funciones y métodos** (585 con comentario, 548 sin él).
 
 ## Módulos
 
@@ -37,8 +37,8 @@ Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver
 - [`src/compiler/semantics/expressions/literals.lar`](#semantics-expressions-literals) — 15 funciones
 - [`src/compiler/semantics/expressions/operators.lar`](#semantics-expressions-operators) — 16 funciones
 - [`src/compiler/semantics/expressions/switches.lar`](#semantics-expressions-switches) — 10 funciones
-- [`src/compiler/semantics/linker.lar`](#semantics-linker) — 73 funciones
-- [`src/compiler/semantics/rules.lar`](#semantics-rules) — 27 funciones
+- [`src/compiler/semantics/linker.lar`](#semantics-linker) — 71 funciones
+- [`src/compiler/semantics/rules.lar`](#semantics-rules) — 26 funciones
 - [`src/compiler/semantics/types.lar`](#semantics-types) — 90 funciones
 - [`src/compiler/codegen/cprogram.lar`](#codegen-cprogram) — 4 funciones
 - [`src/compiler/codegen/debugmap.lar`](#codegen-debugmap) — 10 funciones
@@ -69,7 +69,7 @@ Para la visión de conjunto (fases, datos que pasan de una a otra, recetas), ver
 
 ## main
 
-`src/compiler/main.lar` · 855 líneas · 38 funciones
+`src/compiler/main.lar` · 853 líneas · 38 funciones
 larimar: the Larimar tool and compiler, written in Larimar (Larimar.java + Transpiler.java).
 
 larimar new <name>              creates a project
@@ -148,89 +148,89 @@ The C of a main file (pipeline.compilerPasses), or "" with the problems in compi
 
 `function testCompiler(wanted: String): CCompiler?`  
 The C compiler for the tests (a test file that uses TLS needs the system's: compileC says so).  
-<sub>línea 373</sub>
+<sub>línea 369</sub>
 
 `function testSettings(): TestSettings?`  
 The project's [c] settings for the tests, or the defaults when there is no larimar.toml here.  
-<sub>línea 381</sub>
+<sub>línea 377</sub>
 
 `function testMain(rest: String[*]): int32`  
 larimarc test-main <file.lar> -o <out.c> [--root <folder>]: the C of a file of test functions with a main added (testing.lar). Next to out.c it writes the file with its main (.lar) and the tests' names (.tests, one per line).  
-<sub>línea 406</sub>
+<sub>línea 402</sub>
 
 ### class `Project`
 
 `function load(dir: String): Project?`
-<sub>línea 470</sub>
+<sub>línea 466</sub>
 
 `function keysOf(section: String): String`
-<sub>línea 491</sub>
+<sub>línea 487</sub>
 
 `function allowedKey(section: String, key: String): bool`
-<sub>línea 495</sub>
+<sub>línea 491</sub>
 
 `function project(dir: String, config: Any): Project?`
-<sub>línea 499</sub>
+<sub>línea 495</sub>
 
 `function moduleName(name: String): bool`  
 A name of a module: letters, digits and '_', not starting with a digit.  
-<sub>línea 570</sub>
+<sub>línea 568</sub>
 
 `function isPlatform(name: String): bool`  
 The platforms: of [c.<platform>] and of --target.  
-<sub>línea 579</sub>
+<sub>línea 577</sub>
 
 `function hasNames(value: Any): bool`  
 Whether a table has entries with a name (a section does; a list does not).  
-<sub>línea 585</sub>
+<sub>línea 583</sub>
 
 `function isSection(value: Any): bool`
-<sub>línea 590</sub>
+<sub>línea 588</sub>
 
 `function text(section: Any, key: String, def: String): String`
-<sub>línea 597</sub>
+<sub>línea 595</sub>
 
 `function list(section: Any, key: String, def: String[*]): String[*]`
-<sub>línea 606</sub>
+<sub>línea 604</sub>
 
 `function validName(name: String): bool`
-<sub>línea 629</sub>
+<sub>línea 627</sub>
 
 `function resolve(dir: String, p: String): String`  
 A path of the project: relative to its folder, or absolute.  
-<sub>línea 642</sub>
+<sub>línea 640</sub>
 
 `function build(p: Project, debug: bool): String`  
 Builds the project; returns the executable, or "" on failure.  
-<sub>línea 645</sub>
+<sub>línea 643</sub>
 
 `function buildFrom(p: Project, main: String, debug: bool): String`  
 Compiles `main` (and what it imports) to the project's executable.  
-<sub>línea 655</sub>
+<sub>línea 653</sub>
 
 `function checkLibrary(p: Project): bool`  
 larimar build of a library: its code is checked (its main file and every part it imports). A program uses it from its [dependencies], compiling its source with its own; nothing is built for the library alone.  
-<sub>línea 713</sub>
+<sub>línea 711</sub>
 
 `function runScript(file: String, args: String[*]): int32`  
 larimar file.lar [args]: the file is built in a folder of the system's temporary files (the bundled tcc first: it starts fast) and run with the arguments; its exit code is larimar's. Nothing is printed but what the program prints, so scripts can be piped.  
-<sub>línea 734</sub>
+<sub>línea 732</sub>
 
 `function execute(exe: String, args: String[*]): int32`
-<sub>línea 776</sub>
+<sub>línea 774</sub>
 
 `function create(path: String, library: bool): int32`
-<sub>línea 786</sub>
+<sub>línea 784</sub>
 
 `function createLibrary(path: String, name: String): int32`  
 larimar new <name> --library: a library with one function and a test of it.  
-<sub>línea 818</sub>
+<sub>línea 816</sub>
 
 ---
 
 ## pipeline
 
-`src/compiler/pipeline.lar` · 220 líneas · 25 funciones
+`src/compiler/pipeline.lar` · 216 líneas · 25 funciones
 pipeline: one compilation, as passes over it. A Compilation says what goes in (the main file, where std
 is) and keeps what the passes leave (the program, its problems, the C); a Pass does one thing to it and
 reports what went wrong instead of throwing. The compiler runs them in order and stops after the first
@@ -2245,7 +2245,7 @@ case int64 n, case String s, case Any t (a table), case null.
 
 ## semantics.linker
 
-`src/compiler/semantics/linker.lar` · 1398 líneas · 73 funciones
+`src/compiler/semantics/linker.lar` · 1370 líneas · 71 funciones
 semantics.linker: modules (Linker.java). Each file is a module; `import a.b` loads a/b.lar.
 
 Every module is parsed, its top-level declarations are renamed with its path
@@ -2261,274 +2261,266 @@ Lines are file index * 1000000 + line; decode() turns them back into "file:line"
 <sub>línea 41</sub>
 
 ### class `Linking`
-The state of linking: the settings it was given (target, std, libraries, unsafe C), every module read and its order, the files of the program, and the errors.
+The state of linking: the settings it was given (target, std, libraries, --unsafe-c), every module read and its order, the files of the program, and the errors.
 
 `public function useLinking(state: Linking in default): void`  
 Makes `state` the one the compiler works on.  
-<sub>línea 93</sub>
+<sub>línea 87</sub>
 
 `public function inTarget(platform: String): bool`  
 Whether what is for `platform` ("": every one) is for the target.  
-<sub>línea 101</sub>
+<sub>línea 95</sub>
 
 `function ownStd(mainPath: String in default): String?`  
 The standard library a file belongs to, when it is one of its files (std/crypto.lar open in the editor, of a copy that is not the installed one): its modules are then the ones of that copy, so that `import std.crypto` in its parts is the file being read, not another.  
-<sub>línea 112</sub>
+<sub>línea 106</sub>
 
 `public function link(mainShown: String in default, mainSource: String in default, sourceDir: String in default, std: String in default, mainPath: String in default): void`  
 Link: reads the main file and every module it imports (parsing each), in an order where a module comes after the ones it uses, and gives each the names it sees. The rules (semantics.rules) look at the modules next; assemble puts them together.  
-<sub>línea 130</sub>
+<sub>línea 124</sub>
 
 `public function flushRuleErrors(): void`  
 The errors said so far, into linkErrors (each once).  
-<sub>línea 152</sub>
+<sub>línea 144</sub>
 
 `public function linkedModules(): Module[*]`  
 The modules linked, each after the ones it imports.  
-<sub>línea 158</sub>
+<sub>línea 150</sub>
 
 `public function declarationsOf(module: Module in default): Node[*]`  
 The declarations of a module, as written (before assemble gives them their C names).  
-<sub>línea 161</sub>
+<sub>línea 153</sub>
 
 `public function linkedMainFile(): String`  
 The main file linked.  
-<sub>línea 164</sub>
+<sub>línea 156</sub>
 
 `public function importsOf(module: Module in default): ImportDecl[*]`  
 The imports of a module.  
-<sub>línea 167</sub>
+<sub>línea 159</sub>
 
 `public function ruleError(line: int32, rule: String, msg: String): void`  
 A broken rule of the language: its message, with the rule's id (semantics.rules).  
-<sub>línea 170</sub>
+<sub>línea 162</sub>
 
 `public function assemble(): Program`  
 Assemble: every module's declarations, with their C names, in one Program; the errors go to linkErrors.  
-<sub>línea 175</sub>
+<sub>línea 167</sub>
 
 `function dictFromSet(into: Any, names: Any in default, prefix: String): void`
-<sub>línea 203</sub>
+<sub>línea 195</sub>
 
 `function error(line: int32, msg: String): void`
-<sub>línea 207</sub>
+<sub>línea 199</sub>
 
 `function loadLang(): void`  
 std.lang, cut down to the declarations the program mentions, and the ones those mention (comments after // do not count). A name the main file declares itself is its own.  
-<sub>línea 215</sub>
+<sub>línea 207</sub>
 
 `function taskInterface(c: ClassDecl in default, p: Program in default): String`  
 The name of `implements` that is std.os.process.Task, as the class wrote it ("" when it does not implement it): Task imported by name, or through the alias of std.os.process.  
-<sub>línea 299</sub>
+<sub>línea 291</sub>
 
 `function taskScalar(typeRef: TypeRef in default): bool`
-<sub>línea 317</sub>
+<sub>línea 309</sub>
 
 `function fromTable(typeRef: TypeRef in default, x: String): String`  
 What a value of a scalar type is when it comes back from a table (`x`: the Any).  
-<sub>línea 320</sub>
+<sub>línea 312</sub>
 
 `function modulePathOf(file: String): String`  
 The module path a file is imported by: from the project's folder (tests, and the editor, also from the folder above it, as moduleFile does). "" when it is under neither.  
-<sub>línea 331</sub>
+<sub>línea 323</sub>
 
 `function pathUnder(dir: String, file: String): String`
-<sub>línea 346</sub>
+<sub>línea 338</sub>
 
 `function writeTasks(mainPath: String): void`  
 For each module with classes that implement Task, two functions of its own: one gives the class and fields of a task as a table, the other makes it again from them. std.os.process.tasks is then written to ask each of those modules.  
-<sub>línea 362</sub>
+<sub>línea 354</sub>
 
 `function addWords(text: String in default): void`  
 Adds the words of a text (not those of its comments) to `words`.  
-<sub>línea 515</sub>
+<sub>línea 507</sub>
 
 `function cWords(code: String in default, names: Any in default): void`  
 Every name in a piece of C, into names.  
-<sub>línea 531</sub>
+<sub>línea 523</sub>
 
 `function cCodeUses(code: String in default, cSymbols: Any in default): bool`
-<sub>línea 544</sub>
+<sub>línea 536</sub>
 
 `function parse(module: Module in default, source: String in default): void`
-<sub>línea 563</sub>
+<sub>línea 555</sub>
 
 `public function readSource(path: String): String?`  
 The text of a file, or null if it cannot be read.  
-<sub>línea 597</sub>
+<sub>línea 589</sub>
 
 `public function isStd(path: String): bool`
-<sub>línea 607</sub>
-
-`public function unsafeModule(module: Module in default): bool`  
-Whether the module may have native interfaces of its own (unsafe_c of its project or library).  
-<sub>línea 621</sub>
-
-`public function sourceOf(module: Module in default): String`  
-Who a module's C is from: its library, or the project.  
-<sub>línea 629</sub>
+<sub>línea 599</sub>
 
 `public function trusted(module: Module in default, mainPath: String): bool`  
 Whether a module may have C: the standard library's (the installed one, or the copy being edited), and the language's.  
-<sub>línea 635</sub>
+<sub>línea 607</sub>
 
 `function moduleFile(path: String): String`  
 Where a module's file is: std/, else a library of [dependencies] (its name, or <name>.<part>), else the project's folder (the main file's).  
-<sub>línea 645</sub>
+<sub>línea 617</sub>
 
 `public function libraryOf(path: String): int32`  
 The library a module belongs to (its name, or <name>.<part>): its index, or -1.  
-<sub>línea 668</sub>
+<sub>línea 640</sub>
 
 `function shownName(path: String): String`  
 How a module's file is shown in messages.  
-<sub>línea 676</sub>
+<sub>línea 648</sub>
 
 `function visit(module: Module in default): void`  
 Loads the imports first, so each module comes after the ones it uses (and globals start in that order).  
-<sub>línea 683</sub>
+<sub>línea 655</sub>
 
 `function tables(module: Module in default): void`
-<sub>línea 714</sub>
+<sub>línea 686</sub>
 
 `function bring(module: Module, into: Any, n: String in into, from: Module, mangled: String in into, line: int32): void`
-<sub>línea 777</sub>
+<sub>línea 749</sub>
 
 `function push(): void`
-<sub>línea 795</sub>
+<sub>línea 767</sub>
 
 `function pop(): void`
-<sub>línea 800</sub>
+<sub>línea 772</sub>
 
 `function declare(n: String in default): void`
-<sub>línea 802</sub>
+<sub>línea 774</sub>
 
 `function local(n: String): bool`
-<sub>línea 806</sub>
+<sub>línea 778</sub>
 
 `public function stdFileOpened(module: Module in default): bool`  
 A file of std opened alone (the editor, larimar check std/x.lar): it is std, whatever its module path.  
-<sub>línea 817</sub>
+<sub>línea 789</sub>
 
 `public function isLanguage(module: Module in default): bool`  
 std.lang (or std/lang.lar opened alone): what has no body there the compiler writes.  
-<sub>línea 824</sub>
+<sub>línea 796</sub>
 
 `function nativeKnown(module: Module in default, name: String): bool`
-<sub>línea 829</sub>
+<sub>línea 801</sub>
 
 `function larNames(module: Module in default, code: String, line: int32): String`  
 lar"name" in ccode: a function, type or global of Larimar, by its Larimar name (module.name for another module); it becomes lar"its linked name", and the generator writes its C name there.  
-<sub>línea 838</sub>
+<sub>línea 810</sub>
 
 `function larName(module: Module in default, name: String): String`  
 The linked name of a Larimar name seen from module m ("a.b.name": the module a.b), or "".  
-<sub>línea 863</sub>
+<sub>línea 835</sub>
 
 `function rewriteDecl(module: Module in default, d: Node in default): void`
-<sub>línea 877</sub>
+<sub>línea 849</sub>
 
 `function hasHeaders(module: Module in default): bool`  
 Whether a module brings its own C headers (cinclude or ccode), itself or in its parts (the modules of its folder, net/posix.lar for net.lar): then its natives are declared by them, not by us.  
-<sub>línea 975</sub>
+<sub>línea 947</sub>
 
 `function function_(f: FunctionDecl in default, name: String in default): void`
-<sub>línea 987</sub>
+<sub>línea 959</sub>
 
 `function fields(fs: FieldDecl[*] in default): void`
-<sub>línea 998</sub>
+<sub>línea 970</sub>
 
 `function params(ps: Param[*] in default): void`
-<sub>línea 1005</sub>
+<sub>línea 977</sub>
 
 `function typeRef(t: TypeRef? in default): void`
-<sub>línea 1009</sub>
+<sub>línea 981</sub>
 
 `function typeName(name: String in default, line: int32): String`  
 Shape, geo.Shape, Shape.Circle (enum variant), geo.Shape.Circle.  
-<sub>línea 1022</sub>
+<sub>línea 994</sub>
 
 `function exported(from: Module, n: String, values: bool, line: int32): String`  
 A public name of another module: values first, then types ("" after an error).  
-<sub>línea 1039</sub>
+<sub>línea 1011</sub>
 
 `function hidden(n: String, line: int32): void`  
 Modules do not see the main file's declarations (nobody imports the main file).  
-<sub>línea 1053</sub>
+<sub>línea 1025</sub>
 
 `function block(body: Stmt[*] in default, newScope: bool): void`
-<sub>línea 1061</sub>
+<sub>línea 1033</sub>
 
 `function stmt(s: Stmt in default): void`
-<sub>línea 1067</sub>
+<sub>línea 1039</sub>
 
 `function exprOpt(e: Expr? in default): Expr?`
-<sub>línea 1118</sub>
+<sub>línea 1090</sub>
 
 `function expr(e: Expr in default): Expr`  
 The expression renamed; module.name comes back as the name itself.  
-<sub>línea 1121</sub>
+<sub>línea 1093</sub>
 
 `function asksPlatform(e: Expr in default): bool`  
 Platform.current(), as the linker leaves it.  
-<sub>línea 1208</sub>
+<sub>línea 1180</sub>
 
 `function chosen(switchExpr: SwitchExpr in default): bool`  
 A switch on the platform that --target reduced to its arm.  
-<sub>línea 1214</sub>
+<sub>línea 1186</sub>
 
 `function choosePlatform(switchExpr: SwitchExpr in default): void`  
 With --target, a switch on Platform.current() keeps only the arm of that platform, as its default.  
-<sub>línea 1219</sub>
+<sub>línea 1191</sub>
 
 `function switchExpr(sw: SwitchExpr in default): void`
-<sub>línea 1238</sub>
+<sub>línea 1210</sub>
 
 `function isAlias(n: String): bool`
-<sub>línea 1252</sub>
+<sub>línea 1224</sub>
 
 `function identName(id: Ident in default): void`
-<sub>línea 1256</sub>
+<sub>línea 1228</sub>
 
 `function pattern(p: Pattern in default): void`  
 A variant keeps its name; a type or a constant is renamed (variant lookup ignores a module prefix).  
-<sub>línea 1276</sub>
+<sub>línea 1248</sub>
 
 `public function decode(msg: String): String`  
 "[Line 2000005]" -> "[src/geo.lar:5]", "line 7" -> "main.lar:7", and geo__Shape -> geo.Shape.  
-<sub>línea 1298</sub>
+<sub>línea 1270</sub>
 
 `function replaceLines(msg: String, key: String, bracket: bool): String`
-<sub>línea 1304</sub>
+<sub>línea 1276</sub>
 
 `function moduleOfFile(index: int32): Module?`
-<sub>línea 1344</sub>
+<sub>línea 1316</sub>
 
 `public function namesOfFile(index: int32): Any`  
 What a file can name: name -> its name after linking (its own, imported and the language's).  
-<sub>línea 1353</sub>
+<sub>línea 1325</sub>
 
 `public function isLangHelper(name: String): bool`  
 A name std.lang keeps to itself (its helpers): every file sees it, but the editor does not offer it.  
-<sub>línea 1363</sub>
+<sub>línea 1335</sub>
 
 `public function aliasesOfFile(index: int32): Any`  
 The modules a file imports with a name: alias -> module path ("geo.shapes").  
-<sub>línea 1370</sub>
+<sub>línea 1342</sub>
 
 `public function publicsOfModule(path: String): Any`  
 The public names of a module, each with its name after linking.  
-<sub>línea 1382</sub>
+<sub>línea 1354</sub>
 
 `public function fileOfModule(path: String): String`  
 The file of a module, from its path ("geo.shapes"), or "".  
-<sub>línea 1392</sub>
+<sub>línea 1364</sub>
 
 ---
 
 ## semantics.rules
 
-`src/compiler/semantics/rules.lar` · 234 líneas · 27 funciones
+`src/compiler/semantics/rules.lar` · 206 líneas · 26 funciones
 semantics.rules: the rules of the language that are checked on the linked modules, one object each,
 listed by languageRules(). Each has an id, which its errors say (error[std-own-import]), and the part of
 the spec that says it. The pass CheckRules (pipeline) asks each rule about each module, after Link and
@@ -2600,53 +2592,49 @@ What is inside an `internal` folder (a.b.internal.c) is imported only by the mod
 - `override function check(module: Module in default): void`
   <sub>línea 95</sub>
 
-`function interfaceTypes(module: Module in default): String[*]`  
-The types and structs the native interfaces of a module declare (their names).  
-<sub>línea 113</sub>
-
 `function importsUnsafeTask(module: Module in default): bool`  
 Whether the module takes UnsafeTask from std.os.process (by name, or through an alias).  
-<sub>línea 124</sub>
+<sub>línea 113</sub>
 
 ### class `NoCOutsideStd implements Rule`
-C is only the standard library's: a program, and a library written in Larimar, use what std gives (and, for the rest, other programs). With [project] unsafe_c = true, native interfaces (and nothing else of C), which every build says (unsafeSources).
+C is the standard library's, and an UnsafeTask's: a program, and a library written in Larimar, use what std gives; a C library of their own runs in a process apart, through the native interface of an UnsafeTask.
 
 - `override function id(): String`
-  <sub>línea 142</sub>
+  <sub>línea 131</sub>
 
 - `override function spec(): String`
-  <sub>línea 143</sub>
+  <sub>línea 132</sub>
 
 - `override function check(module: Module in default): void`
-  <sub>línea 144</sub>
+  <sub>línea 133</sub>
 
-`function cKind(d: Node, interfaces: bool, declared: String[*], parts: Any): String`  
-What of C a declaration is ("" when it is not C, or is what a native interface allows).  
-<sub>línea 186</sub>
+`function cKind(d: Node): String`  
+What of C a declaration is ("" when it is not C).  
+<sub>línea 162</sub>
 
 ### class `BodyNeeded implements Rule`
 A function has its body: only what the compiler writes, in std.lang (and std.memory), has none.
 
 - `override function id(): String`
-  <sub>línea 210</sub>
+  <sub>línea 182</sub>
 
 - `override function spec(): String`
-  <sub>línea 211</sub>
+  <sub>línea 183</sub>
 
 - `override function check(module: Module in default): void`
-  <sub>línea 212</sub>
+  <sub>línea 184</sub>
 
 ### class `LanguageTypeOnlyInLang implements Rule`
 `type X { }` (a type of the language, String and Any) is only in std.lang.
 
 - `override function id(): String`
-  <sub>línea 223</sub>
+  <sub>línea 195</sub>
 
 - `override function spec(): String`
-  <sub>línea 224</sub>
+  <sub>línea 196</sub>
 
 - `override function check(module: Module in default): void`
-  <sub>línea 225</sub>
+  <sub>línea 197</sub>
 
 ---
 
@@ -3931,7 +3919,7 @@ Sends the current error to the innermost try, or to the caller.
 
 ## codegen.gen.types
 
-`src/compiler/codegen/gen/types.lar` · 231 líneas · 12 funciones
+`src/compiler/codegen/gen/types.lar` · 232 líneas · 12 funciones
 codegen.gen.types: the C of the types of a program.
 
 `public function externPrototype(functionInfo: FunctionInfo in default): String`  
@@ -3966,16 +3954,16 @@ A plain C name (a function a prototype can declare), not C text.
 
 `function cStruct(type: Type): bool`  
 A C struct (extern type X = struct { ... }): C defines it, Larimar does not.  
-<sub>línea 125</sub>
+<sub>línea 126</sub>
 
 `public function forward(out: StringBuilder, type: Type): void`
-<sub>línea 131</sub>
+<sub>línea 132</sub>
 
 `public function define(out: StringBuilder, t: Type): void`
-<sub>línea 147</sub>
+<sub>línea 148</sub>
 
 `public function envField(symbol: Symbol): String`
-<sub>línea 230</sub>
+<sub>línea 231</sub>
 
 ---
 
@@ -4172,7 +4160,7 @@ The command that installs a C compiler here.
 
 ## project.libraries
 
-`src/compiler/project/libraries.lar` · 98 líneas · 4 funciones
+`src/compiler/project/libraries.lar` · 96 líneas · 4 funciones
 project.libraries: the libraries written in Larimar that a project uses, as source.
 
 [dependencies] of larimar.toml names each one with its folder: the folder of a library project
@@ -4189,18 +4177,18 @@ A library of [dependencies]: its name (its module) and the folder of its modules
 
 `public function larimarLibraries(dir: String, config: Any, problems: String[*]): LarimarLibrary[*]`  
 The libraries of a project's [dependencies], and theirs. Problems go to `problems`.  
-<sub>línea 27</sub>
+<sub>línea 26</sub>
 
 `function collect(dir: String, config: Any, of: String, out: LarimarLibrary[*], problems: String[*]): void`  
 The [dependencies] of one larimar.toml (of the program, or of a library: `of` is its name).  
-<sub>línea 34</sub>
+<sub>línea 33</sub>
 
 `function libraryConfig(name: String, folder: String, from: String, problems: String[*]): Any`  
 The larimar.toml of a library's folder, checked to be that library's (null: a problem was given).  
-<sub>línea 64</sub>
+<sub>línea 62</sub>
 
 `function named(libraries: LarimarLibrary[*], name: String): LarimarLibrary?`
-<sub>línea 92</sub>
+<sub>línea 90</sub>
 
 ---
 

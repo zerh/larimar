@@ -56,10 +56,9 @@ can bring C that the compiler does not check. What Larimar does not have runs in
 If the other process fails, it does not corrupt the memory of yours: the call gets an error. See
 [chapter 23 of the manual](docs/manual.md#23-other-programs-calls-shared-memory-and-processes).
 
-For one C header, a project can say `[project] unsafe_c = true` and declare a **native interface**
-(`native interface LibM "<math.h>" { function cbrt(x: float64): float64; }`, then `LibM.cbrt(x)`): std
-reaches libc the same way. Every build of a program with that C says where it comes from
-([chapter 27](docs/manual.md#c-of-its-own-unsafe_c--true)).
+A C library goes in an `UnsafeTask`: its class declares the library's **native interface**
+(`native interface Sdl "<SDL2/SDL.h>" { ... }`, then `Sdl.SDL_Init(...)`), and that C runs in the task's
+own process, where a crash is an error of the task ([chapter 27](docs/manual.md#c-of-its-own-in-an-unsafetask)).
 
 ## Libraries
 

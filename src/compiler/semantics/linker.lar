@@ -46,7 +46,7 @@ function newModule(path: String in default, index: int32): Module {
     } in default;
 }
 
-/** The state of linking: the settings it was given (target, std, libraries, unsafe C), every module read and its order, the files of the program, and the errors. */
+/** The state of linking: the settings it was given (target, std, libraries, --unsafe-c), every module read and its order, the files of the program, and the errors. */
 public class Linking {
     let mods: Module[*] = [];           // every module, by load order
     let modIndex: Any = {};               // path -> index in mods (loaded or failed)
@@ -73,12 +73,6 @@ public class Linking {
     let taskClasses: bool = false;
     let testsKept: String = "none";
     let unsafeC: bool = false;
-    /** [project] unsafe_c = true of the main file's project: its modules may have native interfaces. */
-    let projectUnsafe: bool = false;
-    /** Per library of [dependencies] (the order of libraryNames): its [project] unsafe_c. */
-    let libraryUnsafe: bool[*] = [];
-    let unsafeSources: String[*] = [];
-    let unsafeNotes: String[*] = [];
     /** The libraries of the project's [dependencies]: their names, and the folders of their modules (same order). */
     let libraryNames: String[*] = [];
     let libraryRoots: String[*] = [];
@@ -143,8 +137,6 @@ public function link(mainShown: String in default, mainSource: String in default
     if (linking.root.program != null) { writeTasks(mainPath); }
     if (linking.root.program != null && !langItself) { loadLang(); }
     for (m in linking.order) { tables(m); }
-    linking.unsafeSources.clear();
-    linking.unsafeNotes.clear();
     flushRuleErrors();
 }
 
@@ -610,26 +602,6 @@ public function isStd(path: String): bool { return path.startsWith("std."); }
  * Whether a program may have C of its own (larimarc --unsafe-c). Only for the compiler's own sources and
  * tests, which try what std's C does: a program built with it has none of the language's guarantees.
  */
-
-/**
- * Where the program's C comes from, outside std: the project ("this project") and the libraries whose
- * native interfaces it has, and what was noticed about them (a type that nothing releases). Built after
- * linking; larimar build says it every time.
- */
-
-/** Whether the module may have native interfaces of its own (unsafe_c of its project or library). */
-public function unsafeModule(module: Module in default): bool {
-    if (isStd(module.path)) { return false; }
-    let library: int32 = libraryOf(module.path);
-    if (library >= 0) { return library < linking.libraryUnsafe.length && linking.libraryUnsafe[library]; }
-    return linking.projectUnsafe;
-}
-
-/** Who a module's C is from: its library, or the project. */
-public function sourceOf(module: Module in default): String {
-    let library: int32 = libraryOf(module.path);
-    return library >= 0 ? linking.libraryNames[library] : "this project";
-}
 
 /** Whether a module may have C: the standard library's (the installed one, or the copy being edited), and the language's. */
 public function trusted(module: Module in default, mainPath: String): bool {

@@ -358,10 +358,6 @@ function compileFile(main: String, shownFrom: String): String {
     for (e in unit.problems) { compileErrors.push(decode(e).clone() in default); }
     if (!ok) { return ""; }
     let c: String = unit.c;
-    if (linking.unsafeSources.length > 0) {             // said every time: the language's guarantees stop at that C
-        Console.printError("note: unsafe C (native interface) from: ${linking.unsafeSources.join(", ")}");
-        for (n in linking.unsafeNotes) { Console.printError("note: ${n}"); }
-    }
     return c;
 }
 
@@ -485,7 +481,7 @@ function load(dir: String): Project? {
 
 let problems: String[*] = [] in default;
 
-const PROJECT_KEYS: String = "[build_dir, kind, main, name, output, unsafe_c, version]";
+const PROJECT_KEYS: String = "[build_dir, kind, main, name, output, version]";
 const C_KEYS: String = "[compiler, flags]";
 
 function keysOf(section: String): String {
@@ -522,6 +518,8 @@ function project(dir: String, config: Any): Project? {
                         problems.push("unknown key '${platformKey}' in [c.${key}] (keys: ${C_KEYS})");
                     }
                 }
+            } else if (sectionName == "project" && key == "unsafe_c") {
+                problems.push("unsafe_c is gone: a C library of a program goes in the native interface of an UnsafeTask (std.os.process), in a process of its own; remove it from [project]");
             } else if (!allowedKey(sectionName, key)) {
                 problems.push("unknown key '${key}' in [${sectionName}] (keys: ${allowed})");
             }

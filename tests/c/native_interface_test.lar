@@ -49,12 +49,12 @@ test function namesAreChecked(): void {
         """, "A native interface says its header");
 }
 
-// Without unsafe C, a program has no native interface: it is said once, at the interface.
-test function onlyWithUnsafeC(): void {
+// Outside an UnsafeTask a program has no native interface: it is said once, at the interface.
+test function onlyInAnUnsafeTask(): void {
     failsInAProgram(raw"""
         native interface M "<math.h>" { function cbrt(x: float64): float64; }
         function main(): int32 { return M.cbrt(8.0) as int32; }
-        """, "native interface is only for the standard library");
+        """, "A native interface of a program goes in a class that implements UnsafeTask");
 }
 
 // What the compiler writes has no body, and only std.lang has it: elsewhere a function needs its body.

@@ -20,7 +20,6 @@ public class LarimarLibrary {
     let name: String;
     let dir: String;                // the folder of its main file: <name>.lar is here, and <name>/ with its parts
     let project: String;            // the library's folder (its larimar.toml)
-    let unsafeC: bool = false;      // [project] unsafe_c = true: it has native interfaces (C of its own)
 }
 
 /** The libraries of a project's [dependencies], and theirs. Problems go to `problems`. */
@@ -54,8 +53,7 @@ function collect(dir: String, config: Any, of: String, out: LarimarLibrary[*], p
             problems.push("library '${name}': its main file is ${Paths.relative(folder, main)}, and it must be <folder of its modules>/${name}.lar".clone());
             continue;
         }
-        let unsafeC: bool = found.project.unsafe_c as bool ?? false;
-        out.push({ name: name.clone(), dir: Paths.parent(main).clone(), project: folder.clone(), unsafeC });
+        out.push({ name: name.clone(), dir: Paths.parent(main).clone(), project: folder.clone() });
         collect(folder, found, name, out, problems);
     }
 }

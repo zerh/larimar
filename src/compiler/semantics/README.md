@@ -202,7 +202,7 @@ and its symbol; or the errors that say why not.
   - `function analyzeSwitch(switchExpr: SwitchExpr in default, isExpr: bool, expected: Type? in default, place: Place in default): Type`
 - **`semantics.linker`**: modules (Linker.java)
   - `class Module`
-  - `class Linking`: The state of linking: the settings it was given (target, std, libraries, unsafe C), every module read and its order, the files of the program, and the errors
+  - `class Linking`: The state of linking: the settings it was given (target, std, libraries, --unsafe-c), every module read and its order, the files of the program, and the errors
   - `function useLinking(state: Linking in default): void`: Makes `state` the one the compiler works on
   - `function inTarget(platform: String): bool`: Whether what is for `platform` ("": every one) is for the target
   - `function link(mainShown: String in default, mainSource: String in default, sourceDir: String in default, std: String in default, mainPath: String in default): void`: Link: reads the main file and every module it imports (parsing each), in an order where a module comes after the ones it uses, and gives each the names it sees
@@ -215,8 +215,6 @@ and its symbol; or the errors that say why not.
   - `function assemble(): Program`: Assemble: every module's declarations, with their C names, in one Program; the errors go to linkErrors
   - `function readSource(path: String): String?`: The text of a file, or null if it cannot be read
   - `function isStd(path: String): bool`
-  - `function unsafeModule(module: Module in default): bool`: Whether the module may have native interfaces of its own (unsafe_c of its project or library)
-  - `function sourceOf(module: Module in default): String`: Who a module's C is from: its library, or the project
   - `function trusted(module: Module in default, mainPath: String): bool`: Whether a module may have C: the standard library's (the installed one, or the copy being edited), and the language's
   - `function libraryOf(path: String): int32`: The library a module belongs to (its name, or <name>.<part>): its index, or -1
   - `function stdFileOpened(module: Module in default): bool`: A file of std opened alone (the editor, larimar check std/x.lar): it is std, whatever its module path

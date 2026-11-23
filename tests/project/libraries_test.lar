@@ -328,42 +328,28 @@ test function aLibraryHasNoCOfItsOwn(): void throws IoError {
     check(output.join("").contains("native function is only for the standard library"), "C in a library: ${output.join("")}");
 }
 
-// [project] unsafe_c = true opens native interface to a project or a library (and nothing else of C): the
-// program that uses it is built with that C, and every build says where it comes from.
-test function unsafeCIsSaidEveryTime(): void throws IoError {
+// A native interface of a program or a library goes in an UnsafeTask: outside one it is an error, and
+// [project] unsafe_c, which once opened it, is gone and says so.
+test function nativeInterfacesGoInAnUnsafeTask(): void throws IoError {
     if (!onlyLinuxOrMac()) { return; }
-    let lib: String = writeNamedLibrary("lib-unsafe", "cubes", raw"""
-        native interface LibM "<math.h>" {
-            type Cell = c"int*";
-            function cbrt(x: float64): float64;
-        }
+    let lib: String = writeNamedLibrary("lib-native", "cubes", raw"""
+        native interface LibM "<math.h>" { function cbrt(x: float64): float64; }
         public function side(volume: float64): float64 { return LibM.cbrt(volume); }
         """, "");
-    Files.writeString(Paths.join(lib, "larimar.toml"), "[project]\nname = \"cubes\"\nkind = \"library\"\nmain = \"src/cubes.lar\"\nunsafe_c = true\n");
-    let app: String = writeProgram("lib-unsafe-app", "[dependencies]\ncubes = \"${lib}\"\n", raw"""
+    let app: String = writeProgram("lib-native-app", "[dependencies]\ncubes = \"${lib}\"\n", raw"""
         import cubes;
-        function main(): int32 {
-            println("${cubes.side(27.0)}");
-            return 0;
-        }
+        function main(): int32 { println("${cubes.side(27.0)}"); return 0; }
         """);
     let output: String[*] = [];
-    checkInt(0, larimarc(["run", app], output));
-    let all: String = output.join("");
-    check(all.contains("note: unsafe C (native interface) from: cubes"), "it says where the C is from: ${all}");
-    check(all.contains("type Cell (int*) has no 'released by'"), "and what nothing frees: ${all}");
-    check(all.endsWith("3.0\n"), "it runs: ${all}");
-    // without unsafe_c, a native interface is std's
-    let own: String = writeProgram("lib-unsafe-own", "", "native interface LibM \"<math.h>\" { function cbrt(x: float64): float64; }\nfunction main(): int32 { return LibM.cbrt(8.0) as int32; }\n");
-    output.clear();
-    checkInt(1, larimarc(["build", own], output));
-    check(output.join("").contains("or for a project with [project] unsafe_c = true"), "the program has none: ${output.join("")}");
-    // and unsafe_c opens native interface only: ccode is still std's
+    checkInt(1, larimarc(["build", app], output));
+    check(output.join("").contains("A native interface of a program goes in a class that implements UnsafeTask"), "a library has none: ${output.join("")}");
+    let own: String = writeProgram("lib-native-own", "", raw"""
+        function main(): int32 { return 0; }
+        """);
     Files.writeString(Paths.join(own, "larimar.toml"), "[project]\nname = \"app\"\nunsafe_c = true\n");
-    Files.writeString(Paths.join(own, "src/main.lar"), "ccode { static int one(void) { return 1; } }\nfunction main(): int32 { return 0; }\n");
     output.clear();
     checkInt(1, larimarc(["build", own], output));
-    check(output.join("").contains("ccode is only for the standard library"), "ccode stays std's: ${output.join("")}");
+    check(output.join("").contains("unsafe_c is gone"), "unsafe_c is gone: ${output.join("")}");
 }
 
 // The library and the program share one runtime, and their names do not meet: each module has its own.

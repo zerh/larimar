@@ -3429,10 +3429,6 @@ struct semantics__linker__Linking {
     bool taskClasses;
     LarString testsKept;
     bool unsafeC;
-    bool projectUnsafe;
-    List_b* libraryUnsafe;
-    List_s* unsafeSources;
-    List_s* unsafeNotes;
     List_s* libraryNames;
     List_s* libraryRoots;
     LarString showFrom;
@@ -3664,7 +3660,6 @@ struct project__libraries__LarimarLibrary {
     LarString name;
     LarString dir;
     LarString project;
-    bool unsafeC;
 };
 
 struct pipeline__Compilation {
@@ -3996,14 +3991,14 @@ struct List_std__os__process__TaskWire { std__os__process__TaskWire** items; int
 struct List_std__os__process__Channel { std__os__process__Channel** items; int32_t length; int32_t capacity; LarMemory* mem; };
 struct List_project__libraries__LarimarLibrary { project__libraries__LarimarLibrary** items; int32_t length; int32_t capacity; LarMemory* mem; };
 struct List_syntax__ast__ExternFunctionDecl { syntax__ast__ExternFunctionDecl** items; int32_t length; int32_t capacity; LarMemory* mem; };
-typedef struct Env_0 { List_syntax__ast__TypeRef* parameterTypes_2075; syntax__parser__Parser* parser_2072; } Env_0;
-typedef struct Env_1 { syntax__ast__Call* call_2148; syntax__parser__Parser* parser_2146; } Env_1;
-typedef struct Env_2 { syntax__parser__Parser* parser_2165; syntax__ast__ObjectLit* literal_2168; } Env_2;
-typedef struct Env_3 { syntax__ast__Lambda* lambda_2175; syntax__parser__Parser* parser_2174; } Env_3;
-typedef struct Env_4 { syntax__parser__Parser* parser_2182; syntax__ast__Pattern* pattern_2184; } Env_4;
-typedef struct Env_5 { List_syntax__ast__Param* list_2351; syntax__parser__Parser* parser_2350; } Env_5;
-typedef struct Env_6 { syntax__parser__Parser* parser_2399; syntax__ast__EnumDecl* declaration_2401; } Env_6;
-typedef struct Env_7 { syntax__ast__ImportDecl* declaration_2440; syntax__parser__Parser* parser_2436; } Env_7;
+typedef struct Env_0 { List_syntax__ast__TypeRef* parameterTypes_2072; syntax__parser__Parser* parser_2069; } Env_0;
+typedef struct Env_1 { syntax__ast__Call* call_2145; syntax__parser__Parser* parser_2143; } Env_1;
+typedef struct Env_2 { syntax__parser__Parser* parser_2162; syntax__ast__ObjectLit* literal_2165; } Env_2;
+typedef struct Env_3 { syntax__ast__Lambda* lambda_2172; syntax__parser__Parser* parser_2171; } Env_3;
+typedef struct Env_4 { syntax__parser__Parser* parser_2179; syntax__ast__Pattern* pattern_2181; } Env_4;
+typedef struct Env_5 { List_syntax__ast__Param* list_2348; syntax__parser__Parser* parser_2347; } Env_5;
+typedef struct Env_6 { syntax__parser__Parser* parser_2396; syntax__ast__EnumDecl* declaration_2398; } Env_6;
+typedef struct Env_7 { syntax__ast__ImportDecl* declaration_2437; syntax__parser__Parser* parser_2433; } Env_7;
 struct Closure_2 {  /* () -> void */
     void (*fn)(void* env);
     union { Env_0 l_0; Env_1 l_1; Env_2 l_2; Env_3 l_3; Env_4 l_4; Env_5 l_5; Env_6 l_6; Env_7 l_7; char _none; } env;
@@ -5142,13 +5137,13 @@ LarString stringOfRange(LarMemory* lar_result_memory, Slice_u8 bytes, int32_t fr
 int64_t std__os__hostProcessId(void);
 bool std__os__hostCwd(Slice_u8 into);
 void std__os__hostProgramPath(Slice_u8 into);
-int32_t std__os__hostShell(LarString command_1639);
+int32_t std__os__hostShell(LarString command_1636);
 int64_t std__os__processId(void);
 Opt_s std__os__env(LarMemory* lar_result_memory, LarString name);
 List_u8* std__os__pathBuffer(LarMemory* lar_result_memory);
 LarString std__os__cText(LarMemory* lar_result_memory, Slice_u8 b);
 LarString std__os__cwd(LarMemory* lar_result_memory);
-int32_t std__os__runCommand(LarString command_1645);
+int32_t std__os__runCommand(LarString command_1642);
 LarString std__os__programPath(LarMemory* lar_result_memory);
 LarString std__os__programDir(LarMemory* lar_result_memory);
 bool std__text__isDigit(uint8_t b);
@@ -5161,22 +5156,22 @@ bool std__text__isAscii(LarString s);
 LarString std__text__fromCode(LarMemory* lar_result_memory, int32_t code);
 LarString std__io__path__parent(LarMemory* lar_result_memory, LarString path);
 LarString std__io__path__fileName(LarMemory* lar_result_memory, LarString path);
-LarString std__io__path__join(LarMemory* lar_result_memory, LarString dir, LarString file_1675);
+LarString std__io__path__join(LarMemory* lar_result_memory, LarString dir, LarString file_1672);
 bool std__io__path__isAbsolute(LarString path);
 LarString std__io__path__absolute(LarMemory* lar_result_memory, LarString path);
 LarString std__io__path__normalize(LarMemory* lar_result_memory, LarString path);
-LarString std__io__path__relative(LarMemory* lar_result_memory, LarString base, LarString file_1685);
+LarString std__io__path__relative(LarMemory* lar_result_memory, LarString base, LarString file_1682);
 void std__io__raise(int32_t code, LarString path, LarError* err_out);
 int32_t std__io__files__folderMakeDirectory(LarString path);
 int32_t std__io__files__folderRemoveDirectory(LarString path);
 int64_t std__io__files__folderListOpen(LarString path);
-bool std__io__files__folderListNext(int64_t list_1709, Slice_u8 into);
-void std__io__files__folderListClose(int64_t list_1711);
+bool std__io__files__folderListNext(int64_t list_1706, Slice_u8 into);
+void std__io__files__folderListClose(int64_t list_1708);
 int32_t std__io__files__code(void);
 List_u8* std__io__files__bytes(LarMemory* lar_result_memory, int32_t n);
 LarString std__io__files__readString(LarMemory* lar_result_memory, LarString path, LarError* err_out);
-void std__io__files__writeFile(LarString path, LarString text_1725, LarString mode, LarError* err_out);
-void std__io__files__writeString(LarString path, LarString text_1731, LarError* err_out);
+void std__io__files__writeFile(LarString path, LarString text_1722, LarString mode, LarError* err_out);
+void std__io__files__writeString(LarString path, LarString text_1728, LarError* err_out);
 int32_t std__io__files__kind(LarString path);
 bool std__io__files__exists(LarString path);
 bool std__io__files__isFile(LarString path);
@@ -5187,16 +5182,16 @@ void std__io__files__createDirectories(LarString path, LarError* err_out);
 void std__io__files__delete(LarString path, LarError* err_out);
 Opt_s std__io__console__lineOf(LarMemory* lar_result_memory, LarNative_std__io__console__FILE f);
 LarString std__io__console__allOf(LarMemory* lar_result_memory, LarNative_std__io__console__FILE f);
-void std__io__console__put(LarString text_1777, bool error);
+void std__io__console__put(LarString text_1774, bool error);
 Opt_s std__io__console__readLine(LarMemory* lar_result_memory);
 LarString std__io__console__read(LarMemory* lar_result_memory, int32_t count);
 int32_t std__io__console__lastCount(void);
-void std__io__console__write(LarString text_1787);
+void std__io__console__write(LarString text_1784);
 void std__io__console__flush(void);
 void std__io__console__binaryMode(void);
 void std__io__console__unbufferInput(void);
 bool std__io__console__waitForInput(int32_t ms);
-void std__io__console__printError(LarString text_1790);
+void std__io__console__printError(LarString text_1787);
 semantics__types__Type* semantics__types__intern(LarMemory* lar_result_memory, semantics__types__Type* type);
 semantics__types__Type* semantics__types__primitive(LarMemory* lar_result_memory, LarString name);
 semantics__types__Type* semantics__types__primByName(LarMemory* lar_result_memory, LarString name);
@@ -5335,7 +5330,7 @@ syntax__ast__Node* syntax__parser__natives__nativeDeclaration(LarMemory* lar_res
 syntax__ast__NativeInterfaceDecl* syntax__parser__natives__nativeInterface(LarMemory* lar_result_memory, syntax__parser__Parser* parser, LarString owner, bool opened);
 void syntax__parser__natives__openedFunctions(syntax__parser__Parser* parser, syntax__ast__NativeInterfaceDecl* declaration, List_syntax__ast__ExternFunctionDecl* functions);
 bool syntax__parser__natives__typeWithFields(syntax__parser__Parser* parser);
-void syntax__parser__natives__cNames(LarString text_2258, List_s* into);
+void syntax__parser__natives__cNames(LarString text_2255, List_s* into);
 bool syntax__parser__natives__atCText(syntax__parser__Parser* parser);
 LarString syntax__parser__natives__cTarget(LarMemory* lar_result_memory, syntax__parser__Parser* parser, LarString what);
 syntax__ast__ExternFunctionDecl* syntax__parser__natives__nativeFunctionOfC(LarMemory* lar_result_memory, syntax__parser__Parser* parser);
@@ -5373,7 +5368,7 @@ void syntax__parser__looseList(syntax__parser__Parser* parser, syntax__lexer__To
 LarString syntax__parser__lives(LarMemory* lar_result_memory, syntax__parser__Parser* parser);
 syntax__ast__Program* syntax__parser__program(LarMemory* lar_result_memory, syntax__parser__Parser* parser, int32_t startLine);
 syntax__ast__ImportDecl* syntax__parser__importDeclaration(LarMemory* lar_result_memory, syntax__parser__Parser* parser);
-void editor__opendocuments__setOpenDocument(LarString path, LarString text_2442);
+void editor__opendocuments__setOpenDocument(LarString path, LarString text_2439);
 Opt_s editor__opendocuments__openDocument(LarMemory* lar_result_memory, LarString path);
 semantics__linker__Module* semantics__linker__newModule(LarMemory* lar_result_memory, LarString path, int32_t index_);
 bool semantics__linker__inTarget(LarString platform);
@@ -5392,17 +5387,15 @@ void semantics__linker__loadLang(void);
 LarString semantics__linker__taskInterface(LarMemory* lar_result_memory, syntax__ast__ClassDecl* c, syntax__ast__Program* p);
 bool semantics__linker__taskScalar(syntax__ast__TypeRef* typeRef);
 LarString semantics__linker__fromTable(LarMemory* lar_result_memory, syntax__ast__TypeRef* typeRef, LarString x);
-LarString semantics__linker__modulePathOf(LarMemory* lar_result_memory, LarString file_2521);
-LarString semantics__linker__pathUnder(LarMemory* lar_result_memory, LarString dir, LarString file_2527);
+LarString semantics__linker__modulePathOf(LarMemory* lar_result_memory, LarString file_2518);
+LarString semantics__linker__pathUnder(LarMemory* lar_result_memory, LarString dir, LarString file_2524);
 void semantics__linker__writeTasks(LarString mainPath);
-void semantics__linker__addWords(LarString text_2572);
+void semantics__linker__addWords(LarString text_2569);
 void semantics__linker__cWords(LarString code, LarAny names);
 bool semantics__linker__cCodeUses(LarString code, LarAny cSymbols);
 void semantics__linker__parse(semantics__linker__Module* module, LarString source);
 Opt_s semantics__linker__readSource(LarMemory* lar_result_memory, LarString path);
 bool semantics__linker__isStd(LarString path);
-bool semantics__linker__unsafeModule(semantics__linker__Module* module);
-LarString semantics__linker__sourceOf(LarMemory* lar_result_memory, semantics__linker__Module* module);
 bool semantics__linker__trusted(semantics__linker__Module* module, LarString mainPath);
 LarString semantics__linker__moduleFile(LarMemory* lar_result_memory, LarString path);
 int32_t semantics__linker__libraryOf(LarString path);
@@ -5449,7 +5442,7 @@ LarAny semantics__linker__publicsOfModule(LarMemory* lar_result_memory, LarStrin
 LarString semantics__linker__fileOfModule(LarMemory* lar_result_memory, LarString path);
 List_semantics__types__Symbol* semantics__analyzer__narrowing__nonNull(LarMemory* lar_result_memory, syntax__ast__Expr* c, bool onTrue);
 void semantics__analyzer__narrowing__facts(syntax__ast__Expr* c, bool onTrue, List_semantics__types__Symbol* out);
-bool semantics__analyzer__narrowing__hasSymbol(List_semantics__types__Symbol* list_2860, semantics__types__Symbol* symbol);
+bool semantics__analyzer__narrowing__hasSymbol(List_semantics__types__Symbol* list_2853, semantics__types__Symbol* symbol);
 void semantics__analyzer__narrowing__narrow(List_semantics__types__Symbol* syms);
 void semantics__analyzer__narrowing__unnarrow(List_semantics__types__Symbol* syms);
 bool semantics__analyzer__narrowing__leaves(List_syntax__ast__Stmt* body);
@@ -5461,7 +5454,7 @@ void semantics__analyzer__narrowing__analyzeThrow(syntax__ast__ThrowStmt* t);
 void semantics__analyzer__narrowing__requireHandled(semantics__types__EnumInfo* enumInfo, int32_t line, LarString what);
 void semantics__analyzer__narrowing__analyzeYield(syntax__ast__YieldStmt* yieldStmt);
 void semantics__analyzer__narrowing__analyzeTry(syntax__ast__TryStmt* t);
-bool semantics__analyzer__narrowing__hasEnum(List_semantics__types__EnumInfo* list_2921, semantics__types__EnumInfo* enumInfo);
+bool semantics__analyzer__narrowing__hasEnum(List_semantics__types__EnumInfo* list_2914, semantics__types__EnumInfo* enumInfo);
 semantics__types__Type* semantics__expressions__literals__checkLambda(LarMemory* lar_result_memory, syntax__ast__Lambda* l, semantics__types__Type* expected, semantics__types__Place* place);
 semantics__types__Type* semantics__expressions__literals__calledReference(LarMemory* lar_result_memory, syntax__ast__Call* c, syntax__ast__Call* ref);
 LarString semantics__expressions__literals__refText(LarMemory* lar_result_memory, syntax__ast__Call* call);
@@ -5688,9 +5681,9 @@ void semantics__analyzer__flow__lifetime(semantics__types__Region* value, semant
 void semantics__analyzer__flow__lifetimeOf(syntax__ast__Expr* value, semantics__types__Region* storage, int32_t line, LarString msg, LarString role);
 void semantics__analyzer__flow__mustLiveForever(semantics__types__Region* value, int32_t line, LarString msg);
 LarString semantics__analyzer__flow__fill(LarMemory* lar_result_memory, LarString msg, semantics__types__Region* v, semantics__types__Region* storage);
-void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* deferred, bool resolve_4417);
+void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* deferred, bool resolve_4410);
 LarString semantics__analyzer__flow__placementFor(LarMemory* lar_result_memory, semantics__types__Region* region);
-LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, semantics__analyzer__Deferred* deferred, semantics__types__Region* v, semantics__types__Region* storage, bool resolve_4427);
+LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, semantics__analyzer__Deferred* deferred, semantics__types__Region* v, semantics__types__Region* storage, bool resolve_4420);
 bool semantics__analyzer__flow__isFunctionValue(syntax__ast__Expr* e);
 LarString semantics__analyzer__flow__parameterHint(LarMemory* lar_result_memory, LarString name, semantics__types__Region* storage);
 LarString semantics__analyzer__flow__viewCulprit(LarMemory* lar_result_memory, syntax__ast__Expr* e, semantics__types__Region* v, LarString target, LarString lives, LarString keep);
@@ -5745,7 +5738,7 @@ semantics__types__Type* semantics__analyzer__narrowedType(LarMemory* lar_result_
 void semantics__analyzer__noteCapture(semantics__types__Symbol* symbol, int32_t line);
 void semantics__analyzer__checkMutations(void);
 void semantics__analyzer__checkMemoryUses(void);
-LarAny std__encoding__json__parse(LarMemory* lar_result_memory, LarString text_4719, LarError* err_out);
+LarAny std__encoding__json__parse(LarMemory* lar_result_memory, LarString text_4712, LarError* err_out);
 LarString std__encoding__json__stringify(LarMemory* lar_result_memory, LarAny v);
 LarString std__encoding__json__quote(LarMemory* lar_result_memory, LarString s);
 bool std__encoding__json__isDigit(uint8_t c);
@@ -5753,12 +5746,12 @@ void std__encoding__json__writeValue(StringBuilder* sb, LarAny v);
 void std__encoding__json__writeTable(StringBuilder* sb, LarAny t);
 void std__encoding__json__writeString(StringBuilder* sb, LarString s);
 LarString std__encoding__toml__message(LarMemory* lar_result_memory, std__encoding__toml__TomlError e);
-LarAny std__encoding__toml__parse(LarMemory* lar_result_memory, LarString text_4756, LarError* err_out);
+LarAny std__encoding__toml__parse(LarMemory* lar_result_memory, LarString text_4749, LarError* err_out);
 void std__encoding__toml__fail(int32_t line, LarString why, LarError* err_out);
 void std__encoding__toml__makeSection(LarAny root, LarString name, int32_t line, LarError* err_out);
 LarAny std__encoding__toml__tableAt(LarMemory* lar_result_memory, LarAny root, LarString name, int32_t line, LarError* err_out);
 bool std__encoding__toml__isTable(LarAny v);
-List_s* std__encoding__toml__splitLines(LarMemory* lar_result_memory, LarString text_4787);
+List_s* std__encoding__toml__splitLines(LarMemory* lar_result_memory, LarString text_4780);
 bool std__encoding__toml__isKey(LarString key);
 bool std__encoding__toml__isSectionName(LarString name);
 bool std__encoding__toml__isNumber(LarString v);
@@ -5773,26 +5766,25 @@ bool semantics__rules__stdOwnPart(LarString part);
 bool semantics__rules__stdOwn(LarString path);
 LarString semantics__rules__stdPublicOf(LarMemory* lar_result_memory, LarString path);
 Opt_s semantics__rules__internalOwner(LarMemory* lar_result_memory, LarString path);
-List_s* semantics__rules__interfaceTypes(LarMemory* lar_result_memory, semantics__linker__Module* module);
 bool semantics__rules__importsUnsafeTask(semantics__linker__Module* module);
-LarString semantics__rules__cKind(LarMemory* lar_result_memory, syntax__ast__Node* d, bool interfaces, List_s* declared, LarAny parts);
+LarString semantics__rules__cKind(LarMemory* lar_result_memory, syntax__ast__Node* d);
 LarString codegen__localnames__markByte(LarMemory* lar_result_memory);
 LarString codegen__localnames__localName(LarMemory* lar_result_memory, LarString role);
 LarString codegen__localnames__localNameFor(LarMemory* lar_result_memory, LarString role, LarString key);
 bool codegen__localnames__isNameStart(uint8_t c);
 bool codegen__localnames__isNamePart(uint8_t c);
-LarString codegen__localnames__nameLocals(LarMemory* lar_result_memory, LarString text_4905);
+LarString codegen__localnames__nameLocals(LarMemory* lar_result_memory, LarString text_4886);
 bool codegen__prune__rootSection(LarString title);
 LarString codegen__prune__prune(LarMemory* lar_result_memory, codegen__cprogram__CProgram* program, List_s* roots);
 void codegen__prune__flush(List_codegen__prune__Piece* pieces, List_s* lines, bool root);
 void codegen__prune__flushHeader(List_codegen__prune__Piece* pieces, List_s* lines);
-LarString codegen__prune__runtimeC(LarMemory* lar_result_memory, LarString file_4950);
+LarString codegen__prune__runtimeC(LarMemory* lar_result_memory, LarString file_4931);
 LarString codegen__prune__runtimeSource(LarMemory* lar_result_memory);
 LarString codegen__prune__headerNames(LarMemory* lar_result_memory, int32_t i);
 LarString codegen__prune__selectRuntime(LarMemory* lar_result_memory, LarString program, bool threads, bool files, bool allHeaders);
 void codegen__prune__paragraph(List_codegen__prune__Piece* pieces, List_s* lines);
 codegen__prune__Piece* codegen__prune__includePiece(LarMemory* lar_result_memory, LarString line);
-List_s* codegen__prune__resolve(LarMemory* lar_result_memory, LarString text_4985, bool threads, bool files);
+List_s* codegen__prune__resolve(LarMemory* lar_result_memory, LarString text_4966, bool threads, bool files);
 List_b* codegen__prune__reach(LarMemory* lar_result_memory, List_codegen__prune__Piece* pieces, List_s* wanted);
 bool codegen__prune__kept(List_codegen__prune__Piece* pieces, List_b* keep, int32_t i);
 void codegen__prune__describe(codegen__prune__Piece* p);
@@ -5821,11 +5813,11 @@ LarString codegen__expressions__operators__anyAs(LarMemory* lar_result_memory, L
 LarString codegen__expressions__strings__string(LarMemory* lar_result_memory, syntax__ast__StringLit* s, LarString memOverride);
 Opt_s codegen__expressions__strings__printDirect(LarMemory* lar_result_memory, syntax__ast__StringLit* s, bool newline);
 LarString codegen__expressions__strings__decodeRaw(LarMemory* lar_result_memory, LarString raw);
-LarString codegen__expressions__strings__cLiteral(LarMemory* lar_result_memory, LarString text_5194);
+LarString codegen__expressions__strings__cLiteral(LarMemory* lar_result_memory, LarString text_5175);
 void codegen__expressions__strings__appendPieces(syntax__ast__StringLit* s, LarString sbRef);
 LarString codegen__expressions__strings__stringLiteral(LarMemory* lar_result_memory, LarString raw);
 LarString codegen__expressions__strings__cBytes(LarMemory* lar_result_memory, LarString raw);
-void codegen__expressions__strings__cByte(StringBuilder* builder, uint8_t v, LarString text_5216);
+void codegen__expressions__strings__cByte(StringBuilder* builder, uint8_t v, LarString text_5197);
 bool codegen__gen__statements__usesErrors(List_syntax__ast__Stmt* body);
 LarString codegen__gen__statements__body(LarMemory* lar_result_memory, List_syntax__ast__Stmt* stmts, semantics__types__Type* ret, bool throwsOut, semantics__types__LambdaInfo* lambda, List_semantics__types__Symbol* paramSymbols, LarString lock, int32_t declLine);
 bool codegen__gen__statements__endsWithJump(List_syntax__ast__Stmt* stmts);
@@ -5898,7 +5890,7 @@ LarString codegen__expressions__calls__builtin(LarMemory* lar_result_memory, syn
 LarString codegen__expressions__calls__printCall(LarMemory* lar_result_memory, syntax__ast__Call* call, bool newline);
 LarString codegen__expressions__calls__stringMethod(LarMemory* lar_result_memory, syntax__ast__Call* call);
 LarString codegen__expressions__calls__splitText(LarMemory* lar_result_memory, syntax__ast__Call* call, LarString s, LarString sep, bool isLines);
-void codegen__expressions__calls__lines(LarString text_5679);
+void codegen__expressions__calls__lines(LarString text_5660);
 LarString codegen__expressions__calls__anyRemoveIf(LarMemory* lar_result_memory, syntax__ast__Call* call);
 LarString codegen__expressions__calls__sortList(LarMemory* lar_result_memory, syntax__ast__Call* call, semantics__types__Type* at);
 LarString codegen__expressions__calls__mapFilter(LarMemory* lar_result_memory, syntax__ast__Call* call, semantics__types__CallInfo* b);
@@ -6000,7 +5992,7 @@ LarString codegen__gen__spreadLines(LarMemory* lar_result_memory, LarString c, L
 LarString codegen__gen__firstMark(LarMemory* lar_result_memory, List_s* all, int32_t k);
 void codegen__gen__line(LarString s);
 LarString codegen__gen__tmp(LarMemory* lar_result_memory, LarString role);
-LarString codegen__gen__indent4(LarMemory* lar_result_memory, LarString text_6118);
+LarString codegen__gen__indent4(LarMemory* lar_result_memory, LarString text_6099);
 void codegen__gen__pushBlock(codegen__gen__Block* blockCode);
 void codegen__gen__popBlock(void);
 codegen__gen__Block* codegen__gen__topBlock(LarMemory* lar_result_memory);
@@ -6015,24 +6007,24 @@ void codegen__gen__section(StringBuilder* out, LarString title);
 LarString codegen__gen__bodyText(LarMemory* lar_result_memory, LarString body);
 LarString codegen__gen__stripIndent(LarMemory* lar_result_memory, LarString code);
 List_semantics__types__ClassInfo* codegen__gen__classesByDepth(LarMemory* lar_result_memory);
-List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(LarMemory* lar_result_memory, LarString dir, LarAny config, List_s* problems_6264);
-void project__libraries__collect(LarString dir, LarAny config, LarString of, List_project__libraries__LarimarLibrary* out, List_s* problems_6270);
-LarAny project__libraries__libraryConfig(LarMemory* lar_result_memory, LarString name, LarString folder, LarString from, List_s* problems_6283);
+List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(LarMemory* lar_result_memory, LarString dir, LarAny config, List_s* problems_6245);
+void project__libraries__collect(LarString dir, LarAny config, LarString of, List_project__libraries__LarimarLibrary* out, List_s* problems_6251);
+LarAny project__libraries__libraryConfig(LarMemory* lar_result_memory, LarString name, LarString folder, LarString from, List_s* problems_6263);
 project__libraries__LarimarLibrary* project__libraries__named(LarMemory* lar_result_memory, List_project__libraries__LarimarLibrary* libraries, LarString name);
 List_pipeline__Pass* pipeline__analysisPasses(LarMemory* lar_result_memory);
 List_pipeline__Pass* pipeline__compilerPasses(LarMemory* lar_result_memory);
 syntax__ast__Program* pipeline__assembledProgram(LarMemory* lar_result_memory);
-pipeline__Compilation* pipeline__compilationWith(LarMemory* lar_result_memory, LarString main__6292, LarString shownFrom, LarString std, LarString sourceRoot);
+pipeline__Compilation* pipeline__compilationWith(LarMemory* lar_result_memory, LarString main__6272, LarString shownFrom, LarString std, LarString sourceRoot);
 bool pipeline__run(pipeline__Compilation* unit, List_pipeline__Pass* passes);
 void pipeline__gather(pipeline__Compilation* unit, List_s* from, int32_t start);
-void pipeline__findLibraryRoots(LarString main__6304);
-bool editor__session__analyzeFile(LarString main__6313, LarString shownFrom);
-pipeline__Compilation* editor__session__compilationOf(LarMemory* lar_result_memory, LarString main__6318, LarString shownFrom);
+void pipeline__findLibraryRoots(LarString main__6284);
+bool editor__session__analyzeFile(LarString main__6293, LarString shownFrom);
+pipeline__Compilation* editor__session__compilationOf(LarMemory* lar_result_memory, LarString main__6298, LarString shownFrom);
 LarString editor__session__stdDir(LarMemory* lar_result_memory);
 Opt_s editor__session__stdIn(LarMemory* lar_result_memory, LarString home);
 List_editor__session__Diagnostic* editor__session__diagnostics(LarMemory* lar_result_memory);
 editor__session__Diagnostic* editor__session__diagnostic(LarMemory* lar_result_memory, LarString raw);
-LarString editor__session__projectMain(LarMemory* lar_result_memory, LarString file_6336);
+LarString editor__session__projectMain(LarMemory* lar_result_memory, LarString file_6316);
 LarString editor__session__tomlMain(LarMemory* lar_result_memory, LarString path);
 int32_t editor__session__checkCommand(List_s* rest);
 bool project__cc__windows(void);
@@ -6065,14 +6057,14 @@ void project__testing__failed(LarString shown, LarString name, LarString problem
 void project__testing__skip(LarString shown, LarString name, LarString why);
 void project__testing__fileFailed(LarString shown, LarString problem);
 LarString project__testing__read(LarMemory* lar_result_memory, LarString path);
-LarString project__testing__head(LarMemory* lar_result_memory, LarString text_6461, int32_t count);
+LarString project__testing__head(LarMemory* lar_result_memory, LarString text_6441, int32_t count);
 LarString project__testing__compileC(LarMemory* lar_result_memory, LarString cFile, LarString exe);
 int32_t project__testing__runProgram(LarString exe, List_s* args, LarString outFile, LarString errFile);
 bool project__testing__memoryError(LarString err_);
 LarString project__testing__memoryReport(LarMemory* lar_result_memory, LarString err_);
 LarString project__testing__skipText(LarMemory* lar_result_memory, LarString out);
 LarString project__testing__exeName(LarMemory* lar_result_memory, LarString b);
-void project__testing__runTestFile(LarString file_6496, LarString shown, LarString source);
+void project__testing__runTestFile(LarString file_6476, LarString shown, LarString source);
 int64_t std__time__monotonic(void);
 LarString std__os__internal__frames__framed(LarMemory* lar_result_memory, LarString json);
 int32_t std__os__internal__frames__lengthOf(LarString line);
@@ -6093,7 +6085,7 @@ int32_t editor__ide__lineOf(int32_t encoded);
 int32_t editor__ide__utf16Col(LarString line, int32_t byteCol);
 int32_t editor__ide__byteCol(LarString line, int32_t units);
 bool editor__ide__nameByte(uint8_t c);
-List_i32* editor__ide__wordColumns(LarMemory* lar_result_memory, LarString text_6651, LarString word, int32_t dotted);
+List_i32* editor__ide__wordColumns(LarMemory* lar_result_memory, LarString text_6631, LarString word, int32_t dotted);
 editor__ide__Word* editor__ide__wordAt(LarMemory* lar_result_memory, LarString line, int32_t col);
 LarString editor__ide__rangeJson(LarMemory* lar_result_memory, int32_t index_, int32_t line, int32_t from, int32_t to);
 LarString editor__ide__lineRangeJson(LarMemory* lar_result_memory, int32_t index_, int32_t line);
@@ -6139,8 +6131,8 @@ LarString editor__ide__symbolsJson(LarMemory* lar_result_memory, LarString path)
 LarString editor__ide__symbolJson(LarMemory* lar_result_memory, LarString name, int32_t kind, int32_t encoded, LarString word, List_s* kids);
 int32_t editor__ide__blockEnd(int32_t index_, int32_t line);
 void editor__ide__prepareCompletion(LarString path, int32_t line0, int32_t char16, bool signatureHelp);
-LarString editor__ide__probeStatement(LarMemory* lar_result_memory, LarString text_7007, LarString before, int32_t chainStart, LarString indent);
-bool editor__ide__needsNoProbe(LarString text_7013, LarString chain);
+LarString editor__ide__probeStatement(LarMemory* lar_result_memory, LarString text_6987, LarString before, int32_t chainStart, LarString indent);
+bool editor__ide__needsNoProbe(LarString text_6993, LarString chain);
 int32_t editor__ide__openParen(LarString before);
 int32_t editor__ide__commasAfter(LarString before, int32_t open_);
 LarString editor__ide__chainBefore(LarMemory* lar_result_memory, LarString line, int32_t dot);
@@ -6163,16 +6155,16 @@ void editor__lsp__send(LarString body);
 void editor__lsp__respond(LarString id, LarString result);
 void editor__lsp__respondError(LarString id, int32_t code, LarString message);
 void editor__lsp__notify(LarString method, LarString params);
-void editor__lsp__log(LarString text_7170);
+void editor__lsp__log(LarString text_7150);
 LarString editor__lsp__capabilities(LarMemory* lar_result_memory);
 LarString editor__lsp__docPath(LarMemory* lar_result_memory, LarAny msg);
 int32_t editor__lsp__serve(void);
 int32_t editor__lsp__handle(LarString body, LarMemory* kept, editor__lsp__Documents* docs);
-void editor__lsp__keep(LarMemory* kept, editor__lsp__Documents* docs, LarString path, LarString text_7194);
+void editor__lsp__keep(LarMemory* kept, editor__lsp__Documents* docs, LarString path, LarString text_7174);
 void editor__lsp__publish(LarString path, editor__lsp__Documents* docs);
 LarAny editor__lsp__parsed(LarMemory* lar_result_memory, LarString body);
 LarString editor__lsp__pathOf(LarMemory* lar_result_memory, LarAny msg);
-Opt_s editor__lsp__answer(LarMemory* lar_result_memory, LarAny msg, LarString path, LarString main__7206);
+Opt_s editor__lsp__answer(LarMemory* lar_result_memory, LarAny msg, LarString path, LarString main__7186);
 Opt_s editor__lsp__readFile(LarMemory* lar_result_memory, LarString path);
 LarString editor__lsp__ask(LarMemory* lar_result_memory, LarString body, editor__lsp__Documents* docs);
 int32_t editor__lsp__runWorker(LarString req, LarString resp);
@@ -6181,22 +6173,22 @@ int32_t editor__dap__contentLength(LarString line);
 Opt_s editor__dap__editorMessage(LarMemory* lar_result_memory, int32_t ms);
 Opt_s editor__dap__backendMessage(LarMemory* lar_result_memory, int32_t ms);
 void editor__dap__toBackendRaw(LarString body);
-void editor__dap__keep(LarString text_7263);
+void editor__dap__keep(LarString text_7243);
 int32_t editor__dap__newHandle(int32_t kind, int32_t frame, int32_t ref, LarString expr, LarString type);
 Opt_editor__dap__Handle editor__dap__handleAt(LarMemory* lar_result_memory, int32_t id);
-void editor__dap__log(LarString text_7273);
+void editor__dap__log(LarString text_7253);
 LarString editor__dap__withNumber(LarMemory* lar_result_memory, LarString json, LarString key, int32_t value);
 void editor__dap__toEditorRaw(LarString body);
 void editor__dap__emit(LarString body);
 void editor__dap__respond(LarAny req, LarString body);
 void editor__dap__respondError(LarAny req, LarString message);
-LarAny editor__dap__parse(LarMemory* lar_result_memory, LarString text_7297);
-int32_t editor__dap__sendBackend(LarString command_7299, LarString args);
-LarString editor__dap__call(LarMemory* lar_result_memory, LarString command_7303, LarString args);
+LarAny editor__dap__parse(LarMemory* lar_result_memory, LarString text_7277);
+int32_t editor__dap__sendBackend(LarString command_7279, LarString args);
+LarString editor__dap__call(LarMemory* lar_result_memory, LarString command_7283, LarString args);
 Opt_s editor__dap__eval(LarMemory* lar_result_memory, int32_t frame, LarString expr);
 Opt_i64 editor__dap__evalInt(int32_t frame, LarString expr);
 Opt_i64 editor__dap__evalAddress(int32_t frame, LarString expr);
-LarString editor__dap__command(LarMemory* lar_result_memory, int32_t frame, LarString text_7321);
+LarString editor__dap__command(LarMemory* lar_result_memory, int32_t frame, LarString text_7301);
 LarAny editor__dap__tableOf(LarMemory* lar_result_memory, LarAny v);
 int32_t editor__dap__atMost(int64_t n, int32_t limit);
 int64_t editor__dap__hexValue(LarString s);
@@ -6217,8 +6209,8 @@ bool editor__dap__hasFunction(LarString cName);
 LarAny editor__dap__functionEntry(LarMemory* lar_result_memory, LarString cName);
 List_s* editor__dap__localVariables(LarMemory* lar_result_memory, int32_t frame);
 List_s* editor__dap__globalVariables(LarMemory* lar_result_memory, int32_t frame);
-editor__dap__Resolved* editor__dap__resolvePath(LarMemory* lar_result_memory, int32_t frame, LarString text_7490);
-List_s* editor__dap__splitPath(LarMemory* lar_result_memory, LarString text_7504);
+editor__dap__Resolved* editor__dap__resolvePath(LarMemory* lar_result_memory, int32_t frame, LarString text_7470);
+List_s* editor__dap__splitPath(LarMemory* lar_result_memory, LarString text_7484);
 bool editor__dap__isNameByte(uint8_t c);
 bool editor__dap__step(int32_t frame, editor__dap__Resolved* r, LarString part);
 bool editor__dap__fromEditor(LarString body);
@@ -6255,15 +6247,15 @@ int32_t command(Slice_s args);
 int32_t newProject(List_s* rest);
 int32_t buildProject(bool run, List_s* rest, List_s* programArgs);
 int32_t test(List_s* rest);
-int32_t file(LarString main__7774, List_s* rest, List_s* programArgs);
-int32_t writeC(LarString main__7780, LarString output);
+int32_t file(LarString main__7754, List_s* rest, List_s* programArgs);
+int32_t writeC(LarString main__7760, LarString output);
 int32_t plugin(LarString cmd, Slice_s args);
 int32_t version(void);
 int32_t usage(void);
 LarString larimarHome(LarMemory* lar_result_memory);
-List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7796);
-int32_t runPlugin(Plugin* plugin_7814, Slice_s args);
-LarString compileFile(LarMemory* lar_result_memory, LarString main__7824, LarString shownFrom);
+List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7776);
+int32_t runPlugin(Plugin* plugin_7794, Slice_s args);
+LarString compileFile(LarMemory* lar_result_memory, LarString main__7804, LarString shownFrom);
 project__cc__CCompiler* testCompiler(LarMemory* lar_result_memory, LarString wanted);
 project__testing__TestSettings* testSettings(LarMemory* lar_result_memory);
 int32_t testMain(List_s* rest);
@@ -6280,9 +6272,9 @@ List_s* list(LarMemory* lar_result_memory, LarAny section, LarString key, List_s
 bool validName(LarString name);
 LarString resolve(LarMemory* lar_result_memory, LarString dir, LarString p);
 LarString build(LarMemory* lar_result_memory, Project* p, bool debug);
-LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__7921, bool debug);
+LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__7900, bool debug);
 bool checkLibrary(Project* p);
-int32_t runScript(LarString file_7943, List_s* args);
+int32_t runScript(LarString file_7922, List_s* args);
 int32_t execute(LarString exe, List_s* args);
 int32_t create(LarString path, bool library);
 int32_t createLibrary(LarString path, LarString name);
@@ -6291,22 +6283,22 @@ LarString std__platform__Platform_name(LarMemory* lar_result_memory);
 int64_t std__os__posix__PosixSystem_processId(void);
 bool std__os__posix__PosixSystem_cwd(Slice_u8 into);
 void std__os__posix__PosixSystem_programPath(Slice_u8 into);
-int32_t std__os__posix__PosixSystem_shell(LarString command_7983);
+int32_t std__os__posix__PosixSystem_shell(LarString command_7962);
 void std__os__macos__MacOSSystem_programPath(Slice_u8 into);
 int64_t std__os__windows__WindowsSystem_processId(void);
 bool std__os__windows__WindowsSystem_cwd(Slice_u8 into);
 void std__os__windows__WindowsSystem_programPath(Slice_u8 into);
-int32_t std__os__windows__WindowsSystem_shell(LarString command_7987);
+int32_t std__os__windows__WindowsSystem_shell(LarString command_7966);
 int32_t std__io__files__posix__PosixFolders_makeDirectory(LarString path);
 int32_t std__io__files__posix__PosixFolders_removeDirectory(LarString path);
 int64_t std__io__files__posix__PosixFolders_listOpen(LarString path);
-bool std__io__files__posix__PosixFolders_listNext(int64_t list_7994, Slice_u8 into);
-void std__io__files__posix__PosixFolders_listClose(int64_t list_7996);
+bool std__io__files__posix__PosixFolders_listNext(int64_t list_7973, Slice_u8 into);
+void std__io__files__posix__PosixFolders_listClose(int64_t list_7975);
 int32_t std__io__files__windows__WindowsFolders_makeDirectory(LarString path);
 int32_t std__io__files__windows__WindowsFolders_removeDirectory(LarString path);
 int64_t std__io__files__windows__WindowsFolders_listOpen(LarString path);
-bool std__io__files__windows__WindowsFolders_listNext(int64_t list_8003, Slice_u8 into);
-void std__io__files__windows__WindowsFolders_listClose(int64_t list_8005);
+bool std__io__files__windows__WindowsFolders_listNext(int64_t list_7982, Slice_u8 into);
+void std__io__files__windows__WindowsFolders_listClose(int64_t list_7984);
 void std__io__console__posix__PosixConsole_unbufferInput(void);
 bool std__io__console__posix__PosixConsole_waitForInput(int32_t ms);
 void std__io__console__windows__WindowsConsole_unbufferInput(void);
@@ -6315,8 +6307,8 @@ int64_t std__time__posix__PosixClock_monotonic(void);
 int64_t std__time__windows__WindowsClock_monotonic(void);
 std__os__sharedmemory__SharedMemoryOutputStream* std__os__sharedmemory__SharedMemoryOutputStream_create(LarMemory* lar_result_memory, LarString name, int32_t capacity, LarError* err_out);
 std__os__sharedmemory__SharedMemoryInputStream* std__os__sharedmemory__SharedMemoryInputStream_create(LarMemory* lar_result_memory, LarString name, int32_t capacity, LarError* err_out);
-static void StringBuilder_add(StringBuilder* self_, LarString text_8037);
-static void StringBuilder_addLine(StringBuilder* self_, LarString text_8039);
+static void StringBuilder_add(StringBuilder* self_, LarString text_8016);
+static void StringBuilder_addLine(StringBuilder* self_, LarString text_8018);
 static int32_t StringBuilder_length(StringBuilder* self_);
 static LarString StringBuilder_toString(StringBuilder* self_, LarMemory* lar_result_memory);
 static void StringBuilder_clear(StringBuilder* self_);
@@ -6366,7 +6358,7 @@ static void syntax__lexer__Lexer_run(syntax__lexer__Lexer* self_);
 static bool syntax__lexer__Lexer_inNativeHeader(syntax__lexer__Lexer* self_);
 static void syntax__lexer__Lexer_fail(syntax__lexer__Lexer* self_, int32_t at, LarString msg);
 static uint8_t syntax__lexer__Lexer_peek(syntax__lexer__Lexer* self_, int32_t k);
-static void syntax__lexer__Lexer_add(syntax__lexer__Lexer* self_, syntax__lexer__TokenType kind, LarString text_8126, int32_t length);
+static void syntax__lexer__Lexer_add(syntax__lexer__Lexer* self_, syntax__lexer__TokenType kind, LarString text_8105, int32_t length);
 static void syntax__lexer__Lexer_blockComment(syntax__lexer__Lexer* self_);
 static void syntax__lexer__Lexer_identifier(syntax__lexer__Lexer* self_);
 static void syntax__lexer__Lexer_cText(syntax__lexer__Lexer* self_);
@@ -6441,8 +6433,8 @@ static void semantics__rules__LanguageTypeOnlyInLang_check(semantics__rules__Lan
 static void* semantics__rules__LanguageTypeOnlyInLang__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
 static void* codegen__cprogram__CFunction__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
 static void* codegen__cprogram__CPart__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
-static void codegen__cprogram__CProgram_add(codegen__cprogram__CProgram* self_, LarString text_8301);
-static void codegen__cprogram__CProgram_addFunction(codegen__cprogram__CProgram* self_, LarString name, LarString text_8305);
+static void codegen__cprogram__CProgram_add(codegen__cprogram__CProgram* self_, LarString text_8273);
+static void codegen__cprogram__CProgram_addFunction(codegen__cprogram__CProgram* self_, LarString name, LarString text_8277);
 static LarString codegen__cprogram__CProgram_text(codegen__cprogram__CProgram* self_, LarMemory* lar_result_memory);
 static void* codegen__cprogram__CProgram__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
 static void* codegen__prune__Piece__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
@@ -6481,7 +6473,7 @@ static void* project__cc__CCompiler__clone(void* self_, LarMemory* mem, LarClone
 static void* project__testing__TestSettings__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
 static void* project__testing__TestFunction__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
 static Opt_s std__os__process__internal__Child_launch(std__os__process__internal__Child* self_, LarMemory* lar_result_memory);
-static bool std__os__process__internal__Child_send(std__os__process__internal__Child* self_, LarString text_8348);
+static bool std__os__process__internal__Child_send(std__os__process__internal__Child* self_, LarString text_8320);
 static void std__os__process__internal__Child_closeInput(std__os__process__internal__Child* self_);
 static Opt_s std__os__process__internal__Child_readLine(std__os__process__internal__Child* self_, LarMemory* lar_result_memory, int32_t ms);
 static Opt_s std__os__process__internal__Child_read(std__os__process__internal__Child* self_, LarMemory* lar_result_memory, int32_t count, int32_t ms);
@@ -6560,7 +6552,7 @@ static bool std__os__process__Process_hasTask(std__os__process__internal__Child*
 static void std__os__process__Process_start(std__os__process__Process* self_, LarError* err_out);
 static std__os__process__Channel* std__os__process__Process_channel(std__os__process__Process* self_, LarMemory* lar_result_memory, LarError* err_out);
 static int32_t std__os__process__Process_join(std__os__process__Process* self_, LarError* err_out);
-static void std__os__process__Process_write(std__os__process__Process* self_, LarString text_8491, LarError* err_out);
+static void std__os__process__Process_write(std__os__process__Process* self_, LarString text_8463, LarError* err_out);
 static void std__os__process__Process_kill(std__os__process__internal__Child* self_);
 static void* std__os__process__Process__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
 static void* syntax__ast__VarDecl__clone(void* self_, LarMemory* mem, LarCloneMap* cm);
@@ -8794,19 +8786,19 @@ void std__os__hostProgramPath(Slice_u8 into) {
     switch_end: ;
 }
 
-int32_t std__os__hostShell(LarString command_1639) {
+int32_t std__os__hostShell(LarString command_1636) {
     std__platform__OS subject = std__platform__Platform_current();
     int32_t value;
     memset(&value, 0, sizeof value);
     {
         if (subject.tag == std__platform__OS_Linux || subject.tag == std__platform__OS_MacOS || subject.tag == std__platform__OS_Unix) {
-            value = std__os__posix__PosixSystem_shell(command_1639);
+            value = std__os__posix__PosixSystem_shell(command_1636);
             goto switch_end;
         }
     }
     {
         if (subject.tag == std__platform__OS_Windows) {
-            value = std__os__windows__WindowsSystem_shell(command_1639);
+            value = std__os__windows__WindowsSystem_shell(command_1636);
             goto switch_end;
         }
     }
@@ -8851,9 +8843,9 @@ LarString std__os__cwd(LarMemory* lar_result_memory) {
     return (std__os__hostCwd(((Slice_u8){ (b)->items, (b)->length })) ? std__os__cText(lar_result_memory, ((Slice_u8){ (b)->items, (b)->length })) : lar_string(".", 1));
 }
 
-int32_t std__os__runCommand(LarString command_1645) {
+int32_t std__os__runCommand(LarString command_1642) {
     fflush(stdout);
-    return std__os__hostShell(command_1645);
+    return std__os__hostShell(command_1642);
 }
 
 LarString std__os__programPath(LarMemory* lar_result_memory) {
@@ -8990,21 +8982,21 @@ LarString std__io__path__fileName(LarMemory* lar_result_memory, LarString path) 
     return result;
 }
 
-LarString std__io__path__join(LarMemory* lar_result_memory, LarString dir, LarString file_1675) {
-    if ((lar_string_eq(dir, lar_string("", 0)) || lar_string_eq(dir, lar_string(".", 1))) || std__io__path__isAbsolute(file_1675)) {
-        return file_1675;
+LarString std__io__path__join(LarMemory* lar_result_memory, LarString dir, LarString file_1672) {
+    if ((lar_string_eq(dir, lar_string("", 0)) || lar_string_eq(dir, lar_string(".", 1))) || std__io__path__isAbsolute(file_1672)) {
+        return file_1672;
     }
     LarString value;
     if (String_endsWith(dir, lar_string("/", 1)) || String_endsWith(dir, lar_string("\\", 1))) {
         LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(7000038));
         lar_text_builder_str(&text, dir);
-        lar_text_builder_str(&text, file_1675);
+        lar_text_builder_str(&text, file_1672);
         value = lar_text_builder_finish(&text);
     } else {
         LarTextBuilder text_2 = lar_text_builder_mem(lar_result_memory, LINE(7000038));
         lar_text_builder_str(&text_2, dir);
         lar_text_builder_add(&text_2, "/", 1);
-        lar_text_builder_str(&text_2, file_1675);
+        lar_text_builder_str(&text_2, file_1672);
         value = lar_text_builder_finish(&text_2);
     }
     return value;
@@ -9023,8 +9015,8 @@ LarString std__io__path__absolute(LarMemory* lar_result_memory, LarString path) 
 
 LarString std__io__path__normalize(LarMemory* lar_result_memory, LarString path) {
     LarMemory memory = lar_memory_growable();
-    LarString text_1679 = String_replace(path, &memory, lar_string("\\", 1), lar_string("/", 1));
-    LarString value = text_1679;
+    LarString text_1676 = String_replace(path, &memory, lar_string("\\", 1), lar_string("/", 1));
+    LarString value = text_1676;
     List_s* value_2 = List_s_new(&memory, 7000054);
     LarString value_3 = lar_string("/", 1);
     if (value_3.len == 0) {
@@ -9062,7 +9054,7 @@ LarString std__io__path__normalize(LarMemory* lar_result_memory, LarString path)
     }
     LarMemory line7000067_temps = lar_memory_growable();
     LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(7000067));
-    lar_text_builder_str(&text, (String_startsWith(text_1679, lar_string("/", 1)) ? lar_string("/", 1) : lar_string("", 0)));
+    lar_text_builder_str(&text, (String_startsWith(text_1676, lar_string("/", 1)) ? lar_string("/", 1) : lar_string("", 0)));
     List_s* value_4 = parts;
     lar_text_builder_str(&text, lar_string_join(value_4->items, value_4->length, lar_string("/", 1), &line7000067_temps, LINE(7000067)));
     LarString r = lar_text_builder_finish(&text);
@@ -9072,9 +9064,9 @@ LarString std__io__path__normalize(LarMemory* lar_result_memory, LarString path)
     return result;
 }
 
-LarString std__io__path__relative(LarMemory* lar_result_memory, LarString base, LarString file_1685) {
+LarString std__io__path__relative(LarMemory* lar_result_memory, LarString base, LarString file_1682) {
     LarString b = std__io__path__absolute(lar_result_memory, base);
-    LarString f = std__io__path__absolute(lar_result_memory, file_1685);
+    LarString f = std__io__path__absolute(lar_result_memory, file_1682);
     if (lar_string_eq(f, b)) {
         return lar_string("", 0);
     }
@@ -9216,19 +9208,19 @@ int64_t std__io__files__folderListOpen(LarString path) {
     return value;
 }
 
-bool std__io__files__folderListNext(int64_t list_1709, Slice_u8 into) {
+bool std__io__files__folderListNext(int64_t list_1706, Slice_u8 into) {
     std__platform__OS subject = std__platform__Platform_current();
     bool value;
     memset(&value, 0, sizeof value);
     {
         if (subject.tag == std__platform__OS_Linux || subject.tag == std__platform__OS_MacOS || subject.tag == std__platform__OS_Unix) {
-            value = std__io__files__posix__PosixFolders_listNext(list_1709, into);
+            value = std__io__files__posix__PosixFolders_listNext(list_1706, into);
             goto switch_end;
         }
     }
     {
         if (subject.tag == std__platform__OS_Windows) {
-            value = std__io__files__windows__WindowsFolders_listNext(list_1709, into);
+            value = std__io__files__windows__WindowsFolders_listNext(list_1706, into);
             goto switch_end;
         }
     }
@@ -9237,17 +9229,17 @@ bool std__io__files__folderListNext(int64_t list_1709, Slice_u8 into) {
     return value;
 }
 
-void std__io__files__folderListClose(int64_t list_1711) {
+void std__io__files__folderListClose(int64_t list_1708) {
     std__platform__OS subject = std__platform__Platform_current();
     {
         if (subject.tag == std__platform__OS_Linux || subject.tag == std__platform__OS_MacOS || subject.tag == std__platform__OS_Unix) {
-            std__io__files__posix__PosixFolders_listClose(list_1711);
+            std__io__files__posix__PosixFolders_listClose(list_1708);
             goto switch_end;
         }
     }
     {
         if (subject.tag == std__platform__OS_Windows) {
-            std__io__files__windows__WindowsFolders_listClose(list_1711);
+            std__io__files__windows__WindowsFolders_listClose(list_1708);
             goto switch_end;
         }
     }
@@ -9330,7 +9322,7 @@ LarString std__io__files__readString(LarMemory* lar_result_memory, LarString pat
     return result;
 }
 
-void std__io__files__writeFile(LarString path, LarString text_1725, LarString mode, LarError* err_out) {
+void std__io__files__writeFile(LarString path, LarString text_1722, LarString mode, LarError* err_out) {
     LarError err;
     err.kind = 0;
     LarMemory memory = lar_memory_growable();
@@ -9345,10 +9337,10 @@ void std__io__files__writeFile(LarString path, LarString text_1725, LarString mo
             return;
         }
     }
-    uint64_t n = ((uint64_t)((text_1725).len));
+    uint64_t n = ((uint64_t)((text_1722).len));
     bool condition = (n == 0ULL);
     if (!condition) {
-        LarString value = text_1725;
+        LarString value = text_1722;
         Slice_u8 value_2 = ((Slice_u8){ (uint8_t*)value.ptr, value.len });
         condition = (fwrite(((void*)(value_2).items), 1ULL, n, std__io__files__FileHandle__get(((LarResource_std__io__files__FileHandle*)lar_unwrap((void*)(f), LINE(8000145))), LINE(8000145))) == n);
     }
@@ -9366,10 +9358,10 @@ void std__io__files__writeFile(LarString path, LarString text_1725, LarString mo
     lar_memory_free(&memory);
 }
 
-void std__io__files__writeString(LarString path, LarString text_1731, LarError* err_out) {
+void std__io__files__writeString(LarString path, LarString text_1728, LarError* err_out) {
     LarError err;
     err.kind = 0;
-    std__io__files__writeFile(path, text_1731, lar_string("wb", 2), &err);
+    std__io__files__writeFile(path, text_1728, lar_string("wb", 2), &err);
     if (err.kind != 0) {
         *err_out = err;
         return;
@@ -9442,19 +9434,19 @@ void std__io__files__createDirectories(LarString path, LarError* err_out) {
     LarError err;
     err.kind = 0;
     LarMemory memory = lar_memory_growable();
-    LarString text_1750 = String_replace(path, &memory, lar_string("\\", 1), lar_string("/", 1));
+    LarString text_1747 = String_replace(path, &memory, lar_string("\\", 1), lar_string("/", 1));
     {
-        LarString text = text_1750;
+        LarString text = text_1747;
         for (int32_t index = 0; index < text.len; index++) {
             int32_t i = index;
             uint8_t b = (uint8_t)text.ptr[index];
-            bool condition = (((b == (uint8_t)47) && (i > 0)) && (!(lar_string_byte(text_1750, (int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), LINE(8000208)) == (uint8_t)58)));
+            bool condition = (((b == (uint8_t)47) && (i > 0)) && (!(lar_string_byte(text_1747, (int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), LINE(8000208)) == (uint8_t)58)));
             if (condition) {
-                LarString value = text_1750;
+                LarString value = text_1747;
                 condition = (!(std__io__files__isDirectory(lar_string_sub(value, (int64_t)(0), (int64_t)(i), 8000208))));
             }
             if (condition) {
-                LarString value_2 = text_1750;
+                LarString value_2 = text_1747;
                 std__io__raise(std__io__files__makeDirectory(lar_string_sub(value_2, (int64_t)(0), (int64_t)(i), 8000208)), path, &err);
                 if (err.kind != 0) {
                     lar_memory_free(&memory);
@@ -9464,7 +9456,7 @@ void std__io__files__createDirectories(LarString path, LarError* err_out) {
             }
         }
     }
-    std__io__raise(std__io__files__makeDirectory(text_1750), path, &err);
+    std__io__raise(std__io__files__makeDirectory(text_1747), path, &err);
     if (err.kind != 0) {
         lar_memory_free(&memory);
         *err_out = err;
@@ -9547,16 +9539,16 @@ LarString std__io__console__allOf(LarMemory* lar_result_memory, LarNative_std__i
     return result;
 }
 
-void std__io__console__put(LarString text_1777, bool error) {
-    if ((text_1777).len == 0) {
+void std__io__console__put(LarString text_1774, bool error) {
+    if ((text_1774).len == 0) {
         return;
     }
     if (error) {
         fflush(stdout);
     }
-    LarString value = text_1777;
+    LarString value = text_1774;
     Slice_u8 value_2 = ((Slice_u8){ (uint8_t*)value.ptr, value.len });
-    uint64_t value_3 = ((uint64_t)((text_1777).len));
+    uint64_t value_3 = ((uint64_t)((text_1774).len));
     fwrite(((void*)(value_2).items), 1ULL, value_3, (error ? stderr : stdout));
     if (error) {
         fflush(stderr);
@@ -9617,8 +9609,8 @@ int32_t std__io__console__lastCount(void) {
     return std__io__console__Counter_get__dispatch((std__io__console__Counter*)std__io__console__lastRead);
 }
 
-void std__io__console__write(LarString text_1787) {
-    std__io__console__put(text_1787, false);
+void std__io__console__write(LarString text_1784) {
+    std__io__console__put(text_1784, false);
 }
 
 void std__io__console__flush(void) {
@@ -9675,8 +9667,8 @@ bool std__io__console__waitForInput(int32_t ms) {
     return value;
 }
 
-void std__io__console__printError(LarString text_1790) {
-    std__io__console__put(text_1790, true);
+void std__io__console__printError(LarString text_1787) {
+    std__io__console__put(text_1787, true);
     std__io__console__put(lar_string("\n", 1), true);
 }
 
@@ -9849,11 +9841,11 @@ semantics__types__Type* semantics__types__arrayTypeOf(LarMemory* lar_result_memo
     }
     lar_panic("no case of the switch matched", LINE(17000156));
     switch_end: ;
-    LarString text_1814 = value;
+    LarString text_1811 = value;
     LarMemory* place = &lar_default_memory;
     semantics__types__Type* new_semantics__types__Type = (semantics__types__Type*)lar_memory_alloc(place, sizeof(semantics__types__Type), LINE(17000161));
     List_semantics__types__Type* list = List_semantics__types__Type_new(place, LINE(17000023));
-    *new_semantics__types__Type = (semantics__types__Type){ .header = { (const void*)&methods_semantics__types__Type, place }, .kind = ((semantics__types__TypeKind){ .tag = semantics__types__TypeKind_Array }), .name = lar_string("", 0), .namedKind = ((semantics__types__NamedKind){ .tag = semantics__types__NamedKind_Struct }), .elem = elem, .arrayKind = arrayKind, .size = size, .params = list, .text = text_1814, .used = false, .funcId = (-1), .order = 0, .safe = false, .plain = NULL };
+    *new_semantics__types__Type = (semantics__types__Type){ .header = { (const void*)&methods_semantics__types__Type, place }, .kind = ((semantics__types__TypeKind){ .tag = semantics__types__TypeKind_Array }), .name = lar_string("", 0), .namedKind = ((semantics__types__NamedKind){ .tag = semantics__types__NamedKind_Struct }), .elem = elem, .arrayKind = arrayKind, .size = size, .params = list, .text = text_1811, .used = false, .funcId = (-1), .order = 0, .safe = false, .plain = NULL };
     semantics__types__Type* result = semantics__types__intern(NULL, new_semantics__types__Type);
     lar_memory_free(&memory);
     return result;
@@ -12013,7 +12005,7 @@ syntax__ast__TypeRef* syntax__parser__types__type(LarMemory* lar_result_memory, 
     if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LParen }))) {
         List_syntax__ast__TypeRef* list_3 = List_syntax__ast__TypeRef_new(&lar_default_memory, LINE(23000017));
         List_syntax__ast__TypeRef* parameterTypes = list_3;
-        syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_0, .env = { .l_0 = { .parameterTypes_2075 = parameterTypes, .parser_2072 = parser } } }));
+        syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_0, .env = { .l_0 = { .parameterTypes_2072 = parameterTypes, .parser_2069 = parser } } }));
         syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), lar_string("Expected ')' in type", 20));
         if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Arrow }))) {
             LarMemory* place_3 = &lar_default_memory;
@@ -12681,7 +12673,7 @@ syntax__ast__Expr* syntax__parser__expressions__postfix(LarMemory* lar_result_me
             List_syntax__ast__Expr* list_2 = List_syntax__ast__Expr_new(place_2, LINE(16000359));
             *new_syntax__ast__Call = (syntax__ast__Call){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Call, place_2 }, .line = (syntax__parser__Parser_previous__dispatch((syntax__parser__Parser*)parser, NULL))->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) } }, .callee = value, .args = list_2 };
             syntax__ast__Call* call = new_syntax__ast__Call;
-            syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_1, .env = { .l_1 = { .call_2148 = call, .parser_2146 = parser } } }));
+            syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_1, .env = { .l_1 = { .call_2145 = call, .parser_2143 = parser } } }));
             syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), lar_string("Expected ')' after arguments", 28));
             value = ((syntax__ast__Expr*)(call));
         } else {
@@ -12912,7 +12904,7 @@ syntax__ast__ObjectLit* syntax__parser__expressions__objectLiteral(LarMemory* la
     *new_syntax__ast__ObjectLit = (syntax__ast__ObjectLit){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__ObjectLit, place_2 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) } }, .typeName = typeName, .fields = list_2 };
     syntax__ast__ObjectLit* literal = new_syntax__ast__ObjectLit;
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LBrace }), lar_string("Expected '{' to open object literal", 35));
-    syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_2, .env = { .l_2 = { .parser_2165 = parser, .literal_2168 = literal } } }));
+    syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_2, .env = { .l_2 = { .parser_2162 = parser, .literal_2165 = literal } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), lar_string("Expected '}' to close object literal", 36));
     return literal;
 }
@@ -12950,7 +12942,7 @@ syntax__ast__Lambda* syntax__parser__expressions__lambda(LarMemory* lar_result_m
     List_syntax__ast__Stmt* list_3 = List_syntax__ast__Stmt_new(place_2, LINE(16000396));
     *new_syntax__ast__Lambda = (syntax__ast__Lambda){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Lambda, place_2 }, .line = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LParen }), lar_string("Expected '('", 12)))->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) } }, .params = list_2, .body = list_3, .ref = NULL };
     syntax__ast__Lambda* lambda = new_syntax__ast__Lambda;
-    syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_3, .env = { .l_3 = { .lambda_2175 = lambda, .parser_2174 = parser } } }));
+    syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_3, .env = { .l_3 = { .lambda_2172 = lambda, .parser_2171 = parser } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), lar_string("Expected ')' after lambda parameters", 36));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Arrow }), lar_string("Expected '->' after lambda parameters", 37));
     (lambda)->body = syntax__parser__statements__block(NULL, parser, lar_string("lambda body", 11));
@@ -13063,7 +13055,7 @@ syntax__ast__Pattern* syntax__parser__expressions__pattern(LarMemory* lar_result
     }
     if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LBrace }))) {
         (pattern)->kind = 2;
-        syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_4, .env = { .l_4 = { .parser_2182 = parser, .pattern_2184 = pattern } } }));
+        syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_4, .env = { .l_4 = { .parser_2179 = parser, .pattern_2181 = pattern } } }));
         syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), lar_string("Expected '}' after the fields of the pattern", 44));
         if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }))) {
             (pattern)->binding = (syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)parser, NULL))->text;
@@ -13241,19 +13233,19 @@ bool syntax__parser__expressions__optionalFollows(syntax__lexer__TokenType next)
 }
 
 LarString syntax__parser__expressions__dottedPath(LarMemory* lar_result_memory, syntax__ast__Expr* value) {
-    syntax__ast__Ident* identifier_2216 = NULL;
-    syntax__ast__Member* member_2217 = NULL;
-    if ((identifier_2216 = (syntax__ast__Ident*)lar_as_class((void*)(value), &lar_class_syntax__ast__Ident)) != NULL) {
-        return (identifier_2216)->name;
+    syntax__ast__Ident* identifier_2213 = NULL;
+    syntax__ast__Member* member_2214 = NULL;
+    if ((identifier_2213 = (syntax__ast__Ident*)lar_as_class((void*)(value), &lar_class_syntax__ast__Ident)) != NULL) {
+        return (identifier_2213)->name;
     }
-    if ((member_2217 = (syntax__ast__Member*)lar_as_class((void*)(value), &lar_class_syntax__ast__Member)) != NULL) {
+    if ((member_2214 = (syntax__ast__Member*)lar_as_class((void*)(value), &lar_class_syntax__ast__Member)) != NULL) {
         LarMemory memory = lar_memory_growable();
-        LarString path = syntax__parser__expressions__dottedPath(&memory, (member_2217)->object);
+        LarString path = syntax__parser__expressions__dottedPath(&memory, (member_2214)->object);
         if (!lar_string_eq(path, lar_string("", 0))) {
             LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(21000416));
             lar_text_builder_str(&text, path);
             lar_text_builder_add(&text, ".", 1);
-            lar_text_builder_str(&text, (member_2217)->name);
+            lar_text_builder_str(&text, (member_2214)->name);
             LarString result = lar_text_builder_finish(&text);
             lar_memory_free(&memory);
             return result;
@@ -13333,8 +13325,8 @@ syntax__ast__Node* syntax__parser__natives__nativeDeclaration(LarMemory* lar_res
 
 syntax__ast__NativeInterfaceDecl* syntax__parser__natives__nativeInterface(LarMemory* lar_result_memory, syntax__parser__Parser* parser, LarString owner, bool opened) {
     (void)lar_result_memory;
-    syntax__ast__ExternValueDecl* v_2237 = NULL;
-    syntax__ast__ExternTypeDecl* t_2241 = NULL;
+    syntax__ast__ExternValueDecl* v_2234 = NULL;
+    syntax__ast__ExternTypeDecl* t_2238 = NULL;
     syntax__lexer__Token* name = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected the name of the native interface", 41));
     LarMemory* place_2 = &lar_default_memory;
     syntax__ast__NativeInterfaceDecl* new_syntax__ast__NativeInterfaceDecl = (syntax__ast__NativeInterfaceDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__NativeInterfaceDecl), LINE(24000047));
@@ -13393,19 +13385,19 @@ syntax__ast__NativeInterfaceDecl* syntax__parser__natives__nativeInterface(LarMe
         } else {
             if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Const })) || syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Let }))) {
                 syntax__ast__Node* n = syntax__parser__natives__nativeValue(NULL, parser);
-                if ((v_2237 = (syntax__ast__ExternValueDecl*)lar_as_class((void*)(n), &lar_class_syntax__ast__ExternValueDecl)) != NULL) {
-                    if (lar_string_eq((v_2237)->cExpr, lar_string("", 0))) {
-                        List_s_push(gives, (v_2237)->cName);
+                if ((v_2234 = (syntax__ast__ExternValueDecl*)lar_as_class((void*)(n), &lar_class_syntax__ast__ExternValueDecl)) != NULL) {
+                    if (lar_string_eq((v_2234)->cExpr, lar_string("", 0))) {
+                        List_s_push(gives, (v_2234)->cName);
                     } else {
-                        syntax__parser__natives__cNames((v_2237)->cExpr, gives);
+                        syntax__parser__natives__cNames((v_2234)->cExpr, gives);
                     }
-                    List_s_push((declaration)->members, (v_2237)->name);
+                    List_s_push((declaration)->members, (v_2234)->name);
                     LarTextBuilder text_4 = lar_text_builder_mem(&lar_default_memory, LINE(24000079));
                     lar_text_builder_str(&text_4, (name)->text);
                     lar_text_builder_add(&text_4, "__", 2);
-                    lar_text_builder_str(&text_4, (v_2237)->name);
-                    (v_2237)->name = lar_text_builder_finish(&text_4);
-                    List_syntax__ast__Node_push((parser)->nativeParts, ((syntax__ast__Node*)(v_2237)));
+                    lar_text_builder_str(&text_4, (v_2234)->name);
+                    (v_2234)->name = lar_text_builder_finish(&text_4);
+                    List_syntax__ast__Node_push((parser)->nativeParts, ((syntax__ast__Node*)(v_2234)));
                 }
             } else {
                 if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Struct }))) {
@@ -13423,16 +13415,16 @@ syntax__ast__NativeInterfaceDecl* syntax__parser__natives__nativeInterface(LarMe
                             syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)parser, NULL);
                             syntax__lexer__Token* typeName = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected the type's name after 'type'", 37));
                             syntax__ast__Node* n = syntax__parser__natives__nativeCType(NULL, parser, typeName);
-                            if ((t_2241 = (syntax__ast__ExternTypeDecl*)lar_as_class((void*)(n), &lar_class_syntax__ast__ExternTypeDecl)) != NULL) {
-                                if (lar_string_eq((t_2241)->cType, lar_string("", 0))) {
+                            if ((t_2238 = (syntax__ast__ExternTypeDecl*)lar_as_class((void*)(n), &lar_class_syntax__ast__ExternTypeDecl)) != NULL) {
+                                if (lar_string_eq((t_2238)->cType, lar_string("", 0))) {
                                     LarTextBuilder text_5 = lar_text_builder_mem(&lar_default_memory, LINE(24000096));
                                     lar_text_builder_str(&text_5, (typeName)->text);
                                     lar_text_builder_add(&text_5, "*", 1);
-                                    (t_2241)->cType = lar_text_builder_finish(&text_5);
+                                    (t_2238)->cType = lar_text_builder_finish(&text_5);
                                 }
-                                syntax__parser__natives__cNames((t_2241)->cType, gives);
-                                List_syntax__ast__ExternTypeDecl_push(types, t_2241);
-                                List_s_push((declaration)->types, (t_2241)->name);
+                                syntax__parser__natives__cNames((t_2238)->cType, gives);
+                                List_syntax__ast__ExternTypeDecl_push(types, t_2238);
+                                List_s_push((declaration)->types, (t_2238)->name);
                             }
                             List_syntax__ast__Node_push((parser)->nativeParts, n);
                         } else {
@@ -13621,14 +13613,14 @@ bool syntax__parser__natives__typeWithFields(syntax__parser__Parser* parser) {
     return false;
 }
 
-void syntax__parser__natives__cNames(LarString text_2258, List_s* into) {
+void syntax__parser__natives__cNames(LarString text_2255, List_s* into) {
     LarMemory memory = lar_memory_growable();
     List_u8* list = List_u8_new(&memory, LINE(24000191));
     List_u8* word = list;
     LarMemory line24000192_temps = lar_memory_growable();
     {
         LarTextBuilder text = lar_text_builder_mem(&line24000192_temps, LINE(24000192));
-        lar_text_builder_str(&text, text_2258);
+        lar_text_builder_str(&text, text_2255);
         lar_text_builder_add(&text, " ", 1);
         LarString text_2 = lar_text_builder_finish(&text);
         for (int32_t index = 0; index < text_2.len; index++) {
@@ -13665,17 +13657,17 @@ LarString syntax__parser__natives__cTarget(LarMemory* lar_result_memory, syntax_
         return lar_string("", 0);
     }
     if (syntax__parser__natives__atCText(parser)) {
-        syntax__lexer__Token* text_2266 = syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)parser, NULL);
-        if (lar_string_eq(String_trim((text_2266)->text, NULL), lar_string("", 0))) {
+        syntax__lexer__Token* text_2263 = syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)parser, NULL);
+        if (lar_string_eq(String_trim((text_2263)->text, NULL), lar_string("", 0))) {
             LarMemory line24000211_temps = lar_memory_growable();
             LarTextBuilder text_2 = lar_text_builder_mem(&line24000211_temps, LINE(24000211));
             lar_text_builder_add(&text_2, "The C of ", 9);
             lar_text_builder_str(&text_2, what);
             lar_text_builder_add(&text_2, " is empty", 9);
-            syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (text_2266)->line, lar_text_builder_finish(&text_2));
+            syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (text_2263)->line, lar_text_builder_finish(&text_2));
             lar_memory_free(&line24000211_temps);
         }
-        return (text_2266)->text;
+        return (text_2263)->text;
     }
     if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Struct }))) {
         LarMemory line24000215_temps = lar_memory_growable();
@@ -14164,15 +14156,15 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(LarMemory* lar_
             List_syntax__ast__Param* list_8 = (declaration)->params;
             for (int32_t index = 0; index < list_8->length; index++) {
                 int32_t i = index;
-                syntax__ast__Param* p_2313 = list_8->items[index];
-                bool memory = (((((i == 0) && (!((p_2313)->type == NULL))) && (((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2313)->type), LINE(24000431))))->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Growable })).tag)) && (((((syntax__ast__TypeRef*)lar_unwrap((void*)((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2313)->type), LINE(24000431))))->inner), LINE(24000431))))->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Named })).tag)) && lar_string_eq((((syntax__ast__TypeRef*)lar_unwrap((void*)((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2313)->type), LINE(24000431))))->inner), LINE(24000431))))->name, lar_string("byte", 4)));
+                syntax__ast__Param* p_2310 = list_8->items[index];
+                bool memory = (((((i == 0) && (!((p_2310)->type == NULL))) && (((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2310)->type), LINE(24000431))))->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Growable })).tag)) && (((((syntax__ast__TypeRef*)lar_unwrap((void*)((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2310)->type), LINE(24000431))))->inner), LINE(24000431))))->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Named })).tag)) && lar_string_eq((((syntax__ast__TypeRef*)lar_unwrap((void*)((((syntax__ast__TypeRef*)lar_unwrap((void*)((p_2310)->type), LINE(24000431))))->inner), LINE(24000431))))->name, lar_string("byte", 4)));
                 if (memory) {
                     LarCloneMap clones_2 = lar_clone_map();
-                    syntax__ast__Param* copy_2 = clone_syntax__ast__Param(p_2313, &lar_default_memory, &clones_2);
+                    syntax__ast__Param* copy_2 = clone_syntax__ast__Param(p_2310, &lar_default_memory, &clones_2);
                     lar_clone_done(&clones_2);
                     List_syntax__ast__Param_push((cFunction)->params, copy_2);
                 } else {
-                    List_syntax__ast__Param_push(kept, p_2313);
+                    List_syntax__ast__Param_push(kept, p_2310);
                 }
             }
         }
@@ -14192,15 +14184,15 @@ syntax__ast__FunctionDecl* syntax__parser__natives__nativeMember(LarMemory* lar_
         {
             List_syntax__ast__Param* list_11 = kept;
             for (int32_t index_2 = 0; index_2 < list_11->length; index_2++) {
-                syntax__ast__Param* p_2315 = list_11->items[index_2];
+                syntax__ast__Param* p_2312 = list_11->items[index_2];
                 LarCloneMap clones_3 = lar_clone_map();
-                syntax__ast__Param* copy_3 = clone_syntax__ast__Param(p_2315, &lar_default_memory, &clones_3);
+                syntax__ast__Param* copy_3 = clone_syntax__ast__Param(p_2312, &lar_default_memory, &clones_3);
                 lar_clone_done(&clones_3);
                 List_syntax__ast__Param_push((cFunction)->params, copy_3);
                 LarMemory* place_6 = &lar_default_memory;
                 syntax__ast__Ident* new_syntax__ast__Ident = (syntax__ast__Ident*)lar_memory_alloc(place_6, sizeof(syntax__ast__Ident), LINE(24000444));
                 List_semantics__types__PatternInfo* list_12 = List_semantics__types__PatternInfo_new(place_6, LINE(16000048));
-                *new_syntax__ast__Ident = (syntax__ast__Ident){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Ident, place_6 }, .line = (c)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_12, .computed = lar_string("", 0) } }, .name = (p_2315)->name };
+                *new_syntax__ast__Ident = (syntax__ast__Ident){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Ident, place_6 }, .line = (c)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_12, .computed = lar_string("", 0) } }, .name = (p_2312)->name };
                 List_syntax__ast__Expr_push(args, ((syntax__ast__Expr*)(new_syntax__ast__Ident)));
             }
         }
@@ -14549,50 +14541,50 @@ syntax__ast__Node* syntax__parser__declarations__topLevelDeclaration(LarMemory* 
 
 syntax__ast__FunctionDecl* syntax__parser__declarations__testFunction(LarMemory* lar_result_memory, syntax__parser__Parser* parser) {
     (void)lar_result_memory;
-    syntax__ast__FunctionDecl* test_2342 = syntax__parser__declarations__functionDeclaration(NULL, parser, false, true);
-    if (!lar_string_eq((test_2342)->typeName, lar_string("", 0))) {
+    syntax__ast__FunctionDecl* test_2339 = syntax__parser__declarations__functionDeclaration(NULL, parser, false, true);
+    if (!lar_string_eq((test_2339)->typeName, lar_string("", 0))) {
         LarMemory line20000068_temps = lar_memory_growable();
         LarTextBuilder text = lar_text_builder_mem(&line20000068_temps, LINE(20000068));
         lar_text_builder_add(&text, "A test function is a plain function, not '", 42);
-        lar_text_builder_str(&text, (test_2342)->typeName);
+        lar_text_builder_str(&text, (test_2339)->typeName);
         lar_text_builder_add(&text, ".", 1);
-        lar_text_builder_str(&text, (test_2342)->name);
+        lar_text_builder_str(&text, (test_2339)->name);
         lar_text_builder_add(&text, "'", 1);
-        syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (test_2342)->_super.line, lar_text_builder_finish(&text));
+        syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (test_2339)->_super.line, lar_text_builder_finish(&text));
         lar_memory_free(&line20000068_temps);
     } else {
-        if (((test_2342)->params)->length > 1) {
+        if (((test_2339)->params)->length > 1) {
             LarMemory line20000070_temps = lar_memory_growable();
             LarTextBuilder text_2 = lar_text_builder_mem(&line20000070_temps, LINE(20000070));
             lar_text_builder_add(&text_2, "A test function takes nothing, or one setup: test function ", 59);
-            lar_text_builder_str(&text_2, (test_2342)->name);
+            lar_text_builder_str(&text_2, (test_2339)->name);
             lar_text_builder_add(&text_2, "(s: MySetup)", 12);
-            syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (test_2342)->_super.line, lar_text_builder_finish(&text_2));
+            syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (test_2339)->_super.line, lar_text_builder_finish(&text_2));
             lar_memory_free(&line20000070_temps);
         } else {
-            if ((!((((test_2342)->ret)->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Named })).tag)) || (!lar_string_eq(((test_2342)->ret)->name, lar_string("void", 4)))) {
+            if ((!((((test_2339)->ret)->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Named })).tag)) || (!lar_string_eq(((test_2339)->ret)->name, lar_string("void", 4)))) {
                 LarMemory line20000072_temps = lar_memory_growable();
                 LarTextBuilder text_3 = lar_text_builder_mem(&line20000072_temps, LINE(20000072));
                 lar_text_builder_add(&text_3, "A test function returns nothing: test function ", 47);
-                lar_text_builder_str(&text_3, (test_2342)->name);
+                lar_text_builder_str(&text_3, (test_2339)->name);
                 lar_text_builder_add(&text_3, "(): void", 8);
-                syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (test_2342)->_super.line, lar_text_builder_finish(&text_3));
+                syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (test_2339)->_super.line, lar_text_builder_finish(&text_3));
                 lar_memory_free(&line20000072_temps);
             } else {
-                if (!lar_string_eq((test_2342)->returnLives, lar_string("", 0))) {
+                if (!lar_string_eq((test_2339)->returnLives, lar_string("", 0))) {
                     LarMemory line20000074_temps = lar_memory_growable();
                     LarTextBuilder text_4 = lar_text_builder_mem(&line20000074_temps, LINE(20000074));
                     lar_text_builder_add(&text_4, "A test function returns nothing, so it has no 'in ", 50);
-                    lar_text_builder_str(&text_4, (test_2342)->returnLives);
+                    lar_text_builder_str(&text_4, (test_2339)->returnLives);
                     lar_text_builder_add(&text_4, "'", 1);
-                    syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (test_2342)->_super.line, lar_text_builder_finish(&text_4));
+                    syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (test_2339)->_super.line, lar_text_builder_finish(&text_4));
                     lar_memory_free(&line20000074_temps);
                 }
             }
         }
     }
-    (test_2342)->isTest = true;
-    return test_2342;
+    (test_2339)->isTest = true;
+    return test_2339;
 }
 
 syntax__ast__Node* syntax__parser__declarations__constant(LarMemory* lar_result_memory, syntax__parser__Parser* parser) {
@@ -14648,10 +14640,10 @@ List_syntax__ast__Param* syntax__parser__declarations__parameters(LarMemory* lar
     (void)lar_result_memory;
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LParen }), lar_string("Expected '('", 12));
     List_syntax__ast__Param* list = List_syntax__ast__Param_new(&lar_default_memory, LINE(20000106));
-    List_syntax__ast__Param* list_2351 = list;
-    syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_5, .env = { .l_5 = { .list_2351 = list_2351, .parser_2350 = parser } } }));
+    List_syntax__ast__Param* list_2348 = list;
+    syntax__parser__strictList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), ((Closure_2){ .fn = lambda_5, .env = { .l_5 = { .list_2348 = list_2348, .parser_2347 = parser } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RParen }), lar_string("Expected ')' after parameters", 29));
-    return list_2351;
+    return list_2348;
 }
 
 syntax__ast__FunctionDecl* syntax__parser__declarations__functionDeclaration(LarMemory* lar_result_memory, syntax__parser__Parser* parser, bool isOverride, bool withBody) {
@@ -14985,11 +14977,11 @@ void syntax__parser__declarations__cBodied(syntax__parser__Parser* p, syntax__as
     {
         List_syntax__ast__Param* list_5 = (declaration)->params;
         for (int32_t index = 0; index < list_5->length; index++) {
-            syntax__ast__Param* p_2386 = list_5->items[index];
+            syntax__ast__Param* p_2383 = list_5->items[index];
             LarMemory* place_5 = &lar_default_memory;
             syntax__ast__Ident* new_syntax__ast__Ident_2 = (syntax__ast__Ident*)lar_memory_alloc(place_5, sizeof(syntax__ast__Ident), LINE(20000277));
             List_semantics__types__PatternInfo* list_6 = List_semantics__types__PatternInfo_new(place_5, LINE(16000048));
-            *new_syntax__ast__Ident_2 = (syntax__ast__Ident){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Ident, place_5 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_6, .computed = lar_string("", 0) } }, .name = (p_2386)->name };
+            *new_syntax__ast__Ident_2 = (syntax__ast__Ident){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Ident, place_5 }, .line = line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_6, .computed = lar_string("", 0) } }, .name = (p_2383)->name };
             List_syntax__ast__Expr_push((call)->args, ((syntax__ast__Expr*)(new_syntax__ast__Ident_2)));
         }
     }
@@ -15104,7 +15096,7 @@ syntax__ast__EnumDecl* syntax__parser__declarations__enumDeclaration(LarMemory* 
     *new_syntax__ast__EnumDecl = (syntax__ast__EnumDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__EnumDecl, place_2 }, .line = (name)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) }, .name = (name)->text, .variants = list_2 };
     syntax__ast__EnumDecl* declaration = new_syntax__ast__EnumDecl;
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LBrace }), lar_string("Expected '{' to open enum body", 30));
-    syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_6, .env = { .l_6 = { .parser_2399 = parser, .declaration_2401 = declaration } } }));
+    syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_6, .env = { .l_6 = { .parser_2396 = parser, .declaration_2398 = declaration } } }));
     syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), lar_string("Expected '}' to close enum body (variants are separated by commas)", 66));
     syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Semi }));
     return declaration;
@@ -15215,8 +15207,8 @@ LarString syntax__parser__lives(LarMemory* lar_result_memory, syntax__parser__Pa
 
 syntax__ast__Program* syntax__parser__program(LarMemory* lar_result_memory, syntax__parser__Parser* parser, int32_t startLine) {
     (void)lar_result_memory;
-    syntax__ast__FunctionDecl* testFunction_2431 = NULL;
-    syntax__ast__FunctionDecl* staticFunction_2432 = NULL;
+    syntax__ast__FunctionDecl* testFunction_2428 = NULL;
+    syntax__ast__FunctionDecl* staticFunction_2429 = NULL;
     LarMemory* place_2 = &lar_default_memory;
     syntax__ast__Program* new_syntax__ast__Program = (syntax__ast__Program*)lar_memory_alloc(place_2, sizeof(syntax__ast__Program), LINE(18000149));
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
@@ -15240,10 +15232,10 @@ syntax__ast__Program* syntax__parser__program(LarMemory* lar_result_memory, synt
         bool isPublic = syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Public }));
         syntax__lexer__Token* start = syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)parser, NULL);
         syntax__ast__Node* declaration = syntax__parser__declarations__topLevelDeclaration(NULL, parser);
-        if ((isPublic && ((testFunction_2431 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(declaration), &lar_class_syntax__ast__FunctionDecl)) != NULL)) && (testFunction_2431)->isTest) {
+        if ((isPublic && ((testFunction_2428 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(declaration), &lar_class_syntax__ast__FunctionDecl)) != NULL)) && (testFunction_2428)->isTest) {
             syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (start)->line, lar_string("A test function cannot be 'public': only larimar test calls it", 62));
         } else {
-            if ((isPublic && ((staticFunction_2432 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(declaration), &lar_class_syntax__ast__FunctionDecl)) != NULL)) && (!lar_string_eq((staticFunction_2432)->typeName, lar_string("", 0)))) {
+            if ((isPublic && ((staticFunction_2429 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(declaration), &lar_class_syntax__ast__FunctionDecl)) != NULL)) && (!lar_string_eq((staticFunction_2429)->typeName, lar_string("", 0)))) {
                 syntax__parser__Parser_error__dispatch((syntax__parser__Parser*)parser, (start)->line, lar_string("A static function is visible where its type is: mark the type 'public', not the function", 88));
             } else {
                 if (isPublic) {
@@ -15302,7 +15294,7 @@ syntax__ast__ImportDecl* syntax__parser__importDeclaration(LarMemory* lar_result
         if (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LBrace }))) {
             (declaration)->hasNames = true;
             (declaration)->alias = lar_string("", 0);
-            syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_7, .env = { .l_7 = { .declaration_2440 = declaration, .parser_2436 = parser } } }));
+            syntax__parser__looseList(parser, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), ((Closure_2){ .fn = lambda_7, .env = { .l_7 = { .declaration_2437 = declaration, .parser_2433 = parser } } }));
             syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)parser, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace }), lar_string("Expected '}' after the imported names", 37));
         }
     }
@@ -15310,11 +15302,11 @@ syntax__ast__ImportDecl* syntax__parser__importDeclaration(LarMemory* lar_result
     return declaration;
 }
 
-void editor__opendocuments__setOpenDocument(LarString path, LarString text_2442) {
+void editor__opendocuments__setOpenDocument(LarString path, LarString text_2439) {
     LarAny value = editor__opendocuments__texts;
     LarAny value_2 = value;
     LarCloneMap clones = lar_clone_map();
-    LarString copy = clone_s(text_2442, &lar_default_memory, &clones);
+    LarString copy = clone_s(text_2439, &lar_default_memory, &clones);
     lar_clone_done(&clones);
     lar_any_set(value_2, path, lar_any_s(copy), LINE(25000012));
 }
@@ -15364,21 +15356,21 @@ bool semantics__linker__inTarget(LarString platform) {
 Opt_s semantics__linker__ownStd(LarMemory* lar_result_memory, LarString mainPath) {
     (void)lar_result_memory;
     LarMemory memory = lar_memory_growable();
-    LarMemory line15000113_temps = lar_memory_growable();
-    LarString dir = std__io__path__parent(NULL, std__io__path__normalize(&memory, std__io__path__absolute(&line15000113_temps, mainPath)));
-    lar_memory_free(&line15000113_temps);
+    LarMemory line15000107_temps = lar_memory_growable();
+    LarString dir = std__io__path__parent(NULL, std__io__path__normalize(&memory, std__io__path__absolute(&line15000107_temps, mainPath)));
+    lar_memory_free(&line15000107_temps);
     while (!lar_string_eq(dir, lar_string("", 0))) {
-        LarMemory line15000115_temps = lar_memory_growable();
-        if (lar_string_eq(std__io__path__fileName(NULL, dir), lar_string("std", 3)) && (!(!(semantics__linker__readSource(NULL, std__io__path__join(&line15000115_temps, dir, lar_string("lang.lar", 8)))).has))) {
+        LarMemory line15000109_temps = lar_memory_growable();
+        if (lar_string_eq(std__io__path__fileName(NULL, dir), lar_string("std", 3)) && (!(!(semantics__linker__readSource(NULL, std__io__path__join(&line15000109_temps, dir, lar_string("lang.lar", 8)))).has))) {
             LarCloneMap clones = lar_clone_map();
             LarString copy = clone_s(dir, &lar_default_memory, &clones);
             lar_clone_done(&clones);
             Opt_s result = ((Opt_s){ .has = true, .value = copy });
-            lar_memory_free(&line15000115_temps);
+            lar_memory_free(&line15000109_temps);
             lar_memory_free(&memory);
             return result;
         }
-        lar_memory_free(&line15000115_temps);
+        lar_memory_free(&line15000109_temps);
         LarString up = std__io__path__parent(NULL, dir);
         if (lar_string_eq(up, dir)) {
             break;
@@ -15406,15 +15398,15 @@ void semantics__linker__link(LarString mainShown, LarString mainSource, LarStrin
     List_s_push((semantics__linker__linking)->fileSources, mainSource);
     List_semantics__linker__Module_push((semantics__linker__linking)->mods, (semantics__linker__linking)->root);
     LarAny value_5 = (semantics__linker__linking)->modIndex;
-    lar_any_set(value_5, lar_string("", 0), lar_any_i((int64_t)(0LL), LAR_ANY_I64), LINE(15000138));
+    lar_any_set(value_5, lar_string("", 0), lar_any_i((int64_t)(0LL), LAR_ANY_I64), LINE(15000132));
     semantics__linker__parse((semantics__linker__linking)->root, mainSource);
     if (!(((semantics__linker__linking)->root)->program == NULL)) {
         semantics__linker__visit((semantics__linker__linking)->root);
     }
-    LarMemory line15000142_temps = lar_memory_growable();
-    LarString value_6 = std__io__path__normalize(&line15000142_temps, std__io__path__absolute(&line15000142_temps, mainPath));
-    bool langItself = lar_string_eq(value_6, std__io__path__normalize(&line15000142_temps, std__io__path__absolute(&line15000142_temps, semantics__linker__moduleFile(&line15000142_temps, lar_string("std.lang", 8)))));
-    lar_memory_free(&line15000142_temps);
+    LarMemory line15000136_temps = lar_memory_growable();
+    LarString value_6 = std__io__path__normalize(&line15000136_temps, std__io__path__absolute(&line15000136_temps, mainPath));
+    bool langItself = lar_string_eq(value_6, std__io__path__normalize(&line15000136_temps, std__io__path__absolute(&line15000136_temps, semantics__linker__moduleFile(&line15000136_temps, lar_string("std.lang", 8)))));
+    lar_memory_free(&line15000136_temps);
     if (!(((semantics__linker__linking)->root)->program == NULL)) {
         semantics__linker__writeTasks(mainPath);
     }
@@ -15428,8 +15420,6 @@ void semantics__linker__link(LarString mainShown, LarString mainSource, LarStrin
             semantics__linker__tables(m);
         }
     }
-    ((void)(((semantics__linker__linking)->unsafeSources)->length = 0));
-    ((void)(((semantics__linker__linking)->unsafeNotes)->length = 0));
     semantics__linker__flushRuleErrors();
 }
 
@@ -15451,7 +15441,7 @@ List_semantics__linker__Module* semantics__linker__linkedModules(LarMemory* lar_
 
 List_syntax__ast__Node* semantics__linker__declarationsOf(LarMemory* lar_result_memory, semantics__linker__Module* module) {
     (void)lar_result_memory;
-    return (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000161))))->decls;
+    return (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000153))))->decls;
 }
 
 LarString semantics__linker__linkedMainFile(LarMemory* lar_result_memory) {
@@ -15461,11 +15451,11 @@ LarString semantics__linker__linkedMainFile(LarMemory* lar_result_memory) {
 
 List_syntax__ast__ImportDecl* semantics__linker__importsOf(LarMemory* lar_result_memory, semantics__linker__Module* module) {
     (void)lar_result_memory;
-    return (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000167))))->imports;
+    return (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000159))))->imports;
 }
 
 void semantics__linker__ruleError(int32_t line, LarString rule, LarString msg) {
-    LarTextBuilder text = lar_text_builder_mem(((semantics__linker__linking)->errors)->mem, LINE(15000171));
+    LarTextBuilder text = lar_text_builder_mem(((semantics__linker__linking)->errors)->mem, LINE(15000163));
     lar_text_builder_add(&text, "Module Error [Line ", 19);
     lar_text_builder_i64(&text, (int64_t)(line));
     lar_text_builder_add(&text, "]: error[", 9);
@@ -15477,14 +15467,14 @@ void semantics__linker__ruleError(int32_t line, LarString rule, LarString msg) {
 
 syntax__ast__Program* semantics__linker__assemble(LarMemory* lar_result_memory) {
     (void)lar_result_memory;
-    syntax__ast__CIncludeDecl* c_2472 = NULL;
+    syntax__ast__CIncludeDecl* c_2469 = NULL;
     LarString mainPath = (semantics__linker__linking)->linkedMain;
-    LarMemory line15000177_temps = lar_memory_growable();
-    LarString value = std__io__path__normalize(&line15000177_temps, std__io__path__absolute(&line15000177_temps, mainPath));
-    bool langItself = lar_string_eq(value, std__io__path__normalize(&line15000177_temps, std__io__path__absolute(&line15000177_temps, semantics__linker__moduleFile(&line15000177_temps, lar_string("std.lang", 8)))));
-    lar_memory_free(&line15000177_temps);
+    LarMemory line15000169_temps = lar_memory_growable();
+    LarString value = std__io__path__normalize(&line15000169_temps, std__io__path__absolute(&line15000169_temps, mainPath));
+    bool langItself = lar_string_eq(value, std__io__path__normalize(&line15000169_temps, std__io__path__absolute(&line15000169_temps, semantics__linker__moduleFile(&line15000169_temps, lar_string("std.lang", 8)))));
+    lar_memory_free(&line15000169_temps);
     LarMemory* place_2 = &lar_default_memory;
-    syntax__ast__Program* new_syntax__ast__Program = (syntax__ast__Program*)lar_memory_alloc(place_2, sizeof(syntax__ast__Program), LINE(15000178));
+    syntax__ast__Program* new_syntax__ast__Program = (syntax__ast__Program*)lar_memory_alloc(place_2, sizeof(syntax__ast__Program), LINE(15000170));
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
     List_syntax__ast__Node* list_2 = List_syntax__ast__Node_new(place_2, LINE(16000078));
     List_syntax__ast__ImportDecl* list_3 = List_syntax__ast__ImportDecl_new(place_2, LINE(16000079));
@@ -15493,55 +15483,55 @@ syntax__ast__Program* semantics__linker__assemble(LarMemory* lar_result_memory) 
     syntax__ast__Program* prog = new_syntax__ast__Program;
     if (!((semantics__linker__linking)->lang == NULL)) {
         {
-            List_syntax__ast__Node* list_5 = (((syntax__ast__Program*)lar_unwrap((void*)((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000180))))->program), LINE(15000180))))->decls;
+            List_syntax__ast__Node* list_5 = (((syntax__ast__Program*)lar_unwrap((void*)((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000172))))->program), LINE(15000172))))->decls;
             for (int32_t index = 0; index < list_5->length; index++) {
                 syntax__ast__Node* d = list_5->items[index];
-                semantics__linker__rewriteDecl(((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000181))), d);
+                semantics__linker__rewriteDecl(((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000173))), d);
                 (d)->builtin = true;
                 List_syntax__ast__Node_push((prog)->decls, d);
             }
         }
     }
-    LarTable* table = lar_table_new(&lar_default_memory, LINE(15000186));
+    LarTable* table = lar_table_new(&lar_default_memory, LINE(15000178));
     LarAny seen = lar_any_t(table);
     {
         List_semantics__linker__Module* list_6 = (semantics__linker__linking)->order;
         for (int32_t index_2 = 0; index_2 < list_6->length; index_2++) {
             semantics__linker__Module* m = list_6->items[index_2];
             {
-                List_syntax__ast__Node* list_7 = (((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000188))))->decls;
+                List_syntax__ast__Node* list_7 = (((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000180))))->decls;
                 for (int32_t index_3 = 0; index_3 < list_7->length; index_3++) {
                     syntax__ast__Node* d = list_7->items[index_3];
                     if (langItself && ((const void*)(m) == (const void*)((semantics__linker__linking)->root))) {
                         (d)->builtin = true;
                     }
-                    if ((c_2472 = (syntax__ast__CIncludeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__CIncludeDecl)) != NULL) {
-                        LarMemory line15000191_temps = lar_memory_growable();
-                        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(15000191));
-                        lar_text_builder_str(&text, (c_2472)->header_);
+                    if ((c_2469 = (syntax__ast__CIncludeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__CIncludeDecl)) != NULL) {
+                        LarMemory line15000183_temps = lar_memory_growable();
+                        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(15000183));
+                        lar_text_builder_str(&text, (c_2469)->header_);
                         lar_text_builder_add(&text, "|", 1);
-                        lar_text_builder_str(&text, (c_2472)->platform);
+                        lar_text_builder_str(&text, (c_2469)->platform);
                         lar_text_builder_add(&text, "|", 1);
                         LarString value_2;
-                        if (!lar_string_eq((c_2472)->owner, lar_string("", 0))) {
-                            LarTextBuilder text_2 = lar_text_builder_mem(&line15000191_temps, LINE(15000191));
+                        if (!lar_string_eq((c_2469)->owner, lar_string("", 0))) {
+                            LarTextBuilder text_2 = lar_text_builder_mem(&line15000183_temps, LINE(15000183));
                             lar_text_builder_str(&text_2, (m)->path);
                             lar_text_builder_add(&text_2, ".", 1);
-                            lar_text_builder_str(&text_2, (c_2472)->owner);
+                            lar_text_builder_str(&text_2, (c_2469)->owner);
                             value_2 = lar_text_builder_finish(&text_2);
                         } else {
                             value_2 = lar_string("", 0);
                         }
                         lar_text_builder_str(&text, value_2);
                         lar_text_builder_add(&text, "|", 1);
-                        lar_text_builder_str(&text, (c_2472)->gives);
+                        lar_text_builder_str(&text, (c_2469)->gives);
                         LarString key = lar_text_builder_finish(&text);
-                        lar_memory_free(&line15000191_temps);
+                        lar_memory_free(&line15000183_temps);
                         if (!lar_any_is_null(lar_any_get(seen, key))) {
                             continue;
                         }
                         LarAny value_3 = seen;
-                        lar_any_set(value_3, key, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000193));
+                        lar_any_set(value_3, key, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000185));
                     }
                     semantics__linker__rewriteDecl(m, d);
                     List_syntax__ast__Node_push((prog)->decls, d);
@@ -15559,21 +15549,21 @@ void semantics__linker__dictFromSet(LarAny into, LarAny names, LarString prefix)
         LarTable* table_2 = table_2_v.kind == LAR_ANY_TABLE ? table_2_v.as.t : NULL;
         int32_t count_2 = table_2 ? table_2->count : 0;
         for (int32_t index = 0; index < count_2; index++) {
-            if (table_2->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000204));
+            if (table_2->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000196));
             LarString k = table_2->keys[index];
             LarAny v = table_2->values[index];
             (void)v;
             LarAny value = into;
-            LarTextBuilder text = lar_text_builder_mem(lar_any_mem(into, LINE(15000204)), LINE(15000204));
+            LarTextBuilder text = lar_text_builder_mem(lar_any_mem(into, LINE(15000196)), LINE(15000196));
             lar_text_builder_str(&text, prefix);
             lar_text_builder_str(&text, k);
-            lar_any_set(value, k, lar_any_s(lar_text_builder_finish(&text)), LINE(15000204));
+            lar_any_set(value, k, lar_any_s(lar_text_builder_finish(&text)), LINE(15000196));
         }
     }
 }
 
 void semantics__linker__error(int32_t line, LarString msg) {
-    LarTextBuilder text = lar_text_builder_mem(((semantics__linker__linking)->errors)->mem, LINE(15000208));
+    LarTextBuilder text = lar_text_builder_mem(((semantics__linker__linking)->errors)->mem, LINE(15000200));
     lar_text_builder_add(&text, "Module Error [Line ", 19);
     lar_text_builder_i64(&text, (int64_t)(line));
     lar_text_builder_add(&text, "]: ", 3);
@@ -15582,19 +15572,19 @@ void semantics__linker__error(int32_t line, LarString msg) {
 }
 
 void semantics__linker__loadLang(void) {
-    syntax__ast__FunctionDecl* sf_2492 = NULL;
-    syntax__ast__CCodeDecl* c_2502 = NULL;
-    LarMemory line15000216_temps = lar_memory_growable();
-    Opt_s source = semantics__linker__readSource(NULL, semantics__linker__moduleFile(&line15000216_temps, lar_string("std.lang", 8)));
-    lar_memory_free(&line15000216_temps);
+    syntax__ast__FunctionDecl* sf_2489 = NULL;
+    syntax__ast__CCodeDecl* c_2499 = NULL;
+    LarMemory line15000208_temps = lar_memory_growable();
+    Opt_s source = semantics__linker__readSource(NULL, semantics__linker__moduleFile(&line15000208_temps, lar_string("std.lang", 8)));
+    lar_memory_free(&line15000208_temps);
     if (!(source).has) {
-        LarMemory line15000218_temps = lar_memory_growable();
-        LarTextBuilder text = lar_text_builder_mem(&line15000218_temps, LINE(15000218));
+        LarMemory line15000210_temps = lar_memory_growable();
+        LarTextBuilder text = lar_text_builder_mem(&line15000210_temps, LINE(15000210));
         lar_text_builder_add(&text, "The language's own module was not found (looked for ", 52);
-        lar_text_builder_str(&text, semantics__linker__shownName(&line15000218_temps, lar_string("std.lang", 8)));
+        lar_text_builder_str(&text, semantics__linker__shownName(&line15000210_temps, lar_string("std.lang", 8)));
         lar_text_builder_add(&text, "); set LARIMAR_HOME to the folder that has std/.", 48);
         semantics__linker__error(1, lar_text_builder_finish(&text));
-        lar_memory_free(&line15000218_temps);
+        lar_memory_free(&line15000210_temps);
         return;
     }
     semantics__linker__Module* module = semantics__linker__newModule(NULL, lar_string("", 0), ((semantics__linker__linking)->fileNames)->length);
@@ -15604,28 +15594,28 @@ void semantics__linker__loadLang(void) {
         return;
     }
     LarString value_2 = source.value;
-    List_s* value_3 = List_s_new(&lar_default_memory, 15000227);
+    List_s* value_3 = List_s_new(&lar_default_memory, 15000219);
     LarString value_4 = lar_string("\n", 1);
     if (value_4.len == 0) {
-        for (int32_t index = 0; index < value_2.len; index++) List_s_add(value_3, lar_string(value_2.ptr + index, 1), 15000227);
+        for (int32_t index = 0; index < value_2.len; index++) List_s_add(value_3, lar_string(value_2.ptr + index, 1), 15000219);
     } else if (value_2.len > 0 || !false) {
         int32_t start = 0;
         for (;;) {
             int32_t index = lar_string_find(value_2, value_4, start);
             int32_t end_index = index < 0 ? value_2.len : index;
             LarString part_index = lar_string(value_2.ptr + start, end_index - start);
-            List_s_add(value_3, part_index, 15000227);
+            List_s_add(value_3, part_index, 15000219);
             if (index < 0) break;
             start = index + value_4.len;
         }
     }
     List_s* lines = value_3;
     LarAny value_5 = (semantics__linker__linking)->words;
-    lar_any_set(value_5, lar_string("String", 6), lar_any_b(true), LINE(15000230));
+    lar_any_set(value_5, lar_string("String", 6), lar_any_b(true), LINE(15000222));
     LarAny value_6 = (semantics__linker__linking)->words;
-    lar_any_set(value_6, lar_string("Any", 3), lar_any_b(true), LINE(15000231));
+    lar_any_set(value_6, lar_string("Any", 3), lar_any_b(true), LINE(15000223));
     List_syntax__ast__Node* all = (p)->decls;
-    List_b* list = List_b_new(&lar_default_memory, LINE(15000233));
+    List_b* list = List_b_new(&lar_default_memory, LINE(15000225));
     List_b* kept = list;
     {
         List_syntax__ast__Node* list_2 = all;
@@ -15644,8 +15634,8 @@ void semantics__linker__loadLang(void) {
                 int32_t i = index_3;
                 syntax__ast__Node* d = list_3->items[index_3];
                 LarString name = syntax__ast__declName(NULL, d);
-                if (((sf_2492 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (!lar_string_eq((sf_2492)->typeName, lar_string("", 0)))) {
-                    name = (lar_any_contains((semantics__linker__linking)->words, lar_any_s((sf_2492)->typeName)) ? (sf_2492)->name : lar_string("", 0));
+                if (((sf_2489 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (!lar_string_eq((sf_2489)->typeName, lar_string("", 0)))) {
+                    name = (lar_any_contains((semantics__linker__linking)->words, lar_any_s((sf_2489)->typeName)) ? (sf_2489)->name : lar_string("", 0));
                 }
                 bool condition = (lar_any_contains(((semantics__linker__linking)->root)->ownTypes, lar_any_s(name)) || lar_any_contains(((semantics__linker__linking)->root)->ownValues, lar_any_s(name)));
                 if (condition) {
@@ -15656,29 +15646,29 @@ void semantics__linker__loadLang(void) {
                     condition = found_2;
                 }
                 bool shadowed = condition;
-                if ((((kept)->items[lar_index((int64_t)(i), (kept)->length, LINE(15000244))] || lar_string_eq(name, lar_string("", 0))) || (!(lar_any_contains((semantics__linker__linking)->words, lar_any_s(name))))) || shadowed) {
+                if ((((kept)->items[lar_index((int64_t)(i), (kept)->length, LINE(15000236))] || lar_string_eq(name, lar_string("", 0))) || (!(lar_any_contains((semantics__linker__linking)->words, lar_any_s(name))))) || shadowed) {
                     continue;
                 }
-                (kept)->items[lar_index((int64_t)(i), (kept)->length, LINE(15000245))] = true;
+                (kept)->items[lar_index((int64_t)(i), (kept)->length, LINE(15000237))] = true;
                 changed = true;
                 {
-                    int32_t range_start = ((int32_t)((uint32_t)(lar_mod_i32((d)->line, 1000000, LINE(15000247))) - (uint32_t)(1)));
-                    int32_t range_end = ((((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (all)->length) ? ((int32_t)((uint32_t)(lar_mod_i32(((all)->items[lar_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (all)->length, LINE(15000247))])->line, 1000000, LINE(15000247))) - (uint32_t)(1))) : (lines)->length);
+                    int32_t range_start = ((int32_t)((uint32_t)(lar_mod_i32((d)->line, 1000000, LINE(15000239))) - (uint32_t)(1)));
+                    int32_t range_end = ((((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (all)->length) ? ((int32_t)((uint32_t)(lar_mod_i32(((all)->items[lar_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (all)->length, LINE(15000239))])->line, 1000000, LINE(15000239))) - (uint32_t)(1))) : (lines)->length);
                     for (int32_t k = range_start; k < range_end; k++) {
-                        semantics__linker__addWords((lines)->items[lar_index((int64_t)(k), (lines)->length, LINE(15000247))]);
+                        semantics__linker__addWords((lines)->items[lar_index((int64_t)(k), (lines)->length, LINE(15000239))]);
                     }
                 }
             }
         }
     }
-    LarTable* table_2 = lar_table_new(&lar_default_memory, LINE(15000250));
+    LarTable* table_2 = lar_table_new(&lar_default_memory, LINE(15000242));
     LarAny cSymbols = lar_any_t(table_2);
     {
         List_syntax__ast__Node* list_4 = all;
         for (int32_t index_5 = 0; index_5 < list_4->length; index_5++) {
             int32_t i = index_5;
             syntax__ast__Node* d = list_4->items[index_5];
-            if (!((kept)->items[lar_index((int64_t)(i), (kept)->length, LINE(15000252))])) {
+            if (!((kept)->items[lar_index((int64_t)(i), (kept)->length, LINE(15000244))])) {
                 continue;
             }
             syntax__ast__Node* subject = d;
@@ -15687,7 +15677,7 @@ void semantics__linker__loadLang(void) {
                     syntax__ast__ExternFunctionDecl* f = (syntax__ast__ExternFunctionDecl*)subject;
                     {
                         LarAny value_9 = cSymbols;
-                        lar_any_set(value_9, (f)->name, lar_any_b(true), LINE(15000255));
+                        lar_any_set(value_9, (f)->name, lar_any_b(true), LINE(15000247));
                         semantics__linker__cWords((f)->cBody, cSymbols);
                     }
                     goto switch_end;
@@ -15715,30 +15705,30 @@ void semantics__linker__loadLang(void) {
         for (int32_t index_6 = 0; index_6 < list_5->length; index_6++) {
             int32_t i = index_6;
             syntax__ast__Node* d = list_5->items[index_6];
-            if (((c_2502 = (syntax__ast__CCodeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__CCodeDecl)) != NULL) && semantics__linker__cCodeUses((c_2502)->code, cSymbols)) {
-                (kept)->items[lar_index((int64_t)(i), (kept)->length, LINE(15000263))] = true;
+            if (((c_2499 = (syntax__ast__CCodeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__CCodeDecl)) != NULL) && semantics__linker__cCodeUses((c_2499)->code, cSymbols)) {
+                (kept)->items[lar_index((int64_t)(i), (kept)->length, LINE(15000255))] = true;
             }
         }
     }
-    List_syntax__ast__Node* list_6 = List_syntax__ast__Node_new(&lar_default_memory, LINE(15000265));
+    List_syntax__ast__Node* list_6 = List_syntax__ast__Node_new(&lar_default_memory, LINE(15000257));
     List_syntax__ast__Node* decls = list_6;
     {
         List_syntax__ast__Node* list_7 = all;
         for (int32_t index_7 = 0; index_7 < list_7->length; index_7++) {
             int32_t i = index_7;
             syntax__ast__Node* d = list_7->items[index_7];
-            if (!((kept)->items[lar_index((int64_t)(i), (kept)->length, LINE(15000267))])) {
+            if (!((kept)->items[lar_index((int64_t)(i), (kept)->length, LINE(15000259))])) {
                 continue;
             }
             List_syntax__ast__Node_push(decls, d);
             if (syntax__ast__isTypeDecl(d)) {
                 LarAny value_10 = (module)->ownTypes;
                 LarAny value_11 = value_10;
-                lar_any_set(value_11, syntax__ast__declName(NULL, d), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000269));
+                lar_any_set(value_11, syntax__ast__declName(NULL, d), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000261));
             } else {
                 LarAny value_12 = (module)->ownValues;
                 LarAny value_13 = value_12;
-                lar_any_set(value_13, syntax__ast__declName(NULL, d), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000269));
+                lar_any_set(value_13, syntax__ast__declName(NULL, d), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000261));
             }
         }
     }
@@ -15746,12 +15736,12 @@ void semantics__linker__loadLang(void) {
         return;
     }
     List_s_push((semantics__linker__linking)->fileNames, semantics__linker__shownName(((semantics__linker__linking)->fileNames)->mem, lar_string("std.lang", 8)));
-    LarMemory line15000273_temps = lar_memory_growable();
+    LarMemory line15000265_temps = lar_memory_growable();
     LarCloneMap clones = lar_clone_map();
-    LarString copy = clone_s(std__io__path__absolute(&line15000273_temps, semantics__linker__moduleFile(&line15000273_temps, lar_string("std.lang", 8))), &lar_default_memory, &clones);
+    LarString copy = clone_s(std__io__path__absolute(&line15000265_temps, semantics__linker__moduleFile(&line15000265_temps, lar_string("std.lang", 8))), &lar_default_memory, &clones);
     lar_clone_done(&clones);
     List_s_push((semantics__linker__linking)->filePaths, copy);
-    lar_memory_free(&line15000273_temps);
+    lar_memory_free(&line15000265_temps);
     List_s_push((semantics__linker__linking)->fileSources, source.value);
     (p)->decls = decls;
     (module)->program = p;
@@ -15760,7 +15750,7 @@ void semantics__linker__loadLang(void) {
         for (int32_t index_8 = 0; index_8 < list_8->length; index_8++) {
             LarString n = list_8->items[index_8];
             LarAny value_14 = (module)->publics;
-            lar_any_set(value_14, n, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000277));
+            lar_any_set(value_14, n, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000269));
         }
     }
     {
@@ -15768,7 +15758,7 @@ void semantics__linker__loadLang(void) {
         LarTable* table_3 = table_3_v.kind == LAR_ANY_TABLE ? table_3_v.as.t : NULL;
         int32_t count_2 = table_3 ? table_3->count : 0;
         for (int32_t index_9 = 0; index_9 < count_2; index_9++) {
-            if (table_3->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000280));
+            if (table_3->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000272));
             LarString k = table_3->keys[index_9];
             LarAny v = table_3->values[index_9];
             (void)v;
@@ -15778,12 +15768,12 @@ void semantics__linker__loadLang(void) {
             if (lar_any_contains((module)->publics, lar_any_s(k))) {
                 value_17 = k;
             } else {
-                LarTextBuilder text_2 = lar_text_builder_mem(lar_any_mem(value_15, LINE(15000280)), LINE(15000280));
+                LarTextBuilder text_2 = lar_text_builder_mem(lar_any_mem(value_15, LINE(15000272)), LINE(15000272));
                 lar_text_builder_add(&text_2, "std__lang__", 11);
                 lar_text_builder_str(&text_2, k);
                 value_17 = lar_text_builder_finish(&text_2);
             }
-            lar_any_set(value_16, k, lar_any_s(value_17), LINE(15000280));
+            lar_any_set(value_16, k, lar_any_s(value_17), LINE(15000272));
         }
     }
     {
@@ -15791,7 +15781,7 @@ void semantics__linker__loadLang(void) {
         LarTable* table_4 = table_4_v.kind == LAR_ANY_TABLE ? table_4_v.as.t : NULL;
         int32_t count_3 = table_4 ? table_4->count : 0;
         for (int32_t index_10 = 0; index_10 < count_3; index_10++) {
-            if (table_4->count != count_3) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000281));
+            if (table_4->count != count_3) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000273));
             LarString k = table_4->keys[index_10];
             LarAny v = table_4->values[index_10];
             (void)v;
@@ -15801,12 +15791,12 @@ void semantics__linker__loadLang(void) {
             if (lar_any_contains((module)->publics, lar_any_s(k))) {
                 value_20 = k;
             } else {
-                LarTextBuilder text_3 = lar_text_builder_mem(lar_any_mem(value_18, LINE(15000281)), LINE(15000281));
+                LarTextBuilder text_3 = lar_text_builder_mem(lar_any_mem(value_18, LINE(15000273)), LINE(15000273));
                 lar_text_builder_add(&text_3, "std__lang__", 11);
                 lar_text_builder_str(&text_3, k);
                 value_20 = lar_text_builder_finish(&text_3);
             }
-            lar_any_set(value_19, k, lar_any_s(value_20), LINE(15000281));
+            lar_any_set(value_19, k, lar_any_s(value_20), LINE(15000273));
         }
     }
     (semantics__linker__linking)->lang = module;
@@ -15841,10 +15831,10 @@ LarString semantics__linker__taskInterface(LarMemory* lar_result_memory, syntax_
                                     }
                                 }
                             }
-                            LarMemory line15000310_temps = lar_memory_growable();
+                            LarMemory line15000302_temps = lar_memory_growable();
                             bool condition = (!lar_string_eq((im)->alias, lar_string("", 0)));
                             if (condition) {
-                                LarTextBuilder text = lar_text_builder_mem(&line15000310_temps, LINE(15000310));
+                                LarTextBuilder text = lar_text_builder_mem(&line15000302_temps, LINE(15000302));
                                 lar_text_builder_str(&text, (im)->alias);
                                 lar_text_builder_add(&text, ".", 1);
                                 lar_text_builder_str(&text, kind);
@@ -15852,10 +15842,10 @@ LarString semantics__linker__taskInterface(LarMemory* lar_result_memory, syntax_
                             }
                             if (condition) {
                                 LarString result = i;
-                                lar_memory_free(&line15000310_temps);
+                                lar_memory_free(&line15000302_temps);
                                 return result;
                             }
-                            lar_memory_free(&line15000310_temps);
+                            lar_memory_free(&line15000302_temps);
                         }
                     }
                 }
@@ -15866,43 +15856,43 @@ LarString semantics__linker__taskInterface(LarMemory* lar_result_memory, syntax_
 }
 
 bool semantics__linker__taskScalar(syntax__ast__TypeRef* typeRef) {
-    LarMemory line15000317_temps = lar_memory_growable();
+    LarMemory line15000309_temps = lar_memory_growable();
     bool condition = (((typeRef)->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Named })).tag);
     if (condition) {
-        LarTextBuilder text = lar_text_builder_mem(&line15000317_temps, LINE(15000317));
+        LarTextBuilder text = lar_text_builder_mem(&line15000309_temps, LINE(15000309));
         lar_text_builder_add(&text, " ", 1);
         lar_text_builder_str(&text, (typeRef)->name);
         lar_text_builder_add(&text, " ", 1);
         condition = String_contains(lar_string(" int8 int16 int32 int64 uint8 uint16 uint32 uint64 byte float32 float64 bool String ", 84), lar_text_builder_finish(&text));
     }
     bool result = condition;
-    lar_memory_free(&line15000317_temps);
+    lar_memory_free(&line15000309_temps);
     return result;
 }
 
 LarString semantics__linker__fromTable(LarMemory* lar_result_memory, syntax__ast__TypeRef* typeRef, LarString x) {
     if (lar_string_eq((typeRef)->name, lar_string("String", 6))) {
-        LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(15000321));
+        LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(15000313));
         lar_text_builder_add(&text, "(", 1);
         lar_text_builder_str(&text, x);
         lar_text_builder_add(&text, " as String \?\? \"\").clone()", 25);
         return lar_text_builder_finish(&text);
     }
     if (lar_string_eq((typeRef)->name, lar_string("bool", 4))) {
-        LarTextBuilder text_2 = lar_text_builder_mem(lar_result_memory, LINE(15000322));
+        LarTextBuilder text_2 = lar_text_builder_mem(lar_result_memory, LINE(15000314));
         lar_text_builder_str(&text_2, x);
         lar_text_builder_add(&text_2, " as bool \?\? false", 17);
         return lar_text_builder_finish(&text_2);
     }
     if (lar_string_eq((typeRef)->name, lar_string("float32", 7)) || lar_string_eq((typeRef)->name, lar_string("float64", 7))) {
-        LarTextBuilder text_3 = lar_text_builder_mem(lar_result_memory, LINE(15000323));
+        LarTextBuilder text_3 = lar_text_builder_mem(lar_result_memory, LINE(15000315));
         lar_text_builder_str(&text_3, x);
         lar_text_builder_add(&text_3, " as ", 4);
         lar_text_builder_str(&text_3, (typeRef)->name);
         lar_text_builder_add(&text_3, " \?\? 0.0", 7);
         return lar_text_builder_finish(&text_3);
     }
-    LarTextBuilder text_4 = lar_text_builder_mem(lar_result_memory, LINE(15000324));
+    LarTextBuilder text_4 = lar_text_builder_mem(lar_result_memory, LINE(15000316));
     lar_text_builder_str(&text_4, x);
     lar_text_builder_add(&text_4, " as ", 4);
     lar_text_builder_str(&text_4, (typeRef)->name);
@@ -15910,32 +15900,32 @@ LarString semantics__linker__fromTable(LarMemory* lar_result_memory, syntax__ast
     return lar_text_builder_finish(&text_4);
 }
 
-LarString semantics__linker__modulePathOf(LarMemory* lar_result_memory, LarString file_2521) {
+LarString semantics__linker__modulePathOf(LarMemory* lar_result_memory, LarString file_2518) {
     LarMemory memory = lar_memory_growable();
-    LarMemory line15000332_temps = lar_memory_growable();
-    LarString own = semantics__linker__pathUnder(lar_result_memory, std__io__path__normalize(&line15000332_temps, std__io__path__absolute(&line15000332_temps, (semantics__linker__linking)->rootDir)), file_2521);
-    lar_memory_free(&line15000332_temps);
+    LarMemory line15000324_temps = lar_memory_growable();
+    LarString own = semantics__linker__pathUnder(lar_result_memory, std__io__path__normalize(&line15000324_temps, std__io__path__absolute(&line15000324_temps, (semantics__linker__linking)->rootDir)), file_2518);
+    lar_memory_free(&line15000324_temps);
     if ((!lar_string_eq(own, lar_string("", 0))) || lar_string_eq((semantics__linker__linking)->testsKept, lar_string("none", 4))) {
         LarString result = own;
         lar_memory_free(&memory);
         return result;
     }
-    LarMemory line15000334_temps = lar_memory_growable();
-    LarString dir = std__io__path__parent(NULL, std__io__path__normalize(&memory, std__io__path__absolute(&line15000334_temps, (semantics__linker__linking)->rootDir)));
-    lar_memory_free(&line15000334_temps);
+    LarMemory line15000326_temps = lar_memory_growable();
+    LarString dir = std__io__path__parent(NULL, std__io__path__normalize(&memory, std__io__path__absolute(&line15000326_temps, (semantics__linker__linking)->rootDir)));
+    lar_memory_free(&line15000326_temps);
     while (!lar_string_eq(dir, lar_string("", 0))) {
-        LarString found = semantics__linker__pathUnder(lar_result_memory, dir, file_2521);
+        LarString found = semantics__linker__pathUnder(lar_result_memory, dir, file_2518);
         if (!lar_string_eq(found, lar_string("", 0))) {
             LarString result_2 = found;
             lar_memory_free(&memory);
             return result_2;
         }
-        LarMemory line15000338_temps = lar_memory_growable();
-        if (std__io__files__isFile(std__io__path__join(&line15000338_temps, dir, lar_string("larimar.toml", 12)))) {
-            lar_memory_free(&line15000338_temps);
+        LarMemory line15000330_temps = lar_memory_growable();
+        if (std__io__files__isFile(std__io__path__join(&line15000330_temps, dir, lar_string("larimar.toml", 12)))) {
+            lar_memory_free(&line15000330_temps);
             break;
         }
-        lar_memory_free(&line15000338_temps);
+        lar_memory_free(&line15000330_temps);
         LarString up = std__io__path__parent(NULL, dir);
         if (lar_string_eq(up, dir)) {
             break;
@@ -15947,19 +15937,19 @@ LarString semantics__linker__modulePathOf(LarMemory* lar_result_memory, LarStrin
     return result_3;
 }
 
-LarString semantics__linker__pathUnder(LarMemory* lar_result_memory, LarString dir, LarString file_2527) {
-    LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(15000347));
+LarString semantics__linker__pathUnder(LarMemory* lar_result_memory, LarString dir, LarString file_2524) {
+    LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(15000339));
     lar_text_builder_str(&text, dir);
     lar_text_builder_add(&text, "/", 1);
     LarString base = lar_text_builder_finish(&text);
-    LarMemory line15000348_temps = lar_memory_growable();
-    LarString full = std__io__path__normalize(lar_result_memory, std__io__path__absolute(&line15000348_temps, file_2527));
-    lar_memory_free(&line15000348_temps);
+    LarMemory line15000340_temps = lar_memory_growable();
+    LarString full = std__io__path__normalize(lar_result_memory, std__io__path__absolute(&line15000340_temps, file_2524));
+    lar_memory_free(&line15000340_temps);
     if ((!(String_startsWith(full, base))) || (!(String_endsWith(full, lar_string(".lar", 4))))) {
         return lar_string("", 0);
     }
     LarString value = full;
-    LarString path = String_replace(lar_string_sub(value, (int64_t)((base).len), (int64_t)(((int32_t)((uint32_t)((full).len) - (uint32_t)(4)))), 15000350), lar_result_memory, lar_string("/", 1), lar_string(".", 1));
+    LarString path = String_replace(lar_string_sub(value, (int64_t)((base).len), (int64_t)(((int32_t)((uint32_t)((full).len) - (uint32_t)(4)))), 15000342), lar_result_memory, lar_string("/", 1), lar_string(".", 1));
     {
         LarString text_2 = path;
         for (int32_t index = 0; index < text_2.len; index++) {
@@ -15976,9 +15966,9 @@ LarString semantics__linker__pathUnder(LarMemory* lar_result_memory, LarString d
 }
 
 void semantics__linker__writeTasks(LarString mainPath) {
-    syntax__ast__ClassDecl* c_2542 = NULL;
-    syntax__ast__FunctionDecl* f_2566 = NULL;
-    syntax__ast__FunctionDecl* g_2568 = NULL;
+    syntax__ast__ClassDecl* c_2539 = NULL;
+    syntax__ast__FunctionDecl* f_2563 = NULL;
+    syntax__ast__FunctionDecl* g_2565 = NULL;
     Opt_i32 value_2 = lar_any_as_i32(lar_any_get((semantics__linker__linking)->modIndex, lar_string("std.os.process", 14)));
     int32_t value_3;
     if (value_2.has) value_3 = value_2.value;
@@ -15989,7 +15979,7 @@ void semantics__linker__writeTasks(LarString mainPath) {
     if (processAt < 0) {
         return;
     }
-    List_s* list_2 = List_s_new(&lar_default_memory, LINE(15000365));
+    List_s* list_2 = List_s_new(&lar_default_memory, LINE(15000357));
     List_s* owners = list_2;
     {
         List_semantics__linker__Module* list_3 = (semantics__linker__linking)->mods;
@@ -16001,114 +15991,114 @@ void semantics__linker__writeTasks(LarString mainPath) {
                 continue;
             }
             LarMemory* place_2 = &lar_default_memory;
-            StringBuilder* new_StringBuilder = (StringBuilder*)lar_memory_alloc(place_2, sizeof(StringBuilder), LINE(15000368));
+            StringBuilder* new_StringBuilder = (StringBuilder*)lar_memory_alloc(place_2, sizeof(StringBuilder), LINE(15000360));
             *new_StringBuilder = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place_2 }, .buf = lar_text_buf_new(place_2) };
             StringBuilder* encode = new_StringBuilder;
             LarMemory* place_3 = &lar_default_memory;
-            StringBuilder* new_StringBuilder_2 = (StringBuilder*)lar_memory_alloc(place_3, sizeof(StringBuilder), LINE(15000369));
+            StringBuilder* new_StringBuilder_2 = (StringBuilder*)lar_memory_alloc(place_3, sizeof(StringBuilder), LINE(15000361));
             *new_StringBuilder_2 = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place_3 }, .buf = lar_text_buf_new(place_3) };
             StringBuilder* start = new_StringBuilder_2;
             LarMemory* place_4 = &lar_default_memory;
-            StringBuilder* new_StringBuilder_3 = (StringBuilder*)lar_memory_alloc(place_4, sizeof(StringBuilder), LINE(15000370));
+            StringBuilder* new_StringBuilder_3 = (StringBuilder*)lar_memory_alloc(place_4, sizeof(StringBuilder), LINE(15000362));
             *new_StringBuilder_3 = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place_4 }, .buf = lar_text_buf_new(place_4) };
             StringBuilder* setup = new_StringBuilder_3;
             LarString iface = lar_string("", 0);
             int32_t line = 0;
             {
-                List_syntax__ast__Node* list_4 = (((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000373))))->decls;
+                List_syntax__ast__Node* list_4 = (((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000365))))->decls;
                 for (int32_t index_2 = 0; index_2 < list_4->length; index_2++) {
                     syntax__ast__Node* d = list_4->items[index_2];
                     LarMemory memory_2 = lar_memory_growable();
-                    if (!(((c_2542 = (syntax__ast__ClassDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ClassDecl)) != NULL))) {
+                    if (!(((c_2539 = (syntax__ast__ClassDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ClassDecl)) != NULL))) {
                         lar_memory_free(&memory_2);
                         continue;
                     }
-                    LarString spelled = semantics__linker__taskInterface(NULL, c_2542, ((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000375))));
+                    LarString spelled = semantics__linker__taskInterface(NULL, c_2539, ((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000367))));
                     if (lar_string_eq(spelled, lar_string("", 0))) {
                         lar_memory_free(&memory_2);
                         continue;
                     }
                     if (lar_string_eq(iface, lar_string("", 0))) {
                         iface = spelled;
-                        line = (c_2542)->_super.line;
+                        line = (c_2539)->_super.line;
                     }
-                    if (!lar_string_eq((c_2542)->superName, lar_string("", 0))) {
-                        LarMemory line15000382_temps = lar_memory_growable();
-                        LarTextBuilder text = lar_text_builder_mem(&line15000382_temps, LINE(15000382));
+                    if (!lar_string_eq((c_2539)->superName, lar_string("", 0))) {
+                        LarMemory line15000374_temps = lar_memory_growable();
+                        LarTextBuilder text = lar_text_builder_mem(&line15000374_temps, LINE(15000374));
                         lar_text_builder_add(&text, "Task '", 6);
-                        lar_text_builder_str(&text, (c_2542)->name);
+                        lar_text_builder_str(&text, (c_2539)->name);
                         lar_text_builder_add(&text, "' extends '", 11);
-                        lar_text_builder_str(&text, (c_2542)->superName);
+                        lar_text_builder_str(&text, (c_2539)->superName);
                         lar_text_builder_add(&text, "': a task goes to another process with its own fields, so it extends no class.", 78);
-                        semantics__linker__error((c_2542)->_super.line, lar_text_builder_finish(&text));
-                        lar_memory_free(&line15000382_temps);
+                        semantics__linker__error((c_2539)->_super.line, lar_text_builder_finish(&text));
+                        lar_memory_free(&line15000374_temps);
                         lar_memory_free(&memory_2);
                         continue;
                     }
                     LarString value_4;
                     if (!lar_string_eq((m)->path, lar_string("", 0))) {
-                        LarTextBuilder text_2 = lar_text_builder_mem(&memory_2, LINE(15000385));
+                        LarTextBuilder text_2 = lar_text_builder_mem(&memory_2, LINE(15000377));
                         lar_text_builder_str(&text_2, (m)->path);
                         lar_text_builder_add(&text_2, ".", 1);
-                        lar_text_builder_str(&text_2, (c_2542)->name);
+                        lar_text_builder_str(&text_2, (c_2539)->name);
                         value_4 = lar_text_builder_finish(&text_2);
                     } else {
-                        value_4 = (c_2542)->name;
+                        value_4 = (c_2539)->name;
                     }
                     LarString key = value_4;
                     if (String_endsWith(spelled, lar_string("UnsafeTask", 10))) {
-                        LarMemory line15000386_temps = lar_memory_growable();
-                        LarTextBuilder text_3 = lar_text_builder_mem(&line15000386_temps, LINE(15000386));
+                        LarMemory line15000378_temps = lar_memory_growable();
+                        LarTextBuilder text_3 = lar_text_builder_mem(&line15000378_temps, LINE(15000378));
                         lar_text_builder_add(&text_3, "    if (task is ", 16);
-                        lar_text_builder_str(&text_3, (c_2542)->name);
+                        lar_text_builder_str(&text_3, (c_2539)->name);
                         lar_text_builder_add(&text_3, " t) {\n        t.setup(loader);\n        return;\n    }\n", 53);
                         StringBuilder_add__dispatch((StringBuilder*)setup, lar_text_builder_finish(&text_3));
-                        lar_memory_free(&line15000386_temps);
+                        lar_memory_free(&line15000378_temps);
                     }
-                    LarMemory line15000387_temps = lar_memory_growable();
-                    LarTextBuilder text_4 = lar_text_builder_mem(&line15000387_temps, LINE(15000387));
+                    LarMemory line15000379_temps = lar_memory_growable();
+                    LarTextBuilder text_4 = lar_text_builder_mem(&line15000379_temps, LINE(15000379));
                     lar_text_builder_add(&text_4, "    if (task is ", 16);
-                    lar_text_builder_str(&text_4, (c_2542)->name);
+                    lar_text_builder_str(&text_4, (c_2539)->name);
                     lar_text_builder_add(&text_4, " t) {\n        let f: Any = {};\n", 31);
                     StringBuilder_add__dispatch((StringBuilder*)encode, lar_text_builder_finish(&text_4));
-                    lar_memory_free(&line15000387_temps);
+                    lar_memory_free(&line15000379_temps);
                     LarMemory* place_5 = &lar_default_memory;
-                    StringBuilder* new_StringBuilder_4 = (StringBuilder*)lar_memory_alloc(place_5, sizeof(StringBuilder), LINE(15000388));
+                    StringBuilder* new_StringBuilder_4 = (StringBuilder*)lar_memory_alloc(place_5, sizeof(StringBuilder), LINE(15000380));
                     *new_StringBuilder_4 = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place_5 }, .buf = lar_text_buf_new(place_5) };
                     StringBuilder* fill = new_StringBuilder_4;
-                    List_s* list_5 = List_s_new(&lar_default_memory, LINE(15000389));
+                    List_s* list_5 = List_s_new(&lar_default_memory, LINE(15000381));
                     List_s* literal = list_5;
                     {
-                        List_syntax__ast__FieldDecl* list_6 = (c_2542)->fields;
+                        List_syntax__ast__FieldDecl* list_6 = (c_2539)->fields;
                         for (int32_t index_3 = 0; index_3 < list_6->length; index_3++) {
                             syntax__ast__FieldDecl* fd = list_6->items[index_3];
                             LarString n = (fd)->name;
                             syntax__ast__TypeRef* typeRef = (fd)->type;
                             if (semantics__linker__taskScalar(typeRef)) {
-                                LarMemory line15000394_temps = lar_memory_growable();
-                                LarTextBuilder text_5 = lar_text_builder_mem(&line15000394_temps, LINE(15000394));
+                                LarMemory line15000386_temps = lar_memory_growable();
+                                LarTextBuilder text_5 = lar_text_builder_mem(&line15000386_temps, LINE(15000386));
                                 lar_text_builder_add(&text_5, "        f[\"", 11);
                                 lar_text_builder_str(&text_5, n);
                                 lar_text_builder_add(&text_5, "\"] = t.", 7);
                                 lar_text_builder_str(&text_5, n);
                                 lar_text_builder_add(&text_5, ";\n", 2);
                                 StringBuilder_add__dispatch((StringBuilder*)encode, lar_text_builder_finish(&text_5));
-                                lar_memory_free(&line15000394_temps);
-                                LarMemory line15000395_temps = lar_memory_growable();
-                                LarTextBuilder text_6 = lar_text_builder_mem(&lar_default_memory, LINE(15000395));
+                                lar_memory_free(&line15000386_temps);
+                                LarMemory line15000387_temps = lar_memory_growable();
+                                LarTextBuilder text_6 = lar_text_builder_mem(&lar_default_memory, LINE(15000387));
                                 lar_text_builder_str(&text_6, n);
                                 lar_text_builder_add(&text_6, ": ", 2);
-                                LarTextBuilder text_7 = lar_text_builder_mem(&line15000395_temps, LINE(15000395));
+                                LarTextBuilder text_7 = lar_text_builder_mem(&line15000387_temps, LINE(15000387));
                                 lar_text_builder_add(&text_7, "fields[\"", 8);
                                 lar_text_builder_str(&text_7, n);
                                 lar_text_builder_add(&text_7, "\"]", 2);
-                                lar_text_builder_str(&text_6, semantics__linker__fromTable(&line15000395_temps, typeRef, lar_text_builder_finish(&text_7)));
+                                lar_text_builder_str(&text_6, semantics__linker__fromTable(&line15000387_temps, typeRef, lar_text_builder_finish(&text_7)));
                                 List_s_push(literal, lar_text_builder_finish(&text_6));
-                                lar_memory_free(&line15000395_temps);
+                                lar_memory_free(&line15000387_temps);
                             } else {
-                                if (((((typeRef)->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Opt })).tag) && (!((typeRef)->inner == NULL))) && semantics__linker__taskScalar(((syntax__ast__TypeRef*)lar_unwrap((void*)((typeRef)->inner), LINE(15000396))))) {
-                                    LarMemory line15000397_temps = lar_memory_growable();
-                                    LarTextBuilder text_8 = lar_text_builder_mem(&line15000397_temps, LINE(15000397));
+                                if (((((typeRef)->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Opt })).tag) && (!((typeRef)->inner == NULL))) && semantics__linker__taskScalar(((syntax__ast__TypeRef*)lar_unwrap((void*)((typeRef)->inner), LINE(15000388))))) {
+                                    LarMemory line15000389_temps = lar_memory_growable();
+                                    LarTextBuilder text_8 = lar_text_builder_mem(&line15000389_temps, LINE(15000389));
                                     lar_text_builder_add(&text_8, "        if (t.", 14);
                                     lar_text_builder_str(&text_8, n);
                                     lar_text_builder_add(&text_8, " != null) { f[\"", 15);
@@ -16117,14 +16107,14 @@ void semantics__linker__writeTasks(LarString mainPath) {
                                     lar_text_builder_str(&text_8, n);
                                     lar_text_builder_add(&text_8, "!; }\n", 5);
                                     StringBuilder_add__dispatch((StringBuilder*)encode, lar_text_builder_finish(&text_8));
-                                    lar_memory_free(&line15000397_temps);
-                                    if (lar_string_eq((((syntax__ast__TypeRef*)lar_unwrap((void*)((typeRef)->inner), LINE(15000398))))->name, lar_string("String", 6))) {
-                                        LarTextBuilder text_9 = lar_text_builder_mem(&lar_default_memory, LINE(15000399));
+                                    lar_memory_free(&line15000389_temps);
+                                    if (lar_string_eq((((syntax__ast__TypeRef*)lar_unwrap((void*)((typeRef)->inner), LINE(15000390))))->name, lar_string("String", 6))) {
+                                        LarTextBuilder text_9 = lar_text_builder_mem(&lar_default_memory, LINE(15000391));
                                         lar_text_builder_str(&text_9, n);
                                         lar_text_builder_add(&text_9, ": null", 6);
                                         List_s_push(literal, lar_text_builder_finish(&text_9));
-                                        LarMemory line15000400_temps = lar_memory_growable();
-                                        LarTextBuilder text_10 = lar_text_builder_mem(&line15000400_temps, LINE(15000400));
+                                        LarMemory line15000392_temps = lar_memory_growable();
+                                        LarTextBuilder text_10 = lar_text_builder_mem(&line15000392_temps, LINE(15000392));
                                         lar_text_builder_add(&text_10, "        if (fields[\"", 20);
                                         lar_text_builder_str(&text_10, n);
                                         lar_text_builder_add(&text_10, "\"] != null) { t.", 16);
@@ -16133,20 +16123,20 @@ void semantics__linker__writeTasks(LarString mainPath) {
                                         lar_text_builder_str(&text_10, n);
                                         lar_text_builder_add(&text_10, "\"] as String \?\? \"\").clone(); }\n", 31);
                                         StringBuilder_add__dispatch((StringBuilder*)fill, lar_text_builder_finish(&text_10));
-                                        lar_memory_free(&line15000400_temps);
+                                        lar_memory_free(&line15000392_temps);
                                     } else {
-                                        LarTextBuilder text_11 = lar_text_builder_mem(&lar_default_memory, LINE(15000402));
+                                        LarTextBuilder text_11 = lar_text_builder_mem(&lar_default_memory, LINE(15000394));
                                         lar_text_builder_str(&text_11, n);
                                         lar_text_builder_add(&text_11, ": fields[\"", 10);
                                         lar_text_builder_str(&text_11, n);
                                         lar_text_builder_add(&text_11, "\"] as ", 6);
-                                        lar_text_builder_str(&text_11, (((syntax__ast__TypeRef*)lar_unwrap((void*)((typeRef)->inner), LINE(15000402))))->name);
+                                        lar_text_builder_str(&text_11, (((syntax__ast__TypeRef*)lar_unwrap((void*)((typeRef)->inner), LINE(15000394))))->name);
                                         List_s_push(literal, lar_text_builder_finish(&text_11));
                                     }
                                 } else {
-                                    if (((((typeRef)->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Growable })).tag) && (!((typeRef)->inner == NULL))) && semantics__linker__taskScalar(((syntax__ast__TypeRef*)lar_unwrap((void*)((typeRef)->inner), LINE(15000404))))) {
-                                        LarMemory line15000405_temps = lar_memory_growable();
-                                        LarTextBuilder text_12 = lar_text_builder_mem(&line15000405_temps, LINE(15000405));
+                                    if (((((typeRef)->kind).tag == (((syntax__ast__TypeRefKind){ .tag = syntax__ast__TypeRefKind_Growable })).tag) && (!((typeRef)->inner == NULL))) && semantics__linker__taskScalar(((syntax__ast__TypeRef*)lar_unwrap((void*)((typeRef)->inner), LINE(15000396))))) {
+                                        LarMemory line15000397_temps = lar_memory_growable();
+                                        LarTextBuilder text_12 = lar_text_builder_mem(&line15000397_temps, LINE(15000397));
                                         lar_text_builder_add(&text_12, "        let l_", 14);
                                         lar_text_builder_str(&text_12, n);
                                         lar_text_builder_add(&text_12, ": Any = {};\n        for (v in t.", 32);
@@ -16159,59 +16149,59 @@ void semantics__linker__writeTasks(LarString mainPath) {
                                         lar_text_builder_str(&text_12, n);
                                         lar_text_builder_add(&text_12, ";\n", 2);
                                         StringBuilder_add__dispatch((StringBuilder*)encode, lar_text_builder_finish(&text_12));
-                                        lar_memory_free(&line15000405_temps);
-                                        LarTextBuilder text_13 = lar_text_builder_mem(&lar_default_memory, LINE(15000406));
+                                        lar_memory_free(&line15000397_temps);
+                                        LarTextBuilder text_13 = lar_text_builder_mem(&lar_default_memory, LINE(15000398));
                                         lar_text_builder_str(&text_13, n);
                                         lar_text_builder_add(&text_13, ": []", 4);
                                         List_s_push(literal, lar_text_builder_finish(&text_13));
-                                        LarMemory line15000407_temps = lar_memory_growable();
-                                        LarTextBuilder text_14 = lar_text_builder_mem(&line15000407_temps, LINE(15000407));
+                                        LarMemory line15000399_temps = lar_memory_growable();
+                                        LarTextBuilder text_14 = lar_text_builder_mem(&line15000399_temps, LINE(15000399));
                                         lar_text_builder_add(&text_14, "        for (i, v in fields[\"", 29);
                                         lar_text_builder_str(&text_14, n);
                                         lar_text_builder_add(&text_14, "\"]) { t.", 8);
                                         lar_text_builder_str(&text_14, n);
                                         lar_text_builder_add(&text_14, ".push(", 6);
-                                        lar_text_builder_str(&text_14, semantics__linker__fromTable(&line15000407_temps, ((syntax__ast__TypeRef*)lar_unwrap((void*)((typeRef)->inner), LINE(15000407))), lar_string("v", 1)));
+                                        lar_text_builder_str(&text_14, semantics__linker__fromTable(&line15000399_temps, ((syntax__ast__TypeRef*)lar_unwrap((void*)((typeRef)->inner), LINE(15000399))), lar_string("v", 1)));
                                         lar_text_builder_add(&text_14, "); }\n", 5);
                                         StringBuilder_add__dispatch((StringBuilder*)fill, lar_text_builder_finish(&text_14));
-                                        lar_memory_free(&line15000407_temps);
+                                        lar_memory_free(&line15000399_temps);
                                     } else {
-                                        LarMemory line15000409_temps = lar_memory_growable();
-                                        LarTextBuilder text_15 = lar_text_builder_mem(&line15000409_temps, LINE(15000409));
+                                        LarMemory line15000401_temps = lar_memory_growable();
+                                        LarTextBuilder text_15 = lar_text_builder_mem(&line15000401_temps, LINE(15000401));
                                         lar_text_builder_add(&text_15, "Field '", 7);
                                         lar_text_builder_str(&text_15, n);
                                         lar_text_builder_add(&text_15, "' of Task '", 11);
-                                        lar_text_builder_str(&text_15, (c_2542)->name);
+                                        lar_text_builder_str(&text_15, (c_2539)->name);
                                         lar_text_builder_add(&text_15, "' goes to another process: it is a number, a bool, a String, an optional of one of them, or a list of them.", 107);
                                         semantics__linker__error((fd)->_super.line, lar_text_builder_finish(&text_15));
-                                        lar_memory_free(&line15000409_temps);
+                                        lar_memory_free(&line15000401_temps);
                                     }
                                 }
                             }
                         }
                     }
-                    LarMemory line15000412_temps = lar_memory_growable();
-                    LarTextBuilder text_16 = lar_text_builder_mem(&line15000412_temps, LINE(15000412));
+                    LarMemory line15000404_temps = lar_memory_growable();
+                    LarTextBuilder text_16 = lar_text_builder_mem(&line15000404_temps, LINE(15000404));
                     lar_text_builder_add(&text_16, "        let out: Any = { name: \"", 32);
                     lar_text_builder_str(&text_16, key);
                     lar_text_builder_add(&text_16, "\" };\n        out[\"fields\"] = f;\n        return out;\n    }\n", 58);
                     StringBuilder_add__dispatch((StringBuilder*)encode, lar_text_builder_finish(&text_16));
-                    lar_memory_free(&line15000412_temps);
-                    LarMemory line15000413_temps = lar_memory_growable();
-                    LarTextBuilder text_17 = lar_text_builder_mem(&line15000413_temps, LINE(15000413));
+                    lar_memory_free(&line15000404_temps);
+                    LarMemory line15000405_temps = lar_memory_growable();
+                    LarTextBuilder text_17 = lar_text_builder_mem(&line15000405_temps, LINE(15000405));
                     lar_text_builder_add(&text_17, "    if (name == \"", 17);
                     lar_text_builder_str(&text_17, key);
                     lar_text_builder_add(&text_17, "\") {\n        let t: ", 20);
-                    lar_text_builder_str(&text_17, (c_2542)->name);
+                    lar_text_builder_str(&text_17, (c_2539)->name);
                     lar_text_builder_add(&text_17, " = { ", 5);
                     List_s* value_5 = literal;
-                    lar_text_builder_str(&text_17, lar_string_join(value_5->items, value_5->length, lar_string(", ", 2), &line15000413_temps, LINE(15000413)));
+                    lar_text_builder_str(&text_17, lar_string_join(value_5->items, value_5->length, lar_string(", ", 2), &line15000405_temps, LINE(15000405)));
                     lar_text_builder_add(&text_17, " };\n", 4);
                     StringBuilder_add__dispatch((StringBuilder*)start, lar_text_builder_finish(&text_17));
-                    lar_memory_free(&line15000413_temps);
-                    LarMemory line15000414_temps = lar_memory_growable();
-                    StringBuilder_add__dispatch((StringBuilder*)start, StringBuilder_toString__dispatch((StringBuilder*)fill, &line15000414_temps));
-                    lar_memory_free(&line15000414_temps);
+                    lar_memory_free(&line15000405_temps);
+                    LarMemory line15000406_temps = lar_memory_growable();
+                    StringBuilder_add__dispatch((StringBuilder*)start, StringBuilder_toString__dispatch((StringBuilder*)fill, &line15000406_temps));
+                    lar_memory_free(&line15000406_temps);
                     StringBuilder_add__dispatch((StringBuilder*)start, lar_string("        return t;\n    }\n", 24));
                     lar_memory_free(&memory_2);
                 }
@@ -16222,34 +16212,34 @@ void semantics__linker__writeTasks(LarString mainPath) {
             }
             iface = lar_string("LarimarProcess.Task", 19);
             LarMemory* place_6 = &lar_default_memory;
-            syntax__ast__ImportDecl* new_syntax__ast__ImportDecl = (syntax__ast__ImportDecl*)lar_memory_alloc(place_6, sizeof(syntax__ast__ImportDecl), LINE(15000419));
+            syntax__ast__ImportDecl* new_syntax__ast__ImportDecl = (syntax__ast__ImportDecl*)lar_memory_alloc(place_6, sizeof(syntax__ast__ImportDecl), LINE(15000411));
             List_semantics__types__PatternInfo* list_7 = List_semantics__types__PatternInfo_new(place_6, LINE(16000048));
             List_s* list_8 = List_s_new(place_6, LINE(16000087));
             *new_syntax__ast__ImportDecl = (syntax__ast__ImportDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__ImportDecl, place_6 }, .line = 1, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_7, .computed = lar_string("", 0) }, .path = lar_string("std.os.process", 14), .alias = lar_string("LarimarProcess", 14), .names = list_8, .hasNames = false };
-            List_syntax__ast__ImportDecl_push((((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000419))))->imports, new_syntax__ast__ImportDecl);
+            List_syntax__ast__ImportDecl_push((((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000411))))->imports, new_syntax__ast__ImportDecl);
             LarMemory* place_7 = &lar_default_memory;
-            syntax__ast__ImportDecl* new_syntax__ast__ImportDecl_2 = (syntax__ast__ImportDecl*)lar_memory_alloc(place_7, sizeof(syntax__ast__ImportDecl), LINE(15000420));
+            syntax__ast__ImportDecl* new_syntax__ast__ImportDecl_2 = (syntax__ast__ImportDecl*)lar_memory_alloc(place_7, sizeof(syntax__ast__ImportDecl), LINE(15000412));
             List_semantics__types__PatternInfo* list_9 = List_semantics__types__PatternInfo_new(place_7, LINE(16000048));
             List_s* list_10 = List_s_new(place_7, LINE(16000087));
             *new_syntax__ast__ImportDecl_2 = (syntax__ast__ImportDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__ImportDecl, place_7 }, .line = 1, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_9, .computed = lar_string("", 0) }, .path = lar_string("std.os.library", 14), .alias = lar_string("LarimarLibraries", 16), .names = list_10, .hasNames = false };
-            List_syntax__ast__ImportDecl_push((((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000420))))->imports, new_syntax__ast__ImportDecl_2);
-            LarMemory line15000421_temps = lar_memory_growable();
-            LarTextBuilder text_18 = lar_text_builder_mem(&lar_default_memory, LINE(15000421));
+            List_syntax__ast__ImportDecl_push((((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000412))))->imports, new_syntax__ast__ImportDecl_2);
+            LarMemory line15000413_temps = lar_memory_growable();
+            LarTextBuilder text_18 = lar_text_builder_mem(&lar_default_memory, LINE(15000413));
             lar_text_builder_add(&text_18, "public function larimarTaskEncode(task: ", 40);
             lar_text_builder_str(&text_18, iface);
             lar_text_builder_add(&text_18, "): Any {\n", 9);
-            lar_text_builder_str(&text_18, StringBuilder_toString__dispatch((StringBuilder*)encode, &line15000421_temps));
+            lar_text_builder_str(&text_18, StringBuilder_toString__dispatch((StringBuilder*)encode, &line15000413_temps));
             lar_text_builder_add(&text_18, "    return null;\n}\n\npublic function larimarTaskStart(name: String, fields: Any): ", 81);
             lar_text_builder_str(&text_18, iface);
             lar_text_builder_add(&text_18, "\? {\n", 4);
-            lar_text_builder_str(&text_18, StringBuilder_toString__dispatch((StringBuilder*)start, &line15000421_temps));
+            lar_text_builder_str(&text_18, StringBuilder_toString__dispatch((StringBuilder*)start, &line15000413_temps));
             lar_text_builder_add(&text_18, "    return null;\n}\n\npublic function larimarTaskSetup(task: ", 59);
             lar_text_builder_str(&text_18, iface);
             lar_text_builder_add(&text_18, ", loader: LarimarLibraries.LibraryLoader): void throws LarimarLibraries.LoadError {\n", 84);
-            lar_text_builder_str(&text_18, StringBuilder_toString__dispatch((StringBuilder*)setup, &line15000421_temps));
+            lar_text_builder_str(&text_18, StringBuilder_toString__dispatch((StringBuilder*)setup, &line15000413_temps));
             lar_text_builder_add(&text_18, "}\n", 2);
             LarString source = lar_text_builder_finish(&text_18);
-            lar_memory_free(&line15000421_temps);
+            lar_memory_free(&line15000413_temps);
             syntax__ast__Program* p = syntax__parser__parseProgram(NULL, source, ((int32_t)((uint32_t)(((int32_t)((uint32_t)((m)->index_) * (uint32_t)(1000000)))) + (uint32_t)(line))));
             if (!lar_string_eq((p)->error, lar_string("", 0))) {
                 List_s_push((semantics__linker__linking)->errors, (p)->error);
@@ -16261,13 +16251,13 @@ void semantics__linker__writeTasks(LarString mainPath) {
                 List_syntax__ast__Node* list_11 = (p)->decls;
                 for (int32_t index_4 = 0; index_4 < list_11->length; index_4++) {
                     syntax__ast__Node* d = list_11->items[index_4];
-                    List_syntax__ast__Node_push((((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000440))))->decls, d);
+                    List_syntax__ast__Node_push((((syntax__ast__Program*)lar_unwrap((void*)((m)->program), LINE(15000432))))->decls, d);
                     LarAny value_6 = (m)->ownValues;
                     LarAny value_7 = value_6;
-                    lar_any_set(value_7, syntax__ast__declName(NULL, d), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000441));
+                    lar_any_set(value_7, syntax__ast__declName(NULL, d), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000433));
                     LarAny value_8 = (m)->publics;
                     LarAny value_9 = value_8;
-                    lar_any_set(value_9, syntax__ast__declName(NULL, d), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000442));
+                    lar_any_set(value_9, syntax__ast__declName(NULL, d), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000434));
                 }
             }
             LarString path = (((const void*)(m) == (const void*)((semantics__linker__linking)->root)) ? semantics__linker__modulePathOf(&memory, mainPath) : (m)->path);
@@ -16287,19 +16277,19 @@ void semantics__linker__writeTasks(LarString mainPath) {
         return;
     }
     LarMemory* place_8 = &lar_default_memory;
-    StringBuilder* new_StringBuilder_5 = (StringBuilder*)lar_memory_alloc(place_8, sizeof(StringBuilder), LINE(15000452));
+    StringBuilder* new_StringBuilder_5 = (StringBuilder*)lar_memory_alloc(place_8, sizeof(StringBuilder), LINE(15000444));
     *new_StringBuilder_5 = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place_8 }, .buf = lar_text_buf_new(place_8) };
     StringBuilder* imports = new_StringBuilder_5;
     LarMemory* place_9 = &lar_default_memory;
-    StringBuilder* new_StringBuilder_6 = (StringBuilder*)lar_memory_alloc(place_9, sizeof(StringBuilder), LINE(15000453));
+    StringBuilder* new_StringBuilder_6 = (StringBuilder*)lar_memory_alloc(place_9, sizeof(StringBuilder), LINE(15000445));
     *new_StringBuilder_6 = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place_9 }, .buf = lar_text_buf_new(place_9) };
     StringBuilder* encodes = new_StringBuilder_6;
     LarMemory* place_10 = &lar_default_memory;
-    StringBuilder* new_StringBuilder_7 = (StringBuilder*)lar_memory_alloc(place_10, sizeof(StringBuilder), LINE(15000454));
+    StringBuilder* new_StringBuilder_7 = (StringBuilder*)lar_memory_alloc(place_10, sizeof(StringBuilder), LINE(15000446));
     *new_StringBuilder_7 = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place_10 }, .buf = lar_text_buf_new(place_10) };
     StringBuilder* starts = new_StringBuilder_7;
     LarMemory* place_11 = &lar_default_memory;
-    StringBuilder* new_StringBuilder_8 = (StringBuilder*)lar_memory_alloc(place_11, sizeof(StringBuilder), LINE(15000455));
+    StringBuilder* new_StringBuilder_8 = (StringBuilder*)lar_memory_alloc(place_11, sizeof(StringBuilder), LINE(15000447));
     *new_StringBuilder_8 = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place_11 }, .buf = lar_text_buf_new(place_11) };
     StringBuilder* setups = new_StringBuilder_8;
     {
@@ -16307,17 +16297,17 @@ void semantics__linker__writeTasks(LarString mainPath) {
         for (int32_t index_5 = 0; index_5 < list_12->length; index_5++) {
             int32_t i = index_5;
             LarString o = list_12->items[index_5];
-            LarMemory line15000457_temps = lar_memory_growable();
-            LarTextBuilder text_19 = lar_text_builder_mem(&line15000457_temps, LINE(15000457));
+            LarMemory line15000449_temps = lar_memory_growable();
+            LarTextBuilder text_19 = lar_text_builder_mem(&line15000449_temps, LINE(15000449));
             lar_text_builder_add(&text_19, "import ", 7);
             lar_text_builder_str(&text_19, o);
             lar_text_builder_add(&text_19, " as Tasks", 9);
             lar_text_builder_i64(&text_19, (int64_t)(i));
             lar_text_builder_add(&text_19, ";\n", 2);
             StringBuilder_add__dispatch((StringBuilder*)imports, lar_text_builder_finish(&text_19));
-            lar_memory_free(&line15000457_temps);
-            LarMemory line15000458_temps = lar_memory_growable();
-            LarTextBuilder text_20 = lar_text_builder_mem(&line15000458_temps, LINE(15000458));
+            lar_memory_free(&line15000449_temps);
+            LarMemory line15000450_temps = lar_memory_growable();
+            LarTextBuilder text_20 = lar_text_builder_mem(&line15000450_temps, LINE(15000450));
             lar_text_builder_add(&text_20, "    let e", 9);
             lar_text_builder_i64(&text_20, (int64_t)(i));
             lar_text_builder_add(&text_20, ": Any = Tasks", 13);
@@ -16328,9 +16318,9 @@ void semantics__linker__writeTasks(LarString mainPath) {
             lar_text_builder_i64(&text_20, (int64_t)(i));
             lar_text_builder_add(&text_20, "; }\n", 4);
             StringBuilder_add__dispatch((StringBuilder*)encodes, lar_text_builder_finish(&text_20));
-            lar_memory_free(&line15000458_temps);
-            LarMemory line15000459_temps = lar_memory_growable();
-            LarTextBuilder text_21 = lar_text_builder_mem(&line15000459_temps, LINE(15000459));
+            lar_memory_free(&line15000450_temps);
+            LarMemory line15000451_temps = lar_memory_growable();
+            LarTextBuilder text_21 = lar_text_builder_mem(&line15000451_temps, LINE(15000451));
             lar_text_builder_add(&text_21, "    let t", 9);
             lar_text_builder_i64(&text_21, (int64_t)(i));
             lar_text_builder_add(&text_21, ": Task\? = Tasks", 15);
@@ -16341,78 +16331,78 @@ void semantics__linker__writeTasks(LarString mainPath) {
             lar_text_builder_i64(&text_21, (int64_t)(i));
             lar_text_builder_add(&text_21, "; }\n", 4);
             StringBuilder_add__dispatch((StringBuilder*)starts, lar_text_builder_finish(&text_21));
-            lar_memory_free(&line15000459_temps);
-            LarMemory line15000460_temps = lar_memory_growable();
-            LarTextBuilder text_22 = lar_text_builder_mem(&line15000460_temps, LINE(15000460));
+            lar_memory_free(&line15000451_temps);
+            LarMemory line15000452_temps = lar_memory_growable();
+            LarTextBuilder text_22 = lar_text_builder_mem(&line15000452_temps, LINE(15000452));
             lar_text_builder_add(&text_22, "    Tasks", 9);
             lar_text_builder_i64(&text_22, (int64_t)(i));
             lar_text_builder_add(&text_22, ".larimarTaskSetup(task, loader);\n", 33);
             StringBuilder_add__dispatch((StringBuilder*)setups, lar_text_builder_finish(&text_22));
-            lar_memory_free(&line15000460_temps);
+            lar_memory_free(&line15000452_temps);
         }
     }
-    LarMemory line15000462_temps = lar_memory_growable();
-    LarTextBuilder text_23 = lar_text_builder_mem(&lar_default_memory, LINE(15000462));
+    LarMemory line15000454_temps = lar_memory_growable();
+    LarTextBuilder text_23 = lar_text_builder_mem(&lar_default_memory, LINE(15000454));
     lar_text_builder_add(&text_23, "import std.os.process { Task };\nimport std.os.library { LibraryLoader, LoadError };\n", 84);
-    lar_text_builder_str(&text_23, StringBuilder_toString__dispatch((StringBuilder*)imports, &line15000462_temps));
+    lar_text_builder_str(&text_23, StringBuilder_toString__dispatch((StringBuilder*)imports, &line15000454_temps));
     lar_text_builder_add(&text_23, "\npublic function encode(task: Task): Any {\n", 43);
-    lar_text_builder_str(&text_23, StringBuilder_toString__dispatch((StringBuilder*)encodes, &line15000462_temps));
+    lar_text_builder_str(&text_23, StringBuilder_toString__dispatch((StringBuilder*)encodes, &line15000454_temps));
     lar_text_builder_add(&text_23, "    return null;\n}\n\npublic function start(name: String, fields: Any): Task\? {\n", 78);
-    lar_text_builder_str(&text_23, StringBuilder_toString__dispatch((StringBuilder*)starts, &line15000462_temps));
+    lar_text_builder_str(&text_23, StringBuilder_toString__dispatch((StringBuilder*)starts, &line15000454_temps));
     lar_text_builder_add(&text_23, "    return null;\n}\n\npublic function setup(task: Task, loader: LibraryLoader): void throws LoadError {\n", 102);
-    lar_text_builder_str(&text_23, StringBuilder_toString__dispatch((StringBuilder*)setups, &line15000462_temps));
+    lar_text_builder_str(&text_23, StringBuilder_toString__dispatch((StringBuilder*)setups, &line15000454_temps));
     lar_text_builder_add(&text_23, "}\n", 2);
     LarString registry = lar_text_builder_finish(&text_23);
-    lar_memory_free(&line15000462_temps);
+    lar_memory_free(&line15000454_temps);
     semantics__linker__Module* tasks = semantics__linker__newModule(NULL, lar_string("std.os.process.tasks", 20), ((semantics__linker__linking)->fileNames)->length);
     List_s_push((semantics__linker__linking)->fileNames, semantics__linker__shownName(((semantics__linker__linking)->fileNames)->mem, lar_string("std.os.process.tasks", 20)));
-    LarMemory line15000481_temps = lar_memory_growable();
+    LarMemory line15000473_temps = lar_memory_growable();
     LarCloneMap clones_2 = lar_clone_map();
-    LarString copy_2 = clone_s(std__io__path__absolute(&line15000481_temps, semantics__linker__moduleFile(&line15000481_temps, lar_string("std.os.process.tasks", 20))), &lar_default_memory, &clones_2);
+    LarString copy_2 = clone_s(std__io__path__absolute(&line15000473_temps, semantics__linker__moduleFile(&line15000473_temps, lar_string("std.os.process.tasks", 20))), &lar_default_memory, &clones_2);
     lar_clone_done(&clones_2);
     List_s_push((semantics__linker__linking)->filePaths, copy_2);
-    lar_memory_free(&line15000481_temps);
+    lar_memory_free(&line15000473_temps);
     List_s_push((semantics__linker__linking)->fileSources, registry);
     List_semantics__linker__Module_push((semantics__linker__linking)->mods, tasks);
     LarAny value_10 = (semantics__linker__linking)->modIndex;
-    lar_any_set(value_10, lar_string("std.os.process.tasks", 20), lar_any_i((int64_t)(((int32_t)((uint32_t)(((semantics__linker__linking)->mods)->length) - (uint32_t)(1)))), LAR_ANY_I32), LINE(15000484));
+    lar_any_set(value_10, lar_string("std.os.process.tasks", 20), lar_any_i((int64_t)(((int32_t)((uint32_t)(((semantics__linker__linking)->mods)->length) - (uint32_t)(1)))), LAR_ANY_I32), LINE(15000476));
     semantics__linker__parse(tasks, registry);
     if ((tasks)->program == NULL) {
         return;
     }
-    semantics__linker__Module* process = ((semantics__linker__linking)->mods)->items[lar_index((int64_t)(processAt), ((semantics__linker__linking)->mods)->length, LINE(15000487))];
+    semantics__linker__Module* process = ((semantics__linker__linking)->mods)->items[lar_index((int64_t)(processAt), ((semantics__linker__linking)->mods)->length, LINE(15000479))];
     if ((process)->program == NULL) {
         return;
     }
     LarMemory* place_12 = &lar_default_memory;
-    syntax__ast__ImportDecl* new_syntax__ast__ImportDecl_3 = (syntax__ast__ImportDecl*)lar_memory_alloc(place_12, sizeof(syntax__ast__ImportDecl), LINE(15000489));
+    syntax__ast__ImportDecl* new_syntax__ast__ImportDecl_3 = (syntax__ast__ImportDecl*)lar_memory_alloc(place_12, sizeof(syntax__ast__ImportDecl), LINE(15000481));
     List_semantics__types__PatternInfo* list_13 = List_semantics__types__PatternInfo_new(place_12, LINE(16000048));
     List_s* list_14 = List_s_new(place_12, LINE(16000087));
     *new_syntax__ast__ImportDecl_3 = (syntax__ast__ImportDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__ImportDecl, place_12 }, .line = 1, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_13, .computed = lar_string("", 0) }, .path = lar_string("std.os.process.tasks", 20), .alias = lar_string("TaskRegistry", 12), .names = list_14, .hasNames = false };
-    List_syntax__ast__ImportDecl_push((((syntax__ast__Program*)lar_unwrap((void*)((process)->program), LINE(15000489))))->imports, new_syntax__ast__ImportDecl_3);
+    List_syntax__ast__ImportDecl_push((((syntax__ast__Program*)lar_unwrap((void*)((process)->program), LINE(15000481))))->imports, new_syntax__ast__ImportDecl_3);
     syntax__ast__Program* calls = syntax__parser__parseProgram(NULL, lar_string("function encodeTask(task: Task): Any { return TaskRegistry.encode(task); }\nfunction startTask(name: String, fields: Any): Task\? { return TaskRegistry.start(name, fields); }\nfunction setupTask(task: Task, loader: LibraryLoader): void throws LoadError { TaskRegistry.setup(task, loader); }\n", 288), ((int32_t)((uint32_t)(((int32_t)((uint32_t)((process)->index_) * (uint32_t)(1000000)))) + (uint32_t)(1))));
     {
-        List_syntax__ast__Node* list_15 = (((syntax__ast__Program*)lar_unwrap((void*)((process)->program), LINE(15000495))))->decls;
+        List_syntax__ast__Node* list_15 = (((syntax__ast__Program*)lar_unwrap((void*)((process)->program), LINE(15000487))))->decls;
         for (int32_t index_6 = 0; index_6 < list_15->length; index_6++) {
             int32_t i = index_6;
             syntax__ast__Node* d = list_15->items[index_6];
-            if (!(((f_2566 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL))) {
+            if (!(((f_2563 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL))) {
                 continue;
             }
             {
                 List_syntax__ast__Node* list_16 = (calls)->decls;
                 for (int32_t index_7 = 0; index_7 < list_16->length; index_7++) {
                     syntax__ast__Node* c = list_16->items[index_7];
-                    if (((g_2568 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(c), &lar_class_syntax__ast__FunctionDecl)) != NULL) && lar_string_eq((g_2568)->name, (f_2566)->name)) {
-                        (g_2568)->_super.line = (f_2566)->_super.line;
-                        List_syntax__ast__Node* value_11 = (((syntax__ast__Program*)lar_unwrap((void*)((process)->program), LINE(15000500))))->decls;
-                        value_11->items[lar_index((int64_t)(i), value_11->length, LINE(15000500))] = ((syntax__ast__Node*)(g_2568));
+                    if (((g_2565 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(c), &lar_class_syntax__ast__FunctionDecl)) != NULL) && lar_string_eq((g_2565)->name, (f_2563)->name)) {
+                        (g_2565)->_super.line = (f_2563)->_super.line;
+                        List_syntax__ast__Node* value_11 = (((syntax__ast__Program*)lar_unwrap((void*)((process)->program), LINE(15000492))))->decls;
+                        value_11->items[lar_index((int64_t)(i), value_11->length, LINE(15000492))] = ((syntax__ast__Node*)(g_2565));
                     }
                 }
             }
         }
     }
-    List_semantics__linker__Module* list_17 = List_semantics__linker__Module_new(&lar_default_memory, LINE(15000504));
+    List_semantics__linker__Module* list_17 = List_semantics__linker__Module_new(&lar_default_memory, LINE(15000496));
     List_semantics__linker__Module* kept = list_17;
     {
         List_semantics__linker__Module* list_18 = (semantics__linker__linking)->order;
@@ -16435,23 +16425,23 @@ void semantics__linker__writeTasks(LarString mainPath) {
     (semantics__linker__linking)->taskClasses = true;
 }
 
-void semantics__linker__addWords(LarString text_2572) {
+void semantics__linker__addWords(LarString text_2569) {
     int32_t i = 0;
-    while (i < (text_2572).len) {
+    while (i < (text_2569).len) {
         int32_t start = i;
-        if (((lar_string_byte(text_2572, (int64_t)(i), LINE(15000519)) == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (text_2572).len)) && (lar_string_byte(text_2572, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), LINE(15000519)) == (uint8_t)47)) {
-            while ((i < (text_2572).len) && (!(lar_string_byte(text_2572, (int64_t)(i), LINE(15000520)) == (uint8_t)10))) {
+        if (((lar_string_byte(text_2569, (int64_t)(i), LINE(15000511)) == (uint8_t)47) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (text_2569).len)) && (lar_string_byte(text_2569, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), LINE(15000511)) == (uint8_t)47)) {
+            while ((i < (text_2569).len) && (!(lar_string_byte(text_2569, (int64_t)(i), LINE(15000512)) == (uint8_t)10))) {
                 i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
             }
         } else {
-            if (std__text__isIdentifierPart(lar_string_byte(text_2572, (int64_t)(i), LINE(15000521))) && (!(std__text__isDigit(lar_string_byte(text_2572, (int64_t)(i), LINE(15000521)))))) {
-                while ((i < (text_2572).len) && std__text__isIdentifierPart(lar_string_byte(text_2572, (int64_t)(i), LINE(15000522)))) {
+            if (std__text__isIdentifierPart(lar_string_byte(text_2569, (int64_t)(i), LINE(15000513))) && (!(std__text__isDigit(lar_string_byte(text_2569, (int64_t)(i), LINE(15000513)))))) {
+                while ((i < (text_2569).len) && std__text__isIdentifierPart(lar_string_byte(text_2569, (int64_t)(i), LINE(15000514)))) {
                     i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
                 }
                 LarAny value = (semantics__linker__linking)->words;
                 LarAny value_2 = value;
-                LarString value_3 = text_2572;
-                lar_any_set(value_2, lar_string_sub(value_3, (int64_t)(start), (int64_t)(i), 15000523), lar_any_b(true), LINE(15000523));
+                LarString value_3 = text_2569;
+                lar_any_set(value_2, lar_string_sub(value_3, (int64_t)(start), (int64_t)(i), 15000515), lar_any_b(true), LINE(15000515));
             } else {
                 i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
             }
@@ -16462,17 +16452,17 @@ void semantics__linker__addWords(LarString text_2572) {
 void semantics__linker__cWords(LarString code, LarAny names) {
     int32_t i = 0;
     while (i < (code).len) {
-        if (std__text__isIdentifierPart(lar_string_byte(code, (int64_t)(i), LINE(15000534))) && (!(std__text__isDigit(lar_string_byte(code, (int64_t)(i), LINE(15000534)))))) {
+        if (std__text__isIdentifierPart(lar_string_byte(code, (int64_t)(i), LINE(15000526))) && (!(std__text__isDigit(lar_string_byte(code, (int64_t)(i), LINE(15000526)))))) {
             int32_t start = i;
-            while ((i < (code).len) && std__text__isIdentifierPart(lar_string_byte(code, (int64_t)(i), LINE(15000536)))) {
+            while ((i < (code).len) && std__text__isIdentifierPart(lar_string_byte(code, (int64_t)(i), LINE(15000528)))) {
                 i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
             }
             LarAny value = names;
             LarString value_2 = code;
             LarCloneMap clones = lar_clone_map();
-            LarString copy = clone_s(lar_string_sub(value_2, (int64_t)(start), (int64_t)(i), 15000537), &lar_default_memory, &clones);
+            LarString copy = clone_s(lar_string_sub(value_2, (int64_t)(start), (int64_t)(i), 15000529), &lar_default_memory, &clones);
             lar_clone_done(&clones);
-            lar_any_set(value, copy, lar_any_b(true), LINE(15000537));
+            lar_any_set(value, copy, lar_any_b(true), LINE(15000529));
         } else {
             i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
         }
@@ -16482,13 +16472,13 @@ void semantics__linker__cWords(LarString code, LarAny names) {
 bool semantics__linker__cCodeUses(LarString code, LarAny cSymbols) {
     int32_t i = 0;
     while (i < (code).len) {
-        if (std__text__isIdentifierPart(lar_string_byte(code, (int64_t)(i), LINE(15000547))) && (!(std__text__isDigit(lar_string_byte(code, (int64_t)(i), LINE(15000547)))))) {
+        if (std__text__isIdentifierPart(lar_string_byte(code, (int64_t)(i), LINE(15000539))) && (!(std__text__isDigit(lar_string_byte(code, (int64_t)(i), LINE(15000539)))))) {
             int32_t start = i;
-            while ((i < (code).len) && std__text__isIdentifierPart(lar_string_byte(code, (int64_t)(i), LINE(15000549)))) {
+            while ((i < (code).len) && std__text__isIdentifierPart(lar_string_byte(code, (int64_t)(i), LINE(15000541)))) {
                 i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
             }
             LarString value = code;
-            if (lar_any_contains(cSymbols, lar_any_s(lar_string_sub(value, (int64_t)(start), (int64_t)(i), 15000550)))) {
+            if (lar_any_contains(cSymbols, lar_any_s(lar_string_sub(value, (int64_t)(start), (int64_t)(i), 15000542)))) {
                 return true;
             }
         } else {
@@ -16499,9 +16489,9 @@ bool semantics__linker__cCodeUses(LarString code, LarAny cSymbols) {
 }
 
 void semantics__linker__parse(semantics__linker__Module* module, LarString source) {
-    syntax__ast__FunctionDecl* f_2588 = NULL;
-    syntax__ast__ExternFunctionDecl* e_2591 = NULL;
-    syntax__ast__FunctionDecl* f_2592 = NULL;
+    syntax__ast__FunctionDecl* f_2585 = NULL;
+    syntax__ast__ExternFunctionDecl* e_2588 = NULL;
+    syntax__ast__FunctionDecl* f_2589 = NULL;
     semantics__linker__addWords(source);
     syntax__ast__Program* p = syntax__parser__parseProgram(NULL, source, ((int32_t)((uint32_t)(((int32_t)((uint32_t)((module)->index_) * (uint32_t)(1000000)))) + (uint32_t)(1))));
     if (!lar_string_eq((p)->error, lar_string("", 0))) {
@@ -16509,13 +16499,13 @@ void semantics__linker__parse(semantics__linker__Module* module, LarString sourc
         return;
     }
     if ((!lar_string_eq((semantics__linker__linking)->testsKept, lar_string("all", 3))) && (!((lar_string_eq((semantics__linker__linking)->testsKept, lar_string("main", 4)) && ((const void*)(module) == (const void*)((semantics__linker__linking)->root)))))) {
-        List_syntax__ast__Node* list = List_syntax__ast__Node_new(&lar_default_memory, LINE(15000571));
+        List_syntax__ast__Node* list = List_syntax__ast__Node_new(&lar_default_memory, LINE(15000563));
         List_syntax__ast__Node* kept = list;
         {
             List_syntax__ast__Node* list_2 = (p)->decls;
             for (int32_t index = 0; index < list_2->length; index++) {
                 syntax__ast__Node* d = list_2->items[index];
-                if (!((((f_2588 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (f_2588)->isTest))) {
+                if (!((((f_2585 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (f_2585)->isTest))) {
                     List_syntax__ast__Node_push(kept, d);
                 }
             }
@@ -16527,17 +16517,17 @@ void semantics__linker__parse(semantics__linker__Module* module, LarString sourc
         for (int32_t index_2 = 0; index_2 < list_3->length; index_2++) {
             int32_t i = index_2;
             syntax__ast__Node* d = list_3->items[index_2];
-            if (((e_2591 = (syntax__ast__ExternFunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ExternFunctionDecl)) != NULL) && semantics__linker__nativeKnown(module, (e_2591)->name)) {
+            if (((e_2588 = (syntax__ast__ExternFunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ExternFunctionDecl)) != NULL) && semantics__linker__nativeKnown(module, (e_2588)->name)) {
                 List_syntax__ast__Node* value = (p)->decls;
                 LarMemory* place_2 = &lar_default_memory;
-                syntax__ast__FunctionDecl* new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FunctionDecl), LINE(15000579));
+                syntax__ast__FunctionDecl* new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl*)lar_memory_alloc(place_2, sizeof(syntax__ast__FunctionDecl), LINE(15000571));
                 List_semantics__types__PatternInfo* list_4 = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
                 List_syntax__ast__Stmt* list_5 = List_syntax__ast__Stmt_new(place_2, LINE(16000173));
-                *new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__FunctionDecl, place_2 }, .line = (e_2591)->_super.line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_4, .computed = lar_string("", 0) }, .name = (e_2591)->name, .params = (e_2591)->params, .ret = (e_2591)->ret, .throwsType = NULL, .body = list_5, .isOverride = false, .isOperator = false, .hasBody = false, .returnLives = lar_string("", 0), .isStatic = false, .cBodied = false, .typeName = lar_string("", 0), .isTest = false, .isProperty = false, .isNative = true, .waitUntil = NULL };
-                (value)->items[lar_index((int64_t)(i), (value)->length, LINE(15000579))] = ((syntax__ast__Node*)(new_syntax__ast__FunctionDecl));
+                *new_syntax__ast__FunctionDecl = (syntax__ast__FunctionDecl){ ._super = { .header = { (const void*)&methods_syntax__ast__FunctionDecl, place_2 }, .line = (e_2588)->_super.line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_4, .computed = lar_string("", 0) }, .name = (e_2588)->name, .params = (e_2588)->params, .ret = (e_2588)->ret, .throwsType = NULL, .body = list_5, .isOverride = false, .isOperator = false, .hasBody = false, .returnLives = lar_string("", 0), .isStatic = false, .cBodied = false, .typeName = lar_string("", 0), .isTest = false, .isProperty = false, .isNative = true, .waitUntil = NULL };
+                (value)->items[lar_index((int64_t)(i), (value)->length, LINE(15000571))] = ((syntax__ast__Node*)(new_syntax__ast__FunctionDecl));
             } else {
-                if (((((f_2592 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (!((f_2592)->hasBody))) && (!((f_2592)->isTest))) && semantics__linker__nativeKnown(module, (f_2592)->name)) {
-                    (f_2592)->isNative = true;
+                if (((((f_2589 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (!((f_2589)->hasBody))) && (!((f_2589)->isTest))) && semantics__linker__nativeKnown(module, (f_2589)->name)) {
+                    (f_2589)->isNative = true;
                 }
             }
         }
@@ -16553,10 +16543,10 @@ void semantics__linker__parse(semantics__linker__Module* module, LarString sourc
             }
             if (syntax__ast__isTypeDecl(d)) {
                 LarAny value_2 = (module)->ownTypes;
-                lar_any_set(value_2, name, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000588));
+                lar_any_set(value_2, name, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000580));
             } else {
                 LarAny value_3 = (module)->ownValues;
-                lar_any_set(value_3, name, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000588));
+                lar_any_set(value_3, name, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000580));
             }
         }
     }
@@ -16565,7 +16555,7 @@ void semantics__linker__parse(semantics__linker__Module* module, LarString sourc
         for (int32_t index_4 = 0; index_4 < list_7->length; index_4++) {
             LarString n = list_7->items[index_4];
             LarAny value_4 = (module)->publics;
-            lar_any_set(value_4, n, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000590));
+            lar_any_set(value_4, n, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000582));
         }
     }
 }
@@ -16574,9 +16564,9 @@ Opt_s semantics__linker__readSource(LarMemory* lar_result_memory, LarString path
     (void)lar_result_memory;
     LarError err;
     err.kind = 0;
-    LarMemory line15000598_temps = lar_memory_growable();
-    Opt_s open_ = editor__opendocuments__openDocument(NULL, std__io__path__normalize(&line15000598_temps, std__io__path__absolute(&line15000598_temps, path)));
-    lar_memory_free(&line15000598_temps);
+    LarMemory line15000590_temps = lar_memory_growable();
+    Opt_s open_ = editor__opendocuments__openDocument(NULL, std__io__path__normalize(&line15000590_temps, std__io__path__absolute(&line15000590_temps, path)));
+    lar_memory_free(&line15000590_temps);
     if (!(!(open_).has)) {
         LarCloneMap clones = lar_clone_map();
         LarString copy = clone_s(open_.value, &semantics__linker__texts, &clones);
@@ -16610,58 +16600,41 @@ bool semantics__linker__isStd(LarString path) {
     return String_startsWith(path, lar_string("std.", 4));
 }
 
-bool semantics__linker__unsafeModule(semantics__linker__Module* module) {
-    if (semantics__linker__isStd((module)->path)) {
-        return false;
-    }
-    int32_t library = semantics__linker__libraryOf((module)->path);
-    if (library >= 0) {
-        return ((library < ((semantics__linker__linking)->libraryUnsafe)->length) && ((semantics__linker__linking)->libraryUnsafe)->items[lar_index((int64_t)(library), ((semantics__linker__linking)->libraryUnsafe)->length, LINE(15000624))]);
-    }
-    return (semantics__linker__linking)->projectUnsafe;
-}
-
-LarString semantics__linker__sourceOf(LarMemory* lar_result_memory, semantics__linker__Module* module) {
-    (void)lar_result_memory;
-    int32_t library = semantics__linker__libraryOf((module)->path);
-    return ((library >= 0) ? ((semantics__linker__linking)->libraryNames)->items[lar_index((int64_t)(library), ((semantics__linker__linking)->libraryNames)->length, LINE(15000631))] : lar_string("this project", 12));
-}
-
 bool semantics__linker__trusted(semantics__linker__Module* module, LarString mainPath) {
-    if (((semantics__linker__linking)->unsafeC || semantics__linker__isStd((module)->path)) || ((!((semantics__linker__linking)->lang == NULL)) && ((const void*)(module) == (const void*)(((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000636))))))) {
+    if (((semantics__linker__linking)->unsafeC || semantics__linker__isStd((module)->path)) || ((!((semantics__linker__linking)->lang == NULL)) && ((const void*)(module) == (const void*)(((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000608))))))) {
         return true;
     }
-    LarString file_2606 = (((const void*)(module) == (const void*)((semantics__linker__linking)->root)) ? mainPath : ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)((module)->index_), ((semantics__linker__linking)->filePaths)->length, LINE(15000637))]);
-    LarMemory line15000638_temps = lar_memory_growable();
-    LarString value = std__io__path__normalize(&line15000638_temps, std__io__path__absolute(&line15000638_temps, file_2606));
-    LarTextBuilder text = lar_text_builder_mem(&line15000638_temps, LINE(15000638));
-    lar_text_builder_str(&text, std__io__path__normalize(&line15000638_temps, std__io__path__absolute(&line15000638_temps, (semantics__linker__linking)->stdDir)));
+    LarString file_2599 = (((const void*)(module) == (const void*)((semantics__linker__linking)->root)) ? mainPath : ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)((module)->index_), ((semantics__linker__linking)->filePaths)->length, LINE(15000609))]);
+    LarMemory line15000610_temps = lar_memory_growable();
+    LarString value = std__io__path__normalize(&line15000610_temps, std__io__path__absolute(&line15000610_temps, file_2599));
+    LarTextBuilder text = lar_text_builder_mem(&line15000610_temps, LINE(15000610));
+    lar_text_builder_str(&text, std__io__path__normalize(&line15000610_temps, std__io__path__absolute(&line15000610_temps, (semantics__linker__linking)->stdDir)));
     lar_text_builder_add(&text, "/", 1);
     bool result = String_startsWith(value, lar_text_builder_finish(&text));
-    lar_memory_free(&line15000638_temps);
+    lar_memory_free(&line15000610_temps);
     return result;
 }
 
 LarString semantics__linker__moduleFile(LarMemory* lar_result_memory, LarString path) {
     if (semantics__linker__isStd(path)) {
-        LarMemory line15000646_temps = lar_memory_growable();
+        LarMemory line15000618_temps = lar_memory_growable();
         LarString value = (semantics__linker__linking)->stdDir;
-        LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(15000646));
-        lar_text_builder_str(&text, String_replace(String_substring(path, NULL, 4), &line15000646_temps, lar_string(".", 1), lar_string("/", 1)));
+        LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(15000618));
+        lar_text_builder_str(&text, String_replace(String_substring(path, NULL, 4), &line15000618_temps, lar_string(".", 1), lar_string("/", 1)));
         lar_text_builder_add(&text, ".lar", 4);
         LarString result = std__io__path__join(lar_result_memory, value, lar_text_builder_finish(&text));
-        lar_memory_free(&line15000646_temps);
+        lar_memory_free(&line15000618_temps);
         return result;
     }
-    LarMemory line15000647_temps = lar_memory_growable();
-    LarTextBuilder text_2 = lar_text_builder_mem(lar_result_memory, LINE(15000647));
-    lar_text_builder_str(&text_2, String_replace(path, &line15000647_temps, lar_string(".", 1), lar_string("/", 1)));
+    LarMemory line15000619_temps = lar_memory_growable();
+    LarTextBuilder text_2 = lar_text_builder_mem(lar_result_memory, LINE(15000619));
+    lar_text_builder_str(&text_2, String_replace(path, &line15000619_temps, lar_string(".", 1), lar_string("/", 1)));
     lar_text_builder_add(&text_2, ".lar", 4);
     LarString relative = lar_text_builder_finish(&text_2);
-    lar_memory_free(&line15000647_temps);
+    lar_memory_free(&line15000619_temps);
     int32_t library = semantics__linker__libraryOf(path);
     if (library >= 0) {
-        return std__io__path__join(lar_result_memory, ((semantics__linker__linking)->libraryRoots)->items[lar_index((int64_t)(library), ((semantics__linker__linking)->libraryRoots)->length, LINE(15000649))], relative);
+        return std__io__path__join(lar_result_memory, ((semantics__linker__linking)->libraryRoots)->items[lar_index((int64_t)(library), ((semantics__linker__linking)->libraryRoots)->length, LINE(15000621))], relative);
     }
     LarString own = std__io__path__join(lar_result_memory, (semantics__linker__linking)->rootDir, relative);
     if (std__io__files__isFile(own)) {
@@ -16674,12 +16647,12 @@ LarString semantics__linker__moduleFile(LarMemory* lar_result_memory, LarString 
             if (std__io__files__isFile(fromProject)) {
                 return fromProject;
             }
-            LarMemory line15000657_temps = lar_memory_growable();
-            if (std__io__files__isFile(std__io__path__join(&line15000657_temps, dir, lar_string("larimar.toml", 12)))) {
-                lar_memory_free(&line15000657_temps);
+            LarMemory line15000629_temps = lar_memory_growable();
+            if (std__io__files__isFile(std__io__path__join(&line15000629_temps, dir, lar_string("larimar.toml", 12)))) {
+                lar_memory_free(&line15000629_temps);
                 break;
             }
-            lar_memory_free(&line15000657_temps);
+            lar_memory_free(&line15000629_temps);
             LarString up = std__io__path__parent(NULL, dir);
             if (lar_string_eq(up, dir)) {
                 break;
@@ -16696,20 +16669,20 @@ int32_t semantics__linker__libraryOf(LarString path) {
         for (int32_t index = 0; index < list->length; index++) {
             int32_t i = index;
             LarString n = list->items[index];
-            LarMemory line15000670_temps = lar_memory_growable();
+            LarMemory line15000642_temps = lar_memory_growable();
             bool condition = lar_string_eq(path, n);
             if (!condition) {
-                LarTextBuilder text = lar_text_builder_mem(&line15000670_temps, LINE(15000670));
+                LarTextBuilder text = lar_text_builder_mem(&line15000642_temps, LINE(15000642));
                 lar_text_builder_str(&text, n);
                 lar_text_builder_add(&text, ".", 1);
                 condition = String_startsWith(path, lar_text_builder_finish(&text));
             }
             if (condition) {
                 int32_t result = i;
-                lar_memory_free(&line15000670_temps);
+                lar_memory_free(&line15000642_temps);
                 return result;
             }
-            lar_memory_free(&line15000670_temps);
+            lar_memory_free(&line15000642_temps);
         }
     }
     return (-1);
@@ -16717,101 +16690,101 @@ int32_t semantics__linker__libraryOf(LarString path) {
 
 LarString semantics__linker__shownName(LarMemory* lar_result_memory, LarString path) {
     if (semantics__linker__isStd(path)) {
-        LarMemory line15000677_temps = lar_memory_growable();
-        LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(15000677));
-        lar_text_builder_str(&text, String_replace(path, &line15000677_temps, lar_string(".", 1), lar_string("/", 1)));
+        LarMemory line15000649_temps = lar_memory_growable();
+        LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(15000649));
+        lar_text_builder_str(&text, String_replace(path, &line15000649_temps, lar_string(".", 1), lar_string("/", 1)));
         lar_text_builder_add(&text, ".lar", 4);
         LarString result = lar_text_builder_finish(&text);
-        lar_memory_free(&line15000677_temps);
+        lar_memory_free(&line15000649_temps);
         return result;
     }
-    LarMemory line15000678_temps = lar_memory_growable();
+    LarMemory line15000650_temps = lar_memory_growable();
     LarString value;
     if (!lar_string_eq((semantics__linker__linking)->showFrom, lar_string("", 0))) {
         LarString value_2 = (semantics__linker__linking)->showFrom;
-        value = std__io__path__relative(lar_result_memory, value_2, semantics__linker__moduleFile(&line15000678_temps, path));
+        value = std__io__path__relative(lar_result_memory, value_2, semantics__linker__moduleFile(&line15000650_temps, path));
     } else {
         value = semantics__linker__moduleFile(lar_result_memory, path);
     }
     LarString result_2 = value;
-    lar_memory_free(&line15000678_temps);
+    lar_memory_free(&line15000650_temps);
     return result_2;
 }
 
 void semantics__linker__visit(semantics__linker__Module* module) {
     {
-        List_syntax__ast__ImportDecl* list = (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000684))))->imports;
+        List_syntax__ast__ImportDecl* list = (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000656))))->imports;
         for (int32_t index = 0; index < list->length; index++) {
             syntax__ast__ImportDecl* imp = list->items[index];
             if (!lar_any_is_null(lar_any_get((semantics__linker__linking)->modIndex, (imp)->path))) {
                 continue;
             }
-            LarMemory line15000686_temps = lar_memory_growable();
+            LarMemory line15000658_temps = lar_memory_growable();
             bool condition = (((semantics__linker__linking)->root)->index_ < ((semantics__linker__linking)->filePaths)->length);
             if (condition) {
-                LarString value_2 = std__io__path__normalize(&line15000686_temps, std__io__path__absolute(&line15000686_temps, semantics__linker__moduleFile(&line15000686_temps, (imp)->path)));
-                condition = lar_string_eq(value_2, std__io__path__normalize(&line15000686_temps, ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)(((semantics__linker__linking)->root)->index_), ((semantics__linker__linking)->filePaths)->length, LINE(15000686))]));
+                LarString value_2 = std__io__path__normalize(&line15000658_temps, std__io__path__absolute(&line15000658_temps, semantics__linker__moduleFile(&line15000658_temps, (imp)->path)));
+                condition = lar_string_eq(value_2, std__io__path__normalize(&line15000658_temps, ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)(((semantics__linker__linking)->root)->index_), ((semantics__linker__linking)->filePaths)->length, LINE(15000658))]));
             }
             if (condition) {
                 LarAny value_3 = (semantics__linker__linking)->modIndex;
-                lar_any_set(value_3, (imp)->path, lar_any_i((int64_t)(0LL), LAR_ANY_I64), LINE(15000687));
-                lar_memory_free(&line15000686_temps);
+                lar_any_set(value_3, (imp)->path, lar_any_i((int64_t)(0LL), LAR_ANY_I64), LINE(15000659));
+                lar_memory_free(&line15000658_temps);
                 continue;
             }
-            lar_memory_free(&line15000686_temps);
-            LarMemory line15000690_temps = lar_memory_growable();
-            Opt_s source = semantics__linker__readSource(NULL, semantics__linker__moduleFile(&line15000690_temps, (imp)->path));
-            lar_memory_free(&line15000690_temps);
+            lar_memory_free(&line15000658_temps);
+            LarMemory line15000662_temps = lar_memory_growable();
+            Opt_s source = semantics__linker__readSource(NULL, semantics__linker__moduleFile(&line15000662_temps, (imp)->path));
+            lar_memory_free(&line15000662_temps);
             if (!(source).has) {
-                LarMemory line15000692_temps = lar_memory_growable();
+                LarMemory line15000664_temps = lar_memory_growable();
                 int32_t value_4 = (imp)->_super.line;
-                LarTextBuilder text = lar_text_builder_mem(&line15000692_temps, LINE(15000692));
+                LarTextBuilder text = lar_text_builder_mem(&line15000664_temps, LINE(15000664));
                 lar_text_builder_add(&text, "Module '", 8);
                 lar_text_builder_str(&text, (imp)->path);
                 lar_text_builder_add(&text, "' not found (looked for ", 24);
-                lar_text_builder_str(&text, semantics__linker__shownName(&line15000692_temps, (imp)->path));
+                lar_text_builder_str(&text, semantics__linker__shownName(&line15000664_temps, (imp)->path));
                 lar_text_builder_add(&text, ").", 2);
                 semantics__linker__error(value_4, lar_text_builder_finish(&text));
-                lar_memory_free(&line15000692_temps);
+                lar_memory_free(&line15000664_temps);
                 continue;
             }
-            LarString text_2621 = source.value;
+            LarString text_2614 = source.value;
             semantics__linker__Module* dep = semantics__linker__newModule(NULL, (imp)->path, ((semantics__linker__linking)->fileNames)->length);
             List_s_push((semantics__linker__linking)->fileNames, semantics__linker__shownName(((semantics__linker__linking)->fileNames)->mem, (imp)->path));
-            LarMemory line15000698_temps = lar_memory_growable();
+            LarMemory line15000670_temps = lar_memory_growable();
             LarCloneMap clones = lar_clone_map();
-            LarString copy = clone_s(std__io__path__absolute(&line15000698_temps, semantics__linker__moduleFile(&line15000698_temps, (imp)->path)), &lar_default_memory, &clones);
+            LarString copy = clone_s(std__io__path__absolute(&line15000670_temps, semantics__linker__moduleFile(&line15000670_temps, (imp)->path)), &lar_default_memory, &clones);
             lar_clone_done(&clones);
             List_s_push((semantics__linker__linking)->filePaths, copy);
-            lar_memory_free(&line15000698_temps);
-            List_s_push((semantics__linker__linking)->fileSources, text_2621);
+            lar_memory_free(&line15000670_temps);
+            List_s_push((semantics__linker__linking)->fileSources, text_2614);
             List_semantics__linker__Module_push((semantics__linker__linking)->mods, dep);
             LarAny value_5 = (semantics__linker__linking)->modIndex;
-            lar_any_set(value_5, (dep)->path, lar_any_i((int64_t)(((int32_t)((uint32_t)(((semantics__linker__linking)->mods)->length) - (uint32_t)(1)))), LAR_ANY_I32), LINE(15000701));
-            semantics__linker__parse(dep, text_2621);
+            lar_any_set(value_5, (dep)->path, lar_any_i((int64_t)(((int32_t)((uint32_t)(((semantics__linker__linking)->mods)->length) - (uint32_t)(1)))), LAR_ANY_I32), LINE(15000673));
+            semantics__linker__parse(dep, text_2614);
             int32_t library = semantics__linker__libraryOf((imp)->path);
-            LarMemory line15000704_temps = lar_memory_growable();
+            LarMemory line15000676_temps = lar_memory_growable();
             bool condition_2 = (library >= 0);
             if (condition_2) {
                 LarString value_6 = (semantics__linker__linking)->rootDir;
-                LarTextBuilder text_2 = lar_text_builder_mem(&line15000704_temps, LINE(15000704));
-                lar_text_builder_str(&text_2, String_replace((imp)->path, &line15000704_temps, lar_string(".", 1), lar_string("/", 1)));
+                LarTextBuilder text_2 = lar_text_builder_mem(&line15000676_temps, LINE(15000676));
+                lar_text_builder_str(&text_2, String_replace((imp)->path, &line15000676_temps, lar_string(".", 1), lar_string("/", 1)));
                 lar_text_builder_add(&text_2, ".lar", 4);
-                condition_2 = std__io__files__isFile(std__io__path__join(&line15000704_temps, value_6, lar_text_builder_finish(&text_2)));
+                condition_2 = std__io__files__isFile(std__io__path__join(&line15000676_temps, value_6, lar_text_builder_finish(&text_2)));
             }
             if (condition_2) {
-                LarMemory line15000705_temps = lar_memory_growable();
+                LarMemory line15000677_temps = lar_memory_growable();
                 int32_t value_7 = (imp)->_super.line;
-                LarTextBuilder text_3 = lar_text_builder_mem(&line15000705_temps, LINE(15000705));
+                LarTextBuilder text_3 = lar_text_builder_mem(&line15000677_temps, LINE(15000677));
                 lar_text_builder_add(&text_3, "Module '", 8);
                 lar_text_builder_str(&text_3, (imp)->path);
                 lar_text_builder_add(&text_3, "' is of the library '", 21);
-                lar_text_builder_str(&text_3, ((semantics__linker__linking)->libraryNames)->items[lar_index((int64_t)(library), ((semantics__linker__linking)->libraryNames)->length, LINE(15000705))]);
+                lar_text_builder_str(&text_3, ((semantics__linker__linking)->libraryNames)->items[lar_index((int64_t)(library), ((semantics__linker__linking)->libraryNames)->length, LINE(15000677))]);
                 lar_text_builder_add(&text_3, "' of [dependencies], and the project has a file with its name too: rename the project's.", 88);
                 semantics__linker__error(value_7, lar_text_builder_finish(&text_3));
-                lar_memory_free(&line15000705_temps);
+                lar_memory_free(&line15000677_temps);
             }
-            lar_memory_free(&line15000704_temps);
+            lar_memory_free(&line15000676_temps);
             if (!((dep)->program == NULL)) {
                 semantics__linker__visit(dep);
             }
@@ -16821,34 +16794,34 @@ void semantics__linker__visit(semantics__linker__Module* module) {
 }
 
 void semantics__linker__tables(semantics__linker__Module* module) {
-    syntax__ast__NativeInterfaceDecl* nativeInterface_2630 = NULL;
-    syntax__ast__NativeInterfaceDecl* nativeInterface_2640 = NULL;
-    if ((!((semantics__linker__linking)->lang == NULL)) && (!((const void*)(module) == (const void*)(((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000715))))))) {
+    syntax__ast__NativeInterfaceDecl* nativeInterface_2623 = NULL;
+    syntax__ast__NativeInterfaceDecl* nativeInterface_2633 = NULL;
+    if ((!((semantics__linker__linking)->lang == NULL)) && (!((const void*)(module) == (const void*)(((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000687))))))) {
         {
-            LarAny table_2_v = (((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000716))))->types;
+            LarAny table_2_v = (((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000688))))->types;
             LarTable* table_2 = table_2_v.kind == LAR_ANY_TABLE ? table_2_v.as.t : NULL;
             int32_t count_2 = table_2 ? table_2->count : 0;
             for (int32_t index = 0; index < count_2; index++) {
-                if (table_2->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000716));
+                if (table_2->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000688));
                 LarString k = table_2->keys[index];
                 LarAny v = table_2->values[index];
-                if (lar_any_contains((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000717))))->publics, lar_any_s(k))) {
+                if (lar_any_contains((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000689))))->publics, lar_any_s(k))) {
                     LarAny value_2 = (module)->types;
-                    lar_any_set(value_2, k, v, LINE(15000717));
+                    lar_any_set(value_2, k, v, LINE(15000689));
                 }
             }
         }
         {
-            LarAny table_3_v = (((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000719))))->values;
+            LarAny table_3_v = (((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000691))))->values;
             LarTable* table_3 = table_3_v.kind == LAR_ANY_TABLE ? table_3_v.as.t : NULL;
             int32_t count_3 = table_3 ? table_3->count : 0;
             for (int32_t index_2 = 0; index_2 < count_3; index_2++) {
-                if (table_3->count != count_3) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000719));
+                if (table_3->count != count_3) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000691));
                 LarString k = table_3->keys[index_2];
                 LarAny v = table_3->values[index_2];
-                if (lar_any_contains((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000720))))->publics, lar_any_s(k))) {
+                if (lar_any_contains((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000692))))->publics, lar_any_s(k))) {
                     LarAny value_3 = (module)->values;
-                    lar_any_set(value_3, k, v, LINE(15000720));
+                    lar_any_set(value_3, k, v, LINE(15000692));
                 }
             }
         }
@@ -16856,33 +16829,33 @@ void semantics__linker__tables(semantics__linker__Module* module) {
     semantics__linker__dictFromSet((module)->values, (module)->ownValues, (module)->prefix);
     semantics__linker__dictFromSet((module)->types, (module)->ownTypes, (module)->prefix);
     {
-        List_syntax__ast__Node* list = (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000725))))->decls;
+        List_syntax__ast__Node* list = (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000697))))->decls;
         for (int32_t index_3 = 0; index_3 < list->length; index_3++) {
             syntax__ast__Node* d = list->items[index_3];
-            if (!(((nativeInterface_2630 = (syntax__ast__NativeInterfaceDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl)) != NULL))) {
+            if (!(((nativeInterface_2623 = (syntax__ast__NativeInterfaceDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl)) != NULL))) {
                 continue;
             }
-            LarTable* table_4 = lar_table_new(&lar_default_memory, LINE(15000727));
+            LarTable* table_4 = lar_table_new(&lar_default_memory, LINE(15000699));
             LarAny members = lar_any_t(table_4);
             {
-                List_s* list_2 = (nativeInterface_2630)->members;
+                List_s* list_2 = (nativeInterface_2623)->members;
                 for (int32_t index_4 = 0; index_4 < list_2->length; index_4++) {
                     LarString n = list_2->items[index_4];
                     LarAny value_4 = members;
-                    LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(15000728));
+                    LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(15000700));
                     lar_text_builder_str(&text, (module)->prefix);
-                    lar_text_builder_str(&text, (nativeInterface_2630)->name);
+                    lar_text_builder_str(&text, (nativeInterface_2623)->name);
                     lar_text_builder_add(&text, "__", 2);
                     lar_text_builder_str(&text, n);
-                    lar_any_set(value_4, n, lar_any_s(lar_text_builder_finish(&text)), LINE(15000728));
+                    lar_any_set(value_4, n, lar_any_s(lar_text_builder_finish(&text)), LINE(15000700));
                 }
             }
             LarAny value_5 = (module)->natives;
-            lar_any_set(value_5, (nativeInterface_2630)->name, members, LINE(15000729));
+            lar_any_set(value_5, (nativeInterface_2623)->name, members, LINE(15000701));
         }
     }
     {
-        List_syntax__ast__ImportDecl* list_3 = (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000731))))->imports;
+        List_syntax__ast__ImportDecl* list_3 = (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000703))))->imports;
         for (int32_t index_5 = 0; index_5 < list_3->length; index_5++) {
             syntax__ast__ImportDecl* imp = list_3->items[index_5];
             Opt_i32 value_6 = lar_any_as_i32(lar_any_get((semantics__linker__linking)->modIndex, (imp)->path));
@@ -16895,7 +16868,7 @@ void semantics__linker__tables(semantics__linker__Module* module) {
             if (ti < 0) {
                 continue;
             }
-            semantics__linker__Module* target = ((semantics__linker__linking)->mods)->items[lar_index((int64_t)(ti), ((semantics__linker__linking)->mods)->length, LINE(15000734))];
+            semantics__linker__Module* target = ((semantics__linker__linking)->mods)->items[lar_index((int64_t)(ti), ((semantics__linker__linking)->mods)->length, LINE(15000706))];
             if ((target)->program == NULL) {
                 continue;
             }
@@ -16906,18 +16879,18 @@ void semantics__linker__tables(semantics__linker__Module* module) {
             if (!((imp)->hasNames)) {
                 LarString a = (imp)->alias;
                 if (((!lar_any_is_null(lar_any_get((module)->values, a))) || (!lar_any_is_null(lar_any_get((module)->types, a)))) || (!lar_any_is_null(lar_any_get((module)->aliases, a)))) {
-                    LarMemory line15000743_temps = lar_memory_growable();
-                    LarTextBuilder text_2 = lar_text_builder_mem(&line15000743_temps, LINE(15000743));
+                    LarMemory line15000715_temps = lar_memory_growable();
+                    LarTextBuilder text_2 = lar_text_builder_mem(&line15000715_temps, LINE(15000715));
                     lar_text_builder_add(&text_2, "'", 1);
                     lar_text_builder_str(&text_2, a);
                     lar_text_builder_add(&text_2, "' is already used in this file; import the module with another name: import ", 76);
                     lar_text_builder_str(&text_2, (imp)->path);
                     lar_text_builder_add(&text_2, " as other;", 10);
                     semantics__linker__error((imp)->_super.line, lar_text_builder_finish(&text_2));
-                    lar_memory_free(&line15000743_temps);
+                    lar_memory_free(&line15000715_temps);
                 } else {
                     LarAny value_8 = (module)->aliases;
-                    lar_any_set(value_8, a, lar_any_i((int64_t)(ti), LAR_ANY_I32), LINE(15000745));
+                    lar_any_set(value_8, a, lar_any_i((int64_t)(ti), LAR_ANY_I32), LINE(15000717));
                 }
                 continue;
             }
@@ -16929,7 +16902,7 @@ void semantics__linker__tables(semantics__linker__Module* module) {
                     if (!lar_any_is_null(lar_any_get((target)->ownValues, n))) {
                         found = true;
                         LarAny value_9 = (module)->values;
-                        LarTextBuilder text_3 = lar_text_builder_mem(&lar_default_memory, LINE(15000753));
+                        LarTextBuilder text_3 = lar_text_builder_mem(&lar_default_memory, LINE(15000725));
                         lar_text_builder_str(&text_3, (target)->prefix);
                         lar_text_builder_str(&text_3, n);
                         semantics__linker__bring(module, value_9, n, target, lar_text_builder_finish(&text_3), (imp)->_super.line);
@@ -16937,21 +16910,21 @@ void semantics__linker__tables(semantics__linker__Module* module) {
                     if (!lar_any_is_null(lar_any_get((target)->ownTypes, n))) {
                         found = true;
                         LarAny value_10 = (module)->types;
-                        LarTextBuilder text_4 = lar_text_builder_mem(&lar_default_memory, LINE(15000757));
+                        LarTextBuilder text_4 = lar_text_builder_mem(&lar_default_memory, LINE(15000729));
                         lar_text_builder_str(&text_4, (target)->prefix);
                         lar_text_builder_str(&text_4, n);
                         semantics__linker__bring(module, value_10, n, target, lar_text_builder_finish(&text_4), (imp)->_super.line);
                     }
                     if (!(found)) {
-                        LarMemory line15000759_temps = lar_memory_growable();
-                        LarTextBuilder text_5 = lar_text_builder_mem(&line15000759_temps, LINE(15000759));
+                        LarMemory line15000731_temps = lar_memory_growable();
+                        LarTextBuilder text_5 = lar_text_builder_mem(&line15000731_temps, LINE(15000731));
                         lar_text_builder_add(&text_5, "Module '", 8);
                         lar_text_builder_str(&text_5, (target)->path);
                         lar_text_builder_add(&text_5, "' has no '", 10);
                         lar_text_builder_str(&text_5, n);
                         lar_text_builder_add(&text_5, "'.", 2);
                         semantics__linker__error((imp)->_super.line, lar_text_builder_finish(&text_5));
-                        lar_memory_free(&line15000759_temps);
+                        lar_memory_free(&line15000731_temps);
                     }
                     if (found && (!lar_any_is_null(lar_any_get((target)->natives, n)))) {
                         LarAny value_11 = (module)->natives;
@@ -16959,33 +16932,33 @@ void semantics__linker__tables(semantics__linker__Module* module) {
                         LarCloneMap clones = lar_clone_map();
                         LarAny copy = clone_any(lar_any_get((target)->natives, n), &lar_default_memory, &clones);
                         lar_clone_done(&clones);
-                        lar_any_set(value_12, n, copy, LINE(15000760));
+                        lar_any_set(value_12, n, copy, LINE(15000732));
                     }
                 }
             }
         }
     }
     {
-        List_syntax__ast__Node* list_5 = (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000763))))->decls;
+        List_syntax__ast__Node* list_5 = (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(15000735))))->decls;
         for (int32_t index_7 = 0; index_7 < list_5->length; index_7++) {
             syntax__ast__Node* d = list_5->items[index_7];
-            if (!(((nativeInterface_2640 = (syntax__ast__NativeInterfaceDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl)) != NULL))) {
+            if (!(((nativeInterface_2633 = (syntax__ast__NativeInterfaceDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl)) != NULL))) {
                 continue;
             }
             {
-                List_s* list_6 = (nativeInterface_2640)->parents;
+                List_s* list_6 = (nativeInterface_2633)->parents;
                 for (int32_t index_8 = 0; index_8 < list_6->length; index_8++) {
                     LarString parent = list_6->items[index_8];
                     if (lar_any_is_null(lar_any_get((module)->natives, parent))) {
-                        LarMemory line15000767_temps = lar_memory_growable();
-                        LarTextBuilder text_6 = lar_text_builder_mem(&line15000767_temps, LINE(15000767));
+                        LarMemory line15000739_temps = lar_memory_growable();
+                        LarTextBuilder text_6 = lar_text_builder_mem(&line15000739_temps, LINE(15000739));
                         lar_text_builder_add(&text_6, "Native interface '", 18);
-                        lar_text_builder_str(&text_6, (nativeInterface_2640)->name);
+                        lar_text_builder_str(&text_6, (nativeInterface_2633)->name);
                         lar_text_builder_add(&text_6, "' extends '", 11);
                         lar_text_builder_str(&text_6, parent);
                         lar_text_builder_add(&text_6, "', which is not a native interface known here (import it by name).", 66);
-                        semantics__linker__error((nativeInterface_2640)->_super.line, lar_text_builder_finish(&text_6));
-                        lar_memory_free(&line15000767_temps);
+                        semantics__linker__error((nativeInterface_2633)->_super.line, lar_text_builder_finish(&text_6));
+                        lar_memory_free(&line15000739_temps);
                         continue;
                     }
                     {
@@ -16993,16 +16966,16 @@ void semantics__linker__tables(semantics__linker__Module* module) {
                         LarTable* table_5 = table_5_v.kind == LAR_ANY_TABLE ? table_5_v.as.t : NULL;
                         int32_t count_4 = table_5 ? table_5->count : 0;
                         for (int32_t index_9 = 0; index_9 < count_4; index_9++) {
-                            if (table_5->count != count_4) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000770));
+                            if (table_5->count != count_4) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15000742));
                             LarString k = table_5->keys[index_9];
                             LarAny v = table_5->values[index_9];
-                            if (lar_any_is_null(lar_any_get(lar_any_get((module)->natives, (nativeInterface_2640)->name), k))) {
-                                LarAny value_13 = lar_any_get((module)->natives, (nativeInterface_2640)->name);
+                            if (lar_any_is_null(lar_any_get(lar_any_get((module)->natives, (nativeInterface_2633)->name), k))) {
+                                LarAny value_13 = lar_any_get((module)->natives, (nativeInterface_2633)->name);
                                 LarAny value_14 = value_13;
                                 LarCloneMap clones_2 = lar_clone_map();
                                 LarAny copy_2 = clone_any(v, &lar_default_memory, &clones_2);
                                 lar_clone_done(&clones_2);
-                                lar_any_set(value_14, k, copy_2, LINE(15000771));
+                                lar_any_set(value_14, k, copy_2, LINE(15000743));
                             }
                         }
                     }
@@ -17015,15 +16988,15 @@ void semantics__linker__tables(semantics__linker__Module* module) {
 void semantics__linker__bring(semantics__linker__Module* module, LarAny into, LarString n, semantics__linker__Module* from, LarString mangled, int32_t line) {
     (void)module;
     if (lar_any_is_null(lar_any_get((from)->publics, n))) {
-        LarMemory line15000779_temps = lar_memory_growable();
-        LarTextBuilder text = lar_text_builder_mem(&line15000779_temps, LINE(15000779));
+        LarMemory line15000751_temps = lar_memory_growable();
+        LarTextBuilder text = lar_text_builder_mem(&line15000751_temps, LINE(15000751));
         lar_text_builder_add(&text, "'", 1);
         lar_text_builder_str(&text, n);
         lar_text_builder_add(&text, "' is private to module '", 24);
         lar_text_builder_str(&text, (from)->path);
         lar_text_builder_add(&text, "'; mark it 'public' there to use it here.", 41);
         semantics__linker__error(line, lar_text_builder_finish(&text));
-        lar_memory_free(&line15000779_temps);
+        lar_memory_free(&line15000751_temps);
     } else {
         bool condition = (!lar_any_is_null(lar_any_get(into, n)));
         if (condition) {
@@ -17044,8 +17017,8 @@ void semantics__linker__bring(semantics__linker__Module* module, LarAny into, La
                 value_6 = (-1);
             }
             LarString last = String_substring(value_4, NULL, ((int32_t)((uint32_t)(value_6) + (uint32_t)(1))));
-            LarMemory line15000782_temps = lar_memory_growable();
-            LarTextBuilder text_2 = lar_text_builder_mem(&line15000782_temps, LINE(15000782));
+            LarMemory line15000754_temps = lar_memory_growable();
+            LarTextBuilder text_2 = lar_text_builder_mem(&line15000754_temps, LINE(15000754));
             lar_text_builder_add(&text_2, "'", 1);
             lar_text_builder_str(&text_2, n);
             lar_text_builder_add(&text_2, "' is already defined in this file; import the module instead and write ", 71);
@@ -17054,10 +17027,10 @@ void semantics__linker__bring(semantics__linker__Module* module, LarAny into, La
             lar_text_builder_str(&text_2, n);
             lar_text_builder_add(&text_2, ".", 1);
             semantics__linker__error(line, lar_text_builder_finish(&text_2));
-            lar_memory_free(&line15000782_temps);
+            lar_memory_free(&line15000754_temps);
         } else {
             LarAny value_7 = into;
-            lar_any_set(value_7, n, lar_any_s(mangled), LINE(15000784));
+            lar_any_set(value_7, n, lar_any_s(mangled), LINE(15000756));
         }
     }
 }
@@ -17066,10 +17039,10 @@ void semantics__linker__push(void) {
     if (semantics__linker__scopeDepth < (semantics__linker__scopes)->length) {
         List_any* value = semantics__linker__scopes;
         int32_t value_2 = semantics__linker__scopeDepth;
-        LarTable* table = lar_table_new(&lar_default_memory, LINE(15000796));
-        (value)->items[lar_index((int64_t)(value_2), (value)->length, LINE(15000796))] = lar_any_t(table);
+        LarTable* table = lar_table_new(&lar_default_memory, LINE(15000768));
+        (value)->items[lar_index((int64_t)(value_2), (value)->length, LINE(15000768))] = lar_any_t(table);
     } else {
-        LarTable* table_2 = lar_table_new(&lar_default_memory, LINE(15000796));
+        LarTable* table_2 = lar_table_new(&lar_default_memory, LINE(15000768));
         List_any_push(semantics__linker__scopes, lar_any_t(table_2));
     }
     semantics__linker__scopeDepth = ((int32_t)((uint32_t)(semantics__linker__scopeDepth) + (uint32_t)(1)));
@@ -17081,15 +17054,15 @@ void semantics__linker__pop(void) {
 
 void semantics__linker__declare(LarString n) {
     if ((!lar_string_eq(n, lar_string("", 0))) && (semantics__linker__scopeDepth > 0)) {
-        LarAny value = (semantics__linker__scopes)->items[lar_index((int64_t)(((int32_t)((uint32_t)(semantics__linker__scopeDepth) - (uint32_t)(1)))), (semantics__linker__scopes)->length, LINE(15000803))];
-        lar_any_set(value, n, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000803));
+        LarAny value = (semantics__linker__scopes)->items[lar_index((int64_t)(((int32_t)((uint32_t)(semantics__linker__scopeDepth) - (uint32_t)(1)))), (semantics__linker__scopes)->length, LINE(15000775))];
+        lar_any_set(value, n, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(15000775));
     }
 }
 
 bool semantics__linker__local(LarString n) {
     int32_t i = 0;
     while (i < semantics__linker__scopeDepth) {
-        if (!lar_any_is_null(lar_any_get((semantics__linker__scopes)->items[lar_index((int64_t)(i), (semantics__linker__scopes)->length, LINE(15000809))], n))) {
+        if (!lar_any_is_null(lar_any_get((semantics__linker__scopes)->items[lar_index((int64_t)(i), (semantics__linker__scopes)->length, LINE(15000781))], n))) {
             return true;
         }
         i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
@@ -17104,15 +17077,15 @@ bool semantics__linker__stdFileOpened(semantics__linker__Module* module) {
         lar_memory_free(&memory);
         return result;
     }
-    LarMemory line15000819_temps = lar_memory_growable();
-    LarString f = std__io__path__normalize(&memory, std__io__path__absolute(&line15000819_temps, ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)((module)->index_), ((semantics__linker__linking)->filePaths)->length, LINE(15000819))]));
-    lar_memory_free(&line15000819_temps);
-    LarMemory line15000820_temps = lar_memory_growable();
-    LarTextBuilder text = lar_text_builder_mem(&line15000820_temps, LINE(15000820));
-    lar_text_builder_str(&text, std__io__path__normalize(&line15000820_temps, std__io__path__absolute(&line15000820_temps, (semantics__linker__linking)->stdDir)));
+    LarMemory line15000791_temps = lar_memory_growable();
+    LarString f = std__io__path__normalize(&memory, std__io__path__absolute(&line15000791_temps, ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)((module)->index_), ((semantics__linker__linking)->filePaths)->length, LINE(15000791))]));
+    lar_memory_free(&line15000791_temps);
+    LarMemory line15000792_temps = lar_memory_growable();
+    LarTextBuilder text = lar_text_builder_mem(&line15000792_temps, LINE(15000792));
+    lar_text_builder_str(&text, std__io__path__normalize(&line15000792_temps, std__io__path__absolute(&line15000792_temps, (semantics__linker__linking)->stdDir)));
     lar_text_builder_add(&text, "/", 1);
     bool result_2 = String_startsWith(f, lar_text_builder_finish(&text));
-    lar_memory_free(&line15000820_temps);
+    lar_memory_free(&line15000792_temps);
     lar_memory_free(&memory);
     return result_2;
 }
@@ -17121,22 +17094,22 @@ bool semantics__linker__isLanguage(semantics__linker__Module* module) {
     if (lar_string_eq((module)->path, lar_string("std.lang", 8))) {
         return true;
     }
-    LarMemory line15000826_temps = lar_memory_growable();
-    bool result = ((lar_string_eq((module)->path, lar_string("", 0)) && ((module)->index_ < ((semantics__linker__linking)->filePaths)->length)) && String_endsWith(String_replace(((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)((module)->index_), ((semantics__linker__linking)->filePaths)->length, LINE(15000826))], &line15000826_temps, lar_string("\\", 1), lar_string("/", 1)), lar_string("std/lang.lar", 12)));
-    lar_memory_free(&line15000826_temps);
+    LarMemory line15000798_temps = lar_memory_growable();
+    bool result = ((lar_string_eq((module)->path, lar_string("", 0)) && ((module)->index_ < ((semantics__linker__linking)->filePaths)->length)) && String_endsWith(String_replace(((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)((module)->index_), ((semantics__linker__linking)->filePaths)->length, LINE(15000798))], &line15000798_temps, lar_string("\\", 1), lar_string("/", 1)), lar_string("std/lang.lar", 12)));
+    lar_memory_free(&line15000798_temps);
     return result;
 }
 
 bool semantics__linker__nativeKnown(semantics__linker__Module* module, LarString name) {
-    LarMemory line15000830_temps = lar_memory_growable();
-    bool alone = ((lar_string_eq((module)->path, lar_string("", 0)) && ((module)->index_ < ((semantics__linker__linking)->filePaths)->length)) && String_endsWith(String_replace(((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)((module)->index_), ((semantics__linker__linking)->filePaths)->length, LINE(15000830))], &line15000830_temps, lar_string("\\", 1), lar_string("/", 1)), lar_string("std/memory.lar", 14)));
-    lar_memory_free(&line15000830_temps);
+    LarMemory line15000802_temps = lar_memory_growable();
+    bool alone = ((lar_string_eq((module)->path, lar_string("", 0)) && ((module)->index_ < ((semantics__linker__linking)->filePaths)->length)) && String_endsWith(String_replace(((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)((module)->index_), ((semantics__linker__linking)->filePaths)->length, LINE(15000802))], &line15000802_temps, lar_string("\\", 1), lar_string("/", 1)), lar_string("std/memory.lar", 14)));
+    lar_memory_free(&line15000802_temps);
     return ((lar_string_eq((module)->path, lar_string("std.memory", 10)) || alone) && (lar_string_eq(name, lar_string("limit", 5)) || lar_string_eq(name, lar_string("compact", 7))));
 }
 
 LarString semantics__linker__larNames(LarMemory* lar_result_memory, semantics__linker__Module* module, LarString code, int32_t line) {
     LarMemory* place = lar_result_memory;
-    StringBuilder* new_StringBuilder = (StringBuilder*)lar_memory_alloc(place, sizeof(StringBuilder), LINE(15000839));
+    StringBuilder* new_StringBuilder = (StringBuilder*)lar_memory_alloc(place, sizeof(StringBuilder), LINE(15000811));
     *new_StringBuilder = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place }, .buf = lar_text_buf_new(place) };
     StringBuilder* out = new_StringBuilder;
     int32_t i = 0;
@@ -17159,28 +17132,28 @@ LarString semantics__linker__larNames(LarMemory* lar_result_memory, semantics__l
             return result;
         }
         LarString value_2 = code;
-        StringBuilder_add__dispatch((StringBuilder*)out, lar_string_sub(value_2, (int64_t)(i), (int64_t)(at.value), 15000852));
+        StringBuilder_add__dispatch((StringBuilder*)out, lar_string_sub(value_2, (int64_t)(i), (int64_t)(at.value), 15000824));
         LarString value_3 = code;
-        LarString name = lar_string_sub(value_3, (int64_t)(((int32_t)((uint32_t)(at.value) + (uint32_t)(4)))), (int64_t)(close_.value), 15000853);
+        LarString name = lar_string_sub(value_3, (int64_t)(((int32_t)((uint32_t)(at.value) + (uint32_t)(4)))), (int64_t)(close_.value), 15000825);
         LarString linked = semantics__linker__larName(&memory, module, name);
         if (lar_string_eq(linked, lar_string("", 0))) {
-            LarMemory line15000855_temps = lar_memory_growable();
-            LarTextBuilder text = lar_text_builder_mem(&line15000855_temps, LINE(15000855));
+            LarMemory line15000827_temps = lar_memory_growable();
+            LarTextBuilder text = lar_text_builder_mem(&line15000827_temps, LINE(15000827));
             lar_text_builder_add(&text, "lar\"", 4);
             lar_text_builder_str(&text, name);
             lar_text_builder_add(&text, "\" in ccode: '", 13);
             lar_text_builder_str(&text, name);
             lar_text_builder_add(&text, "' is not a function, type or global of Larimar seen here.", 57);
             semantics__linker__error(line, lar_text_builder_finish(&text));
-            lar_memory_free(&line15000855_temps);
+            lar_memory_free(&line15000827_temps);
         }
-        LarMemory line15000856_temps = lar_memory_growable();
-        LarTextBuilder text_2 = lar_text_builder_mem(&line15000856_temps, LINE(15000856));
+        LarMemory line15000828_temps = lar_memory_growable();
+        LarTextBuilder text_2 = lar_text_builder_mem(&line15000828_temps, LINE(15000828));
         lar_text_builder_add(&text_2, "lar\"", 4);
         lar_text_builder_str(&text_2, linked);
         lar_text_builder_add(&text_2, "\"", 1);
         StringBuilder_add__dispatch((StringBuilder*)out, lar_text_builder_finish(&text_2));
-        lar_memory_free(&line15000856_temps);
+        lar_memory_free(&line15000828_temps);
         i = ((int32_t)((uint32_t)(close_.value) + (uint32_t)(1)));
         lar_memory_free(&memory);
     }
@@ -17208,7 +17181,7 @@ LarString semantics__linker__larName(LarMemory* lar_result_memory, semantics__li
         return copy;
     }
     LarString value_6 = name;
-    LarString path = lar_string_sub(value_6, (int64_t)(0), (int64_t)(dot.value), 15000866);
+    LarString path = lar_string_sub(value_6, (int64_t)(0), (int64_t)(dot.value), 15000838);
     LarString n = String_substring(name, NULL, ((int32_t)((uint32_t)(dot.value) + (uint32_t)(1))));
     {
         List_semantics__linker__Module* list = (semantics__linker__linking)->mods;
@@ -17227,7 +17200,7 @@ LarString semantics__linker__larName(LarMemory* lar_result_memory, semantics__li
             bool alias = condition;
             if (lar_string_eq((other)->path, path) || alias) {
                 if ((!lar_any_is_null(lar_any_get((other)->ownValues, n))) || (!lar_any_is_null(lar_any_get((other)->ownTypes, n)))) {
-                    LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(15000871));
+                    LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(15000843));
                     lar_text_builder_str(&text, (other)->prefix);
                     lar_text_builder_str(&text, n);
                     return lar_text_builder_finish(&text);
@@ -17250,10 +17223,10 @@ void semantics__linker__rewriteDecl(semantics__linker__Module* module, syntax__a
     }
     LarString mapped = value_3;
     LarString value_4;
-    if (((!((semantics__linker__linking)->lang == NULL)) && ((const void*)(module) == (const void*)(((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000882)))))) && (!lar_string_eq(mapped, lar_string("", 0)))) {
+    if (((!((semantics__linker__linking)->lang == NULL)) && ((const void*)(module) == (const void*)(((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000854)))))) && (!lar_string_eq(mapped, lar_string("", 0)))) {
         value_4 = mapped;
     } else {
-        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(15000882));
+        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(15000854));
         lar_text_builder_str(&text, (module)->prefix);
         lar_text_builder_str(&text, dn);
         value_4 = lar_text_builder_finish(&text);
@@ -17268,8 +17241,8 @@ void semantics__linker__rewriteDecl(semantics__linker__Module* module, syntax__a
                     semantics__linker__function_(f, own);
                 } else {
                     if (lar_any_is_null(lar_any_get((module)->ownTypes, (f)->typeName))) {
-                        LarMemory line15000889_temps = lar_memory_growable();
-                        LarTextBuilder text_2 = lar_text_builder_mem(&line15000889_temps, LINE(15000889));
+                        LarMemory line15000861_temps = lar_memory_growable();
+                        LarTextBuilder text_2 = lar_text_builder_mem(&line15000861_temps, LINE(15000861));
                         lar_text_builder_add(&text_2, "Static function '", 17);
                         lar_text_builder_str(&text_2, (f)->typeName);
                         lar_text_builder_add(&text_2, ".", 1);
@@ -17278,7 +17251,7 @@ void semantics__linker__rewriteDecl(semantics__linker__Module* module, syntax__a
                         lar_text_builder_str(&text_2, (f)->typeName);
                         lar_text_builder_add(&text_2, "'.", 2);
                         semantics__linker__error((f)->_super.line, lar_text_builder_finish(&text_2));
-                        lar_memory_free(&line15000889_temps);
+                        lar_memory_free(&line15000861_temps);
                     }
                     (f)->typeName = semantics__linker__typeName(NULL, (f)->typeName, (f)->_super.line);
                     semantics__linker__function_(f, (f)->name);
@@ -17334,7 +17307,7 @@ void semantics__linker__rewriteDecl(semantics__linker__Module* module, syntax__a
                 if (!lar_string_eq((c)->superName, lar_string("", 0))) {
                     (c)->superName = semantics__linker__typeName(NULL, (c)->superName, (c)->_super.line);
                 }
-                List_s* list_2 = List_s_new(&lar_default_memory, LINE(15000913));
+                List_s* list_2 = List_s_new(&lar_default_memory, LINE(15000885));
                 List_s* ifs = list_2;
                 {
                     List_s* list_3 = (c)->interfaces;
@@ -17361,7 +17334,7 @@ void semantics__linker__rewriteDecl(semantics__linker__Module* module, syntax__a
             syntax__ast__InterfaceDecl* i = (syntax__ast__InterfaceDecl*)subject;
             {
                 (i)->name = own;
-                List_s* list_5 = List_s_new(&lar_default_memory, LINE(15000921));
+                List_s* list_5 = List_s_new(&lar_default_memory, LINE(15000893));
                 List_s* parents = list_5;
                 {
                     List_s* list_6 = (i)->parents;
@@ -17418,7 +17391,7 @@ void semantics__linker__rewriteDecl(semantics__linker__Module* module, syntax__a
         if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__CCodeDecl)) {
             syntax__ast__CCodeDecl* c = (syntax__ast__CCodeDecl*)subject;
             {
-                (c)->fromStd = (((!((semantics__linker__linking)->lang == NULL)) && ((const void*)(module) == (const void*)(((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000935)))))) || semantics__linker__isStd((module)->path));
+                (c)->fromStd = (((!((semantics__linker__linking)->lang == NULL)) && ((const void*)(module) == (const void*)(((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15000907)))))) || semantics__linker__isStd((module)->path));
                 if (String_contains((c)->code, lar_string("lar\"", 4))) {
                     (c)->code = semantics__linker__larNames(lar_object_mem(c), module, (c)->code, (c)->_super.line);
                 }
@@ -17526,7 +17499,7 @@ void semantics__linker__rewriteDecl(semantics__linker__Module* module, syntax__a
 
 bool semantics__linker__hasHeaders(semantics__linker__Module* module) {
     LarMemory memory = lar_memory_growable();
-    LarTextBuilder text = lar_text_builder_mem(&memory, LINE(15000976));
+    LarTextBuilder text = lar_text_builder_mem(&memory, LINE(15000948));
     lar_text_builder_str(&text, (module)->path);
     lar_text_builder_add(&text, ".", 1);
     LarString parts = lar_text_builder_finish(&text);
@@ -17541,7 +17514,7 @@ bool semantics__linker__hasHeaders(semantics__linker__Module* module) {
                 continue;
             }
             {
-                List_syntax__ast__Node* list_2 = (((syntax__ast__Program*)lar_unwrap((void*)((x)->program), LINE(15000980))))->decls;
+                List_syntax__ast__Node* list_2 = (((syntax__ast__Program*)lar_unwrap((void*)((x)->program), LINE(15000952))))->decls;
                 for (int32_t index_2 = 0; index_2 < list_2->length; index_2++) {
                     syntax__ast__Node* d = list_2->items[index_2];
                     if ((lar_as_class((void*)(d), &lar_class_syntax__ast__CIncludeDecl) != NULL) || (lar_as_class((void*)(d), &lar_class_syntax__ast__CCodeDecl) != NULL)) {
@@ -17622,14 +17595,14 @@ LarString semantics__linker__typeName(LarMemory* lar_result_memory, LarString na
     LarString value_2;
     if (!(!(dot).has)) {
         LarString value_3 = name;
-        value_2 = lar_string_sub(value_3, (int64_t)(0), (int64_t)(dot.value), 15001024);
+        value_2 = lar_string_sub(value_3, (int64_t)(0), (int64_t)(dot.value), 15000996);
     } else {
         value_2 = name;
     }
     LarString head = value_2;
     LarString rest = ((!(!(dot).has)) ? String_substring(name, NULL, dot.value) : lar_string("", 0));
     if (!lar_any_is_null(lar_any_get((semantics__linker__rm)->types, head))) {
-        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(15001026));
+        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(15000998));
         Opt_s value_4 = lar_any_as_s(lar_any_get((semantics__linker__rm)->types, head));
         LarString value_5;
         if (value_4.has) value_5 = value_4.value;
@@ -17646,7 +17619,7 @@ LarString semantics__linker__typeName(LarMemory* lar_result_memory, LarString na
         LarString value_6;
         if (!(!(dot2).has)) {
             LarString value_7 = r;
-            value_6 = lar_string_sub(value_7, (int64_t)(0), (int64_t)(dot2.value), 15001030);
+            value_6 = lar_string_sub(value_7, (int64_t)(0), (int64_t)(dot2.value), 15001002);
         } else {
             value_6 = r;
         }
@@ -17658,12 +17631,12 @@ LarString semantics__linker__typeName(LarMemory* lar_result_memory, LarString na
         else {
             value_10 = (-1);
         }
-        LarString mangled = semantics__linker__exported(NULL, (value_8)->items[lar_index((int64_t)(value_10), (value_8)->length, LINE(15001031))], member, false, line);
+        LarString mangled = semantics__linker__exported(NULL, (value_8)->items[lar_index((int64_t)(value_10), (value_8)->length, LINE(15001003))], member, false, line);
         LarString value_11;
         if (lar_string_eq(mangled, lar_string("", 0))) {
             value_11 = name;
         } else {
-            LarTextBuilder text_2 = lar_text_builder_mem(&lar_default_memory, LINE(15001032));
+            LarTextBuilder text_2 = lar_text_builder_mem(&lar_default_memory, LINE(15001004));
             lar_text_builder_str(&text_2, mangled);
             lar_text_builder_str(&text_2, ((!(!(dot2).has)) ? String_substring(r, NULL, dot2.value) : lar_string("", 0)));
             value_11 = lar_text_builder_finish(&text_2);
@@ -17678,30 +17651,30 @@ LarString semantics__linker__exported(LarMemory* lar_result_memory, semantics__l
     (void)lar_result_memory;
     bool found = ((values && (!lar_any_is_null(lar_any_get((from)->ownValues, n)))) || (!lar_any_is_null(lar_any_get((from)->ownTypes, n))));
     if (!(found)) {
-        LarMemory line15001042_temps = lar_memory_growable();
-        LarTextBuilder text = lar_text_builder_mem(&line15001042_temps, LINE(15001042));
+        LarMemory line15001014_temps = lar_memory_growable();
+        LarTextBuilder text = lar_text_builder_mem(&line15001014_temps, LINE(15001014));
         lar_text_builder_add(&text, "Module '", 8);
         lar_text_builder_str(&text, (from)->path);
         lar_text_builder_add(&text, "' has no '", 10);
         lar_text_builder_str(&text, n);
         lar_text_builder_add(&text, "'.", 2);
         semantics__linker__error(line, lar_text_builder_finish(&text));
-        lar_memory_free(&line15001042_temps);
+        lar_memory_free(&line15001014_temps);
         return lar_string("", 0);
     }
     if (lar_any_is_null(lar_any_get((from)->publics, n))) {
-        LarMemory line15001046_temps = lar_memory_growable();
-        LarTextBuilder text_2 = lar_text_builder_mem(&line15001046_temps, LINE(15001046));
+        LarMemory line15001018_temps = lar_memory_growable();
+        LarTextBuilder text_2 = lar_text_builder_mem(&line15001018_temps, LINE(15001018));
         lar_text_builder_add(&text_2, "'", 1);
         lar_text_builder_str(&text_2, n);
         lar_text_builder_add(&text_2, "' is private to module '", 24);
         lar_text_builder_str(&text_2, (from)->path);
         lar_text_builder_add(&text_2, "'; mark it 'public' there to use it here.", 41);
         semantics__linker__error(line, lar_text_builder_finish(&text_2));
-        lar_memory_free(&line15001046_temps);
+        lar_memory_free(&line15001018_temps);
         return lar_string("", 0);
     }
-    LarTextBuilder text_3 = lar_text_builder_mem(&lar_default_memory, LINE(15001049));
+    LarTextBuilder text_3 = lar_text_builder_mem(&lar_default_memory, LINE(15001021));
     lar_text_builder_str(&text_3, (from)->prefix);
     lar_text_builder_str(&text_3, n);
     return lar_text_builder_finish(&text_3);
@@ -17709,13 +17682,13 @@ LarString semantics__linker__exported(LarMemory* lar_result_memory, semantics__l
 
 void semantics__linker__hidden(LarString n, int32_t line) {
     if ((!((const void*)(semantics__linker__rm) == (const void*)((semantics__linker__linking)->root))) && ((!lar_any_is_null(lar_any_get(((semantics__linker__linking)->root)->ownValues, n))) || (!lar_any_is_null(lar_any_get(((semantics__linker__linking)->root)->ownTypes, n))))) {
-        LarMemory line15001055_temps = lar_memory_growable();
-        LarTextBuilder text = lar_text_builder_mem(&line15001055_temps, LINE(15001055));
+        LarMemory line15001027_temps = lar_memory_growable();
+        LarTextBuilder text = lar_text_builder_mem(&line15001027_temps, LINE(15001027));
         lar_text_builder_add(&text, "'", 1);
         lar_text_builder_str(&text, n);
         lar_text_builder_add(&text, "' is declared in the main file, which modules cannot see; move it to a module and import it.", 92);
         semantics__linker__error(line, lar_text_builder_finish(&text));
-        lar_memory_free(&line15001055_temps);
+        lar_memory_free(&line15001027_temps);
     }
 }
 
@@ -17881,11 +17854,11 @@ syntax__ast__Expr* semantics__linker__exprOpt(LarMemory* lar_result_memory, synt
 
 syntax__ast__Expr* semantics__linker__expr(LarMemory* lar_result_memory, syntax__ast__Expr* e) {
     (void)lar_result_memory;
-    syntax__ast__Member* m_2754 = NULL;
-    syntax__ast__Ident* io_2757 = NULL;
-    syntax__ast__Ident* obj_2760 = NULL;
+    syntax__ast__Member* m_2747 = NULL;
+    syntax__ast__Ident* io_2750 = NULL;
+    syntax__ast__Ident* obj_2753 = NULL;
     if ((e)->_super.rewritten) {
-        return ((((m_2754 = (syntax__ast__Member*)lar_as_class((void*)(e), &lar_class_syntax__ast__Member)) != NULL) && (!((m_2754)->replaced == NULL))) ? ((syntax__ast__Expr*)lar_unwrap((void*)((m_2754)->replaced), LINE(15001122))) : e);
+        return ((((m_2747 = (syntax__ast__Member*)lar_as_class((void*)(e), &lar_class_syntax__ast__Member)) != NULL) && (!((m_2747)->replaced == NULL))) ? ((syntax__ast__Expr*)lar_unwrap((void*)((m_2747)->replaced), LINE(15001094))) : e);
     }
     (e)->_super.rewritten = true;
     syntax__ast__Expr* subject = e;
@@ -17900,8 +17873,8 @@ syntax__ast__Expr* semantics__linker__expr(LarMemory* lar_result_memory, syntax_
         if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__Member)) {
             syntax__ast__Member* m = (syntax__ast__Member*)subject;
             {
-                if ((((io_2757 = (syntax__ast__Ident*)lar_as_class((void*)((m)->object), &lar_class_syntax__ast__Ident)) != NULL) && (!(semantics__linker__local((io_2757)->name)))) && (!lar_any_is_null(lar_any_get((semantics__linker__rm)->natives, (io_2757)->name)))) {
-                    Opt_s value_2 = lar_any_as_s(lar_any_get(lar_any_get((semantics__linker__rm)->natives, (io_2757)->name), (m)->name));
+                if ((((io_2750 = (syntax__ast__Ident*)lar_as_class((void*)((m)->object), &lar_class_syntax__ast__Ident)) != NULL) && (!(semantics__linker__local((io_2750)->name)))) && (!lar_any_is_null(lar_any_get((semantics__linker__rm)->natives, (io_2750)->name)))) {
+                    Opt_s value_2 = lar_any_as_s(lar_any_get(lar_any_get((semantics__linker__rm)->natives, (io_2750)->name), (m)->name));
                     LarString value_3;
                     if (value_2.has) value_3 = value_2.value;
                     else {
@@ -17909,18 +17882,18 @@ syntax__ast__Expr* semantics__linker__expr(LarMemory* lar_result_memory, syntax_
                     }
                     LarString found = value_3;
                     if (lar_string_eq(found, lar_string("", 0))) {
-                        LarMemory line15001129_temps = lar_memory_growable();
-                        LarTextBuilder text = lar_text_builder_mem(&line15001129_temps, LINE(15001129));
+                        LarMemory line15001101_temps = lar_memory_growable();
+                        LarTextBuilder text = lar_text_builder_mem(&line15001101_temps, LINE(15001101));
                         lar_text_builder_add(&text, "Native interface '", 18);
-                        lar_text_builder_str(&text, (io_2757)->name);
+                        lar_text_builder_str(&text, (io_2750)->name);
                         lar_text_builder_add(&text, "' has no '", 10);
                         lar_text_builder_str(&text, (m)->name);
                         lar_text_builder_add(&text, "'.", 2);
                         semantics__linker__error((m)->_super._super.line, lar_text_builder_finish(&text));
-                        lar_memory_free(&line15001129_temps);
+                        lar_memory_free(&line15001101_temps);
                     }
                     LarMemory* place_2 = &lar_default_memory;
-                    syntax__ast__Ident* new_syntax__ast__Ident = (syntax__ast__Ident*)lar_memory_alloc(place_2, sizeof(syntax__ast__Ident), LINE(15001130));
+                    syntax__ast__Ident* new_syntax__ast__Ident = (syntax__ast__Ident*)lar_memory_alloc(place_2, sizeof(syntax__ast__Ident), LINE(15001102));
                     int32_t value_4 = (m)->_super._super.line;
                     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
                     *new_syntax__ast__Ident = (syntax__ast__Ident){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Ident, place_2 }, .line = value_4, .builtin = false, .rewritten = true, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) } }, .name = (lar_string_eq(found, lar_string("", 0)) ? (m)->name : found) };
@@ -17928,17 +17901,17 @@ syntax__ast__Expr* semantics__linker__expr(LarMemory* lar_result_memory, syntax_
                     (m)->replaced = ((syntax__ast__Expr*)(id));
                     return ((syntax__ast__Expr*)(id));
                 }
-                if (((obj_2760 = (syntax__ast__Ident*)lar_as_class((void*)((m)->object), &lar_class_syntax__ast__Ident)) != NULL) && semantics__linker__isAlias((obj_2760)->name)) {
+                if (((obj_2753 = (syntax__ast__Ident*)lar_as_class((void*)((m)->object), &lar_class_syntax__ast__Ident)) != NULL) && semantics__linker__isAlias((obj_2753)->name)) {
                     List_semantics__linker__Module* value_5 = (semantics__linker__linking)->mods;
-                    Opt_i32 value_6 = lar_any_as_i32(lar_any_get((semantics__linker__rm)->aliases, (obj_2760)->name));
+                    Opt_i32 value_6 = lar_any_as_i32(lar_any_get((semantics__linker__rm)->aliases, (obj_2753)->name));
                     int32_t value_7;
                     if (value_6.has) value_7 = value_6.value;
                     else {
                         value_7 = (-1);
                     }
-                    LarString name = semantics__linker__exported(NULL, (value_5)->items[lar_index((int64_t)(value_7), (value_5)->length, LINE(15001135))], (m)->name, true, (m)->_super._super.line);
+                    LarString name = semantics__linker__exported(NULL, (value_5)->items[lar_index((int64_t)(value_7), (value_5)->length, LINE(15001107))], (m)->name, true, (m)->_super._super.line);
                     LarMemory* place_3 = &lar_default_memory;
-                    syntax__ast__Ident* new_syntax__ast__Ident_2 = (syntax__ast__Ident*)lar_memory_alloc(place_3, sizeof(syntax__ast__Ident), LINE(15001136));
+                    syntax__ast__Ident* new_syntax__ast__Ident_2 = (syntax__ast__Ident*)lar_memory_alloc(place_3, sizeof(syntax__ast__Ident), LINE(15001108));
                     int32_t value_8 = (m)->_super._super.line;
                     List_semantics__types__PatternInfo* list_2 = List_semantics__types__PatternInfo_new(place_3, LINE(16000048));
                     *new_syntax__ast__Ident_2 = (syntax__ast__Ident){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Ident, place_3 }, .line = value_8, .builtin = false, .rewritten = true, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_2, .computed = lar_string("", 0) } }, .name = (lar_string_eq(name, lar_string("", 0)) ? (m)->name : name) };
@@ -18010,7 +17983,7 @@ syntax__ast__Expr* semantics__linker__expr(LarMemory* lar_result_memory, syntax_
             syntax__ast__Call* c = (syntax__ast__Call*)subject;
             {
                 (c)->callee = semantics__linker__expr(NULL, (c)->callee);
-                List_syntax__ast__Expr* list_3 = List_syntax__ast__Expr_new(&lar_default_memory, LINE(15001162));
+                List_syntax__ast__Expr* list_3 = List_syntax__ast__Expr_new(&lar_default_memory, LINE(15001134));
                 List_syntax__ast__Expr* args = list_3;
                 {
                     List_syntax__ast__Expr* list_4 = (c)->args;
@@ -18093,7 +18066,7 @@ syntax__ast__Expr* semantics__linker__expr(LarMemory* lar_result_memory, syntax_
         if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__ArrayLit)) {
             syntax__ast__ArrayLit* a = (syntax__ast__ArrayLit*)subject;
             {
-                List_syntax__ast__Expr* list_7 = List_syntax__ast__Expr_new(&lar_default_memory, LINE(15001184));
+                List_syntax__ast__Expr* list_7 = List_syntax__ast__Expr_new(&lar_default_memory, LINE(15001156));
                 List_syntax__ast__Expr* elems = list_7;
                 {
                     List_syntax__ast__Expr* list_8 = (a)->elems;
@@ -18111,7 +18084,7 @@ syntax__ast__Expr* semantics__linker__expr(LarMemory* lar_result_memory, syntax_
         if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__StringLit)) {
             syntax__ast__StringLit* s = (syntax__ast__StringLit*)subject;
             {
-                List_syntax__ast__Expr* list_9 = List_syntax__ast__Expr_new(&lar_default_memory, LINE(15001189));
+                List_syntax__ast__Expr* list_9 = List_syntax__ast__Expr_new(&lar_default_memory, LINE(15001161));
                 List_syntax__ast__Expr* exprs = list_9;
                 {
                     List_syntax__ast__Expr* list_10 = (s)->exprs;
@@ -18141,8 +18114,8 @@ syntax__ast__Expr* semantics__linker__expr(LarMemory* lar_result_memory, syntax_
             syntax__ast__SwitchExpr* sw = (syntax__ast__SwitchExpr*)subject;
             {
                 semantics__linker__switchExpr(sw);
-                if (semantics__linker__chosen(sw) && (!((((sw)->cases)->items[lar_index((int64_t)(0), ((sw)->cases)->length, LINE(15001200))])->expr == NULL))) {
-                    return ((syntax__ast__Expr*)lar_unwrap((void*)((((sw)->cases)->items[lar_index((int64_t)(0), ((sw)->cases)->length, LINE(15001200))])->expr), LINE(15001200)));
+                if (semantics__linker__chosen(sw) && (!((((sw)->cases)->items[lar_index((int64_t)(0), ((sw)->cases)->length, LINE(15001172))])->expr == NULL))) {
+                    return ((syntax__ast__Expr*)lar_unwrap((void*)((((sw)->cases)->items[lar_index((int64_t)(0), ((sw)->cases)->length, LINE(15001172))])->expr), LINE(15001172)));
                 }
             }
             goto switch_end;
@@ -18160,14 +18133,14 @@ syntax__ast__Expr* semantics__linker__expr(LarMemory* lar_result_memory, syntax_
 }
 
 bool semantics__linker__asksPlatform(syntax__ast__Expr* e) {
-    syntax__ast__Call* c_2786 = NULL;
-    syntax__ast__Member* m_2787 = NULL;
-    syntax__ast__Ident* t_2788 = NULL;
-    return (((((((c_2786 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL) && (((c_2786)->args)->length == 0)) && ((m_2787 = (syntax__ast__Member*)lar_as_class((void*)((c_2786)->callee), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m_2787)->name, lar_string("current", 7))) && ((t_2788 = (syntax__ast__Ident*)lar_as_class((void*)((m_2787)->object), &lar_class_syntax__ast__Ident)) != NULL)) && (lar_string_eq((t_2788)->name, lar_string("std__platform__Platform", 23)) || lar_string_eq((t_2788)->name, lar_string("std__os__Platform", 17))));
+    syntax__ast__Call* c_2779 = NULL;
+    syntax__ast__Member* m_2780 = NULL;
+    syntax__ast__Ident* t_2781 = NULL;
+    return (((((((c_2779 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL) && (((c_2779)->args)->length == 0)) && ((m_2780 = (syntax__ast__Member*)lar_as_class((void*)((c_2779)->callee), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m_2780)->name, lar_string("current", 7))) && ((t_2781 = (syntax__ast__Ident*)lar_as_class((void*)((m_2780)->object), &lar_class_syntax__ast__Ident)) != NULL)) && (lar_string_eq((t_2781)->name, lar_string("std__platform__Platform", 23)) || lar_string_eq((t_2781)->name, lar_string("std__os__Platform", 17))));
 }
 
 bool semantics__linker__chosen(syntax__ast__SwitchExpr* switchExpr) {
-    return ((((!lar_string_eq((semantics__linker__linking)->target, lar_string("", 0))) && (((switchExpr)->cases)->length == 1)) && (((switchExpr)->cases)->items[lar_index((int64_t)(0), ((switchExpr)->cases)->length, LINE(15001215))])->isDefault) && semantics__linker__asksPlatform((switchExpr)->subject));
+    return ((((!lar_string_eq((semantics__linker__linking)->target, lar_string("", 0))) && (((switchExpr)->cases)->length == 1)) && (((switchExpr)->cases)->items[lar_index((int64_t)(0), ((switchExpr)->cases)->length, LINE(15001187))])->isDefault) && semantics__linker__asksPlatform((switchExpr)->subject));
 }
 
 void semantics__linker__choosePlatform(syntax__ast__SwitchExpr* switchExpr) {
@@ -18201,7 +18174,7 @@ void semantics__linker__choosePlatform(syntax__ast__SwitchExpr* switchExpr) {
             goto switch_end;
         }
     }
-    lar_panic("no case of the switch matched", LINE(15001221));
+    lar_panic("no case of the switch matched", LINE(15001193));
     switch_end: ;
     LarString variant = value;
     {
@@ -18213,26 +18186,26 @@ void semantics__linker__choosePlatform(syntax__ast__SwitchExpr* switchExpr) {
                 List_syntax__ast__Pattern* list_2 = (c)->patterns;
                 for (int32_t index_2 = 0; index_2 < list_2->length; index_2++) {
                     syntax__ast__Pattern* p = list_2->items[index_2];
-                    LarMemory line15001229_temps = lar_memory_growable();
+                    LarMemory line15001201_temps = lar_memory_growable();
                     bool condition = (named || lar_string_eq((p)->name, variant));
                     if (!condition) {
-                        LarTextBuilder text = lar_text_builder_mem(&line15001229_temps, LINE(15001229));
+                        LarTextBuilder text = lar_text_builder_mem(&line15001201_temps, LINE(15001201));
                         lar_text_builder_add(&text, ".", 1);
                         lar_text_builder_str(&text, variant);
                         condition = String_endsWith((p)->name, lar_text_builder_finish(&text));
                     }
                     named = condition;
-                    lar_memory_free(&line15001229_temps);
+                    lar_memory_free(&line15001201_temps);
                 }
             }
             if ((!((c)->guard == NULL)) || (!(((c)->isDefault || named)))) {
                 continue;
             }
             (c)->isDefault = true;
-            List_syntax__ast__Pattern* list_3 = List_syntax__ast__Pattern_new(&lar_default_memory, LINE(15001232));
+            List_syntax__ast__Pattern* list_3 = List_syntax__ast__Pattern_new(&lar_default_memory, LINE(15001204));
             (c)->patterns = list_3;
-            List_syntax__ast__SwitchCase* list_4 = List_syntax__ast__SwitchCase_new(&lar_default_memory, LINE(15001233));
-            List_syntax__ast__SwitchCase_add(list_4, c, LINE(15001233));
+            List_syntax__ast__SwitchCase* list_4 = List_syntax__ast__SwitchCase_new(&lar_default_memory, LINE(15001205));
+            List_syntax__ast__SwitchCase_add(list_4, c, LINE(15001205));
             (switchExpr)->cases = list_4;
             return;
         }
@@ -18259,8 +18232,8 @@ void semantics__linker__switchExpr(syntax__ast__SwitchExpr* sw) {
                 semantics__linker__block((c)->block, true);
             }
             if (!((c)->throwStmt == NULL)) {
-                syntax__ast__ThrowStmt* value_2 = ((syntax__ast__ThrowStmt*)lar_unwrap((void*)((c)->throwStmt), LINE(15001246)));
-                (value_2)->value = semantics__linker__expr(NULL, (((syntax__ast__ThrowStmt*)lar_unwrap((void*)((c)->throwStmt), LINE(15001246))))->value);
+                syntax__ast__ThrowStmt* value_2 = ((syntax__ast__ThrowStmt*)lar_unwrap((void*)((c)->throwStmt), LINE(15001218)));
+                (value_2)->value = semantics__linker__expr(NULL, (((syntax__ast__ThrowStmt*)lar_unwrap((void*)((c)->throwStmt), LINE(15001218))))->value);
             }
             semantics__linker__pop();
         }
@@ -18308,15 +18281,15 @@ void semantics__linker__identName(syntax__ast__Ident* id) {
         return;
     }
     if (!lar_any_is_null(lar_any_get((semantics__linker__rm)->aliases, n))) {
-        LarMemory line15001269_temps = lar_memory_growable();
-        LarTextBuilder text = lar_text_builder_mem(&line15001269_temps, LINE(15001269));
+        LarMemory line15001241_temps = lar_memory_growable();
+        LarTextBuilder text = lar_text_builder_mem(&line15001241_temps, LINE(15001241));
         lar_text_builder_add(&text, "'", 1);
         lar_text_builder_str(&text, n);
         lar_text_builder_add(&text, "' is a module; use one of its names: ", 37);
         lar_text_builder_str(&text, n);
         lar_text_builder_add(&text, ".name", 5);
         semantics__linker__error((id)->_super._super.line, lar_text_builder_finish(&text));
-        lar_memory_free(&line15001269_temps);
+        lar_memory_free(&line15001241_temps);
         return;
     }
     semantics__linker__hidden(n, (id)->_super._super.line);
@@ -18373,7 +18346,7 @@ LarString semantics__linker__decode(LarMemory* lar_result_memory, LarString msg)
 
 LarString semantics__linker__replaceLines(LarMemory* lar_result_memory, LarString msg, LarString key, bool bracket) {
     LarMemory* place = &lar_default_memory;
-    StringBuilder* new_StringBuilder = (StringBuilder*)lar_memory_alloc(place, sizeof(StringBuilder), LINE(15001305));
+    StringBuilder* new_StringBuilder = (StringBuilder*)lar_memory_alloc(place, sizeof(StringBuilder), LINE(15001277));
     *new_StringBuilder = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place }, .buf = lar_text_buf_new(place) };
     StringBuilder* builder = new_StringBuilder;
     int32_t i = 0;
@@ -18385,53 +18358,53 @@ LarString semantics__linker__replaceLines(LarMemory* lar_result_memory, LarStrin
         }
         int32_t j = ((int32_t)((uint32_t)(at.value) + (uint32_t)((key).len)));
         int32_t k = j;
-        while ((k < (msg).len) && std__text__isDigit(lar_string_byte(msg, (int64_t)(k), LINE(15001313)))) {
+        while ((k < (msg).len) && std__text__isDigit(lar_string_byte(msg, (int64_t)(k), LINE(15001285)))) {
             k = ((int32_t)((uint32_t)(k) + (uint32_t)(1)));
         }
         bool ok = (k > j);
         if (bracket) {
-            ok = ((ok && (k < (msg).len)) && (lar_string_byte(msg, (int64_t)(k), LINE(15001316)) == (uint8_t)93));
+            ok = ((ok && (k < (msg).len)) && (lar_string_byte(msg, (int64_t)(k), LINE(15001288)) == (uint8_t)93));
         } else {
-            ok = ((ok && ((at.value == 0) || (!(std__text__isIdentifierPart(lar_string_byte(msg, (int64_t)(((int32_t)((uint32_t)(at.value) - (uint32_t)(1)))), LINE(15001318))))))) && ((k >= (msg).len) || (!(std__text__isIdentifierPart(lar_string_byte(msg, (int64_t)(k), LINE(15001318)))))));
+            ok = ((ok && ((at.value == 0) || (!(std__text__isIdentifierPart(lar_string_byte(msg, (int64_t)(((int32_t)((uint32_t)(at.value) - (uint32_t)(1)))), LINE(15001290))))))) && ((k >= (msg).len) || (!(std__text__isIdentifierPart(lar_string_byte(msg, (int64_t)(k), LINE(15001290)))))));
         }
         if (!(ok)) {
             i = ((int32_t)((uint32_t)(at.value) + (uint32_t)(1)));
             continue;
         }
         LarString value_2 = msg;
-        Opt_i64 value_3 = String_toInt(lar_string_sub(value_2, (int64_t)(j), (int64_t)(k), 15001324));
+        Opt_i64 value_3 = String_toInt(lar_string_sub(value_2, (int64_t)(j), (int64_t)(k), 15001296));
         int64_t value_4;
         if (value_3.has) value_4 = value_3.value;
         else {
             value_4 = 0LL;
         }
         int64_t n = value_4;
-        int32_t file_2819 = ((int32_t)(lar_div_i64(n, 1000000LL, LINE(15001325))));
+        int32_t file_2812 = ((int32_t)(lar_div_i64(n, 1000000LL, LINE(15001297))));
         LarString name = lar_string("\?", 1);
-        if (file_2819 < ((semantics__linker__linking)->fileNames)->length) {
-            name = ((semantics__linker__linking)->fileNames)->items[lar_index((int64_t)(file_2819), ((semantics__linker__linking)->fileNames)->length, LINE(15001327))];
+        if (file_2812 < ((semantics__linker__linking)->fileNames)->length) {
+            name = ((semantics__linker__linking)->fileNames)->items[lar_index((int64_t)(file_2812), ((semantics__linker__linking)->fileNames)->length, LINE(15001299))];
         }
         LarString value_5 = msg;
-        StringBuilder_add__dispatch((StringBuilder*)builder, lar_string_sub(value_5, (int64_t)(done), (int64_t)(at.value), 15001328));
+        StringBuilder_add__dispatch((StringBuilder*)builder, lar_string_sub(value_5, (int64_t)(done), (int64_t)(at.value), 15001300));
         if (bracket) {
-            LarMemory line15001330_temps = lar_memory_growable();
-            LarTextBuilder text = lar_text_builder_mem(&line15001330_temps, LINE(15001330));
+            LarMemory line15001302_temps = lar_memory_growable();
+            LarTextBuilder text = lar_text_builder_mem(&line15001302_temps, LINE(15001302));
             lar_text_builder_add(&text, "[", 1);
             lar_text_builder_str(&text, name);
             lar_text_builder_add(&text, ":", 1);
-            lar_text_builder_i64(&text, (int64_t)(lar_mod_i64(n, 1000000LL, LINE(15001330))));
+            lar_text_builder_i64(&text, (int64_t)(lar_mod_i64(n, 1000000LL, LINE(15001302))));
             lar_text_builder_add(&text, "]", 1);
             StringBuilder_add__dispatch((StringBuilder*)builder, lar_text_builder_finish(&text));
-            lar_memory_free(&line15001330_temps);
+            lar_memory_free(&line15001302_temps);
             done = ((int32_t)((uint32_t)(k) + (uint32_t)(1)));
         } else {
-            LarMemory line15001333_temps = lar_memory_growable();
-            LarTextBuilder text_2 = lar_text_builder_mem(&line15001333_temps, LINE(15001333));
+            LarMemory line15001305_temps = lar_memory_growable();
+            LarTextBuilder text_2 = lar_text_builder_mem(&line15001305_temps, LINE(15001305));
             lar_text_builder_str(&text_2, name);
             lar_text_builder_add(&text_2, ":", 1);
-            lar_text_builder_i64(&text_2, (int64_t)(lar_mod_i64(n, 1000000LL, LINE(15001333))));
+            lar_text_builder_i64(&text_2, (int64_t)(lar_mod_i64(n, 1000000LL, LINE(15001305))));
             StringBuilder_add__dispatch((StringBuilder*)builder, lar_text_builder_finish(&text_2));
-            lar_memory_free(&line15001333_temps);
+            lar_memory_free(&line15001305_temps);
             done = k;
         }
         i = done;
@@ -18451,7 +18424,7 @@ semantics__linker__Module* semantics__linker__moduleOfFile(LarMemory* lar_result
             }
         }
     }
-    if ((!((semantics__linker__linking)->lang == NULL)) && ((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15001348))))->index_ == index_)) {
+    if ((!((semantics__linker__linking)->lang == NULL)) && ((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15001320))))->index_ == index_)) {
         return (semantics__linker__linking)->lang;
     }
     return NULL;
@@ -18459,7 +18432,7 @@ semantics__linker__Module* semantics__linker__moduleOfFile(LarMemory* lar_result
 
 LarAny semantics__linker__namesOfFile(LarMemory* lar_result_memory, int32_t index_) {
     (void)lar_result_memory;
-    LarTable* table_2 = lar_table_new(&lar_default_memory, LINE(15001354));
+    LarTable* table_2 = lar_table_new(&lar_default_memory, LINE(15001326));
     LarAny out = lar_any_t(table_2);
     semantics__linker__Module* module = semantics__linker__moduleOfFile(NULL, index_);
     if (module == NULL) {
@@ -18470,7 +18443,7 @@ LarAny semantics__linker__namesOfFile(LarMemory* lar_result_memory, int32_t inde
         LarTable* table_3 = table_3_v.kind == LAR_ANY_TABLE ? table_3_v.as.t : NULL;
         int32_t count_2 = table_3 ? table_3->count : 0;
         for (int32_t index = 0; index < count_2; index++) {
-            if (table_3->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15001357));
+            if (table_3->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15001329));
             LarString k = table_3->keys[index];
             LarAny v = table_3->values[index];
             LarAny value_2 = out;
@@ -18483,7 +18456,7 @@ LarAny semantics__linker__namesOfFile(LarMemory* lar_result_memory, int32_t inde
             LarCloneMap clones = lar_clone_map();
             LarString copy = clone_s(value_4, &lar_default_memory, &clones);
             lar_clone_done(&clones);
-            lar_any_set(value_2, k, lar_any_s(copy), LINE(15001357));
+            lar_any_set(value_2, k, lar_any_s(copy), LINE(15001329));
         }
     }
     {
@@ -18491,7 +18464,7 @@ LarAny semantics__linker__namesOfFile(LarMemory* lar_result_memory, int32_t inde
         LarTable* table_4 = table_4_v.kind == LAR_ANY_TABLE ? table_4_v.as.t : NULL;
         int32_t count_3 = table_4 ? table_4->count : 0;
         for (int32_t index_2 = 0; index_2 < count_3; index_2++) {
-            if (table_4->count != count_3) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15001358));
+            if (table_4->count != count_3) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15001330));
             LarString k = table_4->keys[index_2];
             LarAny v = table_4->values[index_2];
             LarAny value_5 = out;
@@ -18504,7 +18477,7 @@ LarAny semantics__linker__namesOfFile(LarMemory* lar_result_memory, int32_t inde
             LarCloneMap clones_2 = lar_clone_map();
             LarString copy_2 = clone_s(value_7, &lar_default_memory, &clones_2);
             lar_clone_done(&clones_2);
-            lar_any_set(value_5, k, lar_any_s(copy_2), LINE(15001358));
+            lar_any_set(value_5, k, lar_any_s(copy_2), LINE(15001330));
         }
     }
     return out;
@@ -18514,13 +18487,13 @@ bool semantics__linker__isLangHelper(LarString name) {
     if ((semantics__linker__linking)->lang == NULL) {
         return false;
     }
-    bool own = ((!lar_any_is_null(lar_any_get((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15001365))))->ownValues, name))) || (!lar_any_is_null(lar_any_get((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15001365))))->ownTypes, name))));
-    return (own && lar_any_is_null(lar_any_get((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15001366))))->publics, name)));
+    bool own = ((!lar_any_is_null(lar_any_get((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15001337))))->ownValues, name))) || (!lar_any_is_null(lar_any_get((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15001337))))->ownTypes, name))));
+    return (own && lar_any_is_null(lar_any_get((((semantics__linker__Module*)lar_unwrap((void*)((semantics__linker__linking)->lang), LINE(15001338))))->publics, name)));
 }
 
 LarAny semantics__linker__aliasesOfFile(LarMemory* lar_result_memory, int32_t index_) {
     (void)lar_result_memory;
-    LarTable* table_2 = lar_table_new(&lar_default_memory, LINE(15001371));
+    LarTable* table_2 = lar_table_new(&lar_default_memory, LINE(15001343));
     LarAny out = lar_any_t(table_2);
     semantics__linker__Module* module = semantics__linker__moduleOfFile(NULL, index_);
     if (module == NULL) {
@@ -18531,7 +18504,7 @@ LarAny semantics__linker__aliasesOfFile(LarMemory* lar_result_memory, int32_t in
         LarTable* table_3 = table_3_v.kind == LAR_ANY_TABLE ? table_3_v.as.t : NULL;
         int32_t count_2 = table_3 ? table_3->count : 0;
         for (int32_t index = 0; index < count_2; index++) {
-            if (table_3->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15001374));
+            if (table_3->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15001346));
             LarString k = table_3->keys[index];
             LarAny v = table_3->values[index];
             Opt_i32 value_2 = lar_any_as_i32(v);
@@ -18544,9 +18517,9 @@ LarAny semantics__linker__aliasesOfFile(LarMemory* lar_result_memory, int32_t in
             if ((i >= 0) && (i < ((semantics__linker__linking)->mods)->length)) {
                 LarAny value_4 = out;
                 LarCloneMap clones = lar_clone_map();
-                LarString copy = clone_s((((semantics__linker__linking)->mods)->items[lar_index((int64_t)(i), ((semantics__linker__linking)->mods)->length, LINE(15001376))])->path, &lar_default_memory, &clones);
+                LarString copy = clone_s((((semantics__linker__linking)->mods)->items[lar_index((int64_t)(i), ((semantics__linker__linking)->mods)->length, LINE(15001348))])->path, &lar_default_memory, &clones);
                 lar_clone_done(&clones);
-                lar_any_set(value_4, k, lar_any_s(copy), LINE(15001376));
+                lar_any_set(value_4, k, lar_any_s(copy), LINE(15001348));
             }
         }
     }
@@ -18555,7 +18528,7 @@ LarAny semantics__linker__aliasesOfFile(LarMemory* lar_result_memory, int32_t in
 
 LarAny semantics__linker__publicsOfModule(LarMemory* lar_result_memory, LarString path) {
     (void)lar_result_memory;
-    LarTable* table_2 = lar_table_new(&lar_default_memory, LINE(15001383));
+    LarTable* table_2 = lar_table_new(&lar_default_memory, LINE(15001355));
     LarAny out = lar_any_t(table_2);
     Opt_i32 value_2 = lar_any_as_i32(lar_any_get((semantics__linker__linking)->modIndex, path));
     int32_t value_3;
@@ -18567,21 +18540,21 @@ LarAny semantics__linker__publicsOfModule(LarMemory* lar_result_memory, LarStrin
     if ((i < 0) || (i >= ((semantics__linker__linking)->mods)->length)) {
         return out;
     }
-    semantics__linker__Module* module = ((semantics__linker__linking)->mods)->items[lar_index((int64_t)(i), ((semantics__linker__linking)->mods)->length, LINE(15001386))];
+    semantics__linker__Module* module = ((semantics__linker__linking)->mods)->items[lar_index((int64_t)(i), ((semantics__linker__linking)->mods)->length, LINE(15001358))];
     {
         LarAny table_3_v = (module)->publics;
         LarTable* table_3 = table_3_v.kind == LAR_ANY_TABLE ? table_3_v.as.t : NULL;
         int32_t count_2 = table_3 ? table_3->count : 0;
         for (int32_t index = 0; index < count_2; index++) {
-            if (table_3->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15001387));
+            if (table_3->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(15001359));
             LarString k = table_3->keys[index];
             LarAny v = table_3->values[index];
             (void)v;
             LarAny value_4 = out;
-            LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(15001387));
+            LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(15001359));
             lar_text_builder_str(&text, (module)->prefix);
             lar_text_builder_str(&text, k);
-            lar_any_set(value_4, k, lar_any_s(lar_text_builder_finish(&text)), LINE(15001387));
+            lar_any_set(value_4, k, lar_any_s(lar_text_builder_finish(&text)), LINE(15001359));
         }
     }
     return out;
@@ -18599,8 +18572,8 @@ LarString semantics__linker__fileOfModule(LarMemory* lar_result_memory, LarStrin
     if ((i < 0) || (i >= ((semantics__linker__linking)->mods)->length)) {
         return lar_string("", 0);
     }
-    int32_t idx = (((semantics__linker__linking)->mods)->items[lar_index((int64_t)(i), ((semantics__linker__linking)->mods)->length, LINE(15001395))])->index_;
-    return (((idx >= 0) && (idx < ((semantics__linker__linking)->filePaths)->length)) ? ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)(idx), ((semantics__linker__linking)->filePaths)->length, LINE(15001396))] : lar_string("", 0));
+    int32_t idx = (((semantics__linker__linking)->mods)->items[lar_index((int64_t)(i), ((semantics__linker__linking)->mods)->length, LINE(15001367))])->index_;
+    return (((idx >= 0) && (idx < ((semantics__linker__linking)->filePaths)->length)) ? ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)(idx), ((semantics__linker__linking)->filePaths)->length, LINE(15001368))] : lar_string("", 0));
 }
 
 List_semantics__types__Symbol* semantics__analyzer__narrowing__nonNull(LarMemory* lar_result_memory, syntax__ast__Expr* c, bool onTrue) {
@@ -18612,7 +18585,7 @@ List_semantics__types__Symbol* semantics__analyzer__narrowing__nonNull(LarMemory
 }
 
 void semantics__analyzer__narrowing__facts(syntax__ast__Expr* c, bool onTrue, List_semantics__types__Symbol* out) {
-    syntax__ast__Ident* oi_2858 = NULL;
+    syntax__ast__Ident* oi_2851 = NULL;
     syntax__ast__Expr* subject = c;
     {
         if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__Unary)) {
@@ -18651,7 +18624,7 @@ void semantics__analyzer__narrowing__facts(syntax__ast__Expr* c, bool onTrue, Li
                     } else {
                         if ((lar_string_eq((b)->op, lar_string("!=", 2)) || lar_string_eq((b)->op, lar_string("==", 2))) && (lar_string_eq((b)->op, lar_string("!=", 2)) == onTrue)) {
                             syntax__ast__Expr* other = ((lar_as_class((void*)((b)->left), &lar_class_syntax__ast__NullLit) != NULL) ? (b)->right : ((lar_as_class((void*)((b)->right), &lar_class_syntax__ast__NullLit) != NULL) ? (b)->left : NULL));
-                            semantics__types__Symbol* s = (((oi_2858 = (syntax__ast__Ident*)lar_as_class((void*)(other), &lar_class_syntax__ast__Ident)) != NULL) ? (oi_2858)->_super._super.symbol : NULL);
+                            semantics__types__Symbol* s = (((oi_2851 = (syntax__ast__Ident*)lar_as_class((void*)(other), &lar_class_syntax__ast__Ident)) != NULL) ? (oi_2851)->_super._super.symbol : NULL);
                             if ((((!(s == NULL)) && ((((s)->kind).tag == (((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Local })).tag) || (((s)->kind).tag == (((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Param })).tag))) && semantics__types__isOpt((s)->type)) && (!(semantics__analyzer__narrowing__hasSymbol(out, s)))) {
                                 List_semantics__types__Symbol_push(out, s);
                             }
@@ -18672,9 +18645,9 @@ void semantics__analyzer__narrowing__facts(syntax__ast__Expr* c, bool onTrue, Li
     switch_end: ;
 }
 
-bool semantics__analyzer__narrowing__hasSymbol(List_semantics__types__Symbol* list_2860, semantics__types__Symbol* symbol) {
+bool semantics__analyzer__narrowing__hasSymbol(List_semantics__types__Symbol* list_2853, semantics__types__Symbol* symbol) {
     {
-        List_semantics__types__Symbol* list = list_2860;
+        List_semantics__types__Symbol* list = list_2853;
         for (int32_t index = 0; index < list->length; index++) {
             semantics__types__Symbol* x = list->items[index];
             if ((const void*)(x) == (const void*)(symbol)) {
@@ -18782,8 +18755,8 @@ bool semantics__analyzer__narrowing__leaves(List_syntax__ast__Stmt* body) {
 
 LarAny semantics__analyzer__narrowing__reassignedNames(LarMemory* lar_result_memory, List_syntax__ast__Stmt* body) {
     (void)lar_result_memory;
-    syntax__ast__AssignStmt* a_2878 = NULL;
-    syntax__ast__Ident* id_2879 = NULL;
+    syntax__ast__AssignStmt* a_2871 = NULL;
+    syntax__ast__Ident* id_2872 = NULL;
     LarTable* table = lar_table_new(&lar_default_memory, LINE(34000104));
     LarAny out = lar_any_t(table);
     List_syntax__ast__Stmt* list = List_syntax__ast__Stmt_new(&lar_default_memory, LINE(34000105));
@@ -18793,9 +18766,9 @@ LarAny semantics__analyzer__narrowing__reassignedNames(LarMemory* lar_result_mem
         List_syntax__ast__Stmt* list_2 = ss;
         for (int32_t index = 0; index < list_2->length; index++) {
             syntax__ast__Stmt* s = list_2->items[index];
-            if (((a_2878 = (syntax__ast__AssignStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__AssignStmt)) != NULL) && ((id_2879 = (syntax__ast__Ident*)lar_as_class((void*)((a_2878)->target), &lar_class_syntax__ast__Ident)) != NULL)) {
+            if (((a_2871 = (syntax__ast__AssignStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__AssignStmt)) != NULL) && ((id_2872 = (syntax__ast__Ident*)lar_as_class((void*)((a_2871)->target), &lar_class_syntax__ast__Ident)) != NULL)) {
                 LarAny value = out;
-                lar_any_set(value, (id_2879)->name, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(34000108));
+                lar_any_set(value, (id_2872)->name, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(34000108));
             }
         }
     }
@@ -18803,8 +18776,8 @@ LarAny semantics__analyzer__narrowing__reassignedNames(LarMemory* lar_result_mem
 }
 
 bool semantics__analyzer__narrowing__assigns(List_syntax__ast__Stmt* body, LarString name) {
-    syntax__ast__AssignStmt* a_2884 = NULL;
-    syntax__ast__Ident* id_2885 = NULL;
+    syntax__ast__AssignStmt* a_2877 = NULL;
+    syntax__ast__Ident* id_2878 = NULL;
     List_syntax__ast__Stmt* list = List_syntax__ast__Stmt_new(&lar_default_memory, LINE(34000114));
     List_syntax__ast__Stmt* ss = list;
     syntax__ast__allStmts(body, ss);
@@ -18812,7 +18785,7 @@ bool semantics__analyzer__narrowing__assigns(List_syntax__ast__Stmt* body, LarSt
         List_syntax__ast__Stmt* list_2 = ss;
         for (int32_t index = 0; index < list_2->length; index++) {
             syntax__ast__Stmt* s = list_2->items[index];
-            if ((((a_2884 = (syntax__ast__AssignStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__AssignStmt)) != NULL) && ((id_2885 = (syntax__ast__Ident*)lar_as_class((void*)((a_2884)->target), &lar_class_syntax__ast__Ident)) != NULL)) && lar_string_eq((id_2885)->name, name)) {
+            if ((((a_2877 = (syntax__ast__AssignStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__AssignStmt)) != NULL) && ((id_2878 = (syntax__ast__Ident*)lar_as_class((void*)((a_2877)->target), &lar_class_syntax__ast__Ident)) != NULL)) && lar_string_eq((id_2878)->name, name)) {
                 return true;
             }
         }
@@ -19084,9 +19057,9 @@ void semantics__analyzer__narrowing__analyzeTry(syntax__ast__TryStmt* t) {
     }
 }
 
-bool semantics__analyzer__narrowing__hasEnum(List_semantics__types__EnumInfo* list_2921, semantics__types__EnumInfo* enumInfo) {
+bool semantics__analyzer__narrowing__hasEnum(List_semantics__types__EnumInfo* list_2914, semantics__types__EnumInfo* enumInfo) {
     {
-        List_semantics__types__EnumInfo* list = list_2921;
+        List_semantics__types__EnumInfo* list = list_2914;
         for (int32_t index = 0; index < list->length; index++) {
             semantics__types__EnumInfo* x = list->items[index];
             if ((const void*)(x) == (const void*)(enumInfo)) {
@@ -19277,20 +19250,20 @@ semantics__types__Type* semantics__expressions__literals__calledReference(LarMem
 }
 
 LarString semantics__expressions__literals__refText(LarMemory* lar_result_memory, syntax__ast__Call* call) {
-    syntax__ast__Member* m_2944 = NULL;
-    syntax__ast__Ident* id_2945 = NULL;
-    if ((m_2944 = (syntax__ast__Member*)lar_as_class((void*)((call)->callee), &lar_class_syntax__ast__Member)) != NULL) {
+    syntax__ast__Member* m_2937 = NULL;
+    syntax__ast__Ident* id_2938 = NULL;
+    if ((m_2937 = (syntax__ast__Member*)lar_as_class((void*)((call)->callee), &lar_class_syntax__ast__Member)) != NULL) {
         LarMemory line37000083_temps = lar_memory_growable();
         LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(37000083));
-        lar_text_builder_str(&text, semantics__expressions__describeExpr(&line37000083_temps, (m_2944)->object));
+        lar_text_builder_str(&text, semantics__expressions__describeExpr(&line37000083_temps, (m_2937)->object));
         lar_text_builder_add(&text, "::", 2);
-        lar_text_builder_str(&text, (m_2944)->name);
+        lar_text_builder_str(&text, (m_2937)->name);
         LarString result = lar_text_builder_finish(&text);
         lar_memory_free(&line37000083_temps);
         return result;
     }
-    if ((id_2945 = (syntax__ast__Ident*)lar_as_class((void*)((call)->callee), &lar_class_syntax__ast__Ident)) != NULL) {
-        LarString shown = String_replace((id_2945)->name, lar_result_memory, lar_string("__", 2), lar_string(".", 1));
+    if ((id_2938 = (syntax__ast__Ident*)lar_as_class((void*)((call)->callee), &lar_class_syntax__ast__Ident)) != NULL) {
+        LarString shown = String_replace((id_2938)->name, lar_result_memory, lar_string("__", 2), lar_string(".", 1));
         Opt_i32 value_2 = String_lastIndexOf(shown, lar_string(".", 1));
         int32_t value_3;
         if (value_2.has) value_3 = value_2.value;
@@ -19318,13 +19291,13 @@ LarString semantics__expressions__literals__refText(LarMemory* lar_result_memory
 }
 
 bool semantics__expressions__literals__referenceTarget(syntax__ast__Call* call) {
-    syntax__ast__Member* m_2949 = NULL;
-    if (((m_2949 = (syntax__ast__Member*)lar_as_class((void*)((call)->callee), &lar_class_syntax__ast__Member)) != NULL) && (lar_as_class((void*)((m_2949)->object), &lar_class_syntax__ast__Member) != NULL)) {
+    syntax__ast__Member* m_2942 = NULL;
+    if (((m_2942 = (syntax__ast__Member*)lar_as_class((void*)((call)->callee), &lar_class_syntax__ast__Member)) != NULL) && (lar_as_class((void*)((m_2942)->object), &lar_class_syntax__ast__Member) != NULL)) {
         LarMemory line37000095_temps = lar_memory_growable();
         int32_t value = (call)->_super._super.line;
         LarTextBuilder text = lar_text_builder_mem(&line37000095_temps, LINE(37000095));
         lar_text_builder_add(&text, "'::' takes a module, a variable or 'self' before it: keep '", 59);
-        lar_text_builder_str(&text, semantics__expressions__describeExpr(&line37000095_temps, (m_2949)->object));
+        lar_text_builder_str(&text, semantics__expressions__describeExpr(&line37000095_temps, (m_2942)->object));
         lar_text_builder_add(&text, "' in a variable first.", 22);
         semantics__analyzer__error(value, lar_text_builder_finish(&text));
         lar_memory_free(&line37000095_temps);
@@ -19359,14 +19332,14 @@ semantics__types__Region* semantics__expressions__literals__valuesRegion(LarMemo
 }
 
 bool semantics__expressions__literals__writtenHere(syntax__ast__Expr* e) {
-    syntax__ast__ArrayLit* a_2956 = NULL;
-    syntax__ast__ObjectLit* o_2958 = NULL;
+    syntax__ast__ArrayLit* a_2949 = NULL;
+    syntax__ast__ObjectLit* o_2951 = NULL;
     if ((lar_as_class((void*)(e), &lar_class_syntax__ast__NullLit) != NULL) || ((!((e)->_super.ty == NULL)) && semantics__analyzer__threads__sendable(((semantics__types__Type*)lar_unwrap((void*)((e)->_super.ty), LINE(37000114)))))) {
         return true;
     }
-    if ((a_2956 = (syntax__ast__ArrayLit*)lar_as_class((void*)(e), &lar_class_syntax__ast__ArrayLit)) != NULL) {
+    if ((a_2949 = (syntax__ast__ArrayLit*)lar_as_class((void*)(e), &lar_class_syntax__ast__ArrayLit)) != NULL) {
         {
-            List_syntax__ast__Expr* list = (a_2956)->elems;
+            List_syntax__ast__Expr* list = (a_2949)->elems;
             for (int32_t index = 0; index < list->length; index++) {
                 syntax__ast__Expr* x = list->items[index];
                 if (!(semantics__expressions__literals__writtenHere(x))) {
@@ -19376,9 +19349,9 @@ bool semantics__expressions__literals__writtenHere(syntax__ast__Expr* e) {
         }
         return true;
     }
-    if ((o_2958 = (syntax__ast__ObjectLit*)lar_as_class((void*)(e), &lar_class_syntax__ast__ObjectLit)) != NULL) {
+    if ((o_2951 = (syntax__ast__ObjectLit*)lar_as_class((void*)(e), &lar_class_syntax__ast__ObjectLit)) != NULL) {
         {
-            List_syntax__ast__FieldInit* list_2 = (o_2958)->fields;
+            List_syntax__ast__FieldInit* list_2 = (o_2951)->fields;
             for (int32_t index_2 = 0; index_2 < list_2->length; index_2++) {
                 syntax__ast__FieldInit* fi = list_2->items[index_2];
                 if (!(semantics__expressions__literals__writtenHere((fi)->value))) {
@@ -20276,8 +20249,8 @@ void semantics__analyzer__threads__checkThreadSafeLambda(semantics__types__Lambd
 }
 
 void semantics__analyzer__threads__checkThreadRun(syntax__ast__ObjectLit* literal) {
-    syntax__ast__Placed* p_3073 = NULL;
-    syntax__ast__Lambda* l_3075 = NULL;
+    syntax__ast__Placed* p_3066 = NULL;
+    syntax__ast__Lambda* l_3068 = NULL;
     {
         List_syntax__ast__FieldInit* list = (literal)->fields;
         for (int32_t index = 0; index < list->length; index++) {
@@ -20285,11 +20258,11 @@ void semantics__analyzer__threads__checkThreadRun(syntax__ast__ObjectLit* litera
             if (!lar_string_eq((fi)->name, lar_string("run", 3))) {
                 continue;
             }
-            syntax__ast__Expr* v = (((p_3073 = (syntax__ast__Placed*)lar_as_class((void*)((fi)->value), &lar_class_syntax__ast__Placed)) != NULL) ? (p_3073)->expr : (fi)->value);
-            if (((l_3075 = (syntax__ast__Lambda*)lar_as_class((void*)(v), &lar_class_syntax__ast__Lambda)) != NULL) && (!((l_3075)->_super._super.lambda == NULL))) {
+            syntax__ast__Expr* v = (((p_3066 = (syntax__ast__Placed*)lar_as_class((void*)((fi)->value), &lar_class_syntax__ast__Placed)) != NULL) ? (p_3066)->expr : (fi)->value);
+            if (((l_3068 = (syntax__ast__Lambda*)lar_as_class((void*)(v), &lar_class_syntax__ast__Lambda)) != NULL) && (!((l_3068)->_super._super.lambda == NULL))) {
                 LarMemory* place = &lar_default_memory;
                 semantics__analyzer__ThreadRun* new_semantics__analyzer__ThreadRun = (semantics__analyzer__ThreadRun*)lar_memory_alloc(place, sizeof(semantics__analyzer__ThreadRun), LINE(36000163));
-                *new_semantics__analyzer__ThreadRun = (semantics__analyzer__ThreadRun){ .header = { (const void*)&methods_semantics__analyzer__ThreadRun, place }, .lambda = ((semantics__types__LambdaInfo*)lar_unwrap((void*)((l_3075)->_super._super.lambda), LINE(36000163))), .line = (literal)->_super._super.line, .safe = false };
+                *new_semantics__analyzer__ThreadRun = (semantics__analyzer__ThreadRun){ .header = { (const void*)&methods_semantics__analyzer__ThreadRun, place }, .lambda = ((semantics__types__LambdaInfo*)lar_unwrap((void*)((l_3068)->_super._super.lambda), LINE(36000163))), .line = (literal)->_super._super.line, .safe = false };
                 List_semantics__analyzer__ThreadRun_push((semantics__analyzer__analysis)->threadRuns, new_semantics__analyzer__ThreadRun);
                 return;
             }
@@ -20538,7 +20511,7 @@ bool semantics__expressions__constants__intFits(int64_t i, bool big, bool huge, 
 }
 
 semantics__expressions__constants__ConstVal* semantics__expressions__constants__evalConst(LarMemory* lar_result_memory, syntax__ast__Expr* e) {
-    syntax__ast__IntLit* n_3114 = NULL;
+    syntax__ast__IntLit* n_3107 = NULL;
     syntax__ast__Expr* subject = e;
     {
         if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__IntLit)) {
@@ -20632,8 +20605,8 @@ semantics__expressions__constants__ConstVal* semantics__expressions__constants__
         if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__Unary)) {
             syntax__ast__Unary* u = (syntax__ast__Unary*)subject;
             {
-                if (lar_string_eq((u)->op, lar_string("-", 1)) && ((n_3114 = (syntax__ast__IntLit*)lar_as_class((void*)((u)->operand), &lar_class_syntax__ast__IntLit)) != NULL)) {
-                    return semantics__expressions__constants__literalValue(NULL, n_3114, true);
+                if (lar_string_eq((u)->op, lar_string("-", 1)) && ((n_3107 = (syntax__ast__IntLit*)lar_as_class((void*)((u)->operand), &lar_class_syntax__ast__IntLit)) != NULL)) {
+                    return semantics__expressions__constants__literalValue(NULL, n_3107, true);
                 }
                 semantics__expressions__constants__ConstVal* v = semantics__expressions__constants__evalConst(lar_result_memory, (u)->operand);
                 if (v == NULL) {
@@ -21048,7 +21021,7 @@ void semantics__expressions__operators__convertTo(syntax__ast__Expr* e, semantic
 
 semantics__types__Type* semantics__expressions__operators__checkUnary(LarMemory* lar_result_memory, syntax__ast__Unary* unary, semantics__types__Type* expected, semantics__types__Place* place) {
     (void)lar_result_memory;
-    syntax__ast__IntLit* n_3167 = NULL;
+    syntax__ast__IntLit* n_3160 = NULL;
     if (lar_string_eq((unary)->op, lar_string("&", 1))) {
         return semantics__expressions__operators__checkAddress(NULL, unary);
     }
@@ -21097,9 +21070,9 @@ semantics__types__Type* semantics__expressions__operators__checkUnary(LarMemory*
         lar_memory_free(&line38000146_temps);
         return result_3;
     }
-    if ((n_3167 = (syntax__ast__IntLit*)lar_as_class((void*)((unary)->operand), &lar_class_syntax__ast__IntLit)) != NULL) {
-        semantics__types__Type* type = semantics__expressions__checkIntValue(NULL, semantics__expressions__constants__literalValue(NULL, n_3167, true), (n_3167)->_super._super.line, expected);
-        (n_3167)->_super._super.ty = type;
+    if ((n_3160 = (syntax__ast__IntLit*)lar_as_class((void*)((unary)->operand), &lar_class_syntax__ast__IntLit)) != NULL) {
+        semantics__types__Type* type = semantics__expressions__checkIntValue(NULL, semantics__expressions__constants__literalValue(NULL, n_3160, true), (n_3160)->_super._super.line, expected);
+        (n_3160)->_super._super.ty = type;
         return type;
     }
     syntax__ast__Expr* value_4 = (unary)->operand;
@@ -21130,24 +21103,24 @@ semantics__types__Type* semantics__expressions__operators__checkUnary(LarMemory*
 
 semantics__types__Type* semantics__expressions__operators__checkAddress(LarMemory* lar_result_memory, syntax__ast__Unary* unary) {
     (void)lar_result_memory;
-    syntax__ast__Ident* id_3172 = NULL;
+    syntax__ast__Ident* id_3165 = NULL;
     if (!(semantics__expressions__operators__externArg)) {
         semantics__expressions__check(NULL, (unary)->operand, NULL, semantics__types__P_TEMP);
         return semantics__analyzer__wrong(NULL, (unary)->_super._super.line, lar_string("'&' gives a pointer for C: it is only allowed as an argument of a native function, f(&x).", 89));
     }
     semantics__expressions__operators__externArg = false;
-    if (!(((id_3172 = (syntax__ast__Ident*)lar_as_class((void*)((unary)->operand), &lar_class_syntax__ast__Ident)) != NULL))) {
+    if (!(((id_3165 = (syntax__ast__Ident*)lar_as_class((void*)((unary)->operand), &lar_class_syntax__ast__Ident)) != NULL))) {
         semantics__expressions__check(NULL, (unary)->operand, NULL, semantics__types__P_TEMP);
         return semantics__analyzer__wrong(NULL, (unary)->_super._super.line, lar_string("'&' takes a variable: &x (to give C a field, copy it to a variable first).", 74));
     }
-    semantics__types__Symbol* symbol = semantics__analyzer__lookup(NULL, (id_3172)->name);
+    semantics__types__Symbol* symbol = semantics__analyzer__lookup(NULL, (id_3165)->name);
     if (symbol == NULL) {
         LarMemory line38000180_temps = lar_memory_growable();
         LarTextBuilder text_2 = lar_text_builder_mem(&line38000180_temps, LINE(38000180));
         lar_text_builder_add(&text_2, "Use of undeclared variable '", 28);
-        lar_text_builder_str(&text_2, (id_3172)->name);
+        lar_text_builder_str(&text_2, (id_3165)->name);
         lar_text_builder_add(&text_2, "'.", 2);
-        semantics__types__Type* result = semantics__analyzer__wrong(NULL, (id_3172)->_super._super.line, lar_text_builder_finish(&text_2));
+        semantics__types__Type* result = semantics__analyzer__wrong(NULL, (id_3165)->_super._super.line, lar_text_builder_finish(&text_2));
         lar_memory_free(&line38000180_temps);
         return result;
     }
@@ -21159,7 +21132,7 @@ semantics__types__Type* semantics__expressions__operators__checkAddress(LarMemor
         LarMemory line38000183_temps = lar_memory_growable();
         LarTextBuilder text_3 = lar_text_builder_mem(&line38000183_temps, LINE(38000183));
         lar_text_builder_add(&text_3, "'&' takes a variable, and '", 27);
-        lar_text_builder_str(&text_3, (id_3172)->name);
+        lar_text_builder_str(&text_3, (id_3165)->name);
         lar_text_builder_add(&text_3, "' is not one.", 13);
         semantics__types__Type* result_2 = semantics__analyzer__wrong(NULL, (unary)->_super._super.line, lar_text_builder_finish(&text_3));
         lar_memory_free(&line38000183_temps);
@@ -21169,7 +21142,7 @@ semantics__types__Type* semantics__expressions__operators__checkAddress(LarMemor
         LarMemory line38000184_temps = lar_memory_growable();
         LarTextBuilder text_4 = lar_text_builder_mem(&line38000184_temps, LINE(38000184));
         lar_text_builder_add(&text_4, "'", 1);
-        lar_text_builder_str(&text_4, (id_3172)->name);
+        lar_text_builder_str(&text_4, (id_3165)->name);
         lar_text_builder_add(&text_4, "' is a C global: C already has its address.", 43);
         semantics__types__Type* result_3 = semantics__analyzer__wrong(NULL, (unary)->_super._super.line, lar_text_builder_finish(&text_4));
         lar_memory_free(&line38000184_temps);
@@ -21179,7 +21152,7 @@ semantics__types__Type* semantics__expressions__operators__checkAddress(LarMemor
         LarMemory line38000185_temps = lar_memory_growable();
         LarTextBuilder text_5 = lar_text_builder_mem(&line38000185_temps, LINE(38000185));
         lar_text_builder_add(&text_5, "'", 1);
-        lar_text_builder_str(&text_5, (id_3172)->name);
+        lar_text_builder_str(&text_5, (id_3165)->name);
         lar_text_builder_add(&text_5, "' is a memory: a C function receives it as a memory parameter (byte[*]), not with '&'.", 86);
         semantics__types__Type* result_4 = semantics__analyzer__wrong(NULL, (unary)->_super._super.line, lar_text_builder_finish(&text_5));
         lar_memory_free(&line38000185_temps);
@@ -21189,9 +21162,9 @@ semantics__types__Type* semantics__expressions__operators__checkAddress(LarMemor
         LarMemory line38000186_temps = lar_memory_growable();
         LarTextBuilder text_6 = lar_text_builder_mem(&line38000186_temps, LINE(38000186));
         lar_text_builder_add(&text_6, "'", 1);
-        lar_text_builder_str(&text_6, (id_3172)->name);
+        lar_text_builder_str(&text_6, (id_3165)->name);
         lar_text_builder_add(&text_6, "' cannot change, and C could write through &", 44);
-        lar_text_builder_str(&text_6, (id_3172)->name);
+        lar_text_builder_str(&text_6, (id_3165)->name);
         lar_text_builder_add(&text_6, ".", 1);
         semantics__types__Type* result_5 = semantics__analyzer__wrong(NULL, (unary)->_super._super.line, lar_text_builder_finish(&text_6));
         lar_memory_free(&line38000186_temps);
@@ -21207,7 +21180,7 @@ semantics__types__Type* semantics__expressions__operators__checkAddress(LarMemor
         lar_memory_free(&line38000187_temps);
         return result_6;
     }
-    semantics__analyzer__noteCapture(symbol, (id_3172)->_super._super.line);
+    semantics__analyzer__noteCapture(symbol, (id_3165)->_super._super.line);
     if (((symbol)->kind).tag == (((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Global })).tag) {
         (symbol)->mutatedGlobal = true;
     } else {
@@ -21229,8 +21202,8 @@ semantics__types__MethodInfo* semantics__expressions__operators__operatorOf(LarM
 }
 
 bool semantics__expressions__operators__isIntLiteral(syntax__ast__Expr* e) {
-    syntax__ast__Unary* u_3179 = NULL;
-    return ((lar_as_class((void*)(e), &lar_class_syntax__ast__IntLit) != NULL) || ((((u_3179 = (syntax__ast__Unary*)lar_as_class((void*)(e), &lar_class_syntax__ast__Unary)) != NULL) && lar_string_eq((u_3179)->op, lar_string("-", 1))) && (lar_as_class((void*)((u_3179)->operand), &lar_class_syntax__ast__IntLit) != NULL)));
+    syntax__ast__Unary* u_3172 = NULL;
+    return ((lar_as_class((void*)(e), &lar_class_syntax__ast__IntLit) != NULL) || ((((u_3172 = (syntax__ast__Unary*)lar_as_class((void*)(e), &lar_class_syntax__ast__Unary)) != NULL) && lar_string_eq((u_3172)->op, lar_string("-", 1))) && (lar_as_class((void*)((u_3172)->operand), &lar_class_syntax__ast__IntLit) != NULL)));
 }
 
 semantics__types__Type* semantics__expressions__operators__checkBinary(LarMemory* lar_result_memory, syntax__ast__Binary* binary, semantics__types__Type* expected, semantics__types__Place* place) {
@@ -21535,12 +21508,12 @@ bool semantics__expressions__operators__overloaded(syntax__ast__Binary* binary, 
 }
 
 void semantics__expressions__callbacks__checkCallbackArg(syntax__ast__Expr* a, semantics__types__Type* type, semantics__types__Place* place, LarString what) {
-    syntax__ast__Lambda* l_3221 = NULL;
-    syntax__ast__Member* m_3222 = NULL;
-    syntax__ast__Lambda* written_3224 = NULL;
+    syntax__ast__Lambda* l_3214 = NULL;
+    syntax__ast__Member* m_3215 = NULL;
+    syntax__ast__Lambda* written_3217 = NULL;
     LarMemory memory = lar_memory_growable();
-    if ((((((l_3221 = (syntax__ast__Lambda*)lar_as_class((void*)(a), &lar_class_syntax__ast__Lambda)) != NULL) && (!((l_3221)->ref == NULL))) && (((l_3221)->params)->length == 0)) && ((m_3222 = (syntax__ast__Member*)lar_as_class((void*)((((syntax__ast__Call*)lar_unwrap((void*)((l_3221)->ref), LINE(40000024))))->callee), &lar_class_syntax__ast__Member)) != NULL)) && semantics__expressions__callbacks__isObject((m_3222)->object)) {
-        semantics__expressions__callbacks__methodCallback(a, m_3222, type, what);
+    if ((((((l_3214 = (syntax__ast__Lambda*)lar_as_class((void*)(a), &lar_class_syntax__ast__Lambda)) != NULL) && (!((l_3214)->ref == NULL))) && (((l_3214)->params)->length == 0)) && ((m_3215 = (syntax__ast__Member*)lar_as_class((void*)((((syntax__ast__Call*)lar_unwrap((void*)((l_3214)->ref), LINE(40000024))))->callee), &lar_class_syntax__ast__Member)) != NULL)) && semantics__expressions__callbacks__isObject((m_3215)->object)) {
+        semantics__expressions__callbacks__methodCallback(a, m_3215, type, what);
         lar_memory_free(&memory);
         return;
     }
@@ -21550,8 +21523,8 @@ void semantics__expressions__callbacks__checkCallbackArg(syntax__ast__Expr* a, s
         return;
     }
     List_i32* voids = semantics__types__voidPointers(&memory, type);
-    if (((written_3224 = (syntax__ast__Lambda*)lar_as_class((void*)(a), &lar_class_syntax__ast__Lambda)) != NULL) && (!((written_3224)->_super._super.lambda == NULL))) {
-        semantics__types__LambdaInfo* info = ((semantics__types__LambdaInfo*)lar_unwrap((void*)((written_3224)->_super._super.lambda), LINE(40000032)));
+    if (((written_3217 = (syntax__ast__Lambda*)lar_as_class((void*)(a), &lar_class_syntax__ast__Lambda)) != NULL) && (!((written_3217)->_super._super.lambda == NULL))) {
+        semantics__types__LambdaInfo* info = ((semantics__types__LambdaInfo*)lar_unwrap((void*)((written_3217)->_super._super.lambda), LINE(40000032)));
         if (((info)->captures)->length == 0) {
             LarMemory* place_2 = &lar_default_memory;
             semantics__types__CallbackInfo* new_semantics__types__CallbackInfo = (semantics__types__CallbackInfo*)lar_memory_alloc(place_2, sizeof(semantics__types__CallbackInfo), LINE(40000034));
@@ -21648,14 +21621,14 @@ void semantics__expressions__callbacks__checkCallbackArg(syntax__ast__Expr* a, s
 }
 
 bool semantics__expressions__callbacks__isObject(syntax__ast__Expr* e) {
-    syntax__ast__Ident* id_3229 = NULL;
+    syntax__ast__Ident* id_3222 = NULL;
     if (lar_as_class((void*)(e), &lar_class_syntax__ast__SelfExpr) != NULL) {
         return true;
     }
-    if (!(((id_3229 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL))) {
+    if (!(((id_3222 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL))) {
         return false;
     }
-    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3229)->name);
+    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3222)->name);
     return (((!(s == NULL)) && (!(((s)->kind).tag == (((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Function })).tag))) && (!(((s)->kind).tag == (((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Const })).tag)));
 }
 
@@ -22128,7 +22101,7 @@ semantics__types__Type* semantics__expressions__calls__checkCall(LarMemory* lar_
 
 semantics__types__Type* semantics__expressions__calls__checkMemoryCall(LarMemory* lar_result_memory, syntax__ast__Call* c, bool compact) {
     (void)lar_result_memory;
-    syntax__ast__Ident* id_3288 = NULL;
+    syntax__ast__Ident* id_3281 = NULL;
     LarString what = (compact ? lar_string("Memory.compact(m)", 17) : lar_string("Memory.limit(m, bytes)", 22));
     int32_t value = ((c)->args)->length;
     if (!(value == (compact ? 1 : 2))) {
@@ -22149,7 +22122,7 @@ semantics__types__Type* semantics__expressions__calls__checkMemoryCall(LarMemory
     syntax__ast__Expr* arg = ((c)->args)->items[lar_index((int64_t)(0), ((c)->args)->length, LINE(35000100))];
     semantics__types__Symbol* ms = semantics__expressions__memoryNamed(NULL, arg);
     if (ms == NULL) {
-        if (((id_3288 = (syntax__ast__Ident*)lar_as_class((void*)(arg), &lar_class_syntax__ast__Ident)) != NULL) && lar_string_eq((id_3288)->name, lar_string("default", 7))) {
+        if (((id_3281 = (syntax__ast__Ident*)lar_as_class((void*)(arg), &lar_class_syntax__ast__Ident)) != NULL) && lar_string_eq((id_3281)->name, lar_string("default", 7))) {
             LarMemory line35000103_temps = lar_memory_growable();
             LarTextBuilder text_2 = lar_text_builder_mem(&line35000103_temps, LINE(35000103));
             lar_text_builder_str(&text_2, what);
@@ -22938,9 +22911,9 @@ semantics__types__Region* semantics__expressions__calls__checkArgsLives(LarMemor
 
 semantics__types__Region* semantics__expressions__calls__checkArgs(LarMemory* lar_result_memory, syntax__ast__Call* call, List_semantics__types__Type* params, bool varargs, List_b* memParams, LarString name, List_semantics__types__Place* places, List_b* flows) {
     (void)lar_result_memory;
-    syntax__ast__Unary* au_3410 = NULL;
-    syntax__ast__Cast* ac_3411 = NULL;
-    syntax__ast__Unary* acu_3412 = NULL;
+    syntax__ast__Unary* au_3403 = NULL;
+    syntax__ast__Cast* ac_3404 = NULL;
+    syntax__ast__Unary* acu_3405 = NULL;
     List_syntax__ast__Expr* args = (call)->args;
     if (varargs ? ((args)->length < (params)->length) : (!((args)->length == (params)->length))) {
         LarMemory line35000417_temps = lar_memory_growable();
@@ -22991,7 +22964,7 @@ semantics__types__Region* semantics__expressions__calls__checkArgs(LarMemory* la
                 continue;
             }
             semantics__types__Type* p = (params)->items[lar_index((int64_t)(i), (params)->length, LINE(35000441))];
-            semantics__expressions__operators__externArg = (semantics__expressions__calls__toC && ((((au_3410 = (syntax__ast__Unary*)lar_as_class((void*)(a), &lar_class_syntax__ast__Unary)) != NULL) && lar_string_eq((au_3410)->op, lar_string("&", 1))) || ((((ac_3411 = (syntax__ast__Cast*)lar_as_class((void*)(a), &lar_class_syntax__ast__Cast)) != NULL) && ((acu_3412 = (syntax__ast__Unary*)lar_as_class((void*)((ac_3411)->expr), &lar_class_syntax__ast__Unary)) != NULL)) && lar_string_eq((acu_3412)->op, lar_string("&", 1)))));
+            semantics__expressions__operators__externArg = (semantics__expressions__calls__toC && ((((au_3403 = (syntax__ast__Unary*)lar_as_class((void*)(a), &lar_class_syntax__ast__Unary)) != NULL) && lar_string_eq((au_3403)->op, lar_string("&", 1))) || ((((ac_3404 = (syntax__ast__Cast*)lar_as_class((void*)(a), &lar_class_syntax__ast__Cast)) != NULL) && ((acu_3405 = (syntax__ast__Unary*)lar_as_class((void*)((ac_3404)->expr), &lar_class_syntax__ast__Unary)) != NULL)) && lar_string_eq((acu_3405)->op, lar_string("&", 1)))));
             if (semantics__expressions__calls__toC && (((p)->kind).tag == (((semantics__types__TypeKind){ .tag = semantics__types__TypeKind_Func })).tag)) {
                 LarTextBuilder text_4 = lar_text_builder_mem(&lar_default_memory, LINE(35000444));
                 lar_text_builder_add(&text_4, "Argument ", 9);
@@ -23649,7 +23622,7 @@ semantics__types__Type* semantics__expressions__calls__checkStringMethod(LarMemo
 
 semantics__types__Type* semantics__expressions__calls__checkAnyMethod(LarMemory* lar_result_memory, syntax__ast__Call* call, syntax__ast__Member* member) {
     (void)lar_result_memory;
-    syntax__ast__Lambda* l_3486 = NULL;
+    syntax__ast__Lambda* l_3479 = NULL;
     int32_t n = ((call)->args)->length;
     if (lar_string_eq((member)->name, lar_string("length", 6))) {
         if (!(n == 0)) {
@@ -23738,7 +23711,7 @@ semantics__types__Type* semantics__expressions__calls__checkAnyMethod(LarMemory*
                     syntax__ast__Expr* a = ((call)->args)->items[lar_index((int64_t)(0), ((call)->args)->length, LINE(35000757))];
                     List_semantics__types__Type* list = List_semantics__types__Type_new(&lar_default_memory, LINE(35000758));
                     List_semantics__types__Type* paramTypes = list;
-                    if (((l_3486 = (syntax__ast__Lambda*)lar_as_class((void*)(a), &lar_class_syntax__ast__Lambda)) != NULL) && (((l_3486)->params)->length == 2)) {
+                    if (((l_3479 = (syntax__ast__Lambda*)lar_as_class((void*)(a), &lar_class_syntax__ast__Lambda)) != NULL) && (((l_3479)->params)->length == 2)) {
                         List_semantics__types__Type_push(paramTypes, semantics__types__T_STRING);
                     }
                     List_semantics__types__Type_push(paramTypes, semantics__types__T_ANY);
@@ -23818,7 +23791,7 @@ bool semantics__expressions__calls__throughRef(syntax__ast__Expr* target) {
 
 semantics__types__Type* semantics__expressions__switches__analyzeSwitch(LarMemory* lar_result_memory, syntax__ast__SwitchExpr* switchExpr, bool isExpr, semantics__types__Type* expected, semantics__types__Place* place) {
     (void)lar_result_memory;
-    syntax__ast__BoolLit* b_3517 = NULL;
+    syntax__ast__BoolLit* b_3510 = NULL;
     semantics__types__Type* st = semantics__expressions__check(NULL, (switchExpr)->subject, NULL, semantics__types__P_TEMP);
     LarMemory* place_2 = &lar_default_memory;
     semantics__types__SwitchInfo* new_semantics__types__SwitchInfo = (semantics__types__SwitchInfo*)lar_memory_alloc(place_2, sizeof(semantics__types__SwitchInfo), LINE(33000022));
@@ -23926,8 +23899,8 @@ semantics__types__Type* semantics__expressions__switches__analyzeSwitch(LarMemor
                         {
                             if (subject_2.tag == semantics__types__PatK_Constant) {
                                 {
-                                    if ((b_3517 = (syntax__ast__BoolLit*)lar_as_class((void*)((patternInfo)->constant), &lar_class_syntax__ast__BoolLit)) != NULL) {
-                                        if ((b_3517)->value) {
+                                    if ((b_3510 = (syntax__ast__BoolLit*)lar_as_class((void*)((patternInfo)->constant), &lar_class_syntax__ast__BoolLit)) != NULL) {
+                                        if ((b_3510)->value) {
                                             coversTrue = true;
                                         } else {
                                             coversFalse = true;
@@ -24862,7 +24835,7 @@ void semantics__analyzer__declarations__onlyOnFunction(syntax__ast__FunctionDecl
 }
 
 void semantics__analyzer__declarations__collect(syntax__ast__Program* program) {
-    syntax__ast__FunctionDecl* f_3670 = NULL;
+    syntax__ast__FunctionDecl* f_3663 = NULL;
     semantics__analyzer__declarations__assignPlatforms(program);
     {
         List_syntax__ast__Node* list = (program)->decls;
@@ -25201,8 +25174,8 @@ void semantics__analyzer__declarations__collect(syntax__ast__Program* program) {
         List_syntax__ast__Node* list_24 = (program)->decls;
         for (int32_t index_9 = 0; index_9 < list_24->length; index_9++) {
             syntax__ast__Node* d = list_24->items[index_9];
-            if (((f_3670 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (!lar_string_eq((f_3670)->typeName, lar_string("", 0)))) {
-                semantics__analyzer__declarations__collectStatic(f_3670);
+            if (((f_3663 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (!lar_string_eq((f_3663)->typeName, lar_string("", 0)))) {
+                semantics__analyzer__declarations__collectStatic(f_3663);
             }
         }
     }
@@ -25332,16 +25305,16 @@ bool semantics__analyzer__declarations__functionNameTaken(LarString name, int32_
 }
 
 void semantics__analyzer__declarations__constants(syntax__ast__Program* program) {
-    syntax__ast__ConstDecl* c_3687 = NULL;
+    syntax__ast__ConstDecl* c_3680 = NULL;
     {
         List_syntax__ast__Node* list = (program)->decls;
         for (int32_t index = 0; index < list->length; index++) {
             syntax__ast__Node* d = list->items[index];
-            if (!(((c_3687 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL))) {
+            if (!(((c_3680 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL))) {
                 continue;
             }
-            semantics__types__Type* t = semantics__expressions__resolveType(NULL, (c_3687)->type);
-            semantics__expressions__constants__ConstVal* v = semantics__expressions__constants__evalConst(&lar_default_memory, (c_3687)->value);
+            semantics__types__Type* t = semantics__expressions__resolveType(NULL, (c_3680)->type);
+            semantics__expressions__constants__ConstVal* v = semantics__expressions__constants__evalConst(&lar_default_memory, (c_3680)->value);
             if ((v == NULL) || semantics__types__isError(t)) {
                 continue;
             }
@@ -25350,20 +25323,20 @@ void semantics__analyzer__declarations__constants(syntax__ast__Program* program)
                 LarMemory line41000346_temps = lar_memory_growable();
                 LarTextBuilder text_2 = lar_text_builder_mem(&line41000346_temps, LINE(41000346));
                 lar_text_builder_add(&text_2, "Constant '", 10);
-                lar_text_builder_str(&text_2, (c_3687)->name);
+                lar_text_builder_str(&text_2, (c_3680)->name);
                 lar_text_builder_add(&text_2, "' of type ", 10);
                 lar_text_builder_str(&text_2, (t)->text);
                 lar_text_builder_add(&text_2, " cannot hold that value; constants are numbers, bool or String literals.", 72);
-                semantics__analyzer__error((c_3687)->_super.line, lar_text_builder_finish(&text_2));
+                semantics__analyzer__error((c_3680)->_super.line, lar_text_builder_finish(&text_2));
                 lar_memory_free(&line41000346_temps);
                 continue;
             }
             if (((((v)->kind).tag == (((semantics__types__ConstantKind){ .tag = semantics__types__ConstantKind_Int })).tag) && semantics__types__isInteger(t)) && (!(semantics__expressions__constants__intFits((v)->i, (v)->big, (v)->huge, t)))) {
                 LarMemory line41000350_temps = lar_memory_growable();
-                int32_t value_2 = (c_3687)->_super.line;
+                int32_t value_2 = (c_3680)->_super.line;
                 LarTextBuilder text_3 = lar_text_builder_mem(&line41000350_temps, LINE(41000350));
                 lar_text_builder_add(&text_3, "Constant '", 10);
-                lar_text_builder_str(&text_3, (c_3687)->name);
+                lar_text_builder_str(&text_3, (c_3680)->name);
                 lar_text_builder_add(&text_3, "' = ", 4);
                 lar_text_builder_str(&text_3, semantics__analyzer__declarations__constIntText(&line41000350_temps, v));
                 lar_text_builder_add(&text_3, " does not fit in ", 17);
@@ -25377,7 +25350,7 @@ void semantics__analyzer__declarations__constants(syntax__ast__Program* program)
                 lar_memory_free(&line41000350_temps);
                 continue;
             }
-            semantics__types__Symbol* symbol = semantics__analyzer__declare(NULL, (c_3687)->name, ((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Const }), t, (c_3687)->_super.line);
+            semantics__types__Symbol* symbol = semantics__analyzer__declare(NULL, (c_3680)->name, ((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Const }), t, (c_3680)->_super.line);
             if ((((v)->kind).tag == (((semantics__types__ConstantKind){ .tag = semantics__types__ConstantKind_Int })).tag) && semantics__types__isFloat(t)) {
                 (symbol)->constantKind = ((semantics__types__ConstantKind){ .tag = semantics__types__ConstantKind_Float });
                 (symbol)->constantFloat = ((v)->big ? ((double)(((uint64_t)((v)->i)))) : ((double)((v)->i)));
@@ -25412,7 +25385,7 @@ LarString semantics__analyzer__declarations__constIntText(LarMemory* lar_result_
 }
 
 void semantics__analyzer__declarations__signatures(syntax__ast__Program* program) {
-    syntax__ast__ExternValueDecl* v_3741 = NULL;
+    syntax__ast__ExternValueDecl* v_3734 = NULL;
     {
         List_syntax__ast__Node* list = (program)->decls;
         for (int32_t index = 0; index < list->length; index++) {
@@ -25941,8 +25914,8 @@ void semantics__analyzer__declarations__signatures(syntax__ast__Program* program
         List_syntax__ast__Node* list_30 = (program)->decls;
         for (int32_t index_17 = 0; index_17 < list_30->length; index_17++) {
             syntax__ast__Node* d = list_30->items[index_17];
-            if ((v_3741 = (syntax__ast__ExternValueDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ExternValueDecl)) != NULL) {
-                semantics__analyzer__declarations__externValue(v_3741);
+            if ((v_3734 = (syntax__ast__ExternValueDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ExternValueDecl)) != NULL) {
+                semantics__analyzer__declarations__externValue(v_3734);
             }
         }
     }
@@ -26388,8 +26361,8 @@ bool semantics__analyzer__declarations__isByteArrayRef(syntax__ast__TypeRef* typ
 
 List_b* semantics__analyzer__declarations__memoryParams(LarMemory* lar_result_memory, List_syntax__ast__Param* params, List_syntax__ast__Stmt* body) {
     (void)lar_result_memory;
-    syntax__ast__Placed* p_3786 = NULL;
-    syntax__ast__Ident* m_3787 = NULL;
+    syntax__ast__Placed* p_3779 = NULL;
+    syntax__ast__Ident* m_3780 = NULL;
     LarTable* table = lar_table_new(&lar_default_memory, LINE(41000711));
     LarAny used = lar_any_t(table);
     List_syntax__ast__Expr* list = List_syntax__ast__Expr_new(&lar_default_memory, LINE(41000712));
@@ -26399,9 +26372,9 @@ List_b* semantics__analyzer__declarations__memoryParams(LarMemory* lar_result_me
         List_syntax__ast__Expr* list_2 = es;
         for (int32_t index = 0; index < list_2->length; index++) {
             syntax__ast__Expr* e = list_2->items[index];
-            if ((((p_3786 = (syntax__ast__Placed*)lar_as_class((void*)(e), &lar_class_syntax__ast__Placed)) != NULL) && ((p_3786)->mode == 0)) && ((m_3787 = (syntax__ast__Ident*)lar_as_class((void*)((p_3786)->memory), &lar_class_syntax__ast__Ident)) != NULL)) {
+            if ((((p_3779 = (syntax__ast__Placed*)lar_as_class((void*)(e), &lar_class_syntax__ast__Placed)) != NULL) && ((p_3779)->mode == 0)) && ((m_3780 = (syntax__ast__Ident*)lar_as_class((void*)((p_3779)->memory), &lar_class_syntax__ast__Ident)) != NULL)) {
                 LarAny value = used;
-                lar_any_set(value, (m_3787)->name, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(41000715));
+                lar_any_set(value, (m_3780)->name, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(41000715));
             }
         }
     }
@@ -26695,16 +26668,16 @@ void semantics__analyzer__statements__checkReturns(List_syntax__ast__Stmt* body,
 }
 
 bool semantics__analyzer__statements__isPanic(syntax__ast__Expr* e) {
-    syntax__ast__Call* c_3836 = NULL;
-    if (!(((c_3836 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL))) {
+    syntax__ast__Call* c_3829 = NULL;
+    if (!(((c_3829 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL))) {
         return false;
     }
-    semantics__types__CallInfo* callInfo = (c_3836)->_super._super.call;
+    semantics__types__CallInfo* callInfo = (c_3829)->_super._super.call;
     return (((!(callInfo == NULL)) && (((callInfo)->kind).tag == (((semantics__types__CallK){ .tag = semantics__types__CallK_Builtin })).tag)) && (((callInfo)->builtin).tag == (((semantics__types__BuiltinKind){ .tag = semantics__types__BuiltinKind_Panic })).tag));
 }
 
 bool semantics__analyzer__statements__alwaysExits(List_syntax__ast__Stmt* body) {
-    syntax__ast__BoolLit* b_3844 = NULL;
+    syntax__ast__BoolLit* b_3837 = NULL;
     if ((body)->length == 0) {
         return false;
     }
@@ -26757,7 +26730,7 @@ bool semantics__analyzer__statements__alwaysExits(List_syntax__ast__Stmt* body) 
     {
         if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__WhileStmt)) {
             syntax__ast__WhileStmt* w = (syntax__ast__WhileStmt*)subject;
-            value_2 = ((((b_3844 = (syntax__ast__BoolLit*)lar_as_class((void*)((w)->cond), &lar_class_syntax__ast__BoolLit)) != NULL) && (b_3844)->value) && (!(semantics__analyzer__statements__containsBreak((w)->body))));
+            value_2 = ((((b_3837 = (syntax__ast__BoolLit*)lar_as_class((void*)((w)->cond), &lar_class_syntax__ast__BoolLit)) != NULL) && (b_3837)->value) && (!(semantics__analyzer__statements__containsBreak((w)->body))));
             goto switch_end;
         }
     }
@@ -26891,8 +26864,8 @@ bool semantics__analyzer__statements__containsBreak(List_syntax__ast__Stmt* body
 }
 
 void semantics__analyzer__statements__analyzeStmts(List_syntax__ast__Stmt* body) {
-    syntax__ast__AssignStmt* a_3863 = NULL;
-    syntax__ast__IfStmt* i_3866 = NULL;
+    syntax__ast__AssignStmt* a_3856 = NULL;
+    syntax__ast__IfStmt* i_3859 = NULL;
     if (((semantics__analyzer__analysis)->scope)->body == NULL) {
         ((semantics__analyzer__analysis)->scope)->body = body;
     }
@@ -26914,7 +26887,7 @@ void semantics__analyzer__statements__analyzeStmts(List_syntax__ast__Stmt* body)
                     }
                 }
             }
-            bool direct = (((a_3863 = (syntax__ast__AssignStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__AssignStmt)) != NULL) && (lar_as_class((void*)((a_3863)->target), &lar_class_syntax__ast__Ident) != NULL));
+            bool direct = (((a_3856 = (syntax__ast__AssignStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__AssignStmt)) != NULL) && (lar_as_class((void*)((a_3856)->target), &lar_class_syntax__ast__Ident) != NULL));
             if (!(direct)) {
                 semantics__analyzer__narrowing__unnarrow(ends);
             }
@@ -26927,11 +26900,11 @@ void semantics__analyzer__statements__analyzeStmts(List_syntax__ast__Stmt* body)
             if (direct) {
                 semantics__analyzer__narrowing__unnarrow(ends);
             }
-            if ((i_3866 = (syntax__ast__IfStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__IfStmt)) != NULL) {
-                bool thenLeaves = semantics__analyzer__narrowing__leaves((i_3866)->thenBody);
-                bool elseLeaves = ((i_3866)->hasElse && semantics__analyzer__narrowing__leaves((i_3866)->elseBody));
+            if ((i_3859 = (syntax__ast__IfStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__IfStmt)) != NULL) {
+                bool thenLeaves = semantics__analyzer__narrowing__leaves((i_3859)->thenBody);
+                bool elseLeaves = ((i_3859)->hasElse && semantics__analyzer__narrowing__leaves((i_3859)->elseBody));
                 if (!(thenLeaves == elseLeaves)) {
-                    semantics__analyzer__narrowing__narrow(semantics__analyzer__narrowing__nonNull(NULL, (i_3866)->cond, elseLeaves));
+                    semantics__analyzer__narrowing__narrow(semantics__analyzer__narrowing__nonNull(NULL, (i_3859)->cond, elseLeaves));
                 }
             }
         }
@@ -27090,13 +27063,13 @@ void semantics__analyzer__statements__requireBool(syntax__ast__Expr* cond, LarSt
 }
 
 void semantics__analyzer__statements__analyzeVarDecl(syntax__ast__VarDecl* v) {
-    syntax__ast__Placed* p_3891 = NULL;
-    syntax__ast__ArrayLit* a_3897 = NULL;
+    syntax__ast__Placed* p_3884 = NULL;
+    syntax__ast__ArrayLit* a_3890 = NULL;
     bool global = (((semantics__analyzer__frame(NULL))->kind).tag == (((semantics__types__FrameKind){ .tag = semantics__types__FrameKind_Global })).tag);
     semantics__types__SymbolKind kind = (global ? ((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Global }) : ((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Local }));
     syntax__ast__Expr* init = (v)->init;
-    if ((semantics__analyzer__declarations__isByteArrayRef((v)->type) && ((p_3891 = (syntax__ast__Placed*)lar_as_class((void*)(init), &lar_class_syntax__ast__Placed)) != NULL)) && ((p_3891)->mode == 1)) {
-        semantics__analyzer__statements__declareHeapMemory(v, p_3891, kind, global);
+    if ((semantics__analyzer__declarations__isByteArrayRef((v)->type) && ((p_3884 = (syntax__ast__Placed*)lar_as_class((void*)(init), &lar_class_syntax__ast__Placed)) != NULL)) && ((p_3884)->mode == 1)) {
+        semantics__analyzer__statements__declareHeapMemory(v, p_3884, kind, global);
         return;
     }
     LarMemory line32000316_temps = lar_memory_growable();
@@ -27177,14 +27150,14 @@ void semantics__analyzer__statements__analyzeVarDecl(syntax__ast__VarDecl* v) {
         (s)->region = semantics__types__variableRegion(NULL, s);
     }
     (v)->_super._super.symbol = s;
-    if (((((((t)->kind).tag == (((semantics__types__TypeKind){ .tag = semantics__types__TypeKind_Array })).tag) && ((const void*)(((semantics__types__Type*)lar_unwrap((void*)((t)->elem), LINE(32000349)))) == (const void*)(semantics__types__T_BYTE))) && (((t)->arrayKind).tag == (((semantics__types__ArrayKind){ .tag = semantics__types__ArrayKind_Fixed })).tag)) && ((a_3897 = (syntax__ast__ArrayLit*)lar_as_class((void*)(init), &lar_class_syntax__ast__ArrayLit)) != NULL)) && (((a_3897)->elems)->length == 0)) {
+    if (((((((t)->kind).tag == (((semantics__types__TypeKind){ .tag = semantics__types__TypeKind_Array })).tag) && ((const void*)(((semantics__types__Type*)lar_unwrap((void*)((t)->elem), LINE(32000349)))) == (const void*)(semantics__types__T_BYTE))) && (((t)->arrayKind).tag == (((semantics__types__ArrayKind){ .tag = semantics__types__ArrayKind_Fixed })).tag)) && ((a_3890 = (syntax__ast__ArrayLit*)lar_as_class((void*)(init), &lar_class_syntax__ast__ArrayLit)) != NULL)) && (((a_3890)->elems)->length == 0)) {
         (s)->memoryCandidate = true;
     }
 }
 
 void semantics__analyzer__statements__declareHeapMemory(syntax__ast__VarDecl* v, syntax__ast__Placed* p, semantics__types__SymbolKind kind, bool global) {
-    syntax__ast__ArrayLit* a_3902 = NULL;
-    if ((!(((a_3902 = (syntax__ast__ArrayLit*)lar_as_class((void*)((p)->expr), &lar_class_syntax__ast__ArrayLit)) != NULL))) || (((a_3902)->elems)->length > 0)) {
+    syntax__ast__ArrayLit* a_3895 = NULL;
+    if ((!(((a_3895 = (syntax__ast__ArrayLit*)lar_as_class((void*)((p)->expr), &lar_class_syntax__ast__ArrayLit)) != NULL))) || (((a_3895)->elems)->length > 0)) {
         semantics__analyzer__error((v)->_super._super.line, lar_string("A memory in the heap starts empty: let m: byte[*] = [] in heap;", 63));
     }
     syntax__ast__TypeRef* tr = (v)->type;
@@ -27214,28 +27187,28 @@ void semantics__analyzer__statements__declareHeapMemory(syntax__ast__VarDecl* v,
 }
 
 void semantics__analyzer__statements__analyzeAssign(syntax__ast__AssignStmt* asg) {
-    syntax__ast__Ident* id_3915 = NULL;
-    syntax__ast__Member* m_3917 = NULL;
-    syntax__ast__Member* m_3918 = NULL;
-    syntax__ast__Index* x_3921 = NULL;
+    syntax__ast__Ident* id_3908 = NULL;
+    syntax__ast__Member* m_3910 = NULL;
+    syntax__ast__Member* m_3911 = NULL;
+    syntax__ast__Index* x_3914 = NULL;
     syntax__ast__Expr* target = (asg)->target;
     semantics__types__Type* tt = semantics__types__T_ERROR;
     semantics__types__Region* storage = semantics__types__R_STATIC;
     semantics__types__Place* place = semantics__types__P_TEMP;
     semantics__types__Symbol* root = NULL;
     semantics__analyzer__MutK mk = ((semantics__analyzer__MutK){ .tag = semantics__analyzer__MutK_Field });
-    if ((id_3915 = (syntax__ast__Ident*)lar_as_class((void*)(target), &lar_class_syntax__ast__Ident)) != NULL) {
-        semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3915)->name);
+    if ((id_3908 = (syntax__ast__Ident*)lar_as_class((void*)(target), &lar_class_syntax__ast__Ident)) != NULL) {
+        semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_3908)->name);
         if (s == NULL) {
             LarMemory line32000387_temps = lar_memory_growable();
             LarTextBuilder text_2 = lar_text_builder_mem(&line32000387_temps, LINE(32000387));
             lar_text_builder_add(&text_2, "Use of undeclared variable '", 28);
-            lar_text_builder_str(&text_2, (id_3915)->name);
+            lar_text_builder_str(&text_2, (id_3908)->name);
             lar_text_builder_add(&text_2, "'.", 2);
-            semantics__analyzer__error((id_3915)->_super._super.line, lar_text_builder_finish(&text_2));
+            semantics__analyzer__error((id_3908)->_super._super.line, lar_text_builder_finish(&text_2));
             lar_memory_free(&line32000387_temps);
         } else {
-            (id_3915)->_super._super.symbol = s;
+            (id_3908)->_super._super.symbol = s;
             if (((s)->kind).tag == (((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Function })).tag) {
                 LarMemory line32000391_temps = lar_memory_growable();
                 LarTextBuilder text_3 = lar_text_builder_mem(&line32000391_temps, LINE(32000391));
@@ -27272,9 +27245,9 @@ void semantics__analyzer__statements__analyzeAssign(syntax__ast__AssignStmt* asg
                             semantics__analyzer__error((asg)->_super._super.line, lar_text_builder_finish(&text_6));
                             lar_memory_free(&line32000397_temps);
                         } else {
-                            semantics__analyzer__noteCapture(s, (id_3915)->_super._super.line);
+                            semantics__analyzer__noteCapture(s, (id_3908)->_super._super.line);
                             if ((((s)->kind).tag == (((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Global })).tag) && ((s)->externValue == NULL)) {
-                                semantics__analyzer__threads__useGlobal(s, (id_3915)->_super._super.line);
+                                semantics__analyzer__threads__useGlobal(s, (id_3908)->_super._super.line);
                             }
                             tt = (s)->type;
                             storage = ((((s)->kind).tag == (((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Global })).tag) ? semantics__types__R_STATIC : (s)->region);
@@ -27300,25 +27273,25 @@ void semantics__analyzer__statements__analyzeAssign(syntax__ast__AssignStmt* asg
                             }
                             root = s;
                             mk = ((semantics__analyzer__MutK){ .tag = semantics__analyzer__MutK_Reassign });
-                            (id_3915)->_super._super.ty = tt;
+                            (id_3908)->_super._super.ty = tt;
                         }
                     }
                 }
             }
         }
     } else {
-        if (((m_3917 = (syntax__ast__Member*)lar_as_class((void*)(target), &lar_class_syntax__ast__Member)) != NULL) && semantics__analyzer__statements__memberIsAnyKey(m_3917)) {
+        if (((m_3910 = (syntax__ast__Member*)lar_as_class((void*)(target), &lar_class_syntax__ast__Member)) != NULL) && semantics__analyzer__statements__memberIsAnyKey(m_3910)) {
             tt = semantics__types__T_ANY;
-            storage = semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((m_3917)->object)));
+            storage = semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((m_3910)->object)));
             LarMemory* place_3 = &lar_default_memory;
             semantics__types__Place* new_semantics__types__Place_2 = (semantics__types__Place*)lar_memory_alloc(place_3, sizeof(semantics__types__Place), LINE(32000415));
-            *new_semantics__types__Place_2 = (semantics__types__Place){ .header = { (const void*)&methods_semantics__types__Place, place_3 }, .kind = ((semantics__types__PlaceKind){ .tag = semantics__types__PlaceKind_OfAny }), .memory = NULL, .bytes = 0LL, .expr = (m_3917)->object, .scope = NULL };
+            *new_semantics__types__Place_2 = (semantics__types__Place){ .header = { (const void*)&methods_semantics__types__Place, place_3 }, .kind = ((semantics__types__PlaceKind){ .tag = semantics__types__PlaceKind_OfAny }), .memory = NULL, .bytes = 0LL, .expr = (m_3910)->object, .scope = NULL };
             place = new_semantics__types__Place_2;
-            root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(m_3917)));
+            root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(m_3910)));
         } else {
-            if ((m_3918 = (syntax__ast__Member*)lar_as_class((void*)(target), &lar_class_syntax__ast__Member)) != NULL) {
-                tt = semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)(m_3918)));
-                semantics__types__MemberInfo* mi = (m_3918)->_super._super.member;
+            if ((m_3911 = (syntax__ast__Member*)lar_as_class((void*)(target), &lar_class_syntax__ast__Member)) != NULL) {
+                tt = semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)(m_3911)));
+                semantics__types__MemberInfo* mi = (m_3911)->_super._super.member;
                 if (((!(mi == NULL)) && (((mi)->kind).tag == (((semantics__types__MemberKind){ .tag = semantics__types__MemberKind_Field })).tag)) && semantics__types__isClass(((semantics__types__Type*)lar_unwrap((void*)((mi)->objectType), LINE(32000420))))) {
                     semantics__types__ClassInfo* classInfo = semantics__types__classOf(NULL, (((semantics__types__Type*)lar_unwrap((void*)((mi)->objectType), LINE(32000421))))->name);
                     if ((!(classInfo == NULL)) && (classInfo)->thread) {
@@ -27329,7 +27302,7 @@ void semantics__analyzer__statements__analyzeAssign(syntax__ast__AssignStmt* asg
                     LarMemory line32000425_temps = lar_memory_growable();
                     LarTextBuilder text_8 = lar_text_builder_mem(&line32000425_temps, LINE(32000425));
                     lar_text_builder_add(&text_8, "Field '", 7);
-                    lar_text_builder_str(&text_8, (m_3918)->name);
+                    lar_text_builder_str(&text_8, (m_3911)->name);
                     lar_text_builder_add(&text_8, "' is a C string: it is read (a view of C's text), not assigned.", 63);
                     semantics__analyzer__error((asg)->_super._super.line, lar_text_builder_finish(&text_8));
                     lar_memory_free(&line32000425_temps);
@@ -27341,39 +27314,39 @@ void semantics__analyzer__statements__analyzeAssign(syntax__ast__AssignStmt* asg
                         }
                         tt = semantics__types__T_ERROR;
                     } else {
-                        storage = semantics__analyzer__compact__storageRegion(NULL, (m_3918)->object);
-                        place = semantics__analyzer__compact__placeFor(NULL, (m_3918)->object);
-                        root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(m_3918)));
-                        if (((!(semantics__analyzer__compact__isLValue((m_3918)->object))) && (!(semantics__analyzer__compact__isReference(semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)((m_3918)->object))))))) && (!(semantics__types__isPtr(((semantics__types__Type*)lar_unwrap((void*)((mi)->objectType), LINE(32000434))))))) {
+                        storage = semantics__analyzer__compact__storageRegion(NULL, (m_3911)->object);
+                        place = semantics__analyzer__compact__placeFor(NULL, (m_3911)->object);
+                        root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(m_3911)));
+                        if (((!(semantics__analyzer__compact__isLValue((m_3911)->object))) && (!(semantics__analyzer__compact__isReference(semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)((m_3911)->object))))))) && (!(semantics__types__isPtr(((semantics__types__Type*)lar_unwrap((void*)((mi)->objectType), LINE(32000434))))))) {
                             semantics__analyzer__error((asg)->_super._super.line, lar_string("Cannot assign to a field of a temporary value; store it in a variable first.", 76));
                         }
                     }
                 }
             } else {
-                if ((x_3921 = (syntax__ast__Index*)lar_as_class((void*)(target), &lar_class_syntax__ast__Index)) != NULL) {
-                    tt = semantics__expressions__check(NULL, ((syntax__ast__Expr*)(x_3921)), NULL, semantics__types__P_TEMP);
-                    semantics__types__Type* ot = semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)((x_3921)->object)));
-                    storage = semantics__analyzer__compact__storageRegion(NULL, (x_3921)->object);
+                if ((x_3914 = (syntax__ast__Index*)lar_as_class((void*)(target), &lar_class_syntax__ast__Index)) != NULL) {
+                    tt = semantics__expressions__check(NULL, ((syntax__ast__Expr*)(x_3914)), NULL, semantics__types__P_TEMP);
+                    semantics__types__Type* ot = semantics__expressions__conversions__typeOf(NULL, ((syntax__ast__Node*)((x_3914)->object)));
+                    storage = semantics__analyzer__compact__storageRegion(NULL, (x_3914)->object);
                     if ((const void*)(ot) == (const void*)(semantics__types__T_STRING)) {
                         semantics__analyzer__error((asg)->_super._super.line, lar_string("A String cannot be changed; build a new one (replace, substring, a StringBuilder or interpolation).", 99));
                     }
                     if ((const void*)(ot) == (const void*)(semantics__types__T_ANY)) {
                         LarMemory* place_4 = &lar_default_memory;
                         semantics__types__Place* new_semantics__types__Place_3 = (semantics__types__Place*)lar_memory_alloc(place_4, sizeof(semantics__types__Place), LINE(32000444));
-                        *new_semantics__types__Place_3 = (semantics__types__Place){ .header = { (const void*)&methods_semantics__types__Place, place_4 }, .kind = ((semantics__types__PlaceKind){ .tag = semantics__types__PlaceKind_OfAny }), .memory = NULL, .bytes = 0LL, .expr = (x_3921)->object, .scope = NULL };
+                        *new_semantics__types__Place_3 = (semantics__types__Place){ .header = { (const void*)&methods_semantics__types__Place, place_4 }, .kind = ((semantics__types__PlaceKind){ .tag = semantics__types__PlaceKind_OfAny }), .memory = NULL, .bytes = 0LL, .expr = (x_3914)->object, .scope = NULL };
                         place = new_semantics__types__Place_3;
                     } else {
                         if (semantics__types__isArray(ot, ((semantics__types__ArrayKind){ .tag = semantics__types__ArrayKind_Growable }))) {
                             LarMemory* place_5 = &lar_default_memory;
                             semantics__types__Place* new_semantics__types__Place_4 = (semantics__types__Place*)lar_memory_alloc(place_5, sizeof(semantics__types__Place), LINE(32000446));
-                            *new_semantics__types__Place_4 = (semantics__types__Place){ .header = { (const void*)&methods_semantics__types__Place, place_5 }, .kind = ((semantics__types__PlaceKind){ .tag = semantics__types__PlaceKind_OfList }), .memory = NULL, .bytes = 0LL, .expr = (x_3921)->object, .scope = NULL };
+                            *new_semantics__types__Place_4 = (semantics__types__Place){ .header = { (const void*)&methods_semantics__types__Place, place_5 }, .kind = ((semantics__types__PlaceKind){ .tag = semantics__types__PlaceKind_OfList }), .memory = NULL, .bytes = 0LL, .expr = (x_3914)->object, .scope = NULL };
                             place = new_semantics__types__Place_4;
                         } else {
-                            place = semantics__analyzer__compact__placeFor(NULL, (x_3921)->object);
+                            place = semantics__analyzer__compact__placeFor(NULL, (x_3914)->object);
                         }
                     }
-                    root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(x_3921)));
-                    if ((!(semantics__analyzer__compact__isLValue((x_3921)->object))) && (!(semantics__analyzer__compact__isReference(ot)))) {
+                    root = semantics__analyzer__compact__rootSymbol(NULL, ((syntax__ast__Expr*)(x_3914)));
+                    if ((!(semantics__analyzer__compact__isLValue((x_3914)->object))) && (!(semantics__analyzer__compact__isReference(ot)))) {
                         semantics__analyzer__error((asg)->_super._super.line, lar_string("Cannot assign to an element of a temporary array; store it in a variable first.", 79));
                     }
                 } else {
@@ -27424,27 +27397,27 @@ bool semantics__analyzer__statements__memberIsAnyKey(syntax__ast__Member* m) {
 }
 
 LarString semantics__analyzer__statements__describeTarget(LarMemory* lar_result_memory, syntax__ast__Expr* t) {
-    syntax__ast__Ident* id_3930 = NULL;
-    syntax__ast__Member* m_3931 = NULL;
-    if ((id_3930 = (syntax__ast__Ident*)lar_as_class((void*)(t), &lar_class_syntax__ast__Ident)) != NULL) {
+    syntax__ast__Ident* id_3923 = NULL;
+    syntax__ast__Member* m_3924 = NULL;
+    if ((id_3923 = (syntax__ast__Ident*)lar_as_class((void*)(t), &lar_class_syntax__ast__Ident)) != NULL) {
         LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(32000480));
         lar_text_builder_add(&text, "'", 1);
-        lar_text_builder_str(&text, (id_3930)->name);
+        lar_text_builder_str(&text, (id_3923)->name);
         lar_text_builder_add(&text, "'", 1);
         return lar_text_builder_finish(&text);
     }
-    if ((m_3931 = (syntax__ast__Member*)lar_as_class((void*)(t), &lar_class_syntax__ast__Member)) != NULL) {
+    if ((m_3924 = (syntax__ast__Member*)lar_as_class((void*)(t), &lar_class_syntax__ast__Member)) != NULL) {
         LarString value;
-        if ((!((m_3931)->_super._super.member == NULL)) && (((((semantics__types__MemberInfo*)lar_unwrap((void*)((m_3931)->_super._super.member), LINE(32000481))))->kind).tag == (((semantics__types__MemberKind){ .tag = semantics__types__MemberKind_AnyKey })).tag)) {
+        if ((!((m_3924)->_super._super.member == NULL)) && (((((semantics__types__MemberInfo*)lar_unwrap((void*)((m_3924)->_super._super.member), LINE(32000481))))->kind).tag == (((semantics__types__MemberKind){ .tag = semantics__types__MemberKind_AnyKey })).tag)) {
             LarTextBuilder text_2 = lar_text_builder_mem(lar_result_memory, LINE(32000481));
             lar_text_builder_add(&text_2, "entry '", 7);
-            lar_text_builder_str(&text_2, (m_3931)->name);
+            lar_text_builder_str(&text_2, (m_3924)->name);
             lar_text_builder_add(&text_2, "'", 1);
             value = lar_text_builder_finish(&text_2);
         } else {
             LarTextBuilder text_3 = lar_text_builder_mem(lar_result_memory, LINE(32000481));
             lar_text_builder_add(&text_3, "field '", 7);
-            lar_text_builder_str(&text_3, (m_3931)->name);
+            lar_text_builder_str(&text_3, (m_3924)->name);
             lar_text_builder_add(&text_3, "'", 1);
             value = lar_text_builder_finish(&text_3);
         }
@@ -28021,20 +27994,20 @@ semantics__types__Type* semantics__expressions__checkIntValue(LarMemory* lar_res
     } else {
         value = (v)->text;
     }
-    LarString text_3993 = value;
+    LarString text_3986 = value;
     if (((((const void*)(p) == (const void*)(semantics__types__T_INT32)) && ((t == NULL) || (!(semantics__types__isInteger(t))))) && (!((v)->big))) && (!((v)->huge))) {
         LarMemory line31000216_temps = lar_memory_growable();
         LarTextBuilder text_3 = lar_text_builder_mem(&line31000216_temps, LINE(31000216));
-        lar_text_builder_str(&text_3, text_3993);
+        lar_text_builder_str(&text_3, text_3986);
         lar_text_builder_add(&text_3, " does not fit in int32; give it a type, e.g. let n: int64 = ", 60);
-        lar_text_builder_str(&text_3, text_3993);
+        lar_text_builder_str(&text_3, text_3986);
         lar_text_builder_add(&text_3, ";", 1);
         semantics__analyzer__error(line, lar_text_builder_finish(&text_3));
         lar_memory_free(&line31000216_temps);
     } else {
         LarMemory line31000218_temps = lar_memory_growable();
         LarTextBuilder text_4 = lar_text_builder_mem(&line31000218_temps, LINE(31000218));
-        lar_text_builder_str(&text_4, text_3993);
+        lar_text_builder_str(&text_4, text_3986);
         lar_text_builder_add(&text_4, " does not fit in ", 17);
         lar_text_builder_str(&text_4, (p)->text);
         lar_text_builder_add(&text_4, " (", 2);
@@ -28216,27 +28189,27 @@ LarString semantics__expressions__variantFieldNames(LarMemory* lar_result_memory
 
 LarString semantics__expressions__typeNamed(LarMemory* lar_result_memory, syntax__ast__Expr* e) {
     (void)lar_result_memory;
-    syntax__ast__Ident* id_4018 = NULL;
-    if ((!(((id_4018 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL))) || (!(semantics__analyzer__lookup(NULL, (id_4018)->name) == NULL))) {
+    syntax__ast__Ident* id_4011 = NULL;
+    if ((!(((id_4011 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL))) || (!(semantics__analyzer__lookup(NULL, (id_4011)->name) == NULL))) {
         return lar_string("", 0);
     }
-    LarString n = (id_4018)->name;
+    LarString n = (id_4011)->name;
     return (((((((!(semantics__types__structOf(NULL, n) == NULL)) || (!(semantics__types__classOf(NULL, n) == NULL))) || (!(semantics__types__interfaceOf(NULL, n) == NULL))) || (!(semantics__types__enumOf(NULL, n) == NULL))) || (!(semantics__types__primByName(NULL, n) == NULL))) || semantics__types__isExternTypeName(n)) ? n : lar_string("", 0));
 }
 
 semantics__types__EnumInfo* semantics__expressions__enumNamed(LarMemory* lar_result_memory, syntax__ast__Expr* e) {
     (void)lar_result_memory;
-    syntax__ast__Ident* id_4021 = NULL;
-    return ((((id_4021 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL) && (semantics__analyzer__lookup(NULL, (id_4021)->name) == NULL)) ? semantics__types__enumOf(NULL, (id_4021)->name) : NULL);
+    syntax__ast__Ident* id_4014 = NULL;
+    return ((((id_4014 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL) && (semantics__analyzer__lookup(NULL, (id_4014)->name) == NULL)) ? semantics__types__enumOf(NULL, (id_4014)->name) : NULL);
 }
 
 semantics__types__Symbol* semantics__expressions__memoryNamed(LarMemory* lar_result_memory, syntax__ast__Expr* e) {
     (void)lar_result_memory;
-    syntax__ast__Ident* id_4023 = NULL;
-    if (!(((id_4023 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL))) {
+    syntax__ast__Ident* id_4016 = NULL;
+    if (!(((id_4016 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL))) {
         return NULL;
     }
-    semantics__types__Symbol* symbol = semantics__analyzer__lookup(NULL, (id_4023)->name);
+    semantics__types__Symbol* symbol = semantics__analyzer__lookup(NULL, (id_4016)->name);
     return (((!(symbol == NULL)) && semantics__types__isMemory(symbol)) ? symbol : NULL);
 }
 
@@ -28441,8 +28414,8 @@ semantics__types__Type* semantics__expressions__checkMember(LarMemory* lar_resul
     semantics__types__MethodInfo* parentMethod = semantics__expressions__methodOf(NULL, ot, (m)->name);
     if ((!(parentMethod == NULL)) && ((parentMethod)->decl)->isProperty) {
         semantics__types__Type* paramType = ((semantics__types__Type*)lar_unwrap((void*)((((semantics__types__Type*)lar_unwrap((void*)((parentMethod)->sig), LINE(31000402))))->elem), LINE(31000402)));
-        bool text_4039 = (((const void*)(paramType) == (const void*)(semantics__types__T_STRING)) || ((const void*)(paramType) == (const void*)(semantics__types__optionalOf(NULL, semantics__types__T_STRING))));
-        if (semantics__expressions__conversions__hasRefs(paramType) && (!(text_4039))) {
+        bool text_4032 = (((const void*)(paramType) == (const void*)(semantics__types__T_STRING)) || ((const void*)(paramType) == (const void*)(semantics__types__optionalOf(NULL, semantics__types__T_STRING))));
+        if (semantics__expressions__conversions__hasRefs(paramType) && (!(text_4032))) {
             LarMemory line31000404_temps = lar_memory_growable();
             LarTextBuilder text_11 = lar_text_builder_mem(&line31000404_temps, LINE(31000404));
             lar_text_builder_add(&text_11, "A native let gives a number, bool, String or String\? ('", 55);
@@ -28465,7 +28438,7 @@ semantics__types__Type* semantics__expressions__checkMember(LarMemory* lar_resul
         semantics__types__MemberInfo* new_semantics__types__MemberInfo_9 = (semantics__types__MemberInfo*)lar_memory_alloc(place_10, sizeof(semantics__types__MemberInfo), LINE(31000406));
         *new_semantics__types__MemberInfo_9 = (semantics__types__MemberInfo){ .header = { (const void*)&methods_semantics__types__MemberInfo, place_10 }, .kind = ((semantics__types__MemberKind){ .tag = semantics__types__MemberKind_Property }), .field = NULL, .objectType = ot, .enumInfo = NULL, .variant = NULL, .memory = NULL, .stat = lar_string("", 0), .key = lar_string("", 0), .method = parentMethod, .typeName = lar_string("", 0) };
         (m)->_super._super.member = new_semantics__types__MemberInfo_9;
-        if (text_4039) {
+        if (text_4032) {
             (m)->_super._super.place = place;
             semantics__expressions__conversions__setRegion(((syntax__ast__Node*)(m)), semantics__expressions__calls__placedResult(NULL, ((syntax__ast__Expr*)(m)), paramType, place));
         } else {
@@ -28708,7 +28681,7 @@ semantics__types__Place* semantics__expressions__resolvePlacement(LarMemory* lar
 
 semantics__types__Type* semantics__expressions__checkPlaced(LarMemory* lar_result_memory, syntax__ast__Placed* p, semantics__types__Type* expected) {
     (void)lar_result_memory;
-    syntax__ast__Binary* b_4067 = NULL;
+    syntax__ast__Binary* b_4060 = NULL;
     syntax__ast__Expr* inner = (p)->expr;
     semantics__types__Place* place = semantics__expressions__resolvePlacement(NULL, p);
     if (place == NULL) {
@@ -28718,7 +28691,7 @@ semantics__types__Type* semantics__expressions__checkPlaced(LarMemory* lar_resul
     if (((!(expected == NULL)) && ((const void*)(expected) == (const void*)(semantics__types__T_ANY))) && (semantics__types__isStruct(type) || semantics__types__isEnumT(type))) {
         (inner)->_super.place = place;
     }
-    bool branches = (((lar_as_class((void*)(inner), &lar_class_syntax__ast__Ternary) != NULL) || (lar_as_class((void*)(inner), &lar_class_syntax__ast__SwitchExpr) != NULL)) || (((b_4067 = (syntax__ast__Binary*)lar_as_class((void*)(inner), &lar_class_syntax__ast__Binary)) != NULL) && lar_string_eq((b_4067)->op, lar_string("\?\?", 2))));
+    bool branches = (((lar_as_class((void*)(inner), &lar_class_syntax__ast__Ternary) != NULL) || (lar_as_class((void*)(inner), &lar_class_syntax__ast__SwitchExpr) != NULL)) || (((b_4060 = (syntax__ast__Binary*)lar_as_class((void*)(inner), &lar_class_syntax__ast__Binary)) != NULL) && lar_string_eq((b_4060)->op, lar_string("\?\?", 2))));
     if ((((inner)->_super.place == NULL) && (!(branches))) && (!(semantics__types__isError(type)))) {
         semantics__analyzer__error((p)->_super._super.line, lar_string("'in' has no effect here: this value does not need memory (it is a number, a literal or a plain value).", 102));
     }
@@ -28733,17 +28706,17 @@ semantics__types__Type* semantics__expressions__checkPlaced(LarMemory* lar_resul
 
 semantics__types__Symbol* semantics__expressions__resolveMemory(LarMemory* lar_result_memory, syntax__ast__Expr* e) {
     (void)lar_result_memory;
-    syntax__ast__Ident* id_4071 = NULL;
-    if (!(((id_4071 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL))) {
+    syntax__ast__Ident* id_4064 = NULL;
+    if (!(((id_4064 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL))) {
         semantics__analyzer__error((e)->_super.line, lar_string("After 'in' write a memory variable, 'heap', or byte[N] for a temporary buffer.", 78));
         return NULL;
     }
-    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_4071)->name);
+    semantics__types__Symbol* s = semantics__analyzer__lookup(NULL, (id_4064)->name);
     if (s == NULL) {
         LarMemory line31000528_temps = lar_memory_growable();
         LarTextBuilder text_2 = lar_text_builder_mem(&line31000528_temps, LINE(31000528));
         lar_text_builder_add(&text_2, "Use of undeclared memory '", 26);
-        lar_text_builder_str(&text_2, (id_4071)->name);
+        lar_text_builder_str(&text_2, (id_4064)->name);
         lar_text_builder_add(&text_2, "'.", 2);
         semantics__analyzer__error((e)->_super.line, lar_text_builder_finish(&text_2));
         lar_memory_free(&line31000528_temps);
@@ -29179,13 +29152,13 @@ void semantics__analyzer__compact__resolveRegions(void) {
 
 syntax__ast__Expr* semantics__analyzer__compact__objectOf(LarMemory* lar_result_memory, syntax__ast__Expr* e) {
     (void)lar_result_memory;
-    syntax__ast__Member* m_4113 = NULL;
-    syntax__ast__Index* x_4114 = NULL;
-    if ((m_4113 = (syntax__ast__Member*)lar_as_class((void*)(e), &lar_class_syntax__ast__Member)) != NULL) {
-        return (m_4113)->object;
+    syntax__ast__Member* m_4106 = NULL;
+    syntax__ast__Index* x_4107 = NULL;
+    if ((m_4106 = (syntax__ast__Member*)lar_as_class((void*)(e), &lar_class_syntax__ast__Member)) != NULL) {
+        return (m_4106)->object;
     }
-    if ((x_4114 = (syntax__ast__Index*)lar_as_class((void*)(e), &lar_class_syntax__ast__Index)) != NULL) {
-        return (x_4114)->object;
+    if ((x_4107 = (syntax__ast__Index*)lar_as_class((void*)(e), &lar_class_syntax__ast__Index)) != NULL) {
+        return (x_4107)->object;
     }
     return NULL;
 }
@@ -29307,7 +29280,7 @@ void semantics__analyzer__compact__analyzeReturn(syntax__ast__ReturnStmt* r) {
 }
 
 void semantics__analyzer__compact__analyzeWhen(syntax__ast__IfStmt* ifStmt) {
-    syntax__ast__IfStmt* n_4143 = NULL;
+    syntax__ast__IfStmt* n_4136 = NULL;
     LarString outer = semantics__analyzer__compact__platformCtx;
     semantics__types__Scope* stmtScope = (semantics__analyzer__analysis)->scope;
     semantics__types__Scope* blockScope = semantics__analyzer__block(NULL);
@@ -29326,8 +29299,8 @@ void semantics__analyzer__compact__analyzeWhen(syntax__ast__IfStmt* ifStmt) {
         if (!((cur)->hasElse)) {
             break;
         }
-        if (((((cur)->elseBody)->length == 1) && ((n_4143 = (syntax__ast__IfStmt*)lar_as_class((void*)(((cur)->elseBody)->items[lar_index((int64_t)(0), ((cur)->elseBody)->length, LINE(30000267))]), &lar_class_syntax__ast__IfStmt)) != NULL)) && (n_4143)->chained) {
-            cur = n_4143;
+        if (((((cur)->elseBody)->length == 1) && ((n_4136 = (syntax__ast__IfStmt*)lar_as_class((void*)(((cur)->elseBody)->items[lar_index((int64_t)(0), ((cur)->elseBody)->length, LINE(30000267))]), &lar_class_syntax__ast__IfStmt)) != NULL)) && (n_4136)->chained) {
+            cur = n_4136;
             continue;
         }
         covered = true;
@@ -29851,8 +29824,8 @@ bool semantics__analyzer__flow__creatingMethod(LarString name) {
 
 syntax__ast__Expr* semantics__analyzer__flow__linked(LarMemory* lar_result_memory, syntax__ast__Expr* e) {
     (void)lar_result_memory;
-    syntax__ast__Member* m_4218 = NULL;
-    return ((((m_4218 = (syntax__ast__Member*)lar_as_class((void*)(e), &lar_class_syntax__ast__Member)) != NULL) && (!((m_4218)->replaced == NULL))) ? ((syntax__ast__Expr*)lar_unwrap((void*)((m_4218)->replaced), LINE(29000181))) : e);
+    syntax__ast__Member* m_4211 = NULL;
+    return ((((m_4211 = (syntax__ast__Member*)lar_as_class((void*)(e), &lar_class_syntax__ast__Member)) != NULL) && (!((m_4211)->replaced == NULL))) ? ((syntax__ast__Expr*)lar_unwrap((void*)((m_4211)->replaced), LINE(29000181))) : e);
 }
 
 bool semantics__analyzer__flow__callMemory(semantics__types__FunctionInfo* functionInfo) {
@@ -29944,10 +29917,10 @@ bool semantics__analyzer__flow__lengthIsNumber(LarString name) {
 }
 
 void semantics__analyzer__flow__mentioned(syntax__ast__Expr* e, LarAny out, bool viaPlaced) {
-    syntax__ast__Ident* id_4244 = NULL;
-    syntax__ast__Member* o_4250 = NULL;
-    syntax__ast__Ident* pid_4252 = NULL;
-    syntax__ast__YieldStmt* y_4257 = NULL;
+    syntax__ast__Ident* id_4237 = NULL;
+    syntax__ast__Member* o_4243 = NULL;
+    syntax__ast__Ident* pid_4245 = NULL;
+    syntax__ast__YieldStmt* y_4250 = NULL;
     LarMemory memory = lar_memory_growable();
     List_syntax__ast__Expr* list = List_syntax__ast__Expr_new(&memory, LINE(29000233));
     List_syntax__ast__Expr* items = list;
@@ -29991,8 +29964,8 @@ void semantics__analyzer__flow__mentioned(syntax__ast__Expr* e, LarAny out, bool
                         {
                             List_syntax__ast__Expr* list_4 = (t)->exprs;
                             for (int32_t index_3 = 0; index_3 < list_4->length; index_3++) {
-                                syntax__ast__Expr* x_4242 = list_4->items[index_3];
-                                syntax__ast__exprAll(x_4242, true, skip);
+                                syntax__ast__Expr* x_4235 = list_4->items[index_3];
+                                syntax__ast__exprAll(x_4235, true, skip);
                             }
                         }
                     }
@@ -30003,7 +29976,7 @@ void semantics__analyzer__flow__mentioned(syntax__ast__Expr* e, LarAny out, bool
                 if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__Call)) {
                     syntax__ast__Call* c = (syntax__ast__Call*)subject;
                     {
-                        semantics__types__FunctionInfo* functionInfo = (((id_4244 = (syntax__ast__Ident*)lar_as_class((void*)(semantics__analyzer__flow__linked(NULL, (c)->callee)), &lar_class_syntax__ast__Ident)) != NULL) ? semantics__types__functionOf(NULL, (id_4244)->name) : semantics__analyzer__flow__staticCallee(NULL, c));
+                        semantics__types__FunctionInfo* functionInfo = (((id_4237 = (syntax__ast__Ident*)lar_as_class((void*)(semantics__analyzer__flow__linked(NULL, (c)->callee)), &lar_class_syntax__ast__Ident)) != NULL) ? semantics__types__functionOf(NULL, (id_4237)->name) : semantics__analyzer__flow__staticCallee(NULL, c));
                         if ((!(functionInfo == NULL)) && ((!((functionInfo)->isExtern)) || semantics__analyzer__flow__callMemory(functionInfo))) {
                             {
                                 List_syntax__ast__Expr* list_5 = (c)->args;
@@ -30030,13 +30003,13 @@ void semantics__analyzer__flow__mentioned(syntax__ast__Expr* e, LarAny out, bool
                                 syntax__ast__exprAll(((syntax__ast__Expr*)(m)), true, skip);
                             }
                         } else {
-                            if ((((!lar_string_eq(semantics__analyzer__flow__flowSelfClass, lar_string("", 0))) && lar_string_eq((m)->name, lar_string("length", 6))) && ((o_4250 = (syntax__ast__Member*)lar_as_class((void*)((m)->object), &lar_class_syntax__ast__Member)) != NULL)) && (lar_as_class((void*)((o_4250)->object), &lar_class_syntax__ast__SelfExpr) != NULL)) {
-                                semantics__types__FieldInfo* field = semantics__types__findField(NULL, semantics__analyzer__flow__flowSelfClass, (o_4250)->name);
+                            if ((((!lar_string_eq(semantics__analyzer__flow__flowSelfClass, lar_string("", 0))) && lar_string_eq((m)->name, lar_string("length", 6))) && ((o_4243 = (syntax__ast__Member*)lar_as_class((void*)((m)->object), &lar_class_syntax__ast__Member)) != NULL)) && (lar_as_class((void*)((o_4243)->object), &lar_class_syntax__ast__SelfExpr) != NULL)) {
+                                semantics__types__FieldInfo* field = semantics__types__findField(NULL, semantics__analyzer__flow__flowSelfClass, (o_4243)->name);
                                 if ((!(field == NULL)) && (((const void*)((field)->type) == (const void*)(semantics__types__T_STRING)) || ((((field)->type)->kind).tag == (((semantics__types__TypeKind){ .tag = semantics__types__TypeKind_Array })).tag))) {
                                     syntax__ast__exprAll(((syntax__ast__Expr*)(m)), true, skip);
                                 }
                             } else {
-                                if ((lar_string_eq((m)->name, lar_string("length", 6)) && ((pid_4252 = (syntax__ast__Ident*)lar_as_class((void*)((m)->object), &lar_class_syntax__ast__Ident)) != NULL)) && semantics__analyzer__flow__lengthIsNumber((pid_4252)->name)) {
+                                if ((lar_string_eq((m)->name, lar_string("length", 6)) && ((pid_4245 = (syntax__ast__Ident*)lar_as_class((void*)((m)->object), &lar_class_syntax__ast__Ident)) != NULL)) && semantics__analyzer__flow__lengthIsNumber((pid_4245)->name)) {
                                     syntax__ast__exprAll(((syntax__ast__Expr*)(m)), true, skip);
                                 }
                             }
@@ -30067,8 +30040,8 @@ void semantics__analyzer__flow__mentioned(syntax__ast__Expr* e, LarAny out, bool
                                     List_syntax__ast__Stmt* list_8 = stmts;
                                     for (int32_t index_6 = 0; index_6 < list_8->length; index_6++) {
                                         syntax__ast__Stmt* st = list_8->items[index_6];
-                                        if ((y_4257 = (syntax__ast__YieldStmt*)lar_as_class((void*)(st), &lar_class_syntax__ast__YieldStmt)) != NULL) {
-                                            semantics__analyzer__flow__mentioned((y_4257)->value, out, viaPlaced);
+                                        if ((y_4250 = (syntax__ast__YieldStmt*)lar_as_class((void*)(st), &lar_class_syntax__ast__YieldStmt)) != NULL) {
+                                            semantics__analyzer__flow__mentioned((y_4250)->value, out, viaPlaced);
                                         }
                                     }
                                 }
@@ -30198,8 +30171,8 @@ bool semantics__analyzer__flow__returnsArgs(List_syntax__ast__Param* params, Lis
 }
 
 LarAny semantics__analyzer__flow__flowNames(LarMemory* lar_result_memory, List_syntax__ast__Stmt* body, bool viaPlaced) {
-    syntax__ast__ReturnStmt* r_4280 = NULL;
-    syntax__ast__Member* m_4288 = NULL;
+    syntax__ast__ReturnStmt* r_4273 = NULL;
+    syntax__ast__Member* m_4281 = NULL;
     LarMemory memory = lar_memory_growable();
     LarTable* table = lar_table_new(lar_result_memory, LINE(29000320));
     LarAny flow = lar_any_t(table);
@@ -30213,8 +30186,8 @@ LarAny semantics__analyzer__flow__flowNames(LarMemory* lar_result_memory, List_s
         List_syntax__ast__Stmt* list_3 = stmts;
         for (int32_t index = 0; index < list_3->length; index++) {
             syntax__ast__Stmt* s = list_3->items[index];
-            if (((r_4280 = (syntax__ast__ReturnStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__ReturnStmt)) != NULL) && (!((r_4280)->value == NULL))) {
-                semantics__analyzer__flow__mentioned(((syntax__ast__Expr*)lar_unwrap((void*)((r_4280)->value), LINE(29000326))), flow, viaPlaced);
+            if (((r_4273 = (syntax__ast__ReturnStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__ReturnStmt)) != NULL) && (!((r_4273)->value == NULL))) {
+                semantics__analyzer__flow__mentioned(((syntax__ast__Expr*)lar_unwrap((void*)((r_4273)->value), LINE(29000326))), flow, viaPlaced);
             }
         }
     }
@@ -30278,7 +30251,7 @@ LarAny semantics__analyzer__flow__flowNames(LarMemory* lar_result_memory, List_s
                     if (lar_is_a(lar_object_class(subject_3), &lar_class_syntax__ast__Call)) {
                         syntax__ast__Call* c = (syntax__ast__Call*)subject_3;
                         {
-                            if ((((m_4288 = (syntax__ast__Member*)lar_as_class((void*)((c)->callee), &lar_class_syntax__ast__Member)) != NULL) && lar_any_contains(flow, lar_any_s(semantics__analyzer__flow__rootName(NULL, (m_4288)->object)))) && (lar_string_eq((m_4288)->name, lar_string("push", 4)) || (!(semantics__analyzer__flow__builtinFresh((m_4288)->name))))) {
+                            if ((((m_4281 = (syntax__ast__Member*)lar_as_class((void*)((c)->callee), &lar_class_syntax__ast__Member)) != NULL) && lar_any_contains(flow, lar_any_s(semantics__analyzer__flow__rootName(NULL, (m_4281)->object)))) && (lar_string_eq((m_4281)->name, lar_string("push", 4)) || (!(semantics__analyzer__flow__builtinFresh((m_4281)->name))))) {
                                 {
                                     List_syntax__ast__Expr* list_6 = (c)->args;
                                     for (int32_t index_4 = 0; index_4 < list_6->length; index_4++) {
@@ -30396,8 +30369,8 @@ bool semantics__analyzer__flow__isDeclared(semantics__analyzer__flow__Declared* 
 }
 
 bool semantics__analyzer__flow__createsResult(List_syntax__ast__Stmt* body, semantics__types__Type* ret, List_syntax__ast__Param* params) {
-    syntax__ast__VarDecl* v_4315 = NULL;
-    syntax__ast__Ident* id_4320 = NULL;
+    syntax__ast__VarDecl* v_4308 = NULL;
+    syntax__ast__Ident* id_4313 = NULL;
     LarMemory memory = lar_memory_growable();
     if (!(semantics__expressions__conversions__hasRefs(ret))) {
         bool result = false;
@@ -30427,9 +30400,9 @@ bool semantics__analyzer__flow__createsResult(List_syntax__ast__Stmt* body, sema
         List_syntax__ast__Stmt* list_5 = stmts;
         for (int32_t index_2 = 0; index_2 < list_5->length; index_2++) {
             syntax__ast__Stmt* s = list_5->items[index_2];
-            if ((v_4315 = (syntax__ast__VarDecl*)lar_as_class((void*)(s), &lar_class_syntax__ast__VarDecl)) != NULL) {
-                List_s_push((declared)->names, (v_4315)->name);
-                List_Osyntax__ast__TypeRef_push((declared)->types, (v_4315)->type);
+            if ((v_4308 = (syntax__ast__VarDecl*)lar_as_class((void*)(s), &lar_class_syntax__ast__VarDecl)) != NULL) {
+                List_s_push((declared)->names, (v_4308)->name);
+                List_Osyntax__ast__TypeRef_push((declared)->types, (v_4308)->type);
             }
         }
     }
@@ -30457,7 +30430,7 @@ bool semantics__analyzer__flow__createsResult(List_syntax__ast__Stmt* body, sema
             {
                 if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__AssignStmt)) {
                     syntax__ast__AssignStmt* a = (syntax__ast__AssignStmt*)subject;
-                    value_2 = (((((id_4320 = (syntax__ast__Ident*)lar_as_class((void*)((a)->target), &lar_class_syntax__ast__Ident)) != NULL) && lar_any_contains(flow, lar_any_s((id_4320)->name))) && semantics__analyzer__flow__refsOf(semantics__analyzer__flow__declaredType(NULL, declared, (id_4320)->name))) ? (a)->value : NULL);
+                    value_2 = (((((id_4313 = (syntax__ast__Ident*)lar_as_class((void*)((a)->target), &lar_class_syntax__ast__Ident)) != NULL) && lar_any_contains(flow, lar_any_s((id_4313)->name))) && semantics__analyzer__flow__refsOf(semantics__analyzer__flow__declaredType(NULL, declared, (id_4313)->name))) ? (a)->value : NULL);
                     goto switch_end;
                 }
             }
@@ -30731,7 +30704,7 @@ bool semantics__analyzer__flow__switchCreates(syntax__ast__SwitchExpr* switchExp
 }
 
 bool semantics__analyzer__flow__yieldsCreate(List_syntax__ast__Stmt* block, bool any, semantics__analyzer__flow__Declared* declared) {
-    syntax__ast__YieldStmt* y_4357 = NULL;
+    syntax__ast__YieldStmt* y_4350 = NULL;
     LarMemory memory = lar_memory_growable();
     List_syntax__ast__Stmt* list = List_syntax__ast__Stmt_new(&memory, LINE(29000495));
     List_syntax__ast__Stmt* stmts = list;
@@ -30740,7 +30713,7 @@ bool semantics__analyzer__flow__yieldsCreate(List_syntax__ast__Stmt* block, bool
         List_syntax__ast__Stmt* list_2 = stmts;
         for (int32_t index = 0; index < list_2->length; index++) {
             syntax__ast__Stmt* s = list_2->items[index];
-            if (((y_4357 = (syntax__ast__YieldStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__YieldStmt)) != NULL) && semantics__analyzer__flow__creates((y_4357)->value, any, declared)) {
+            if (((y_4350 = (syntax__ast__YieldStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__YieldStmt)) != NULL) && semantics__analyzer__flow__creates((y_4350)->value, any, declared)) {
                 bool result = true;
                 lar_memory_free(&memory);
                 return result;
@@ -30754,23 +30727,23 @@ bool semantics__analyzer__flow__yieldsCreate(List_syntax__ast__Stmt* block, bool
 
 semantics__types__FunctionInfo* semantics__analyzer__flow__staticCallee(LarMemory* lar_result_memory, syntax__ast__Call* call) {
     (void)lar_result_memory;
-    syntax__ast__Member* m_4359 = NULL;
-    syntax__ast__Ident* t_4360 = NULL;
-    if ((!(((m_4359 = (syntax__ast__Member*)lar_as_class((void*)(semantics__analyzer__flow__linked(NULL, (call)->callee)), &lar_class_syntax__ast__Member)) != NULL))) || (!(((t_4360 = (syntax__ast__Ident*)lar_as_class((void*)((m_4359)->object), &lar_class_syntax__ast__Ident)) != NULL)))) {
+    syntax__ast__Member* m_4352 = NULL;
+    syntax__ast__Ident* t_4353 = NULL;
+    if ((!(((m_4352 = (syntax__ast__Member*)lar_as_class((void*)(semantics__analyzer__flow__linked(NULL, (call)->callee)), &lar_class_syntax__ast__Member)) != NULL))) || (!(((t_4353 = (syntax__ast__Ident*)lar_as_class((void*)((m_4352)->object), &lar_class_syntax__ast__Ident)) != NULL)))) {
         return NULL;
     }
     LarMemory line29000506_temps = lar_memory_growable();
     LarTextBuilder text = lar_text_builder_mem(&line29000506_temps, LINE(29000506));
-    lar_text_builder_str(&text, (t_4360)->name);
+    lar_text_builder_str(&text, (t_4353)->name);
     lar_text_builder_add(&text, ".", 1);
-    lar_text_builder_str(&text, (m_4359)->name);
+    lar_text_builder_str(&text, (m_4352)->name);
     semantics__types__FunctionInfo* result = semantics__types__functionOf(NULL, lar_text_builder_finish(&text));
     lar_memory_free(&line29000506_temps);
     return result;
 }
 
 bool semantics__analyzer__flow__callCreates(syntax__ast__Call* call, bool any, semantics__analyzer__flow__Declared* declared) {
-    syntax__ast__Ident* cid_4368 = NULL;
+    syntax__ast__Ident* cid_4361 = NULL;
     bool args = false;
     {
         List_syntax__ast__Expr* list = (call)->args;
@@ -30784,7 +30757,7 @@ bool semantics__analyzer__flow__callCreates(syntax__ast__Call* call, bool any, s
     syntax__ast__Expr* callee = semantics__analyzer__flow__linked(NULL, (call)->callee);
     semantics__types__FunctionInfo* sf = semantics__analyzer__flow__staticCallee(NULL, call);
     if ((lar_as_class((void*)(callee), &lar_class_syntax__ast__Ident) != NULL) || (!(sf == NULL))) {
-        LarString fname = (((cid_4368 = (syntax__ast__Ident*)lar_as_class((void*)(callee), &lar_class_syntax__ast__Ident)) != NULL) ? (cid_4368)->name : lar_string("", 0));
+        LarString fname = (((cid_4361 = (syntax__ast__Ident*)lar_as_class((void*)(callee), &lar_class_syntax__ast__Ident)) != NULL) ? (cid_4361)->name : lar_string("", 0));
         if (lar_string_eq(fname, lar_string("print", 5)) || lar_string_eq(fname, lar_string("println", 7))) {
             return false;
         }
@@ -30842,8 +30815,8 @@ bool semantics__analyzer__flow__callCreates(syntax__ast__Call* call, bool any, s
 }
 
 bool semantics__analyzer__flow__methodCreates(syntax__ast__Member* member, syntax__ast__Call* call, bool coarse, bool any, semantics__analyzer__flow__Declared* declared) {
-    syntax__ast__Ident* en_4380 = NULL;
-    if ((((en_4380 = (syntax__ast__Ident*)lar_as_class((void*)((member)->object), &lar_class_syntax__ast__Ident)) != NULL) && (!(semantics__types__enumOf(NULL, (en_4380)->name) == NULL))) && (!(semantics__analyzer__flow__isDeclared(declared, (en_4380)->name)))) {
+    syntax__ast__Ident* en_4373 = NULL;
+    if ((((en_4373 = (syntax__ast__Ident*)lar_as_class((void*)((member)->object), &lar_class_syntax__ast__Ident)) != NULL) && (!(semantics__types__enumOf(NULL, (en_4373)->name) == NULL))) && (!(semantics__analyzer__flow__isDeclared(declared, (en_4373)->name)))) {
         return coarse;
     }
     LarString n = (member)->name;
@@ -31023,10 +30996,10 @@ LarString semantics__analyzer__flow__fill(LarMemory* lar_result_memory, LarStrin
     return result;
 }
 
-void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* deferred, bool resolve_4417) {
-    syntax__ast__Ident* id_4421 = NULL;
-    semantics__types__Region* v = (resolve_4417 ? semantics__types__resolveRegion(NULL, (deferred)->value) : (deferred)->value);
-    semantics__types__Region* st = (resolve_4417 ? semantics__types__resolveRegion(NULL, (deferred)->storage) : (deferred)->storage);
+void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* deferred, bool resolve_4410) {
+    syntax__ast__Ident* id_4414 = NULL;
+    semantics__types__Region* v = (resolve_4410 ? semantics__types__resolveRegion(NULL, (deferred)->value) : (deferred)->value);
+    semantics__types__Region* st = (resolve_4410 ? semantics__types__resolveRegion(NULL, (deferred)->storage) : (deferred)->storage);
     if (((deferred)->kind).tag == (((semantics__analyzer__DefK){ .tag = semantics__analyzer__DefK_ReturnLocal })).tag) {
         bool condition = (((v)->kind).tag == (((semantics__types__RegionKind){ .tag = semantics__types__RegionKind_Local })).tag);
         if (condition) {
@@ -31035,18 +31008,18 @@ void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* deferred
         }
         if (condition) {
             syntax__ast__Expr* e = (deferred)->expr;
-            if ((!(e == NULL)) && ((id_4421 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL)) {
+            if ((!(e == NULL)) && ((id_4414 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL)) {
                 LarMemory line29000624_temps = lar_memory_growable();
                 int32_t value_3 = (deferred)->line;
                 LarTextBuilder text = lar_text_builder_mem(&line29000624_temps, LINE(29000624));
                 lar_text_builder_add(&text, "'", 1);
-                lar_text_builder_str(&text, (id_4421)->name);
+                lar_text_builder_str(&text, (id_4414)->name);
                 lar_text_builder_add(&text, "' lives in ", 11);
                 lar_text_builder_str(&text, semantics__types__describe(&line29000624_temps, v));
                 lar_text_builder_add(&text, ", which is freed when the function returns: return ", 51);
-                lar_text_builder_str(&text, (id_4421)->name);
+                lar_text_builder_str(&text, (id_4414)->name);
                 lar_text_builder_add(&text, ".clone(), or create '", 21);
-                lar_text_builder_str(&text, (id_4421)->name);
+                lar_text_builder_str(&text, (id_4414)->name);
                 lar_text_builder_add(&text, "' without 'in'.", 15);
                 semantics__analyzer__error(value_3, lar_text_builder_finish(&text));
                 lar_memory_free(&line29000624_temps);
@@ -31065,7 +31038,7 @@ void semantics__analyzer__flow__runCheck(semantics__analyzer__Deferred* deferred
     }
     if (!(semantics__types__outlives(v, st))) {
         LarMemory memory_2 = lar_memory_growable();
-        LarString named = semantics__analyzer__flow__culprit(&memory_2, deferred, v, st, resolve_4417);
+        LarString named = semantics__analyzer__flow__culprit(&memory_2, deferred, v, st, resolve_4410);
         LarMemory line29000633_temps = lar_memory_growable();
         int32_t value_5 = (deferred)->line;
         semantics__analyzer__error(value_5, ((!lar_string_eq(named, lar_string("", 0))) ? named : semantics__analyzer__flow__fill(&line29000633_temps, ((((!lar_string_eq((deferred)->forever, lar_string("", 0))) && (((st)->kind).tag == (((semantics__types__RegionKind){ .tag = semantics__types__RegionKind_Static })).tag)) && (((v)->kind).tag == (((semantics__types__RegionKind){ .tag = semantics__types__RegionKind_Local })).tag)) ? (deferred)->forever : (deferred)->msg), v, st)));
@@ -31096,16 +31069,16 @@ LarString semantics__analyzer__flow__placementFor(LarMemory* lar_result_memory, 
     return ((((region)->kind).tag == (((semantics__types__RegionKind){ .tag = semantics__types__RegionKind_Static })).tag) ? lar_string(" in default", 11) : lar_string("", 0));
 }
 
-LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, semantics__analyzer__Deferred* deferred, semantics__types__Region* v, semantics__types__Region* storage, bool resolve_4427) {
-    syntax__ast__Placed* p_4430 = NULL;
-    syntax__ast__ObjectLit* o_4434 = NULL;
-    syntax__ast__Ident* id_4437 = NULL;
-    syntax__ast__Ident* id_4439 = NULL;
-    syntax__ast__Ident* id_4440 = NULL;
-    syntax__ast__Lambda* l_4442 = NULL;
-    syntax__ast__Member* rm_4447 = NULL;
-    syntax__ast__Ident* id_4450 = NULL;
-    syntax__ast__Ident* id_4451 = NULL;
+LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, semantics__analyzer__Deferred* deferred, semantics__types__Region* v, semantics__types__Region* storage, bool resolve_4420) {
+    syntax__ast__Placed* p_4423 = NULL;
+    syntax__ast__ObjectLit* o_4427 = NULL;
+    syntax__ast__Ident* id_4430 = NULL;
+    syntax__ast__Ident* id_4432 = NULL;
+    syntax__ast__Ident* id_4433 = NULL;
+    syntax__ast__Lambda* l_4435 = NULL;
+    syntax__ast__Member* rm_4440 = NULL;
+    syntax__ast__Ident* id_4443 = NULL;
+    syntax__ast__Ident* id_4444 = NULL;
     LarMemory memory_2 = lar_memory_growable();
     syntax__ast__Expr* given = (deferred)->expr;
     if (given == NULL) {
@@ -31114,8 +31087,8 @@ LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, seman
         return result;
     }
     syntax__ast__Expr* e = given;
-    if ((p_4430 = (syntax__ast__Placed*)lar_as_class((void*)(e), &lar_class_syntax__ast__Placed)) != NULL) {
-        e = (p_4430)->expr;
+    if ((p_4423 = (syntax__ast__Placed*)lar_as_class((void*)(e), &lar_class_syntax__ast__Placed)) != NULL) {
+        e = (p_4423)->expr;
     }
     LarString value_2;
     if (!(((storage)->kind).tag == (((semantics__types__RegionKind){ .tag = semantics__types__RegionKind_Static })).tag)) {
@@ -31137,20 +31110,20 @@ LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, seman
     LarString keep = (((((storage)->kind).tag == (((semantics__types__RegionKind){ .tag = semantics__types__RegionKind_Static })).tag) && String_startsWith((deferred)->target, lar_string("'", 1))) ? lar_string(" in default", 11) : lar_string("", 0));
     LarString keepVariable = semantics__analyzer__flow__placementFor(&memory_2, storage);
     if (lar_string_eq((deferred)->role, lar_string("throw", 5))) {
-        if ((o_4434 = (syntax__ast__ObjectLit*)lar_as_class((void*)(e), &lar_class_syntax__ast__ObjectLit)) != NULL) {
+        if ((o_4427 = (syntax__ast__ObjectLit*)lar_as_class((void*)(e), &lar_class_syntax__ast__ObjectLit)) != NULL) {
             {
-                List_syntax__ast__FieldInit* list = (o_4434)->fields;
+                List_syntax__ast__FieldInit* list = (o_4427)->fields;
                 for (int32_t index = 0; index < list->length; index++) {
                     syntax__ast__FieldInit* fi = list->items[index];
-                    semantics__types__Region* r = (resolve_4427 ? semantics__types__resolveRegion(NULL, semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((fi)->value)))) : semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((fi)->value))));
-                    if ((!(semantics__types__outlives(r, semantics__types__R_STATIC))) && ((id_4437 = (syntax__ast__Ident*)lar_as_class((void*)((fi)->value), &lar_class_syntax__ast__Ident)) != NULL)) {
+                    semantics__types__Region* r = (resolve_4420 ? semantics__types__resolveRegion(NULL, semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((fi)->value)))) : semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((fi)->value))));
+                    if ((!(semantics__types__outlives(r, semantics__types__R_STATIC))) && ((id_4430 = (syntax__ast__Ident*)lar_as_class((void*)((fi)->value), &lar_class_syntax__ast__Ident)) != NULL)) {
                         LarTextBuilder text_3 = lar_text_builder_mem(lar_result_memory, LINE(29000666));
                         lar_text_builder_add(&text_3, "An error can travel up to main, so '", 36);
-                        lar_text_builder_str(&text_3, (id_4437)->name);
+                        lar_text_builder_str(&text_3, (id_4430)->name);
                         lar_text_builder_add(&text_3, "' must live the whole program: ", 31);
                         lar_text_builder_str(&text_3, (fi)->name);
                         lar_text_builder_add(&text_3, ": ", 2);
-                        lar_text_builder_str(&text_3, (id_4437)->name);
+                        lar_text_builder_str(&text_3, (id_4430)->name);
                         lar_text_builder_add(&text_3, ".clone() in default", 19);
                         LarString result_2 = lar_text_builder_finish(&text_3);
                         lar_memory_free(&memory_2);
@@ -31165,37 +31138,37 @@ LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, seman
     }
     if (String_startsWith((deferred)->role, lar_string("field ", 6))) {
         LarString field = String_substring((deferred)->role, NULL, 6);
-        if (((id_4439 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL) && semantics__analyzer__flow__isFunctionValue(e)) {
+        if (((id_4432 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL) && semantics__analyzer__flow__isFunctionValue(e)) {
             LarMemory line29000675_temps = lar_memory_growable();
             LarTextBuilder text_4 = lar_text_builder_mem(lar_result_memory, LINE(29000675));
             lar_text_builder_add(&text_4, "Field '", 7);
             lar_text_builder_str(&text_4, field);
             lar_text_builder_add(&text_4, "' gets the function '", 21);
-            lar_text_builder_str(&text_4, (id_4439)->name);
+            lar_text_builder_str(&text_4, (id_4432)->name);
             lar_text_builder_add(&text_4, "', which lives in {v}, but the object lives ", 44);
             lar_text_builder_str(&text_4, lives);
             lar_text_builder_add(&text_4, ". A function cannot be copied with clone(): make '", 50);
-            lar_text_builder_str(&text_4, (id_4439)->name);
+            lar_text_builder_str(&text_4, (id_4432)->name);
             lar_text_builder_add(&text_4, "' live there", 12);
-            lar_text_builder_str(&text_4, semantics__analyzer__flow__parameterHint(&line29000675_temps, (id_4439)->name, storage));
+            lar_text_builder_str(&text_4, semantics__analyzer__flow__parameterHint(&line29000675_temps, (id_4432)->name, storage));
             lar_text_builder_add(&text_4, ".", 1);
             LarString result_4 = semantics__analyzer__flow__fill(lar_result_memory, lar_text_builder_finish(&text_4), v, storage);
             lar_memory_free(&line29000675_temps);
             lar_memory_free(&memory_2);
             return result_4;
         }
-        if ((id_4440 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL) {
+        if ((id_4433 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL) {
             LarTextBuilder text_5 = lar_text_builder_mem(lar_result_memory, LINE(29000678));
             lar_text_builder_add(&text_5, "Field '", 7);
             lar_text_builder_str(&text_5, field);
             lar_text_builder_add(&text_5, "' gets '", 8);
-            lar_text_builder_str(&text_5, (id_4440)->name);
+            lar_text_builder_str(&text_5, (id_4433)->name);
             lar_text_builder_add(&text_5, "', which lives in {v}, but the object lives ", 44);
             lar_text_builder_str(&text_5, lives);
             lar_text_builder_add(&text_5, ": ", 2);
             lar_text_builder_str(&text_5, field);
             lar_text_builder_add(&text_5, ": ", 2);
-            lar_text_builder_str(&text_5, (id_4440)->name);
+            lar_text_builder_str(&text_5, (id_4433)->name);
             lar_text_builder_add(&text_5, ".clone()", 8);
             lar_text_builder_str(&text_5, keep);
             LarString result_5 = semantics__analyzer__flow__fill(lar_result_memory, lar_text_builder_finish(&text_5), v, storage);
@@ -31223,9 +31196,9 @@ LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, seman
         lar_memory_free(&memory_2);
         return result_7;
     }
-    if (((l_4442 = (syntax__ast__Lambda*)lar_as_class((void*)(e), &lar_class_syntax__ast__Lambda)) != NULL) && (!((l_4442)->_super._super.lambda == NULL))) {
+    if (((l_4435 = (syntax__ast__Lambda*)lar_as_class((void*)(e), &lar_class_syntax__ast__Lambda)) != NULL) && (!((l_4435)->_super._super.lambda == NULL))) {
         {
-            List_semantics__types__Symbol* list_2 = (((semantics__types__LambdaInfo*)lar_unwrap((void*)((l_4442)->_super._super.lambda), LINE(29000685))))->captures;
+            List_semantics__types__Symbol* list_2 = (((semantics__types__LambdaInfo*)lar_unwrap((void*)((l_4435)->_super._super.lambda), LINE(29000685))))->captures;
             for (int32_t index_2 = 0; index_2 < list_2->length; index_2++) {
                 semantics__types__Symbol* s = list_2->items[index_2];
                 LarMemory memory_3 = lar_memory_growable();
@@ -31233,7 +31206,7 @@ LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, seman
                     lar_memory_free(&memory_3);
                     continue;
                 }
-                semantics__types__Region* r = (resolve_4427 ? semantics__types__resolveRegion(NULL, (s)->region) : (s)->region);
+                semantics__types__Region* r = (resolve_4420 ? semantics__types__resolveRegion(NULL, (s)->region) : (s)->region);
                 if (semantics__types__outlives(r, storage)) {
                     lar_memory_free(&memory_3);
                     continue;
@@ -31251,11 +31224,11 @@ LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, seman
                 lar_text_builder_add(&text_7, "; and capture 'kept' instead.", 29);
                 LarString fix = lar_text_builder_finish(&text_7);
                 LarString value_5;
-                if ((!((l_4442)->ref == NULL)) && ((rm_4447 = (syntax__ast__Member*)lar_as_class((void*)((((syntax__ast__Call*)lar_unwrap((void*)((l_4442)->ref), LINE(29000692))))->callee), &lar_class_syntax__ast__Member)) != NULL)) {
+                if ((!((l_4435)->ref == NULL)) && ((rm_4440 = (syntax__ast__Member*)lar_as_class((void*)((((syntax__ast__Call*)lar_unwrap((void*)((l_4435)->ref), LINE(29000692))))->callee), &lar_class_syntax__ast__Member)) != NULL)) {
                     LarTextBuilder text_8 = lar_text_builder_mem(&memory_3, LINE(29000693));
                     lar_text_builder_str(&text_8, (s)->name);
                     lar_text_builder_add(&text_8, "::", 2);
-                    lar_text_builder_str(&text_8, (rm_4447)->name);
+                    lar_text_builder_str(&text_8, (rm_4440)->name);
                     lar_text_builder_add(&text_8, " keeps '", 8);
                     lar_text_builder_str(&text_8, (s)->name);
                     lar_text_builder_add(&text_8, "', which lives in {v}, but ", 27);
@@ -31276,7 +31249,7 @@ LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, seman
                     value_5 = lar_text_builder_finish(&text_9);
                 }
                 LarString start = value_5;
-                if (semantics__analyzer__flow__clonesInside(l_4442, (s)->name)) {
+                if (semantics__analyzer__flow__clonesInside(l_4435, (s)->name)) {
                     LarTextBuilder text_10 = lar_text_builder_mem(lar_result_memory, LINE(29000696));
                     lar_text_builder_str(&text_10, start);
                     lar_text_builder_add(&text_10, " ", 1);
@@ -31310,35 +31283,35 @@ LarString semantics__analyzer__flow__culprit(LarMemory* lar_result_memory, seman
         lar_memory_free(&memory_2);
         return result_11;
     }
-    if (((id_4450 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL) && semantics__analyzer__flow__isFunctionValue(e)) {
+    if (((id_4443 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL) && semantics__analyzer__flow__isFunctionValue(e)) {
         LarMemory line29000705_temps = lar_memory_growable();
         LarTextBuilder text_12 = lar_text_builder_mem(lar_result_memory, LINE(29000705));
         lar_text_builder_add(&text_12, "The function '", 14);
-        lar_text_builder_str(&text_12, (id_4450)->name);
+        lar_text_builder_str(&text_12, (id_4443)->name);
         lar_text_builder_add(&text_12, "' lives in {v}, but ", 20);
         lar_text_builder_str(&text_12, (deferred)->target);
         lar_text_builder_add(&text_12, " lives ", 7);
         lar_text_builder_str(&text_12, lives);
         lar_text_builder_add(&text_12, ". A function cannot be copied with clone(): make '", 50);
-        lar_text_builder_str(&text_12, (id_4450)->name);
+        lar_text_builder_str(&text_12, (id_4443)->name);
         lar_text_builder_add(&text_12, "' live there", 12);
-        lar_text_builder_str(&text_12, semantics__analyzer__flow__parameterHint(&line29000705_temps, (id_4450)->name, storage));
+        lar_text_builder_str(&text_12, semantics__analyzer__flow__parameterHint(&line29000705_temps, (id_4443)->name, storage));
         lar_text_builder_add(&text_12, ".", 1);
         LarString result_12 = semantics__analyzer__flow__fill(lar_result_memory, lar_text_builder_finish(&text_12), v, storage);
         lar_memory_free(&line29000705_temps);
         lar_memory_free(&memory_2);
         return result_12;
     }
-    if (((id_4451 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL) && (((v)->kind).tag == (((semantics__types__RegionKind){ .tag = semantics__types__RegionKind_Local })).tag)) {
+    if (((id_4444 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL) && (((v)->kind).tag == (((semantics__types__RegionKind){ .tag = semantics__types__RegionKind_Local })).tag)) {
         LarTextBuilder text_13 = lar_text_builder_mem(lar_result_memory, LINE(29000708));
         lar_text_builder_add(&text_13, "'", 1);
-        lar_text_builder_str(&text_13, (id_4451)->name);
+        lar_text_builder_str(&text_13, (id_4444)->name);
         lar_text_builder_add(&text_13, "' lives in {v}, but ", 20);
         lar_text_builder_str(&text_13, (deferred)->target);
         lar_text_builder_add(&text_13, " lives ", 7);
         lar_text_builder_str(&text_13, lives);
         lar_text_builder_add(&text_13, ". Keep a copy there: ", 21);
-        lar_text_builder_str(&text_13, (id_4451)->name);
+        lar_text_builder_str(&text_13, (id_4444)->name);
         lar_text_builder_add(&text_13, ".clone()", 8);
         lar_text_builder_str(&text_13, keep);
         LarString result_13 = semantics__analyzer__flow__fill(lar_result_memory, lar_text_builder_finish(&text_13), v, storage);
@@ -31376,17 +31349,17 @@ LarString semantics__analyzer__flow__parameterHint(LarMemory* lar_result_memory,
 
 LarString semantics__analyzer__flow__viewCulprit(LarMemory* lar_result_memory, syntax__ast__Expr* e, semantics__types__Region* v, LarString target, LarString lives, LarString keep) {
     (void)v;
-    syntax__ast__Call* c_4461 = NULL;
-    syntax__ast__Member* m_4462 = NULL;
-    syntax__ast__Ident* id_4463 = NULL;
-    syntax__ast__Ident* oid_4465 = NULL;
+    syntax__ast__Call* c_4454 = NULL;
+    syntax__ast__Member* m_4455 = NULL;
+    syntax__ast__Ident* id_4456 = NULL;
+    syntax__ast__Ident* oid_4458 = NULL;
     LarMemory memory_2 = lar_memory_growable();
     LarMemory line29000725_temps = lar_memory_growable();
-    bool condition = ((!(((c_4461 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL))) || (!(((m_4462 = (syntax__ast__Member*)lar_as_class((void*)((c_4461)->callee), &lar_class_syntax__ast__Member)) != NULL))));
+    bool condition = ((!(((c_4454 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL))) || (!(((m_4455 = (syntax__ast__Member*)lar_as_class((void*)((c_4454)->callee), &lar_class_syntax__ast__Member)) != NULL))));
     if (!condition) {
         LarTextBuilder text = lar_text_builder_mem(&line29000725_temps, LINE(29000725));
         lar_text_builder_add(&text, " ", 1);
-        lar_text_builder_str(&text, (m_4462)->name);
+        lar_text_builder_str(&text, (m_4455)->name);
         lar_text_builder_add(&text, " ", 1);
         condition = (!(String_contains(lar_string(" trim trimStart trimEnd substring bytes split lines toString ", 61), lar_text_builder_finish(&text))));
     }
@@ -31398,10 +31371,10 @@ LarString semantics__analyzer__flow__viewCulprit(LarMemory* lar_result_memory, s
     }
     lar_memory_free(&line29000725_temps);
     LarString value_2;
-    if ((id_4463 = (syntax__ast__Ident*)lar_as_class((void*)((m_4462)->object), &lar_class_syntax__ast__Ident)) != NULL) {
+    if ((id_4456 = (syntax__ast__Ident*)lar_as_class((void*)((m_4455)->object), &lar_class_syntax__ast__Ident)) != NULL) {
         LarTextBuilder text_2 = lar_text_builder_mem(&memory_2, LINE(29000726));
         lar_text_builder_add(&text_2, "'", 1);
-        lar_text_builder_str(&text_2, (id_4463)->name);
+        lar_text_builder_str(&text_2, (id_4456)->name);
         lar_text_builder_add(&text_2, "'", 1);
         value_2 = lar_text_builder_finish(&text_2);
     } else {
@@ -31409,13 +31382,13 @@ LarString semantics__analyzer__flow__viewCulprit(LarMemory* lar_result_memory, s
     }
     LarString source = value_2;
     LarString value_3;
-    if ((oid_4465 = (syntax__ast__Ident*)lar_as_class((void*)((m_4462)->object), &lar_class_syntax__ast__Ident)) != NULL) {
+    if ((oid_4458 = (syntax__ast__Ident*)lar_as_class((void*)((m_4455)->object), &lar_class_syntax__ast__Ident)) != NULL) {
         LarTextBuilder text_3 = lar_text_builder_mem(&memory_2, LINE(29000727));
-        lar_text_builder_str(&text_3, (oid_4465)->name);
+        lar_text_builder_str(&text_3, (oid_4458)->name);
         lar_text_builder_add(&text_3, ".", 1);
-        lar_text_builder_str(&text_3, (m_4462)->name);
+        lar_text_builder_str(&text_3, (m_4455)->name);
         lar_text_builder_add(&text_3, "(", 1);
-        lar_text_builder_str(&text_3, ((((c_4461)->args)->length == 0) ? lar_string("", 0) : lar_string("...", 3)));
+        lar_text_builder_str(&text_3, ((((c_4454)->args)->length == 0) ? lar_string("", 0) : lar_string("...", 3)));
         lar_text_builder_add(&text_3, ")", 1);
         value_3 = lar_text_builder_finish(&text_3);
     } else {
@@ -31423,7 +31396,7 @@ LarString semantics__analyzer__flow__viewCulprit(LarMemory* lar_result_memory, s
     }
     LarString code = value_3;
     LarTextBuilder text_4 = lar_text_builder_mem(lar_result_memory, LINE(29000728));
-    lar_text_builder_str(&text_4, (m_4462)->name);
+    lar_text_builder_str(&text_4, (m_4455)->name);
     lar_text_builder_add(&text_4, "() shares the bytes of ", 23);
     lar_text_builder_str(&text_4, source);
     lar_text_builder_add(&text_4, ", which lives in {v}, but ", 26);
@@ -31440,9 +31413,9 @@ LarString semantics__analyzer__flow__viewCulprit(LarMemory* lar_result_memory, s
 }
 
 bool semantics__analyzer__flow__clonesInside(syntax__ast__Lambda* lambda, LarString name) {
-    syntax__ast__Call* c_4471 = NULL;
-    syntax__ast__Member* m_4472 = NULL;
-    syntax__ast__Ident* id_4473 = NULL;
+    syntax__ast__Call* c_4464 = NULL;
+    syntax__ast__Member* m_4465 = NULL;
+    syntax__ast__Ident* id_4466 = NULL;
     LarMemory memory = lar_memory_growable();
     List_syntax__ast__Expr* list = List_syntax__ast__Expr_new(&memory, LINE(29000733));
     List_syntax__ast__Expr* items = list;
@@ -31451,7 +31424,7 @@ bool semantics__analyzer__flow__clonesInside(syntax__ast__Lambda* lambda, LarStr
         List_syntax__ast__Expr* list_2 = items;
         for (int32_t index = 0; index < list_2->length; index++) {
             syntax__ast__Expr* x = list_2->items[index];
-            if ((((((c_4471 = (syntax__ast__Call*)lar_as_class((void*)(x), &lar_class_syntax__ast__Call)) != NULL) && ((m_4472 = (syntax__ast__Member*)lar_as_class((void*)((c_4471)->callee), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m_4472)->name, lar_string("clone", 5))) && ((id_4473 = (syntax__ast__Ident*)lar_as_class((void*)((m_4472)->object), &lar_class_syntax__ast__Ident)) != NULL)) && lar_string_eq((id_4473)->name, name)) {
+            if ((((((c_4464 = (syntax__ast__Call*)lar_as_class((void*)(x), &lar_class_syntax__ast__Call)) != NULL) && ((m_4465 = (syntax__ast__Member*)lar_as_class((void*)((c_4464)->callee), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m_4465)->name, lar_string("clone", 5))) && ((id_4466 = (syntax__ast__Ident*)lar_as_class((void*)((m_4465)->object), &lar_class_syntax__ast__Ident)) != NULL)) && lar_string_eq((id_4466)->name, name)) {
                 bool result = true;
                 lar_memory_free(&memory);
                 return result;
@@ -31725,22 +31698,22 @@ semantics__types__Conversion* semantics__expressions__conversions__conversionOf(
 
 semantics__types__Type* semantics__expressions__conversions__coerce(LarMemory* lar_result_memory, syntax__ast__Expr* e, semantics__types__Type* target, semantics__types__Place* place, LarString ctx) {
     (void)lar_result_memory;
-    syntax__ast__Placed* p_4505 = NULL;
-    syntax__ast__Placed* pl_4513 = NULL;
-    syntax__ast__Lambda* l_4515 = NULL;
+    syntax__ast__Placed* p_4498 = NULL;
+    syntax__ast__Placed* pl_4506 = NULL;
+    syntax__ast__Lambda* l_4508 = NULL;
     if (semantics__types__isError(target)) {
         semantics__expressions__check(NULL, e, NULL, place);
         return semantics__types__T_ERROR;
     }
-    if ((((p_4505 = (syntax__ast__Placed*)lar_as_class((void*)(e), &lar_class_syntax__ast__Placed)) != NULL) && (lar_as_class((void*)((p_4505)->expr), &lar_class_syntax__ast__Lambda) != NULL)) && semantics__types__isInterface(target)) {
-        syntax__ast__Expr* value_2 = (p_4505)->expr;
-        semantics__types__Place* value_3 = semantics__expressions__resolvePlacement(NULL, p_4505);
+    if ((((p_4498 = (syntax__ast__Placed*)lar_as_class((void*)(e), &lar_class_syntax__ast__Placed)) != NULL) && (lar_as_class((void*)((p_4498)->expr), &lar_class_syntax__ast__Lambda) != NULL)) && semantics__types__isInterface(target)) {
+        syntax__ast__Expr* value_2 = (p_4498)->expr;
+        semantics__types__Place* value_3 = semantics__expressions__resolvePlacement(NULL, p_4498);
         if (value_3 == NULL) {
             value_3 = semantics__types__P_TEMP;
         }
         semantics__types__Type* type = semantics__expressions__conversions__coerce(NULL, value_2, target, value_3, ctx);
         (e)->_super.ty = type;
-        semantics__expressions__conversions__setRegion(((syntax__ast__Node*)(e)), semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((p_4505)->expr))));
+        semantics__expressions__conversions__setRegion(((syntax__ast__Node*)(e)), semantics__expressions__conversions__regionOf(NULL, ((syntax__ast__Node*)((p_4498)->expr))));
         return type;
     }
     if ((lar_as_class((void*)(e), &lar_class_syntax__ast__Lambda) != NULL) && semantics__types__isInterface(target)) {
@@ -31784,14 +31757,14 @@ semantics__types__Type* semantics__expressions__conversions__coerce(LarMemory* l
     }
     semantics__types__Type* bare = semantics__expressions__operators__withoutThreadSafe(NULL, target);
     if (!((const void*)(bare) == (const void*)(target))) {
-        syntax__ast__Expr* inner = (((pl_4513 = (syntax__ast__Placed*)lar_as_class((void*)(e), &lar_class_syntax__ast__Placed)) != NULL) ? (pl_4513)->expr : e);
-        if ((l_4515 = (syntax__ast__Lambda*)lar_as_class((void*)(inner), &lar_class_syntax__ast__Lambda)) != NULL) {
+        syntax__ast__Expr* inner = (((pl_4506 = (syntax__ast__Placed*)lar_as_class((void*)(e), &lar_class_syntax__ast__Placed)) != NULL) ? (pl_4506)->expr : e);
+        if ((l_4508 = (syntax__ast__Lambda*)lar_as_class((void*)(inner), &lar_class_syntax__ast__Lambda)) != NULL) {
             semantics__types__Type* leftType = semantics__expressions__conversions__coerce(NULL, e, bare, place, ctx);
             if (semantics__types__isError(leftType)) {
                 return semantics__types__T_ERROR;
             }
-            if (!((l_4515)->_super._super.lambda == NULL)) {
-                semantics__analyzer__threads__checkThreadSafeLambda(((semantics__types__LambdaInfo*)lar_unwrap((void*)((l_4515)->_super._super.lambda), LINE(28000153))), (e)->_super.line);
+            if (!((l_4508)->_super._super.lambda == NULL)) {
+                semantics__analyzer__threads__checkThreadSafeLambda(((semantics__types__LambdaInfo*)lar_unwrap((void*)((l_4508)->_super._super.lambda), LINE(28000153))), (e)->_super.line);
             }
             semantics__expressions__note(target);
             return target;
@@ -31847,8 +31820,8 @@ semantics__types__Type* semantics__expressions__conversions__coerce(LarMemory* l
 
 void semantics__expressions__conversions__box(syntax__ast__Expr* e, semantics__types__Type* type, semantics__types__Place* place) {
     (void)type;
-    syntax__ast__Placed* p_4524 = NULL;
-    semantics__types__Place* bp = ((((p_4524 = (syntax__ast__Placed*)lar_as_class((void*)(e), &lar_class_syntax__ast__Placed)) != NULL) && (!(((p_4524)->expr)->_super.place == NULL))) ? ((semantics__types__Place*)lar_unwrap((void*)(((p_4524)->expr)->_super.place), LINE(28000182))) : place);
+    syntax__ast__Placed* p_4517 = NULL;
+    semantics__types__Place* bp = ((((p_4517 = (syntax__ast__Placed*)lar_as_class((void*)(e), &lar_class_syntax__ast__Placed)) != NULL) && (!(((p_4517)->expr)->_super.place == NULL))) ? ((semantics__types__Place*)lar_unwrap((void*)(((p_4517)->expr)->_super.place), LINE(28000182))) : place);
     if (((bp)->kind).tag == (((semantics__types__PlaceKind){ .tag = semantics__types__PlaceKind_Stack })).tag) {
         semantics__analyzer__error((e)->_super.line, lar_string("A value put in an Any is copied into a memory, not into a temporary buffer.", 75));
         return;
@@ -32482,7 +32455,7 @@ void semantics__analyzer__classes__checkFieldDefaults(void) {
 }
 
 bool semantics__analyzer__classes__isConstantExpr(syntax__ast__Expr* e) {
-    syntax__ast__Ident* id_4603 = NULL;
+    syntax__ast__Ident* id_4596 = NULL;
     syntax__ast__Expr* subject = e;
     bool value_2;
     memset(&value_2, 0, sizeof value_2);
@@ -32561,7 +32534,7 @@ bool semantics__analyzer__classes__isConstantExpr(syntax__ast__Expr* e) {
     {
         if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__Member)) {
             syntax__ast__Member* m = (syntax__ast__Member*)subject;
-            value_2 = ((((id_4603 = (syntax__ast__Ident*)lar_as_class((void*)((m)->object), &lar_class_syntax__ast__Ident)) != NULL) && (!(semantics__types__enumOf(NULL, (id_4603)->name) == NULL))) && (semantics__analyzer__lookup(NULL, (id_4603)->name) == NULL));
+            value_2 = ((((id_4596 = (syntax__ast__Ident*)lar_as_class((void*)((m)->object), &lar_class_syntax__ast__Ident)) != NULL) && (!(semantics__types__enumOf(NULL, (id_4596)->name) == NULL))) && (semantics__analyzer__lookup(NULL, (id_4596)->name) == NULL));
             goto switch_end;
         }
     }
@@ -33003,7 +32976,7 @@ semantics__analyzer__FrameState* semantics__analyzer__state(LarMemory* lar_resul
 }
 
 void semantics__analyzer__analyze(syntax__ast__Program* program) {
-    syntax__ast__VarDecl* v_4668 = NULL;
+    syntax__ast__VarDecl* v_4661 = NULL;
     List_semantics__types__Frame_push((semantics__analyzer__analysis)->frames, (semantics__analyzer__analysis)->globalFrame);
     (semantics__analyzer__analysis)->frameTop = 1;
     ((semantics__analyzer__analysis)->globalFrame)->root = (semantics__analyzer__analysis)->scope;
@@ -33031,11 +33004,11 @@ void semantics__analyzer__analyze(syntax__ast__Program* program) {
         List_syntax__ast__Node* list_4 = (program)->decls;
         for (int32_t index = 0; index < list_4->length; index++) {
             syntax__ast__Node* d = list_4->items[index];
-            if ((v_4668 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) {
-                List_syntax__ast__VarDecl_push((semantics__types__declared)->globals, v_4668);
+            if ((v_4661 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) {
+                List_syntax__ast__VarDecl_push((semantics__types__declared)->globals, v_4661);
                 semantics__types__Owner* o = semantics__types__newOwner(NULL);
                 ((semantics__analyzer__analysis)->globalFrame)->owner = o;
-                semantics__analyzer__statements__analyzeVarDecl(v_4668);
+                semantics__analyzer__statements__analyzeVarDecl(v_4661);
                 ((semantics__analyzer__analysis)->globalFrame)->owner = NULL;
                 List_semantics__types__Owner_push(initializers, o);
             }
@@ -33375,12 +33348,12 @@ void semantics__analyzer__checkMemoryUses(void) {
     }
 }
 
-LarAny std__encoding__json__parse(LarMemory* lar_result_memory, LarString text_4719, LarError* err_out) {
+LarAny std__encoding__json__parse(LarMemory* lar_result_memory, LarString text_4712, LarError* err_out) {
     LarError err;
     err.kind = 0;
     LarMemory* place = lar_result_memory;
     std__encoding__json__JsonParser* new_std__encoding__json__JsonParser = (std__encoding__json__JsonParser*)lar_memory_alloc(place, sizeof(std__encoding__json__JsonParser), LINE(44000019));
-    *new_std__encoding__json__JsonParser = (std__encoding__json__JsonParser){ .header = { (const void*)&methods_std__encoding__json__JsonParser, place }, .text = text_4719, .pos = 0 };
+    *new_std__encoding__json__JsonParser = (std__encoding__json__JsonParser){ .header = { (const void*)&methods_std__encoding__json__JsonParser, place }, .text = text_4712, .pos = 0 };
     std__encoding__json__JsonParser* p = new_std__encoding__json__JsonParser;
     std__encoding__json__JsonParser_space__dispatch((std__encoding__json__JsonParser*)p);
     LarAny value_2 = std__encoding__json__JsonParser_value__dispatch((std__encoding__json__JsonParser*)p, lar_result_memory, &err);
@@ -33392,7 +33365,7 @@ LarAny std__encoding__json__parse(LarMemory* lar_result_memory, LarString text_4
     }
     LarAny v = value_2;
     std__encoding__json__JsonParser_space__dispatch((std__encoding__json__JsonParser*)p);
-    if ((p)->pos < (text_4719).len) {
+    if ((p)->pos < (text_4712).len) {
         err.kind = 22;
         err.as.e_std__encoding__json__JsonError = ((std__encoding__json__JsonError){ .tag = std__encoding__json__JsonError_Invalid, .as.Invalid = { .at = (p)->pos, .why = lar_string("text after the value", 20) } });
         *err_out = err;
@@ -33627,7 +33600,7 @@ LarString std__encoding__toml__message(LarMemory* lar_result_memory, std__encodi
     return value;
 }
 
-LarAny std__encoding__toml__parse(LarMemory* lar_result_memory, LarString text_4756, LarError* err_out) {
+LarAny std__encoding__toml__parse(LarMemory* lar_result_memory, LarString text_4749, LarError* err_out) {
     LarError err;
     err.kind = 0;
     LarMemory memory = lar_memory_growable();
@@ -33636,7 +33609,7 @@ LarAny std__encoding__toml__parse(LarMemory* lar_result_memory, LarString text_4
     List_s* list = List_s_new(&memory, LINE(46000030));
     List_s* sectionNames = list;
     LarString currentName = lar_string("", 0);
-    List_s* lines = std__encoding__toml__splitLines(&memory, text_4756);
+    List_s* lines = std__encoding__toml__splitLines(&memory, text_4749);
     int32_t i = 0;
     while (i < (lines)->length) {
         LarMemory memory_2 = lar_memory_growable();
@@ -33955,11 +33928,11 @@ bool std__encoding__toml__isTable(LarAny v) {
     return value;
 }
 
-List_s* std__encoding__toml__splitLines(LarMemory* lar_result_memory, LarString text_4787) {
+List_s* std__encoding__toml__splitLines(LarMemory* lar_result_memory, LarString text_4780) {
     List_s* list = List_s_new(lar_result_memory, LINE(46000123));
     List_s* out = list;
     {
-        LarString value = text_4787;
+        LarString value = text_4780;
         List_s* value_2 = List_s_new(lar_result_memory, 46000124);
         LarString value_3 = lar_string("\n", 1);
         if (value_3.len == 0) {
@@ -34130,7 +34103,7 @@ LarAny std__encoding__toml__parseValue(LarMemory* lar_result_memory, LarString v
         }
         LarString inner = String_trim(lar_string_sub(value_3, (int64_t)(1), (int64_t)(value_5), 46000168), NULL);
         LarTable* table = lar_table_new(lar_result_memory, LINE(46000169));
-        LarAny list_4802 = lar_any_t(table);
+        LarAny list_4795 = lar_any_t(table);
         int32_t i = 0;
         while (i < (inner).len) {
             uint8_t c = lar_string_byte(inner, (int64_t)(i), LINE(46000172));
@@ -34159,8 +34132,8 @@ LarAny std__encoding__toml__parseValue(LarMemory* lar_result_memory, LarString v
                     return zero_value_5;
                 }
             }
-            LarAny value_7 = list_4802;
-            LarAny value_8 = std__encoding__toml__parseValue(lar_any_mem(list_4802, LINE(46000181)), item, line, &err);
+            LarAny value_7 = list_4795;
+            LarAny value_8 = std__encoding__toml__parseValue(lar_any_mem(list_4795, LINE(46000181)), item, line, &err);
             if (err.kind != 0) {
                 *err_out = err;
                 LarAny zero_value_6;
@@ -34170,7 +34143,7 @@ LarAny std__encoding__toml__parseValue(LarMemory* lar_result_memory, LarString v
             lar_any_push(value_7, value_8, LINE(46000181));
             i = ((int32_t)((uint32_t)(end) + (uint32_t)(1)));
         }
-        return list_4802;
+        return list_4795;
     }
     LarMemory line46000186_temps = lar_memory_growable();
     LarTextBuilder text_3 = lar_text_builder_mem(&line46000186_temps, LINE(46000186));
@@ -34463,34 +34436,12 @@ Opt_s semantics__rules__internalOwner(LarMemory* lar_result_memory, LarString pa
     return ((Opt_s){ .has = false });
 }
 
-List_s* semantics__rules__interfaceTypes(LarMemory* lar_result_memory, semantics__linker__Module* module) {
-    syntax__ast__NativeInterfaceDecl* nativeInterface_4873 = NULL;
-    List_s* list = List_s_new(lar_result_memory, LINE(47000114));
-    List_s* names = list;
-    {
-        List_syntax__ast__Node* list_2 = semantics__linker__declarationsOf(NULL, module);
-        for (int32_t index = 0; index < list_2->length; index++) {
-            syntax__ast__Node* d = list_2->items[index];
-            if ((nativeInterface_4873 = (syntax__ast__NativeInterfaceDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl)) != NULL) {
-                {
-                    List_s* list_3 = (nativeInterface_4873)->types;
-                    for (int32_t index_2 = 0; index_2 < list_3->length; index_2++) {
-                        LarString t = list_3->items[index_2];
-                        List_s_push(names, t);
-                    }
-                }
-            }
-        }
-    }
-    return names;
-}
-
 bool semantics__rules__importsUnsafeTask(semantics__linker__Module* module) {
     if ((module)->program == NULL) {
         return false;
     }
     {
-        List_syntax__ast__ImportDecl* list = (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(47000126))))->imports;
+        List_syntax__ast__ImportDecl* list = (((syntax__ast__Program*)lar_unwrap((void*)((module)->program), LINE(47000115))))->imports;
         for (int32_t index = 0; index < list->length; index++) {
             syntax__ast__ImportDecl* im = list->items[index];
             if (!lar_string_eq((im)->path, lar_string("std.os.process", 14))) {
@@ -34513,7 +34464,7 @@ bool semantics__rules__importsUnsafeTask(semantics__linker__Module* module) {
     return false;
 }
 
-LarString semantics__rules__cKind(LarMemory* lar_result_memory, syntax__ast__Node* d, bool interfaces, List_s* declared, LarAny parts) {
+LarString semantics__rules__cKind(LarMemory* lar_result_memory, syntax__ast__Node* d) {
     (void)lar_result_memory;
     syntax__ast__Node* subject = d;
     LarString value;
@@ -34530,58 +34481,6 @@ LarString semantics__rules__cKind(LarMemory* lar_result_memory, syntax__ast__Nod
         if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__CIncludeDecl)) {
             syntax__ast__CIncludeDecl* c = (syntax__ast__CIncludeDecl*)subject;
             if (!lar_string_eq((c)->gives, lar_string("", 0))) {
-                value = lar_string("", 0);
-                goto switch_end;
-            }
-        }
-    }
-    {
-        if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__ExternTypeDecl)) {
-            syntax__ast__ExternTypeDecl* t = (syntax__ast__ExternTypeDecl*)subject;
-            bool condition = interfaces;
-            if (condition) {
-                List_s* value_2 = declared;
-                LarString value_3 = (t)->name;
-                bool found = false;
-                for (int32_t index = 0; index < value_2->length; index++) if (lar_string_eq(value_2->items[index], value_3)) { found = true; break; }
-                condition = found;
-            }
-            if (condition) {
-                value = lar_string("", 0);
-                goto switch_end;
-            }
-        }
-    }
-    {
-        if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__StructDecl)) {
-            syntax__ast__StructDecl* st = (syntax__ast__StructDecl*)subject;
-            bool condition_2 = interfaces;
-            if (condition_2) {
-                List_s* value_4 = declared;
-                LarString value_5 = (st)->name;
-                bool found_2 = false;
-                for (int32_t index_2 = 0; index_2 < value_4->length; index_2++) if (lar_string_eq(value_4->items[index_2], value_5)) { found_2 = true; break; }
-                condition_2 = found_2;
-            }
-            if (condition_2) {
-                value = lar_string("", 0);
-                goto switch_end;
-            }
-        }
-    }
-    {
-        if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__ExternFunctionDecl)) {
-            syntax__ast__ExternFunctionDecl* f = (syntax__ast__ExternFunctionDecl*)subject;
-            if (!lar_any_is_null(lar_any_get(parts, (f)->name))) {
-                value = lar_string("", 0);
-                goto switch_end;
-            }
-        }
-    }
-    {
-        if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__ExternValueDecl)) {
-            syntax__ast__ExternValueDecl* v = (syntax__ast__ExternValueDecl*)subject;
-            if (!lar_any_is_null(lar_any_get(parts, (v)->name))) {
                 value = lar_string("", 0);
                 goto switch_end;
             }
@@ -34653,7 +34552,7 @@ LarString semantics__rules__cKind(LarMemory* lar_result_memory, syntax__ast__Nod
             goto switch_end;
         }
     }
-    lar_panic("no case of the switch matched", LINE(47000187));
+    lar_panic("no case of the switch matched", LINE(47000163));
     switch_end: ;
     return value;
 }
@@ -34697,35 +34596,35 @@ bool codegen__localnames__isNamePart(uint8_t c) {
     return (codegen__localnames__isNameStart(c) || ((c >= (uint8_t)48) && (c <= (uint8_t)57)));
 }
 
-LarString codegen__localnames__nameLocals(LarMemory* lar_result_memory, LarString text_4905) {
+LarString codegen__localnames__nameLocals(LarMemory* lar_result_memory, LarString text_4886) {
     LarMemory memory = lar_memory_growable();
-    if (!(String_indexOf_1(text_4905, codegen__localnames__MARK)).has) {
-        LarString result = text_4905;
+    if (!(String_indexOf_1(text_4886, codegen__localnames__MARK)).has) {
+        LarString result = text_4886;
         lar_memory_free(&memory);
         return result;
     }
     LarTable* table = lar_table_new(&memory, LINE(50000035));
     LarAny taken = lar_any_t(table);
     int32_t i = 0;
-    while (i < (text_4905).len) {
-        uint8_t c = lar_string_byte(text_4905, (int64_t)(i), LINE(50000038));
+    while (i < (text_4886).len) {
+        uint8_t c = lar_string_byte(text_4886, (int64_t)(i), LINE(50000038));
         if (c == (uint8_t)1) {
             int32_t n = 0;
-            while ((i < (text_4905).len) && (n < 3)) {
-                if (lar_string_byte(text_4905, (int64_t)(i), LINE(50000042)) == (uint8_t)1) {
+            while ((i < (text_4886).len) && (n < 3)) {
+                if (lar_string_byte(text_4886, (int64_t)(i), LINE(50000042)) == (uint8_t)1) {
                     n = ((int32_t)((uint32_t)(n) + (uint32_t)(1)));
                 }
                 i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
             }
             continue;
         }
-        if (codegen__localnames__isNameStart(c) && ((i == 0) || (!(codegen__localnames__isNamePart(lar_string_byte(text_4905, (int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), LINE(50000047))))))) {
+        if (codegen__localnames__isNameStart(c) && ((i == 0) || (!(codegen__localnames__isNamePart(lar_string_byte(text_4886, (int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), LINE(50000047))))))) {
             int32_t j = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
-            while ((j < (text_4905).len) && codegen__localnames__isNamePart(lar_string_byte(text_4905, (int64_t)(j), LINE(50000049)))) {
+            while ((j < (text_4886).len) && codegen__localnames__isNamePart(lar_string_byte(text_4886, (int64_t)(j), LINE(50000049)))) {
                 j = ((int32_t)((uint32_t)(j) + (uint32_t)(1)));
             }
             LarAny value_2 = taken;
-            LarString value_3 = text_4905;
+            LarString value_3 = text_4886;
             lar_any_set(value_2, lar_string_sub(value_3, (int64_t)(i), (int64_t)(j), 50000050), lar_any_b(true), LINE(50000050));
             i = j;
             continue;
@@ -34740,30 +34639,30 @@ LarString codegen__localnames__nameLocals(LarMemory* lar_result_memory, LarStrin
     StringBuilder* out = new_StringBuilder;
     int32_t start = 0;
     i = 0;
-    while (i < (text_4905).len) {
-        if (!(lar_string_byte(text_4905, (int64_t)(i), LINE(50000061)) == (uint8_t)1)) {
+    while (i < (text_4886).len) {
+        if (!(lar_string_byte(text_4886, (int64_t)(i), LINE(50000061)) == (uint8_t)1)) {
             i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
             continue;
         }
-        LarString value_4 = text_4905;
+        LarString value_4 = text_4886;
         StringBuilder_add__dispatch((StringBuilder*)out, lar_string_sub(value_4, (int64_t)(start), (int64_t)(i), 50000065));
-        Opt_i32 value_5 = String_indexOf_2(text_4905, codegen__localnames__MARK, ((int32_t)((uint32_t)(i) + (uint32_t)(1))));
+        Opt_i32 value_5 = String_indexOf_2(text_4886, codegen__localnames__MARK, ((int32_t)((uint32_t)(i) + (uint32_t)(1))));
         int32_t value_6;
         if (value_5.has) value_6 = value_5.value;
         else {
-            value_6 = (text_4905).len;
+            value_6 = (text_4886).len;
         }
         int32_t roleEnd = value_6;
-        Opt_i32 value_7 = String_indexOf_2(text_4905, codegen__localnames__MARK, ((int32_t)((uint32_t)(roleEnd) + (uint32_t)(1))));
+        Opt_i32 value_7 = String_indexOf_2(text_4886, codegen__localnames__MARK, ((int32_t)((uint32_t)(roleEnd) + (uint32_t)(1))));
         int32_t value_8;
         if (value_7.has) value_8 = value_7.value;
         else {
-            value_8 = (text_4905).len;
+            value_8 = (text_4886).len;
         }
         int32_t keyEnd = value_8;
-        LarString value_9 = text_4905;
+        LarString value_9 = text_4886;
         LarString role = lar_string_sub(value_9, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (int64_t)(roleEnd), 50000068);
-        LarString value_10 = text_4905;
+        LarString value_10 = text_4886;
         LarString key = lar_string_sub(value_10, (int64_t)(((int32_t)((uint32_t)(roleEnd) + (uint32_t)(1)))), (int64_t)(keyEnd), 50000069);
         Opt_s name = lar_any_as_s(lar_any_get(names, key));
         if (!(name).has) {
@@ -34787,8 +34686,8 @@ LarString codegen__localnames__nameLocals(LarMemory* lar_result_memory, LarStrin
         i = ((int32_t)((uint32_t)(keyEnd) + (uint32_t)(1)));
         start = i;
     }
-    LarString value_13 = text_4905;
-    StringBuilder_add__dispatch((StringBuilder*)out, lar_string_sub(value_13, (int64_t)(start), (int64_t)((text_4905).len), 50000086));
+    LarString value_13 = text_4886;
+    StringBuilder_add__dispatch((StringBuilder*)out, lar_string_sub(value_13, (int64_t)(start), (int64_t)((text_4886).len), 50000086));
     LarString result_2 = StringBuilder_toString__dispatch((StringBuilder*)out, lar_result_memory);
     lar_memory_free(&memory);
     return result_2;
@@ -34815,11 +34714,11 @@ LarString codegen__prune__prune(LarMemory* lar_result_memory, codegen__cprogram_
             if (!((part)->cFunction == NULL)) {
                 codegen__prune__flush(pieces, cur, codegen__prune__rootSection(title));
                 codegen__cprogram__CFunction* f = ((codegen__cprogram__CFunction*)lar_unwrap((void*)((part)->cFunction), LINE(51000054)));
-                LarString text_4931 = String_trimEnd((f)->text, NULL);
+                LarString text_4912 = String_trimEnd((f)->text, NULL);
                 LarMemory* place = (pieces)->mem;
                 codegen__prune__Piece* new_codegen__prune__Piece = (codegen__prune__Piece*)lar_memory_alloc(place, sizeof(codegen__prune__Piece), LINE(51000056));
                 LarCloneMap clones = lar_clone_map();
-                LarString copy = clone_s(text_4931, (pieces)->mem, &clones);
+                LarString copy = clone_s(text_4912, (pieces)->mem, &clones);
                 lar_clone_done(&clones);
                 LarString value_2 = copy;
                 List_s* list_4 = List_s_new(place, LINE(51000030));
@@ -35022,16 +34921,16 @@ void codegen__prune__flushHeader(List_codegen__prune__Piece* pieces, List_s* lin
     ((void)((lines)->length = 0));
 }
 
-LarString codegen__prune__runtimeC(LarMemory* lar_result_memory, LarString file_4950) {
+LarString codegen__prune__runtimeC(LarMemory* lar_result_memory, LarString file_4931) {
     (void)lar_result_memory;
-    Opt_i32 value_2 = String_indexOf_1(file_4950, lar_string("ccode {", 7));
+    Opt_i32 value_2 = String_indexOf_1(file_4931, lar_string("ccode {", 7));
     int32_t value_3;
     if (value_2.has) value_3 = value_2.value;
     else {
         value_3 = (-1);
     }
     int32_t marker = value_3;
-    Opt_i32 value_4 = String_lastIndexOf(file_4950, lar_string("}", 1));
+    Opt_i32 value_4 = String_lastIndexOf(file_4931, lar_string("}", 1));
     int32_t value_5;
     if (value_4.has) value_5 = value_4.value;
     else {
@@ -35040,7 +34939,7 @@ LarString codegen__prune__runtimeC(LarMemory* lar_result_memory, LarString file_
     int32_t close_ = value_5;
     LarString value_6;
     if ((marker >= 0) && (close_ > ((int32_t)((uint32_t)(marker) + (uint32_t)(7))))) {
-        LarString value_7 = file_4950;
+        LarString value_7 = file_4931;
         value_6 = lar_string_sub(value_7, (int64_t)(((int32_t)((uint32_t)(marker) + (uint32_t)(7)))), (int64_t)(close_), 51000130);
     } else {
         value_6 = lar_string("", 0);
@@ -35054,7 +34953,7 @@ LarString codegen__prune__runtimeSource(LarMemory* lar_result_memory) {
     if (!(!(codegen__prune__runtimeRead).has)) {
         return Opt_s_unwrap(codegen__prune__runtimeRead, LINE(51000136));
     }
-    LarString text_4953 = lar_string("", 0);
+    LarString text_4934 = lar_string("", 0);
     {
         List_s* list = codegen__prune__runtimeFiles;
         for (int32_t index = 0; index < list->length; index++) {
@@ -35069,14 +34968,14 @@ LarString codegen__prune__runtimeSource(LarMemory* lar_result_memory) {
             {
                 LarMemory line51000141_temps = lar_memory_growable();
                 LarTextBuilder text_2 = lar_text_builder_mem(lar_result_memory, LINE(51000141));
-                lar_text_builder_str(&text_2, text_4953);
+                lar_text_builder_str(&text_2, text_4934);
                 LarString value_2 = std__io__files__readString(&line51000141_temps, path, &err);
                 if (err.kind != 0) {
                     lar_memory_free(&line51000141_temps);
                     goto try_catch;
                 }
                 lar_text_builder_str(&text_2, codegen__prune__runtimeC(NULL, value_2));
-                text_4953 = lar_text_builder_finish(&text_2);
+                text_4934 = lar_text_builder_finish(&text_2);
                 lar_memory_free(&line51000141_temps);
             }
             goto try_end;
@@ -35086,11 +34985,11 @@ LarString codegen__prune__runtimeSource(LarMemory* lar_result_memory) {
                 (void)e;
                 err.kind = 0;
                 LarTextBuilder text_3 = lar_text_builder_mem(lar_result_memory, LINE(51000143));
-                lar_text_builder_str(&text_3, text_4953);
+                lar_text_builder_str(&text_3, text_4934);
                 lar_text_builder_add(&text_3, "#error \"Larimar's runtime was not found: ", 41);
                 lar_text_builder_str(&text_3, path);
                 lar_text_builder_add(&text_3, " (set LARIMAR_HOME to the folder that has std/ and runtime/)\"\n", 62);
-                text_4953 = lar_text_builder_finish(&text_3);
+                text_4934 = lar_text_builder_finish(&text_3);
             } else {
                 lar_memory_free(&memory);
                 lar_panic("uncaught error", 0);
@@ -35100,10 +34999,10 @@ LarString codegen__prune__runtimeSource(LarMemory* lar_result_memory) {
         }
     }
     LarCloneMap clones = lar_clone_map();
-    LarString copy = clone_s(text_4953, &lar_default_memory, &clones);
+    LarString copy = clone_s(text_4934, &lar_default_memory, &clones);
     lar_clone_done(&clones);
     codegen__prune__runtimeRead = ((Opt_s){ .has = true, .value = copy });
-    return text_4953;
+    return text_4934;
 }
 
 LarString codegen__prune__headerNames(LarMemory* lar_result_memory, int32_t i) {
@@ -35348,7 +35247,7 @@ codegen__prune__Piece* codegen__prune__includePiece(LarMemory* lar_result_memory
     return p;
 }
 
-List_s* codegen__prune__resolve(LarMemory* lar_result_memory, LarString text_4985, bool threads, bool files) {
+List_s* codegen__prune__resolve(LarMemory* lar_result_memory, LarString text_4966, bool threads, bool files) {
     LarMemory memory = lar_memory_growable();
     List_s* list = List_s_new(lar_result_memory, LINE(51000234));
     List_s* out = list;
@@ -35361,7 +35260,7 @@ List_s* codegen__prune__resolve(LarMemory* lar_result_memory, LarString text_498
     int32_t top = 0;
     bool active = true;
     {
-        LarString value_2 = text_4985;
+        LarString value_2 = text_4966;
         List_s* value_3 = List_s_new(lar_result_memory, 51000241);
         LarString value_4 = lar_string("\n", 1);
         if (value_4.len == 0) {
@@ -35899,9 +35798,9 @@ LarString codegen__expressions__patterns__patternTest(LarMemory* lar_result_memo
         lar_memory_free(&memory);
         return result_4;
     }
-    LarString test_5072 = lar_string("1", 1);
+    LarString test_5053 = lar_string("1", 1);
     if (((patternInfo)->kind).tag == (((semantics__types__PatK){ .tag = semantics__types__PatK_AnyType })).tag) {
-        test_5072 = lar_string("0", 1);
+        test_5053 = lar_string("0", 1);
     } else {
         if (((patternInfo)->kind).tag == (((semantics__types__PatK){ .tag = semantics__types__PatK_Null })).tag) {
             LarString value_3;
@@ -35917,7 +35816,7 @@ LarString codegen__expressions__patterns__patternTest(LarMemory* lar_result_memo
                 lar_text_builder_add(&text_8, ".has", 4);
                 value_3 = lar_text_builder_finish(&text_8);
             }
-            test_5072 = value_3;
+            test_5053 = value_3;
         } else {
             if (((patternInfo)->kind).tag == (((semantics__types__PatK){ .tag = semantics__types__PatK_Variant })).tag) {
                 LarTextBuilder text_9 = lar_text_builder_mem(lar_result_memory, LINE(57000028));
@@ -35926,7 +35825,7 @@ LarString codegen__expressions__patterns__patternTest(LarMemory* lar_result_memo
                 lar_text_builder_str(&text_9, (inner)->name);
                 lar_text_builder_add(&text_9, "_", 1);
                 lar_text_builder_str(&text_9, (((semantics__types__VariantInfo*)lar_unwrap((void*)((patternInfo)->variant), LINE(57000028))))->name);
-                test_5072 = lar_text_builder_finish(&text_9);
+                test_5053 = lar_text_builder_finish(&text_9);
             } else {
                 if (((patternInfo)->kind).tag == (((semantics__types__PatK){ .tag = semantics__types__PatK_Constant })).tag) {
                     LarMemory memory_2 = lar_memory_growable();
@@ -35947,7 +35846,7 @@ LarString codegen__expressions__patterns__patternTest(LarMemory* lar_result_memo
                         lar_text_builder_str(&text_11, c);
                         value_4 = lar_text_builder_finish(&text_11);
                     }
-                    test_5072 = value_4;
+                    test_5053 = value_4;
                     lar_memory_free(&memory_2);
                 } else {
                     if (((patternInfo)->kind).tag == (((semantics__types__PatK){ .tag = semantics__types__PatK_Class })).tag) {
@@ -35960,7 +35859,7 @@ LarString codegen__expressions__patterns__patternTest(LarMemory* lar_result_memo
                             lar_text_builder_add(&text_12, ".obj), &lar_class_", 18);
                             lar_text_builder_str(&text_12, (((semantics__types__ClassInfo*)lar_unwrap((void*)((patternInfo)->cls), LINE(57000034))))->name);
                             lar_text_builder_add(&text_12, "))", 2);
-                            test_5072 = lar_text_builder_finish(&text_12);
+                            test_5053 = lar_text_builder_finish(&text_12);
                         } else {
                             LarTextBuilder text_13 = lar_text_builder_mem(lar_result_memory, LINE(57000036));
                             lar_text_builder_add(&text_13, "lar_is_a(lar_object_class(", 26);
@@ -35968,7 +35867,7 @@ LarString codegen__expressions__patterns__patternTest(LarMemory* lar_result_memo
                             lar_text_builder_add(&text_13, "), &lar_class_", 14);
                             lar_text_builder_str(&text_13, (((semantics__types__ClassInfo*)lar_unwrap((void*)((patternInfo)->cls), LINE(57000036))))->name);
                             lar_text_builder_add(&text_13, ")", 1);
-                            test_5072 = lar_text_builder_finish(&text_13);
+                            test_5053 = lar_text_builder_finish(&text_13);
                         }
                     }
                 }
@@ -35981,11 +35880,11 @@ LarString codegen__expressions__patterns__patternTest(LarMemory* lar_result_memo
         lar_text_builder_add(&text_14, "(", 1);
         lar_text_builder_str(&text_14, has);
         lar_text_builder_add(&text_14, " && ", 4);
-        lar_text_builder_str(&text_14, test_5072);
+        lar_text_builder_str(&text_14, test_5053);
         lar_text_builder_add(&text_14, ")", 1);
         value_5 = lar_text_builder_finish(&text_14);
     } else {
-        value_5 = test_5072;
+        value_5 = test_5053;
     }
     LarString result_5 = value_5;
     lar_memory_free(&memory);
@@ -36122,7 +36021,7 @@ LarString codegen__expressions__operators__wide(LarMemory* lar_result_memory, se
 }
 
 LarString codegen__expressions__operators__unary(LarMemory* lar_result_memory, syntax__ast__Unary* u, semantics__types__Type* type) {
-    syntax__ast__IntLit* n_5090 = NULL;
+    syntax__ast__IntLit* n_5071 = NULL;
     LarMemory memory = lar_memory_growable();
     semantics__types__MethodInfo* op = (u)->_super._super.opMethod;
     if (!(op == NULL)) {
@@ -36167,8 +36066,8 @@ LarString codegen__expressions__operators__unary(LarMemory* lar_result_memory, s
         lar_memory_free(&memory);
         return result_4;
     }
-    if (((n_5090 = (syntax__ast__IntLit*)lar_as_class((void*)((u)->operand), &lar_class_syntax__ast__IntLit)) != NULL) && semantics__types__isInteger(type)) {
-        LarString result_5 = codegen__expressions__intLiteral(lar_result_memory, ((n_5090)->big ? (n_5090)->num : ((int64_t)((uint64_t)(0LL) - (uint64_t)((n_5090)->num)))), false, type);
+    if (((n_5071 = (syntax__ast__IntLit*)lar_as_class((void*)((u)->operand), &lar_class_syntax__ast__IntLit)) != NULL) && semantics__types__isInteger(type)) {
+        LarString result_5 = codegen__expressions__intLiteral(lar_result_memory, ((n_5071)->big ? (n_5071)->num : ((int64_t)((uint64_t)(0LL) - (uint64_t)((n_5071)->num)))), false, type);
         lar_memory_free(&memory);
         return result_5;
     }
@@ -36673,14 +36572,14 @@ LarString codegen__expressions__operators__isTest(LarMemory* lar_result_memory, 
     lar_text_builder_add(&text_4, ", &lar_class_", 13);
     lar_text_builder_str(&text_4, (((semantics__types__ClassInfo*)lar_unwrap((void*)((isExpr)->_super._super.tested), LINE(59000101))))->name);
     lar_text_builder_add(&text_4, ")", 1);
-    LarString test_5114 = lar_text_builder_finish(&text_4);
+    LarString test_5095 = lar_text_builder_finish(&text_4);
     semantics__types__Symbol* b = (isExpr)->_super._super.symbol;
     LarMemory line59000103_temps = lar_memory_growable();
     LarString value_2;
     if (b == NULL) {
         LarTextBuilder text_5 = lar_text_builder_mem(lar_result_memory, LINE(59000103));
         lar_text_builder_add(&text_5, "(", 1);
-        lar_text_builder_str(&text_5, test_5114);
+        lar_text_builder_str(&text_5, test_5095);
         lar_text_builder_add(&text_5, " != NULL)", 9);
         value_2 = lar_text_builder_finish(&text_5);
     } else {
@@ -36690,7 +36589,7 @@ LarString codegen__expressions__operators__isTest(LarMemory* lar_result_memory, 
         lar_text_builder_add(&text_6, " = (", 4);
         lar_text_builder_str(&text_6, codegen__expressions__typeCName(&line59000103_temps, (((semantics__types__ClassInfo*)lar_unwrap((void*)((isExpr)->_super._super.tested), LINE(59000103))))->name));
         lar_text_builder_add(&text_6, "*)", 2);
-        lar_text_builder_str(&text_6, test_5114);
+        lar_text_builder_str(&text_6, test_5095);
         lar_text_builder_add(&text_6, ") != NULL)", 10);
         value_2 = lar_text_builder_finish(&text_6);
     }
@@ -37301,10 +37200,10 @@ Opt_s codegen__expressions__strings__printDirect(LarMemory* lar_result_memory, s
         List_s* list_6 = texts;
         for (int32_t index_5 = 0; index_5 < list_6->length; index_5++) {
             int32_t i = index_5;
-            LarString text_5181 = list_6->items[index_5];
+            LarString text_5162 = list_6->items[index_5];
             LarMemory memory = lar_memory_growable();
             LarMemory line58000057_temps = lar_memory_growable();
-            StringBuilder_add__dispatch((StringBuilder*)format, String_replace(text_5181, &line58000057_temps, lar_string("%", 1), lar_string("%%", 2)));
+            StringBuilder_add__dispatch((StringBuilder*)format, String_replace(text_5162, &line58000057_temps, lar_string("%", 1), lar_string("%%", 2)));
             lar_memory_free(&line58000057_temps);
             if (i == ((s)->exprs)->length) {
                 lar_memory_free(&memory);
@@ -37451,18 +37350,18 @@ LarString codegen__expressions__strings__decodeRaw(LarMemory* lar_result_memory,
     return StringBuilder_toString__dispatch((StringBuilder*)builder, lar_result_memory);
 }
 
-LarString codegen__expressions__strings__cLiteral(LarMemory* lar_result_memory, LarString text_5194) {
+LarString codegen__expressions__strings__cLiteral(LarMemory* lar_result_memory, LarString text_5175) {
     LarMemory* place = &lar_default_memory;
     StringBuilder* new_StringBuilder = (StringBuilder*)lar_memory_alloc(place, sizeof(StringBuilder), LINE(58000117));
     *new_StringBuilder = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place }, .buf = lar_text_buf_new(place) };
     StringBuilder* builder = new_StringBuilder;
     StringBuilder_add__dispatch((StringBuilder*)builder, lar_string("\"", 1));
     {
-        LarString text = text_5194;
+        LarString text = text_5175;
         for (int32_t index = 0; index < text.len; index++) {
             int32_t i = index;
             uint8_t b = (uint8_t)text.ptr[index];
-            LarString value = text_5194;
+            LarString value = text_5175;
             codegen__expressions__strings__cByte(builder, b, lar_string_sub(value, (int64_t)(i), (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), 58000119));
         }
     }
@@ -37475,9 +37374,9 @@ void codegen__expressions__strings__appendPieces(syntax__ast__StringLit* s, LarS
         List_s* list = (s)->texts;
         for (int32_t index = 0; index < list->length; index++) {
             int32_t i = index;
-            LarString text_5201 = list->items[index];
+            LarString text_5182 = list->items[index];
             LarMemory memory = lar_memory_growable();
-            LarString c = codegen__expressions__strings__cBytes(&memory, text_5201);
+            LarString c = codegen__expressions__strings__cBytes(&memory, text_5182);
             if (codegen__expressions__strings__cLength > 0) {
                 LarMemory line58000128_temps = lar_memory_growable();
                 LarTextBuilder text = lar_text_builder_mem(&line58000128_temps, LINE(58000128));
@@ -37665,7 +37564,7 @@ LarString codegen__expressions__strings__cBytes(LarMemory* lar_result_memory, La
     return StringBuilder_toString__dispatch((StringBuilder*)builder, lar_result_memory);
 }
 
-void codegen__expressions__strings__cByte(StringBuilder* builder, uint8_t v, LarString text_5216) {
+void codegen__expressions__strings__cByte(StringBuilder* builder, uint8_t v, LarString text_5197) {
     if (v == (uint8_t)34) {
         StringBuilder_add__dispatch((StringBuilder*)builder, lar_string("\\\"", 2));
     } else {
@@ -37682,7 +37581,7 @@ void codegen__expressions__strings__cByte(StringBuilder* builder, uint8_t v, Lar
                         StringBuilder_add__dispatch((StringBuilder*)builder, lar_string("\\t", 2));
                     } else {
                         if ((v >= (uint8_t)32) && (v < (uint8_t)127)) {
-                            StringBuilder_add__dispatch((StringBuilder*)builder, text_5216);
+                            StringBuilder_add__dispatch((StringBuilder*)builder, text_5197);
                         } else {
                             int32_t a = ((int32_t)(((uint8_t)((((uint8_t)((uint32_t)(v) >> ((int)(6) & 7)))) & ((uint8_t)7)))));
                             int32_t b = ((int32_t)(((uint8_t)((((uint8_t)((uint32_t)(v) >> ((int)(3) & 7)))) & ((uint8_t)7)))));
@@ -37707,7 +37606,7 @@ void codegen__expressions__strings__cByte(StringBuilder* builder, uint8_t v, Lar
 }
 
 bool codegen__gen__statements__usesErrors(List_syntax__ast__Stmt* body) {
-    syntax__ast__SwitchExpr* sw_5225 = NULL;
+    syntax__ast__SwitchExpr* sw_5206 = NULL;
     if (!((codegen__gen__generation)->hasErrors)) {
         return false;
     }
@@ -37733,9 +37632,9 @@ bool codegen__gen__statements__usesErrors(List_syntax__ast__Stmt* body) {
             if ((lar_as_class((void*)(e), &lar_class_syntax__ast__Call) != NULL) && (e)->_super.throwing) {
                 return true;
             }
-            if ((sw_5225 = (syntax__ast__SwitchExpr*)lar_as_class((void*)(e), &lar_class_syntax__ast__SwitchExpr)) != NULL) {
+            if ((sw_5206 = (syntax__ast__SwitchExpr*)lar_as_class((void*)(e), &lar_class_syntax__ast__SwitchExpr)) != NULL) {
                 {
-                    List_syntax__ast__SwitchCase* list_5 = (sw_5225)->cases;
+                    List_syntax__ast__SwitchCase* list_5 = (sw_5206)->cases;
                     for (int32_t index_3 = 0; index_3 < list_5->length; index_3++) {
                         syntax__ast__SwitchCase* c = list_5->items[index_3];
                         if (!((c)->throwStmt == NULL)) {
@@ -37960,11 +37859,11 @@ void codegen__gen__statements__stmt(syntax__ast__Stmt* s) {
     *new_StringBuilder = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place_2 }, .buf = lar_text_buf_new(place_2) };
     (value)->out = new_StringBuilder;
     codegen__gen__statements__stmtInner(s);
-    LarString text_5262 = StringBuilder_toString__dispatch((StringBuilder*)((codegen__gen__generation)->writing)->out, &memory);
+    LarString text_5243 = StringBuilder_toString__dispatch((StringBuilder*)((codegen__gen__generation)->writing)->out, &memory);
     ((codegen__gen__generation)->writing)->out = outer;
     ((codegen__gen__generation)->writing)->temp = saved;
     if (lar_string_eq((t)->name, lar_string("", 0))) {
-        StringBuilder_add__dispatch((StringBuilder*)((codegen__gen__generation)->writing)->out, text_5262);
+        StringBuilder_add__dispatch((StringBuilder*)((codegen__gen__generation)->writing)->out, text_5243);
         lar_memory_free(&memory);
         return;
     }
@@ -37975,7 +37874,7 @@ void codegen__gen__statements__stmt(syntax__ast__Stmt* s) {
     lar_text_builder_add(&text, " = lar_memory_growable();", 25);
     codegen__gen__line(lar_text_builder_finish(&text));
     lar_memory_free(&line56000165_temps);
-    StringBuilder_add__dispatch((StringBuilder*)((codegen__gen__generation)->writing)->out, text_5262);
+    StringBuilder_add__dispatch((StringBuilder*)((codegen__gen__generation)->writing)->out, text_5243);
     LarTextBuilder text_2 = lar_text_builder_mem(&memory, LINE(56000167));
     lar_text_builder_add(&text_2, "lar_memory_free(&", 17);
     lar_text_builder_str(&text_2, (t)->name);
@@ -38191,14 +38090,14 @@ void codegen__gen__statements__stmtInner(syntax__ast__Stmt* s) {
 }
 
 void codegen__gen__statements__assign(syntax__ast__AssignStmt* s) {
-    syntax__ast__Binary* b_5289 = NULL;
+    syntax__ast__Binary* b_5270 = NULL;
     syntax__ast__Expr* target = (s)->target;
     List_syntax__ast__Expr* list = List_syntax__ast__Expr_new(&lar_default_memory, LINE(56000231));
     List_syntax__ast__Expr* parts = list;
     codegen__gen__statements__placeParts(target, parts);
     List_syntax__ast__Expr* list_2 = List_syntax__ast__Expr_new(&lar_default_memory, LINE(56000233));
     List_syntax__ast__Expr* held = list_2;
-    if (((b_5289 = (syntax__ast__Binary*)lar_as_class((void*)((s)->value), &lar_class_syntax__ast__Binary)) != NULL) && ((const void*)((b_5289)->left) == (const void*)(target))) {
+    if (((b_5270 = (syntax__ast__Binary*)lar_as_class((void*)((s)->value), &lar_class_syntax__ast__Binary)) != NULL) && ((const void*)((b_5270)->left) == (const void*)(target))) {
         {
             List_syntax__ast__Expr* list_3 = parts;
             for (int32_t index = 0; index < list_3->length; index++) {
@@ -38261,14 +38160,14 @@ void codegen__gen__statements__placeObject(syntax__ast__Expr* o, List_syntax__as
 }
 
 void codegen__gen__statements__assignTo(syntax__ast__AssignStmt* s, syntax__ast__Expr* target) {
-    syntax__ast__Member* m_5301 = NULL;
-    syntax__ast__Index* x_5303 = NULL;
+    syntax__ast__Member* m_5282 = NULL;
+    syntax__ast__Index* x_5284 = NULL;
     LarMemory memory = lar_memory_growable();
     semantics__types__MemberInfo* mi = (target)->_super.member;
-    if ((((m_5301 = (syntax__ast__Member*)lar_as_class((void*)(target), &lar_class_syntax__ast__Member)) != NULL) && (!(mi == NULL))) && (((mi)->kind).tag == (((semantics__types__MemberKind){ .tag = semantics__types__MemberKind_AnyKey })).tag)) {
+    if ((((m_5282 = (syntax__ast__Member*)lar_as_class((void*)(target), &lar_class_syntax__ast__Member)) != NULL) && (!(mi == NULL))) && (((mi)->kind).tag == (((semantics__types__MemberKind){ .tag = semantics__types__MemberKind_AnyKey })).tag)) {
         LarMemory memory_2 = lar_memory_growable();
         LarMemory line56000276_temps = lar_memory_growable();
-        LarString obj = codegen__expressions__hoist(&memory_2, lar_string("LarAny", 6), codegen__expressions__expr(&line56000276_temps, (m_5301)->object));
+        LarString obj = codegen__expressions__hoist(&memory_2, lar_string("LarAny", 6), codegen__expressions__expr(&line56000276_temps, (m_5282)->object));
         lar_memory_free(&line56000276_temps);
         LarMemory line56000277_temps = lar_memory_growable();
         LarTextBuilder text = lar_text_builder_mem(&line56000277_temps, LINE(56000277));
@@ -38287,14 +38186,14 @@ void codegen__gen__statements__assignTo(syntax__ast__AssignStmt* s, syntax__ast_
         lar_memory_free(&memory);
         return;
     }
-    if (((x_5303 = (syntax__ast__Index*)lar_as_class((void*)(target), &lar_class_syntax__ast__Index)) != NULL) && ((const void*)(((x_5303)->object)->_super.ty) == (const void*)(semantics__types__T_ANY))) {
+    if (((x_5284 = (syntax__ast__Index*)lar_as_class((void*)(target), &lar_class_syntax__ast__Index)) != NULL) && ((const void*)(((x_5284)->object)->_super.ty) == (const void*)(semantics__types__T_ANY))) {
         LarMemory memory_3 = lar_memory_growable();
         LarMemory line56000281_temps = lar_memory_growable();
-        LarString obj = codegen__expressions__hoist(&memory_3, lar_string("LarAny", 6), codegen__expressions__expr(&line56000281_temps, (x_5303)->object));
+        LarString obj = codegen__expressions__hoist(&memory_3, lar_string("LarAny", 6), codegen__expressions__expr(&line56000281_temps, (x_5284)->object));
         lar_memory_free(&line56000281_temps);
-        LarString key = codegen__expressions__expr(&memory_3, (x_5303)->index_);
+        LarString key = codegen__expressions__expr(&memory_3, (x_5284)->index_);
         LarString v = codegen__expressions__value(&memory_3, (s)->value);
-        if ((const void*)(((x_5303)->index_)->_super.ty) == (const void*)(semantics__types__T_STRING)) {
+        if ((const void*)(((x_5284)->index_)->_super.ty) == (const void*)(semantics__types__T_STRING)) {
             LarMemory line56000285_temps = lar_memory_growable();
             LarTextBuilder text_2 = lar_text_builder_mem(&line56000285_temps, LINE(56000285));
             lar_text_builder_add(&text_2, "lar_any_set(", 12);
@@ -38520,7 +38419,7 @@ void codegen__gen__statements__ifStmt(syntax__ast__IfStmt* i) {
 }
 
 void codegen__gen__statements__whenStmt(syntax__ast__IfStmt* ifStmt) {
-    syntax__ast__IfStmt* n_5322 = NULL;
+    syntax__ast__IfStmt* n_5303 = NULL;
     List_s* list = List_s_new(&lar_default_memory, LINE(56000359));
     List_s* above = list;
     syntax__ast__IfStmt* cur = ifStmt;
@@ -38541,8 +38440,8 @@ void codegen__gen__statements__whenStmt(syntax__ast__IfStmt* ifStmt) {
         if (!((cur)->hasElse)) {
             break;
         }
-        if (((((cur)->elseBody)->length == 1) && ((n_5322 = (syntax__ast__IfStmt*)lar_as_class((void*)(((cur)->elseBody)->items[lar_index((int64_t)(0), ((cur)->elseBody)->length, LINE(56000367))]), &lar_class_syntax__ast__IfStmt)) != NULL)) && (n_5322)->chained) {
-            cur = n_5322;
+        if (((((cur)->elseBody)->length == 1) && ((n_5303 = (syntax__ast__IfStmt*)lar_as_class((void*)(((cur)->elseBody)->items[lar_index((int64_t)(0), ((cur)->elseBody)->length, LINE(56000367))]), &lar_class_syntax__ast__IfStmt)) != NULL)) && (n_5303)->chained) {
+            cur = n_5303;
             continue;
         }
         codegen__gen__line(lar_string("#else", 5));
@@ -38691,7 +38590,7 @@ void codegen__gen__statements__indexVar(semantics__types__Symbol* ix, LarString 
 }
 
 void codegen__gen__statements__forStmt(syntax__ast__ForStmt* f) {
-    syntax__ast__Member* m_5351 = NULL;
+    syntax__ast__Member* m_5332 = NULL;
     semantics__types__ForInfo* info = ((semantics__types__ForInfo*)lar_unwrap((void*)((f)->_super._super.forInfo), LINE(56000433)));
     codegen__gen__Block* saved = (codegen__gen__generation)->loopBlock;
     codegen__gen__line(lar_string("{", 1));
@@ -38759,7 +38658,7 @@ void codegen__gen__statements__forStmt(syntax__ast__ForStmt* f) {
         if (!((info)->any == 0)) {
             LarMemory memory_2 = lar_memory_growable();
             bool named = ((info)->any == 2);
-            syntax__ast__Expr* src = ((named && ((m_5351 = (syntax__ast__Member*)lar_as_class((void*)((f)->iterable), &lar_class_syntax__ast__Member)) != NULL)) ? (m_5351)->object : (f)->iterable);
+            syntax__ast__Expr* src = ((named && ((m_5332 = (syntax__ast__Member*)lar_as_class((void*)((f)->iterable), &lar_class_syntax__ast__Member)) != NULL)) ? (m_5332)->object : (f)->iterable);
             LarString table = codegen__gen__tmp(&memory_2, lar_string("table", 5));
             LarString n = codegen__gen__tmp(&memory_2, lar_string("count", 5));
             LarString idx = codegen__gen__tmp(&memory_2, lar_string("index", 5));
@@ -38866,12 +38765,12 @@ void codegen__gen__statements__forStmt(syntax__ast__ForStmt* f) {
         } else {
             if ((!(((f)->iterable)->_super.ty == NULL)) && ((const void*)(((semantics__types__Type*)lar_unwrap((void*)(((f)->iterable)->_super.ty), LINE(56000465)))) == (const void*)(semantics__types__T_STRING))) {
                 LarMemory memory_3 = lar_memory_growable();
-                LarString text_5357 = codegen__gen__tmp(&memory_3, lar_string("text", 4));
+                LarString text_5338 = codegen__gen__tmp(&memory_3, lar_string("text", 4));
                 LarString idx = codegen__gen__tmp(&memory_3, lar_string("index", 5));
                 LarMemory line56000468_temps = lar_memory_growable();
                 LarTextBuilder text_14 = lar_text_builder_mem(&line56000468_temps, LINE(56000468));
                 lar_text_builder_add(&text_14, "LarString ", 10);
-                lar_text_builder_str(&text_14, text_5357);
+                lar_text_builder_str(&text_14, text_5338);
                 lar_text_builder_add(&text_14, " = ", 3);
                 lar_text_builder_str(&text_14, codegen__expressions__expr(&line56000468_temps, (f)->iterable));
                 lar_text_builder_add(&text_14, ";", 1);
@@ -38884,7 +38783,7 @@ void codegen__gen__statements__forStmt(syntax__ast__ForStmt* f) {
                 lar_text_builder_add(&text_15, " = 0; ", 6);
                 lar_text_builder_str(&text_15, idx);
                 lar_text_builder_add(&text_15, " < ", 3);
-                lar_text_builder_str(&text_15, text_5357);
+                lar_text_builder_str(&text_15, text_5338);
                 lar_text_builder_add(&text_15, ".len; ", 6);
                 lar_text_builder_str(&text_15, idx);
                 lar_text_builder_add(&text_15, "++) {", 5);
@@ -38897,7 +38796,7 @@ void codegen__gen__statements__forStmt(syntax__ast__ForStmt* f) {
                 lar_text_builder_add(&text_16, "uint8_t ", 8);
                 lar_text_builder_str(&text_16, (v)->cName);
                 lar_text_builder_add(&text_16, " = (uint8_t)", 12);
-                lar_text_builder_str(&text_16, text_5357);
+                lar_text_builder_str(&text_16, text_5338);
                 lar_text_builder_add(&text_16, ".ptr[", 5);
                 lar_text_builder_str(&text_16, idx);
                 lar_text_builder_add(&text_16, "];", 2);
@@ -40865,11 +40764,11 @@ LarString codegen__expressions__lambdas__arrayLit(LarMemory* lar_result_memory, 
 }
 
 LarString codegen__expressions__callbacks__callbackArg(LarMemory* lar_result_memory, syntax__ast__Expr* a, semantics__types__CallbackInfo* callback) {
-    syntax__ast__Lambda* l_5540 = NULL;
+    syntax__ast__Lambda* l_5521 = NULL;
     LarMemory memory = lar_memory_growable();
-    if ((((callback)->kind).tag == (((semantics__types__CallbackKind){ .tag = semantics__types__CallbackKind_Plain })).tag) && ((l_5540 = (syntax__ast__Lambda*)lar_as_class((void*)(a), &lar_class_syntax__ast__Lambda)) != NULL)) {
+    if ((((callback)->kind).tag == (((semantics__types__CallbackKind){ .tag = semantics__types__CallbackKind_Plain })).tag) && ((l_5521 = (syntax__ast__Lambda*)lar_as_class((void*)(a), &lar_class_syntax__ast__Lambda)) != NULL)) {
         LarMemory line61000026_temps = lar_memory_growable();
-        codegen__expressions__lambdas__lambdaValue(&line61000026_temps, l_5540);
+        codegen__expressions__lambdas__lambdaValue(&line61000026_temps, l_5521);
         lar_memory_free(&line61000026_temps);
     }
     semantics__types__CallbackKind subject = (callback)->kind;
@@ -41313,18 +41212,18 @@ LarString codegen__expressions__callbacks__trampoline(LarMemory* lar_result_memo
 
 syntax__ast__Expr* codegen__expressions__calls__receiver(LarMemory* lar_result_memory, syntax__ast__Call* call) {
     (void)lar_result_memory;
-    syntax__ast__Member* m_5570 = NULL;
-    return (((m_5570 = (syntax__ast__Member*)lar_as_class((void*)((call)->callee), &lar_class_syntax__ast__Member)) != NULL) ? (m_5570)->object : (call)->callee);
+    syntax__ast__Member* m_5551 = NULL;
+    return (((m_5551 = (syntax__ast__Member*)lar_as_class((void*)((call)->callee), &lar_class_syntax__ast__Member)) != NULL) ? (m_5551)->object : (call)->callee);
 }
 
 LarString codegen__expressions__calls__calleeName(LarMemory* lar_result_memory, syntax__ast__Call* call) {
     (void)lar_result_memory;
-    syntax__ast__Member* m_5572 = NULL;
-    return (((m_5572 = (syntax__ast__Member*)lar_as_class((void*)((call)->callee), &lar_class_syntax__ast__Member)) != NULL) ? (m_5572)->name : lar_string("", 0));
+    syntax__ast__Member* m_5553 = NULL;
+    return (((m_5553 = (syntax__ast__Member*)lar_as_class((void*)((call)->callee), &lar_class_syntax__ast__Member)) != NULL) ? (m_5553)->name : lar_string("", 0));
 }
 
 LarString codegen__expressions__calls__call(LarMemory* lar_result_memory, syntax__ast__Call* c) {
-    syntax__ast__StringLit* s_5586 = NULL;
+    syntax__ast__StringLit* s_5567 = NULL;
     semantics__types__CallInfo* callInfo = ((semantics__types__CallInfo*)lar_unwrap((void*)((c)->_super._super.call), LINE(55000031)));
     if (((callInfo)->kind).tag == (((semantics__types__CallK){ .tag = semantics__types__CallK_Builtin })).tag) {
         return codegen__expressions__calls__builtin(lar_result_memory, c, callInfo);
@@ -41431,13 +41330,13 @@ LarString codegen__expressions__calls__call(LarMemory* lar_result_memory, syntax
         lar_text_builder_add(&text_5, "));", 3);
         codegen__gen__line(lar_text_builder_finish(&text_5));
         lar_memory_free(&line55000053_temps);
-        if ((s_5586 = (syntax__ast__StringLit*)lar_as_class((void*)(((c)->args)->items[lar_index((int64_t)(0), ((c)->args)->length, LINE(55000054))]), &lar_class_syntax__ast__StringLit)) != NULL) {
+        if ((s_5567 = (syntax__ast__StringLit*)lar_as_class((void*)(((c)->args)->items[lar_index((int64_t)(0), ((c)->args)->length, LINE(55000054))]), &lar_class_syntax__ast__StringLit)) != NULL) {
             LarMemory line55000054_temps = lar_memory_growable();
             LarTextBuilder text_6 = lar_text_builder_mem(&line55000054_temps, LINE(55000054));
             lar_text_builder_add(&text_6, "&", 1);
             lar_text_builder_str(&text_6, b);
             lar_text_builder_add(&text_6, "->_sb", 5);
-            codegen__expressions__strings__appendPieces(s_5586, lar_text_builder_finish(&text_6));
+            codegen__expressions__strings__appendPieces(s_5567, lar_text_builder_finish(&text_6));
             lar_memory_free(&line55000054_temps);
         }
         if (lar_string_eq((((semantics__types__MethodInfo*)lar_unwrap((void*)((callInfo)->method), LINE(55000055))))->name, lar_string("addLine", 7))) {
@@ -41749,13 +41648,13 @@ List_s* codegen__expressions__calls__first(LarMemory* lar_result_memory, LarStri
 }
 
 bool codegen__expressions__calls__isBuilderAdd(syntax__ast__Call* call, semantics__types__CallInfo* callInfo) {
-    syntax__ast__StringLit* s_5612 = NULL;
+    syntax__ast__StringLit* s_5593 = NULL;
     semantics__types__MethodInfo* mi = ((semantics__types__MethodInfo*)lar_unwrap((void*)((callInfo)->method), LINE(55000139)));
     semantics__types__ClassInfo* classInfo = semantics__types__classOf(NULL, (mi)->owner);
     if (((classInfo == NULL) || (!((classInfo)->builder))) || (!((lar_string_eq((mi)->name, lar_string("add", 3)) || lar_string_eq((mi)->name, lar_string("addLine", 7)))))) {
         return false;
     }
-    return ((((s_5612 = (syntax__ast__StringLit*)lar_as_class((void*)(((call)->args)->items[lar_index((int64_t)(0), ((call)->args)->length, LINE(55000142))]), &lar_class_syntax__ast__StringLit)) != NULL) && (((s_5612)->exprs)->length > 0)) && ((s_5612)->_super._super.conversionOf == NULL));
+    return ((((s_5593 = (syntax__ast__StringLit*)lar_as_class((void*)(((call)->args)->items[lar_index((int64_t)(0), ((call)->args)->length, LINE(55000142))]), &lar_class_syntax__ast__StringLit)) != NULL) && (((s_5593)->exprs)->length > 0)) && ((s_5593)->_super._super.conversionOf == NULL));
 }
 
 List_s* codegen__expressions__calls__args(LarMemory* lar_result_memory, List_syntax__ast__Expr* asg, List_b* memParams) {
@@ -42201,11 +42100,11 @@ LarString codegen__expressions__calls__builtin(LarMemory* lar_result_memory, syn
                 LarString x = codegen__expressions__hoist(&memory_4, value_7, codegen__expressions__value(&line55000257_temps, ((call)->args)->items[lar_index((int64_t)(0), ((call)->args)->length, LINE(55000257))]));
                 lar_memory_free(&line55000257_temps);
                 LarString found = codegen__gen__tmp(lar_result_memory, lar_string("found", 5));
-                LarString k_5653 = codegen__gen__tmp(lar_result_memory, lar_string("index", 5));
+                LarString k_5634 = codegen__gen__tmp(lar_result_memory, lar_string("index", 5));
                 LarTextBuilder text_15 = lar_text_builder_mem(&memory_4, LINE(55000260));
                 lar_text_builder_str(&text_15, (il)->items[lar_index((int64_t)(0), (il)->length, LINE(55000260))]);
                 lar_text_builder_add(&text_15, "[", 1);
-                lar_text_builder_str(&text_15, k_5653);
+                lar_text_builder_str(&text_15, k_5634);
                 lar_text_builder_add(&text_15, "]", 1);
                 LarString e = lar_text_builder_finish(&text_15);
                 LarString value_8;
@@ -42246,13 +42145,13 @@ LarString codegen__expressions__calls__builtin(LarMemory* lar_result_memory, syn
                 LarMemory line55000263_temps = lar_memory_growable();
                 LarTextBuilder text_20 = lar_text_builder_mem(&line55000263_temps, LINE(55000263));
                 lar_text_builder_add(&text_20, "for (int32_t ", 13);
-                lar_text_builder_str(&text_20, k_5653);
+                lar_text_builder_str(&text_20, k_5634);
                 lar_text_builder_add(&text_20, " = 0; ", 6);
-                lar_text_builder_str(&text_20, k_5653);
+                lar_text_builder_str(&text_20, k_5634);
                 lar_text_builder_add(&text_20, " < ", 3);
                 lar_text_builder_str(&text_20, (il)->items[lar_index((int64_t)(1), (il)->length, LINE(55000263))]);
                 lar_text_builder_add(&text_20, "; ", 2);
-                lar_text_builder_str(&text_20, k_5653);
+                lar_text_builder_str(&text_20, k_5634);
                 lar_text_builder_add(&text_20, "++) if (", 8);
                 lar_text_builder_str(&text_20, eq);
                 lar_text_builder_add(&text_20, ") { ", 4);
@@ -42314,14 +42213,14 @@ LarString codegen__expressions__calls__builtin(LarMemory* lar_result_memory, syn
 }
 
 LarString codegen__expressions__calls__printCall(LarMemory* lar_result_memory, syntax__ast__Call* call, bool newline) {
-    syntax__ast__StringLit* s_5661 = NULL;
+    syntax__ast__StringLit* s_5642 = NULL;
     LarString f = (newline ? lar_string("lar_println", 11) : lar_string("lar_print", 9));
     syntax__ast__Expr* arg = ((call)->args)->items[lar_index((int64_t)(0), ((call)->args)->length, LINE(55000275))];
     semantics__types__Place* ap = (arg)->_super.place;
-    if (((s_5661 = (syntax__ast__StringLit*)lar_as_class((void*)(arg), &lar_class_syntax__ast__StringLit)) != NULL) && ((arg)->_super.conversionOf == NULL)) {
+    if (((s_5642 = (syntax__ast__StringLit*)lar_as_class((void*)(arg), &lar_class_syntax__ast__StringLit)) != NULL) && ((arg)->_super.conversionOf == NULL)) {
         bool defaultPlace = ((!(ap == NULL)) && (((ap)->kind).tag == (((semantics__types__PlaceKind){ .tag = semantics__types__PlaceKind_Temp })).tag));
-        if ((((s_5661)->exprs)->length == 0) || defaultPlace) {
-            Opt_s direct = codegen__expressions__strings__printDirect(lar_result_memory, s_5661, newline);
+        if ((((s_5642)->exprs)->length == 0) || defaultPlace) {
+            Opt_s direct = codegen__expressions__strings__printDirect(lar_result_memory, s_5642, newline);
             if (!(!(direct).has)) {
                 return direct.value;
             }
@@ -42540,9 +42439,9 @@ LarString codegen__expressions__calls__splitText(LarMemory* lar_result_memory, s
     return result;
 }
 
-void codegen__expressions__calls__lines(LarString text_5679) {
+void codegen__expressions__calls__lines(LarString text_5660) {
     LarMemory memory = lar_memory_growable();
-    LarString value = text_5679;
+    LarString value = text_5660;
     List_s* value_2 = List_s_new(&memory, 55000334);
     LarString value_3 = lar_string("\n", 1);
     if (value_3.len == 0) {
@@ -42727,7 +42626,7 @@ LarString codegen__expressions__calls__sortList(LarMemory* lar_result_memory, sy
     LarMemory memory_2 = lar_memory_growable();
     semantics__types__Type* element = ((semantics__types__Type*)lar_unwrap((void*)((at)->elem), LINE(55000386)));
     LarString elementC = codegen__expressions__cType(&memory_2, element);
-    List_s* list_5698 = codegen__expressions__calls__itemsOf(NULL, at, codegen__expressions__calls__receiver(NULL, call));
+    List_s* list_5679 = codegen__expressions__calls__itemsOf(NULL, at, codegen__expressions__calls__receiver(NULL, call));
     LarString items = codegen__gen__tmp(&memory_2, lar_string("items", 5));
     LarString count = codegen__gen__tmp(&memory_2, lar_string("count", 5));
     LarString spare = codegen__gen__tmp(&memory_2, lar_string("spare", 5));
@@ -42737,7 +42636,7 @@ LarString codegen__expressions__calls__sortList(LarMemory* lar_result_memory, sy
     lar_text_builder_add(&text, "* ", 2);
     lar_text_builder_str(&text, items);
     lar_text_builder_add(&text, " = ", 3);
-    lar_text_builder_str(&text, (list_5698)->items[lar_index((int64_t)(0), (list_5698)->length, LINE(55000392))]);
+    lar_text_builder_str(&text, (list_5679)->items[lar_index((int64_t)(0), (list_5679)->length, LINE(55000392))]);
     lar_text_builder_add(&text, ";", 1);
     codegen__gen__line(lar_text_builder_finish(&text));
     lar_memory_free(&line55000392_temps);
@@ -42746,7 +42645,7 @@ LarString codegen__expressions__calls__sortList(LarMemory* lar_result_memory, sy
     lar_text_builder_add(&text_2, "int64_t ", 8);
     lar_text_builder_str(&text_2, count);
     lar_text_builder_add(&text_2, " = ", 3);
-    lar_text_builder_str(&text_2, (list_5698)->items[lar_index((int64_t)(1), (list_5698)->length, LINE(55000393))]);
+    lar_text_builder_str(&text_2, (list_5679)->items[lar_index((int64_t)(1), (list_5679)->length, LINE(55000393))]);
     lar_text_builder_add(&text_2, ";", 1);
     codegen__gen__line(lar_text_builder_finish(&text_2));
     lar_memory_free(&line55000393_temps);
@@ -44544,8 +44443,8 @@ LarString codegen__gen__classes__mainWrapper(LarMemory* lar_result_memory) {
         lar_memory_free(&memory);
         return result_2;
     }
-    semantics__types__FunctionInfo* main__5871 = mo;
-    bool withArgs = (((((semantics__types__Type*)lar_unwrap((void*)((main__5871)->sig), LINE(53000287))))->params)->length > 0);
+    semantics__types__FunctionInfo* main__5852 = mo;
+    bool withArgs = (((((semantics__types__Type*)lar_unwrap((void*)((main__5852)->sig), LINE(53000287))))->params)->length > 0);
     LarMemory* place = &lar_default_memory;
     StringBuilder* new_StringBuilder = (StringBuilder*)lar_memory_alloc(place, sizeof(StringBuilder), LINE(53000288));
     *new_StringBuilder = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place }, .buf = lar_text_buf_new(place) };
@@ -44580,7 +44479,7 @@ LarString codegen__gen__classes__mainWrapper(LarMemory* lar_result_memory) {
         StringBuilder_add__dispatch((StringBuilder*)builder, lar_string("    for (int i = 1; i < argc; i++) args[i - 1] = lar_string_of_c(argv[i]);\n", 75));
         StringBuilder_add__dispatch((StringBuilder*)builder, lar_string("    Slice_s arg_slice = { args, argc > 1 \? (int32_t)(argc - 1) : 0 };\n", 70));
     }
-    bool throwsOut = (!((main__5871)->throwsType == NULL));
+    bool throwsOut = (!((main__5852)->throwsType == NULL));
     if (throwsOut) {
         StringBuilder_add__dispatch((StringBuilder*)builder, lar_string("    LarError err;\n    err.kind = 0;\n", 36));
     }
@@ -44602,7 +44501,7 @@ LarString codegen__gen__classes__mainWrapper(LarMemory* lar_result_memory) {
     lar_text_builder_str(&text_4, a);
     lar_text_builder_add(&text_4, ")", 1);
     LarString call = lar_text_builder_finish(&text_4);
-    if ((const void*)(((semantics__types__Type*)lar_unwrap((void*)((((semantics__types__Type*)lar_unwrap((void*)((main__5871)->sig), LINE(53000307))))->elem), LINE(53000307)))) == (const void*)(semantics__types__T_VOID)) {
+    if ((const void*)(((semantics__types__Type*)lar_unwrap((void*)((((semantics__types__Type*)lar_unwrap((void*)((main__5852)->sig), LINE(53000307))))->elem), LINE(53000307)))) == (const void*)(semantics__types__T_VOID)) {
         LarMemory line53000307_temps = lar_memory_growable();
         LarTextBuilder text_5 = lar_text_builder_mem(&line53000307_temps, LINE(53000307));
         lar_text_builder_add(&text_5, "    ", 4);
@@ -44639,7 +44538,7 @@ LarString codegen__gen__classes__mainWrapper(LarMemory* lar_result_memory) {
         }
     }
     if (throwsOut) {
-        LarString en = (((semantics__types__Type*)lar_unwrap((void*)((main__5871)->throwsType), LINE(53000316))))->name;
+        LarString en = (((semantics__types__Type*)lar_unwrap((void*)((main__5852)->throwsType), LINE(53000316))))->name;
         LarMemory line53000317_temps = lar_memory_growable();
         LarTextBuilder text_8 = lar_text_builder_mem(&line53000317_temps, LINE(53000317));
         lar_text_builder_add(&text_8, "    if (err.kind != 0) {\n        fflush(stdout);\n        fprintf(stderr, \"uncaught error: ", 90);
@@ -44652,7 +44551,7 @@ LarString codegen__gen__classes__mainWrapper(LarMemory* lar_result_memory) {
         StringBuilder_add__dispatch((StringBuilder*)builder, lar_text_builder_finish(&text_8));
         lar_memory_free(&line53000317_temps);
     }
-    if ((const void*)(((semantics__types__Type*)lar_unwrap((void*)((((semantics__types__Type*)lar_unwrap((void*)((main__5871)->sig), LINE(53000319))))->elem), LINE(53000319)))) == (const void*)(semantics__types__T_VOID)) {
+    if ((const void*)(((semantics__types__Type*)lar_unwrap((void*)((((semantics__types__Type*)lar_unwrap((void*)((main__5852)->sig), LINE(53000319))))->elem), LINE(53000319)))) == (const void*)(semantics__types__T_VOID)) {
         StringBuilder_add__dispatch((StringBuilder*)builder, lar_string("    return 0;\n", 14));
     } else {
         StringBuilder_add__dispatch((StringBuilder*)builder, lar_string("    return (int)result;\n", 24));
@@ -45561,10 +45460,10 @@ bool codegen__expressions__isIdentifier(LarString s) {
 }
 
 LarString codegen__expressions__value(LarMemory* lar_result_memory, syntax__ast__Expr* e) {
-    syntax__ast__Lambda* l_5966 = NULL;
+    syntax__ast__Lambda* l_5947 = NULL;
     semantics__types__Conversion* conversion = (e)->_super.conversionOf;
-    if ((((l_5966 = (syntax__ast__Lambda*)lar_as_class((void*)(e), &lar_class_syntax__ast__Lambda)) != NULL) && (!(conversion == NULL))) && (((conversion)->kind).tag == (((semantics__types__ConversionKind){ .tag = semantics__types__ConversionKind_SamLambda })).tag)) {
-        return codegen__expressions__lambdas__singleMethodObject(lar_result_memory, l_5966, conversion);
+    if ((((l_5947 = (syntax__ast__Lambda*)lar_as_class((void*)(e), &lar_class_syntax__ast__Lambda)) != NULL) && (!(conversion == NULL))) && (((conversion)->kind).tag == (((semantics__types__ConversionKind){ .tag = semantics__types__ConversionKind_SamLambda })).tag)) {
+        return codegen__expressions__lambdas__singleMethodObject(lar_result_memory, l_5947, conversion);
     }
     LarString v = codegen__expressions__expr(lar_result_memory, e);
     return ((conversion == NULL) ? v : codegen__expressions__convert(lar_result_memory, v, conversion, e));
@@ -46443,31 +46342,31 @@ LarString codegen__expressions__unwrap(LarMemory* lar_result_memory, syntax__ast
 }
 
 LarString codegen__expressions__placed(LarMemory* lar_result_memory, syntax__ast__Expr* inner) {
-    syntax__ast__Lambda* l_6027 = NULL;
+    syntax__ast__Lambda* l_6008 = NULL;
     semantics__types__Conversion* conversion = (inner)->_super.conversionOf;
-    return (((((l_6027 = (syntax__ast__Lambda*)lar_as_class((void*)(inner), &lar_class_syntax__ast__Lambda)) != NULL) && (!(conversion == NULL))) && (((conversion)->kind).tag == (((semantics__types__ConversionKind){ .tag = semantics__types__ConversionKind_SamLambda })).tag)) ? codegen__expressions__lambdas__singleMethodObject(lar_result_memory, l_6027, conversion) : codegen__expressions__expr(lar_result_memory, inner));
+    return (((((l_6008 = (syntax__ast__Lambda*)lar_as_class((void*)(inner), &lar_class_syntax__ast__Lambda)) != NULL) && (!(conversion == NULL))) && (((conversion)->kind).tag == (((semantics__types__ConversionKind){ .tag = semantics__types__ConversionKind_SamLambda })).tag)) ? codegen__expressions__lambdas__singleMethodObject(lar_result_memory, l_6008, conversion) : codegen__expressions__expr(lar_result_memory, inner));
 }
 
 LarString codegen__expressions__intLiteral(LarMemory* lar_result_memory, int64_t v, bool big, semantics__types__Type* t) {
     LarMemory memory = lar_memory_growable();
     LarTextBuilder text = lar_text_builder_mem(&memory, LINE(52000497));
     lar_text_builder_i64(&text, (int64_t)(v));
-    LarString text_6031 = lar_text_builder_finish(&text);
+    LarString text_6012 = lar_text_builder_finish(&text);
     if (big) {
         LarTextBuilder text_2 = lar_text_builder_mem(&memory, LINE(52000498));
         lar_text_builder_u64(&text_2, (uint64_t)(((uint64_t)(v))));
-        text_6031 = lar_text_builder_finish(&text_2);
+        text_6012 = lar_text_builder_finish(&text_2);
     }
     if ((!(t == NULL)) && semantics__types__isFloat(t)) {
         LarString value;
         if ((const void*)(t) == (const void*)(semantics__types__T_FLOAT32)) {
             LarTextBuilder text_3 = lar_text_builder_mem(lar_result_memory, LINE(52000499));
-            lar_text_builder_str(&text_3, text_6031);
+            lar_text_builder_str(&text_3, text_6012);
             lar_text_builder_add(&text_3, ".0f", 3);
             value = lar_text_builder_finish(&text_3);
         } else {
             LarTextBuilder text_4 = lar_text_builder_mem(lar_result_memory, LINE(52000499));
-            lar_text_builder_str(&text_4, text_6031);
+            lar_text_builder_str(&text_4, text_6012);
             lar_text_builder_add(&text_4, ".0", 2);
             value = lar_text_builder_finish(&text_4);
         }
@@ -46496,7 +46395,7 @@ LarString codegen__expressions__intLiteral(LarMemory* lar_result_memory, int64_t
         suffix = lar_string("ULL", 3);
     }
     LarTextBuilder text_5 = lar_text_builder_mem(lar_result_memory, LINE(52000508));
-    lar_text_builder_str(&text_5, text_6031);
+    lar_text_builder_str(&text_5, text_6012);
     lar_text_builder_str(&text_5, suffix);
     LarString s = lar_text_builder_finish(&text_5);
     if (semantics__types__bits(p) < 32) {
@@ -47380,15 +47279,15 @@ LarString codegen__gen__tmp(LarMemory* lar_result_memory, LarString role) {
     return codegen__localnames__localName(lar_result_memory, role);
 }
 
-LarString codegen__gen__indent4(LarMemory* lar_result_memory, LarString text_6118) {
-    if (String_isEmpty(text_6118)) {
+LarString codegen__gen__indent4(LarMemory* lar_result_memory, LarString text_6099) {
+    if (String_isEmpty(text_6099)) {
         return lar_string("", 0);
     }
     LarMemory* place = &lar_default_memory;
     StringBuilder* new_StringBuilder = (StringBuilder*)lar_memory_alloc(place, sizeof(StringBuilder), LINE(49000213));
     *new_StringBuilder = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place }, .buf = lar_text_buf_new(place) };
     StringBuilder* builder = new_StringBuilder;
-    LarString value = text_6118;
+    LarString value = text_6099;
     List_s* value_2 = List_s_new(lar_result_memory, 49000214);
     LarString value_3 = lar_string("\n", 1);
     if (value_3.len == 0) {
@@ -47659,7 +47558,7 @@ codegen__cprogram__CProgram* codegen__gen__emitC(LarMemory* lar_result_memory) {
         }
     }
     LarString init = codegen__gen__classes__initGlobals(lar_result_memory);
-    LarString main__6145 = codegen__gen__classes__mainWrapper(lar_result_memory);
+    LarString main__6126 = codegen__gen__classes__mainWrapper(lar_result_memory);
     {
         List_semantics__types__ClassInfo* list_11 = (semantics__types__declared)->classes;
         for (int32_t index_9 = 0; index_9 < list_11->length; index_9++) {
@@ -47714,17 +47613,17 @@ codegen__cprogram__CProgram* codegen__gen__emitC(LarMemory* lar_result_memory) {
                     lar_text_builder_add(&text_7, "\"", 1);
                     value_8 = lar_text_builder_finish(&text_7);
                 }
-                LarString text_6158 = value_8;
+                LarString text_6139 = value_8;
                 LarMemory line49000359_temps = lar_memory_growable();
                 LarString value_9;
                 if (lar_string_eq(platformName, lar_string("", 0))) {
-                    value_9 = text_6158;
+                    value_9 = text_6139;
                 } else {
                     LarTextBuilder text_8 = lar_text_builder_mem(&line49000359_temps, LINE(49000359));
                     lar_text_builder_add(&text_8, "#if ", 4);
                     lar_text_builder_str(&text_8, semantics__types__platformCondition(NULL, platformName));
                     lar_text_builder_add(&text_8, "\n", 1);
-                    lar_text_builder_str(&text_8, text_6158);
+                    lar_text_builder_str(&text_8, text_6139);
                     lar_text_builder_add(&text_8, "\n#endif", 7);
                     value_9 = lar_text_builder_finish(&text_8);
                 }
@@ -47768,12 +47667,12 @@ codegen__cprogram__CProgram* codegen__gen__emitC(LarMemory* lar_result_memory) {
                 lar_text_builder_add(&text_12, "\"", 1);
                 value_11 = lar_text_builder_finish(&text_12);
             }
-            LarString text_6160 = value_11;
+            LarString text_6141 = value_11;
             LarMemory line49000368_temps = lar_memory_growable();
             LarString value_12;
             if (lar_string_eq(platformName, lar_string("", 0))) {
                 LarTextBuilder text_13 = lar_text_builder_mem(&line49000368_temps, LINE(49000368));
-                lar_text_builder_str(&text_13, text_6160);
+                lar_text_builder_str(&text_13, text_6141);
                 lar_text_builder_add(&text_13, "\n", 1);
                 value_12 = lar_text_builder_finish(&text_13);
             } else {
@@ -47781,7 +47680,7 @@ codegen__cprogram__CProgram* codegen__gen__emitC(LarMemory* lar_result_memory) {
                 lar_text_builder_add(&text_14, "#if ", 4);
                 lar_text_builder_str(&text_14, semantics__types__platformCondition(NULL, platformName));
                 lar_text_builder_add(&text_14, "\n", 1);
-                lar_text_builder_str(&text_14, text_6160);
+                lar_text_builder_str(&text_14, text_6141);
                 lar_text_builder_add(&text_14, "\n#endif\n", 8);
                 value_12 = lar_text_builder_finish(&text_14);
             }
@@ -47974,13 +47873,13 @@ codegen__cprogram__CProgram* codegen__gen__emitC(LarMemory* lar_result_memory) {
                 lar_text_builder_add(&text_19, " {\n", 3);
                 lar_text_builder_str(&text_19, codegen__gen__bodyText(&line49000437_temps, body));
                 lar_text_builder_add(&text_19, "\n}", 2);
-                LarString text_6180 = lar_text_builder_finish(&text_19);
+                LarString text_6161 = lar_text_builder_finish(&text_19);
                 lar_memory_free(&line49000437_temps);
                 LarMemory line49000438_temps = lar_memory_growable();
                 LarString value_15;
                 if (lar_string_eq(platformName, lar_string("", 0))) {
                     LarTextBuilder text_20 = lar_text_builder_mem(&line49000438_temps, LINE(49000438));
-                    lar_text_builder_str(&text_20, text_6180);
+                    lar_text_builder_str(&text_20, text_6161);
                     lar_text_builder_add(&text_20, "\n", 1);
                     value_15 = lar_text_builder_finish(&text_20);
                 } else {
@@ -47988,7 +47887,7 @@ codegen__cprogram__CProgram* codegen__gen__emitC(LarMemory* lar_result_memory) {
                     lar_text_builder_add(&text_21, "#if ", 4);
                     lar_text_builder_str(&text_21, semantics__types__platformCondition(NULL, platformName));
                     lar_text_builder_add(&text_21, "\n", 1);
-                    lar_text_builder_str(&text_21, text_6180);
+                    lar_text_builder_str(&text_21, text_6161);
                     lar_text_builder_add(&text_21, "\n#endif\n", 8);
                     value_15 = lar_text_builder_finish(&text_21);
                 }
@@ -48330,8 +48229,8 @@ codegen__cprogram__CProgram* codegen__gen__emitC(LarMemory* lar_result_memory) {
         List_s* list_47 = functionTexts;
         for (int32_t index_44 = 0; index_44 < list_47->length; index_44++) {
             int32_t i = index_44;
-            LarString text_6208 = list_47->items[index_44];
-            codegen__cprogram__CProgram_addFunction__dispatch((codegen__cprogram__CProgram*)program, (functionNames)->items[lar_index((int64_t)(i), (functionNames)->length, LINE(49000529))], text_6208);
+            LarString text_6189 = list_47->items[index_44];
+            codegen__cprogram__CProgram_addFunction__dispatch((codegen__cprogram__CProgram*)program, (functionNames)->items[lar_index((int64_t)(i), (functionNames)->length, LINE(49000529))], text_6189);
         }
     }
     bool anyBuilder = false;
@@ -48425,7 +48324,7 @@ codegen__cprogram__CProgram* codegen__gen__emitC(LarMemory* lar_result_memory) {
     StringBuilder_add__dispatch((StringBuilder*)out, clones);
     codegen__gen__section(out, lar_string("Entry point", 11));
     StringBuilder_add__dispatch((StringBuilder*)out, init);
-    StringBuilder_add__dispatch((StringBuilder*)out, main__6145);
+    StringBuilder_add__dispatch((StringBuilder*)out, main__6126);
     LarMemory line49000571_temps = lar_memory_growable();
     codegen__cprogram__CProgram_add__dispatch((codegen__cprogram__CProgram*)program, StringBuilder_toString__dispatch((StringBuilder*)out, &line49000571_temps));
     lar_memory_free(&line49000571_temps);
@@ -48639,11 +48538,11 @@ LarString codegen__gen__bodyText(LarMemory* lar_result_memory, LarString body) {
         (void)(lines)->items[lar_pop(&(lines)->length, LINE(49000671))];
     }
     List_s* value_4 = lines;
-    LarString text_6245 = codegen__gen__stripIndent(&memory, lar_string_join(value_4->items, value_4->length, lar_string("\n", 1), &lar_default_memory, LINE(49000672)));
+    LarString text_6226 = codegen__gen__stripIndent(&memory, lar_string_join(value_4->items, value_4->length, lar_string("\n", 1), &lar_default_memory, LINE(49000672)));
     LarMemory line49000673_temps = lar_memory_growable();
     LarTextBuilder text = lar_text_builder_mem(lar_result_memory, LINE(49000673));
     lar_text_builder_add(&text, "    ", 4);
-    lar_text_builder_str(&text, String_replace(text_6245, &line49000673_temps, lar_string("\n", 1), lar_string("\n    ", 5)));
+    lar_text_builder_str(&text, String_replace(text_6226, &line49000673_temps, lar_string("\n", 1), lar_string("\n    ", 5)));
     LarString result = lar_text_builder_finish(&text);
     lar_memory_free(&line49000673_temps);
     lar_memory_free(&memory);
@@ -48717,38 +48616,38 @@ LarString codegen__gen__stripIndent(LarMemory* lar_result_memory, LarString code
 List_semantics__types__ClassInfo* codegen__gen__classesByDepth(LarMemory* lar_result_memory) {
     (void)lar_result_memory;
     List_semantics__types__ClassInfo* list = List_semantics__types__ClassInfo_new(&lar_default_memory, LINE(49000701));
-    List_semantics__types__ClassInfo* list_6258 = list;
+    List_semantics__types__ClassInfo* list_6239 = list;
     {
         List_semantics__types__ClassInfo* list_2 = (semantics__types__declared)->classes;
         for (int32_t index = 0; index < list_2->length; index++) {
             semantics__types__ClassInfo* c = list_2->items[index];
             int32_t d = semantics__types__classDepth((c)->name);
-            int32_t i = (list_6258)->length;
-            List_semantics__types__ClassInfo_push(list_6258, c);
-            while ((i > 0) && (semantics__types__classDepth(((list_6258)->items[lar_index((int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), (list_6258)->length, LINE(49000706))])->name) > d)) {
-                (list_6258)->items[lar_index((int64_t)(i), (list_6258)->length, LINE(49000707))] = (list_6258)->items[lar_index((int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), (list_6258)->length, LINE(49000707))];
+            int32_t i = (list_6239)->length;
+            List_semantics__types__ClassInfo_push(list_6239, c);
+            while ((i > 0) && (semantics__types__classDepth(((list_6239)->items[lar_index((int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), (list_6239)->length, LINE(49000706))])->name) > d)) {
+                (list_6239)->items[lar_index((int64_t)(i), (list_6239)->length, LINE(49000707))] = (list_6239)->items[lar_index((int64_t)(((int32_t)((uint32_t)(i) - (uint32_t)(1)))), (list_6239)->length, LINE(49000707))];
                 i = ((int32_t)((uint32_t)(i) - (uint32_t)(1)));
             }
-            (list_6258)->items[lar_index((int64_t)(i), (list_6258)->length, LINE(49000710))] = c;
+            (list_6239)->items[lar_index((int64_t)(i), (list_6239)->length, LINE(49000710))] = c;
         }
     }
-    return list_6258;
+    return list_6239;
 }
 
-List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(LarMemory* lar_result_memory, LarString dir, LarAny config, List_s* problems_6264) {
-    List_project__libraries__LarimarLibrary* list = List_project__libraries__LarimarLibrary_new(lar_result_memory, LINE(63000028));
+List_project__libraries__LarimarLibrary* project__libraries__larimarLibraries(LarMemory* lar_result_memory, LarString dir, LarAny config, List_s* problems_6245) {
+    List_project__libraries__LarimarLibrary* list = List_project__libraries__LarimarLibrary_new(lar_result_memory, LINE(63000027));
     List_project__libraries__LarimarLibrary* out = list;
-    project__libraries__collect(dir, config, lar_string("", 0), out, problems_6264);
+    project__libraries__collect(dir, config, lar_string("", 0), out, problems_6245);
     return out;
 }
 
-void project__libraries__collect(LarString dir, LarAny config, LarString of, List_project__libraries__LarimarLibrary* out, List_s* problems_6270) {
+void project__libraries__collect(LarString dir, LarAny config, LarString of, List_project__libraries__LarimarLibrary* out, List_s* problems_6251) {
     LarMemory memory = lar_memory_growable();
     LarString value_2;
     if (lar_string_eq(of, lar_string("", 0))) {
         value_2 = lar_string("", 0);
     } else {
-        LarTextBuilder text = lar_text_builder_mem(&memory, LINE(63000035));
+        LarTextBuilder text = lar_text_builder_mem(&memory, LINE(63000034));
         lar_text_builder_add(&text, " (in the [dependencies] of '", 28);
         lar_text_builder_str(&text, of);
         lar_text_builder_add(&text, "')", 2);
@@ -48760,14 +48659,14 @@ void project__libraries__collect(LarString dir, LarAny config, LarString of, Lis
         LarTable* table_2 = table_2_v.kind == LAR_ANY_TABLE ? table_2_v.as.t : NULL;
         int32_t count_2 = table_2 ? table_2->count : 0;
         for (int32_t index = 0; index < count_2; index++) {
-            if (table_2->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(63000036));
+            if (table_2->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(63000035));
             LarString name = table_2->keys[index];
             LarAny where = table_2->values[index];
             LarMemory memory_2 = lar_memory_growable();
             Opt_s path = lar_any_as_s(where);
             if (!(path).has) {
-                LarMemory line63000039_temps = lar_memory_growable();
-                LarTextBuilder text_2 = lar_text_builder_mem(&line63000039_temps, LINE(63000039));
+                LarMemory line63000038_temps = lar_memory_growable();
+                LarTextBuilder text_2 = lar_text_builder_mem(&line63000038_temps, LINE(63000038));
                 lar_text_builder_str(&text_2, name);
                 lar_text_builder_add(&text_2, " in [dependencies] is the folder of the library", 47);
                 lar_text_builder_str(&text_2, from);
@@ -48777,21 +48676,21 @@ void project__libraries__collect(LarString dir, LarAny config, LarString of, Lis
                 lar_text_builder_str(&text_2, name);
                 lar_text_builder_add(&text_2, "\"", 1);
                 LarCloneMap clones = lar_clone_map();
-                LarString copy = clone_s(lar_text_builder_finish(&text_2), (problems_6270)->mem, &clones);
+                LarString copy = clone_s(lar_text_builder_finish(&text_2), (problems_6251)->mem, &clones);
                 lar_clone_done(&clones);
-                List_s_push(problems_6270, copy);
-                lar_memory_free(&line63000039_temps);
+                List_s_push(problems_6251, copy);
+                lar_memory_free(&line63000038_temps);
                 lar_memory_free(&memory_2);
                 continue;
             }
-            LarMemory line63000042_temps = lar_memory_growable();
-            LarString folder = std__io__path__normalize(&memory_2, std__io__path__join(&line63000042_temps, dir, path.value));
-            lar_memory_free(&line63000042_temps);
+            LarMemory line63000041_temps = lar_memory_growable();
+            LarString folder = std__io__path__normalize(&memory_2, std__io__path__join(&line63000041_temps, dir, path.value));
+            lar_memory_free(&line63000041_temps);
             project__libraries__LarimarLibrary* known = project__libraries__named(NULL, out, name);
             if (!(known == NULL)) {
                 if (!lar_string_eq((known)->project, folder)) {
-                    LarMemory line63000046_temps = lar_memory_growable();
-                    LarTextBuilder text_3 = lar_text_builder_mem(&line63000046_temps, LINE(63000046));
+                    LarMemory line63000045_temps = lar_memory_growable();
+                    LarTextBuilder text_3 = lar_text_builder_mem(&line63000045_temps, LINE(63000045));
                     lar_text_builder_add(&text_3, "two libraries are called '", 26);
                     lar_text_builder_str(&text_3, name);
                     lar_text_builder_add(&text_3, "': ", 3);
@@ -48800,15 +48699,15 @@ void project__libraries__collect(LarString dir, LarAny config, LarString of, Lis
                     lar_text_builder_str(&text_3, folder);
                     lar_text_builder_str(&text_3, from);
                     LarCloneMap clones_2 = lar_clone_map();
-                    LarString copy_2 = clone_s(lar_text_builder_finish(&text_3), (problems_6270)->mem, &clones_2);
+                    LarString copy_2 = clone_s(lar_text_builder_finish(&text_3), (problems_6251)->mem, &clones_2);
                     lar_clone_done(&clones_2);
-                    List_s_push(problems_6270, copy_2);
-                    lar_memory_free(&line63000046_temps);
+                    List_s_push(problems_6251, copy_2);
+                    lar_memory_free(&line63000045_temps);
                 }
                 lar_memory_free(&memory_2);
                 continue;
             }
-            LarAny found = project__libraries__libraryConfig(&memory_2, name, folder, from, problems_6270);
+            LarAny found = project__libraries__libraryConfig(&memory_2, name, folder, from, problems_6251);
             if (lar_any_is_null(found)) {
                 lar_memory_free(&memory_2);
                 continue;
@@ -48817,74 +48716,67 @@ void project__libraries__collect(LarString dir, LarAny config, LarString of, Lis
             LarString value_4;
             if (value_3.has) value_4 = value_3.value;
             else {
-                LarTextBuilder text_4 = lar_text_builder_mem(&memory_2, LINE(63000052));
+                LarTextBuilder text_4 = lar_text_builder_mem(&memory_2, LINE(63000051));
                 lar_text_builder_add(&text_4, "src/", 4);
                 lar_text_builder_str(&text_4, name);
                 lar_text_builder_add(&text_4, ".lar", 4);
                 value_4 = lar_text_builder_finish(&text_4);
             }
-            LarString main__6278 = std__io__path__join(&memory_2, folder, value_4);
-            LarMemory line63000053_temps = lar_memory_growable();
-            LarTextBuilder text_5 = lar_text_builder_mem(&line63000053_temps, LINE(63000053));
+            LarString main__6259 = std__io__path__join(&memory_2, folder, value_4);
+            LarMemory line63000052_temps = lar_memory_growable();
+            LarTextBuilder text_5 = lar_text_builder_mem(&line63000052_temps, LINE(63000052));
             lar_text_builder_str(&text_5, name);
             lar_text_builder_add(&text_5, ".lar", 4);
-            if ((!lar_string_eq(std__io__path__fileName(NULL, main__6278), lar_text_builder_finish(&text_5))) || (!(std__io__files__isFile(main__6278)))) {
-                LarMemory line63000054_temps = lar_memory_growable();
-                LarTextBuilder text_6 = lar_text_builder_mem(&line63000054_temps, LINE(63000054));
+            if ((!lar_string_eq(std__io__path__fileName(NULL, main__6259), lar_text_builder_finish(&text_5))) || (!(std__io__files__isFile(main__6259)))) {
+                LarMemory line63000053_temps = lar_memory_growable();
+                LarTextBuilder text_6 = lar_text_builder_mem(&line63000053_temps, LINE(63000053));
                 lar_text_builder_add(&text_6, "library '", 9);
                 lar_text_builder_str(&text_6, name);
                 lar_text_builder_add(&text_6, "': its main file is ", 20);
-                lar_text_builder_str(&text_6, std__io__path__relative(&line63000054_temps, folder, main__6278));
+                lar_text_builder_str(&text_6, std__io__path__relative(&line63000053_temps, folder, main__6259));
                 lar_text_builder_add(&text_6, ", and it must be <folder of its modules>/", 41);
                 lar_text_builder_str(&text_6, name);
                 lar_text_builder_add(&text_6, ".lar", 4);
                 LarCloneMap clones_3 = lar_clone_map();
-                LarString copy_3 = clone_s(lar_text_builder_finish(&text_6), (problems_6270)->mem, &clones_3);
+                LarString copy_3 = clone_s(lar_text_builder_finish(&text_6), (problems_6251)->mem, &clones_3);
                 lar_clone_done(&clones_3);
-                List_s_push(problems_6270, copy_3);
-                lar_memory_free(&line63000054_temps);
+                List_s_push(problems_6251, copy_3);
                 lar_memory_free(&line63000053_temps);
+                lar_memory_free(&line63000052_temps);
                 lar_memory_free(&memory_2);
                 continue;
             }
-            lar_memory_free(&line63000053_temps);
-            Opt_b value_5 = lar_any_as_b(lar_any_get(lar_any_get(found, lar_string("project", 7)), lar_string("unsafe_c", 8)));
-            bool value_6;
-            if (value_5.has) value_6 = value_5.value;
-            else {
-                value_6 = false;
-            }
-            bool unsafeC = value_6;
+            lar_memory_free(&line63000052_temps);
             LarMemory* place = (out)->mem;
-            project__libraries__LarimarLibrary* new_project__libraries__LarimarLibrary = (project__libraries__LarimarLibrary*)lar_memory_alloc(place, sizeof(project__libraries__LarimarLibrary), LINE(63000058));
+            project__libraries__LarimarLibrary* new_project__libraries__LarimarLibrary = (project__libraries__LarimarLibrary*)lar_memory_alloc(place, sizeof(project__libraries__LarimarLibrary), LINE(63000056));
             LarCloneMap clones_4 = lar_clone_map();
             LarString copy_4 = clone_s(name, (out)->mem, &clones_4);
             lar_clone_done(&clones_4);
-            LarString value_7 = copy_4;
+            LarString value_5 = copy_4;
             LarCloneMap clones_5 = lar_clone_map();
-            LarString copy_5 = clone_s(std__io__path__parent(NULL, main__6278), (out)->mem, &clones_5);
+            LarString copy_5 = clone_s(std__io__path__parent(NULL, main__6259), (out)->mem, &clones_5);
             lar_clone_done(&clones_5);
-            LarString value_8 = copy_5;
+            LarString value_6 = copy_5;
             LarCloneMap clones_6 = lar_clone_map();
             LarString copy_6 = clone_s(folder, (out)->mem, &clones_6);
             lar_clone_done(&clones_6);
-            *new_project__libraries__LarimarLibrary = (project__libraries__LarimarLibrary){ .header = { (const void*)&methods_project__libraries__LarimarLibrary, place }, .name = value_7, .dir = value_8, .project = copy_6, .unsafeC = unsafeC };
+            *new_project__libraries__LarimarLibrary = (project__libraries__LarimarLibrary){ .header = { (const void*)&methods_project__libraries__LarimarLibrary, place }, .name = value_5, .dir = value_6, .project = copy_6 };
             List_project__libraries__LarimarLibrary_push(out, new_project__libraries__LarimarLibrary);
-            project__libraries__collect(folder, found, name, out, problems_6270);
+            project__libraries__collect(folder, found, name, out, problems_6251);
             lar_memory_free(&memory_2);
         }
     }
     lar_memory_free(&memory);
 }
 
-LarAny project__libraries__libraryConfig(LarMemory* lar_result_memory, LarString name, LarString folder, LarString from, List_s* problems_6283) {
+LarAny project__libraries__libraryConfig(LarMemory* lar_result_memory, LarString name, LarString folder, LarString from, List_s* problems_6263) {
     LarError err;
     err.kind = 0;
     LarMemory memory = lar_memory_growable();
     LarString toml = std__io__path__join(&memory, folder, lar_string("larimar.toml", 12));
     if (!(std__io__files__isFile(toml))) {
-        LarMemory line63000067_temps = lar_memory_growable();
-        LarTextBuilder text = lar_text_builder_mem(&line63000067_temps, LINE(63000067));
+        LarMemory line63000065_temps = lar_memory_growable();
+        LarTextBuilder text = lar_text_builder_mem(&line63000065_temps, LINE(63000065));
         lar_text_builder_add(&text, "library '", 9);
         lar_text_builder_str(&text, name);
         lar_text_builder_add(&text, "': ", 3);
@@ -48892,29 +48784,29 @@ LarAny project__libraries__libraryConfig(LarMemory* lar_result_memory, LarString
         lar_text_builder_add(&text, " has no larimar.toml", 20);
         lar_text_builder_str(&text, from);
         LarCloneMap clones = lar_clone_map();
-        LarString copy = clone_s(lar_text_builder_finish(&text), (problems_6283)->mem, &clones);
+        LarString copy = clone_s(lar_text_builder_finish(&text), (problems_6263)->mem, &clones);
         lar_clone_done(&clones);
-        List_s_push(problems_6283, copy);
-        lar_memory_free(&line63000067_temps);
+        List_s_push(problems_6263, copy);
+        lar_memory_free(&line63000065_temps);
         LarAny result = lar_any_null();
         lar_memory_free(&memory);
         return result;
     }
     LarAny config = lar_any_null();
     {
-        LarMemory line63000072_temps = lar_memory_growable();
-        LarString value_2 = std__io__files__readString(&line63000072_temps, toml, &err);
+        LarMemory line63000070_temps = lar_memory_growable();
+        LarString value_2 = std__io__files__readString(&line63000070_temps, toml, &err);
         if (err.kind != 0) {
-            lar_memory_free(&line63000072_temps);
+            lar_memory_free(&line63000070_temps);
             goto try_catch;
         }
         LarAny value_3 = std__encoding__toml__parse(lar_result_memory, value_2, &err);
         if (err.kind != 0) {
-            lar_memory_free(&line63000072_temps);
+            lar_memory_free(&line63000070_temps);
             goto try_catch;
         }
         config = value_3;
-        lar_memory_free(&line63000072_temps);
+        lar_memory_free(&line63000070_temps);
     }
     goto try_end;
     try_catch:
@@ -48922,15 +48814,15 @@ LarAny project__libraries__libraryConfig(LarMemory* lar_result_memory, LarString
         std__io__IoError e = err.as.e_std__io__IoError;
         (void)e;
         err.kind = 0;
-        LarMemory line63000074_temps = lar_memory_growable();
-        LarTextBuilder text_2 = lar_text_builder_mem(&line63000074_temps, LINE(63000074));
+        LarMemory line63000072_temps = lar_memory_growable();
+        LarTextBuilder text_2 = lar_text_builder_mem(&line63000072_temps, LINE(63000072));
         lar_text_builder_add(&text_2, "cannot read ", 12);
         lar_text_builder_str(&text_2, toml);
         LarCloneMap clones_2 = lar_clone_map();
-        LarString copy_2 = clone_s(lar_text_builder_finish(&text_2), (problems_6283)->mem, &clones_2);
+        LarString copy_2 = clone_s(lar_text_builder_finish(&text_2), (problems_6263)->mem, &clones_2);
         lar_clone_done(&clones_2);
-        List_s_push(problems_6283, copy_2);
-        lar_memory_free(&line63000074_temps);
+        List_s_push(problems_6263, copy_2);
+        lar_memory_free(&line63000072_temps);
         LarAny result_2 = lar_any_null();
         lar_memory_free(&memory);
         return result_2;
@@ -48938,16 +48830,16 @@ LarAny project__libraries__libraryConfig(LarMemory* lar_result_memory, LarString
         std__encoding__toml__TomlError e = err.as.e_std__encoding__toml__TomlError;
         (void)e;
         err.kind = 0;
-        LarMemory line63000077_temps = lar_memory_growable();
-        LarTextBuilder text_3 = lar_text_builder_mem(&line63000077_temps, LINE(63000077));
+        LarMemory line63000075_temps = lar_memory_growable();
+        LarTextBuilder text_3 = lar_text_builder_mem(&line63000075_temps, LINE(63000075));
         lar_text_builder_str(&text_3, toml);
         lar_text_builder_add(&text_3, ": ", 2);
-        lar_text_builder_str(&text_3, std__encoding__toml__message(&line63000077_temps, e));
+        lar_text_builder_str(&text_3, std__encoding__toml__message(&line63000075_temps, e));
         LarCloneMap clones_3 = lar_clone_map();
-        LarString copy_3 = clone_s(lar_text_builder_finish(&text_3), (problems_6283)->mem, &clones_3);
+        LarString copy_3 = clone_s(lar_text_builder_finish(&text_3), (problems_6263)->mem, &clones_3);
         lar_clone_done(&clones_3);
-        List_s_push(problems_6283, copy_3);
-        lar_memory_free(&line63000077_temps);
+        List_s_push(problems_6263, copy_3);
+        lar_memory_free(&line63000075_temps);
         LarAny result_3 = lar_any_null();
         lar_memory_free(&memory);
         return result_3;
@@ -48964,8 +48856,8 @@ LarAny project__libraries__libraryConfig(LarMemory* lar_result_memory, LarString
     }
     LarString kind = value_5;
     if (!lar_string_eq(kind, lar_string("library", 7))) {
-        LarMemory line63000082_temps = lar_memory_growable();
-        LarTextBuilder text_4 = lar_text_builder_mem(&line63000082_temps, LINE(63000082));
+        LarMemory line63000080_temps = lar_memory_growable();
+        LarTextBuilder text_4 = lar_text_builder_mem(&line63000080_temps, LINE(63000080));
         lar_text_builder_add(&text_4, "library '", 9);
         lar_text_builder_str(&text_4, name);
         lar_text_builder_add(&text_4, "': ", 3);
@@ -48973,10 +48865,10 @@ LarAny project__libraries__libraryConfig(LarMemory* lar_result_memory, LarString
         lar_text_builder_add(&text_4, " is a program, not a library ([project] kind = \"library\")", 57);
         lar_text_builder_str(&text_4, from);
         LarCloneMap clones_4 = lar_clone_map();
-        LarString copy_4 = clone_s(lar_text_builder_finish(&text_4), (problems_6283)->mem, &clones_4);
+        LarString copy_4 = clone_s(lar_text_builder_finish(&text_4), (problems_6263)->mem, &clones_4);
         lar_clone_done(&clones_4);
-        List_s_push(problems_6283, copy_4);
-        lar_memory_free(&line63000082_temps);
+        List_s_push(problems_6263, copy_4);
+        lar_memory_free(&line63000080_temps);
         LarAny result_4 = lar_any_null();
         lar_memory_free(&memory);
         return result_4;
@@ -48988,8 +48880,8 @@ LarAny project__libraries__libraryConfig(LarMemory* lar_result_memory, LarString
         value_7 = lar_string("", 0);
     }
     if (!lar_string_eq(value_7, name)) {
-        LarMemory line63000086_temps = lar_memory_growable();
-        LarTextBuilder text_5 = lar_text_builder_mem(&line63000086_temps, LINE(63000086));
+        LarMemory line63000084_temps = lar_memory_growable();
+        LarTextBuilder text_5 = lar_text_builder_mem(&line63000084_temps, LINE(63000084));
         lar_text_builder_add(&text_5, "library '", 9);
         lar_text_builder_str(&text_5, name);
         lar_text_builder_add(&text_5, "': the library in ", 18);
@@ -49005,10 +48897,10 @@ LarAny project__libraries__libraryConfig(LarMemory* lar_result_memory, LarString
         lar_text_builder_add(&text_5, "'", 1);
         lar_text_builder_str(&text_5, from);
         LarCloneMap clones_5 = lar_clone_map();
-        LarString copy_5 = clone_s(lar_text_builder_finish(&text_5), (problems_6283)->mem, &clones_5);
+        LarString copy_5 = clone_s(lar_text_builder_finish(&text_5), (problems_6263)->mem, &clones_5);
         lar_clone_done(&clones_5);
-        List_s_push(problems_6283, copy_5);
-        lar_memory_free(&line63000086_temps);
+        List_s_push(problems_6263, copy_5);
+        lar_memory_free(&line63000084_temps);
         LarAny result_5 = lar_any_null();
         lar_memory_free(&memory);
         return result_5;
@@ -49091,12 +48983,12 @@ syntax__ast__Program* pipeline__assembledProgram(LarMemory* lar_result_memory) {
     return pipeline__program;
 }
 
-pipeline__Compilation* pipeline__compilationWith(LarMemory* lar_result_memory, LarString main__6292, LarString shownFrom, LarString std, LarString sourceRoot) {
+pipeline__Compilation* pipeline__compilationWith(LarMemory* lar_result_memory, LarString main__6272, LarString shownFrom, LarString std, LarString sourceRoot) {
     (void)lar_result_memory;
     LarMemory* place = &lar_default_memory;
     pipeline__Compilation* new_pipeline__Compilation = (pipeline__Compilation*)lar_memory_alloc(place, sizeof(pipeline__Compilation), LINE(45000083));
     LarCloneMap clones = lar_clone_map();
-    LarString copy = clone_s(main__6292, &lar_default_memory, &clones);
+    LarString copy = clone_s(main__6272, &lar_default_memory, &clones);
     lar_clone_done(&clones);
     LarString value = copy;
     LarCloneMap clones_2 = lar_clone_map();
@@ -49142,14 +49034,12 @@ void pipeline__gather(pipeline__Compilation* unit, List_s* from, int32_t start) 
     }
 }
 
-void pipeline__findLibraryRoots(LarString main__6304) {
+void pipeline__findLibraryRoots(LarString main__6284) {
     LarError err;
     err.kind = 0;
     ((void)(((semantics__linker__linking)->libraryNames)->length = 0));
     ((void)(((semantics__linker__linking)->libraryRoots)->length = 0));
-    ((void)(((semantics__linker__linking)->libraryUnsafe)->length = 0));
-    (semantics__linker__linking)->projectUnsafe = false;
-    LarString dir = std__io__path__parent(NULL, main__6304);
+    LarString dir = std__io__path__parent(NULL, main__6284);
     while (!lar_string_eq(dir, lar_string("", 0))) {
         LarMemory memory = lar_memory_growable();
         LarString toml = std__io__path__join(&memory, dir, lar_string("larimar.toml", 12));
@@ -49167,18 +49057,11 @@ void pipeline__findLibraryRoots(LarString main__6304) {
                     goto try_catch;
                 }
                 LarAny config = value_2;
-                Opt_b value_3 = lar_any_as_b(lar_any_get(lar_any_get(config, lar_string("project", 7)), lar_string("unsafe_c", 8)));
-                bool value_4;
-                if (value_3.has) value_4 = value_3.value;
-                else {
-                    value_4 = false;
-                }
-                (semantics__linker__linking)->projectUnsafe = value_4;
-                List_s* list = List_s_new(&memory_2, LINE(45000206));
+                List_s* list = List_s_new(&memory_2, LINE(45000203));
                 List_s* ignored = list;
-                LarMemory line45000207_temps = lar_memory_growable();
+                LarMemory line45000204_temps = lar_memory_growable();
                 {
-                    List_project__libraries__LarimarLibrary* list_2 = project__libraries__larimarLibraries(&line45000207_temps, dir, config, ignored);
+                    List_project__libraries__LarimarLibrary* list_2 = project__libraries__larimarLibraries(&line45000204_temps, dir, config, ignored);
                     for (int32_t index = 0; index < list_2->length; index++) {
                         project__libraries__LarimarLibrary* l = list_2->items[index];
                         LarCloneMap clones = lar_clone_map();
@@ -49189,10 +49072,9 @@ void pipeline__findLibraryRoots(LarString main__6304) {
                         LarString copy_2 = clone_s((l)->dir, &lar_default_memory, &clones_2);
                         lar_clone_done(&clones_2);
                         List_s_push((semantics__linker__linking)->libraryRoots, copy_2);
-                        List_b_push((semantics__linker__linking)->libraryUnsafe, (l)->unsafeC);
                     }
                 }
-                lar_memory_free(&line45000207_temps);
+                lar_memory_free(&line45000204_temps);
                 lar_memory_free(&memory_2);
             }
             goto try_end;
@@ -49219,9 +49101,9 @@ void pipeline__findLibraryRoots(LarString main__6304) {
     }
 }
 
-bool editor__session__analyzeFile(LarString main__6313, LarString shownFrom) {
+bool editor__session__analyzeFile(LarString main__6293, LarString shownFrom) {
     LarMemory memory = lar_memory_growable();
-    pipeline__Compilation* unit = editor__session__compilationOf(&memory, main__6313, shownFrom);
+    pipeline__Compilation* unit = editor__session__compilationOf(&memory, main__6293, shownFrom);
     LarMemory line43000031_temps = lar_memory_growable();
     bool ok = pipeline__run(unit, pipeline__analysisPasses(&line43000031_temps));
     lar_memory_free(&line43000031_temps);
@@ -49246,8 +49128,8 @@ bool editor__session__analyzeFile(LarString main__6313, LarString shownFrom) {
     return result;
 }
 
-pipeline__Compilation* editor__session__compilationOf(LarMemory* lar_result_memory, LarString main__6318, LarString shownFrom) {
-    return pipeline__compilationWith(NULL, main__6318, shownFrom, editor__session__stdDir(lar_result_memory), editor__session__sourceRoot);
+pipeline__Compilation* editor__session__compilationOf(LarMemory* lar_result_memory, LarString main__6298, LarString shownFrom) {
+    return pipeline__compilationWith(NULL, main__6298, shownFrom, editor__session__stdDir(lar_result_memory), editor__session__sourceRoot);
 }
 
 LarString editor__session__stdDir(LarMemory* lar_result_memory) {
@@ -49358,12 +49240,12 @@ editor__session__Diagnostic* editor__session__diagnostic(LarMemory* lar_result_m
     }
     int64_t encoded = value_4;
     int32_t index_ = ((int32_t)(lar_div_i64(encoded, ((int64_t)(1000000)), LINE(43000089))));
-    LarString file_6335 = (((index_ >= 0) && (index_ < ((semantics__linker__linking)->filePaths)->length)) ? ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)(index_), ((semantics__linker__linking)->filePaths)->length, LINE(43000090))] : lar_string("", 0));
+    LarString file_6315 = (((index_ >= 0) && (index_ < ((semantics__linker__linking)->filePaths)->length)) ? ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)(index_), ((semantics__linker__linking)->filePaths)->length, LINE(43000090))] : lar_string("", 0));
     LarMemory line43000091_temps = lar_memory_growable();
     LarMemory* place_2 = lar_result_memory;
     editor__session__Diagnostic* new_editor__session__Diagnostic_2 = (editor__session__Diagnostic*)lar_memory_alloc(place_2, sizeof(editor__session__Diagnostic), LINE(43000091));
     LarCloneMap clones_2 = lar_clone_map();
-    LarString copy_2 = clone_s(file_6335, lar_result_memory, &clones_2);
+    LarString copy_2 = clone_s(file_6315, lar_result_memory, &clones_2);
     lar_clone_done(&clones_2);
     LarString value_5 = copy_2;
     LarCloneMap clones_3 = lar_clone_map();
@@ -49380,17 +49262,17 @@ editor__session__Diagnostic* editor__session__diagnostic(LarMemory* lar_result_m
     return result_2;
 }
 
-LarString editor__session__projectMain(LarMemory* lar_result_memory, LarString file_6336) {
-    LarString dir = std__io__path__parent(NULL, file_6336);
+LarString editor__session__projectMain(LarMemory* lar_result_memory, LarString file_6316) {
+    LarString dir = std__io__path__parent(NULL, file_6316);
     while (!lar_string_eq(dir, lar_string("", 0))) {
         LarMemory memory = lar_memory_growable();
         LarString toml = std__io__path__join(&memory, dir, lar_string("larimar.toml", 12));
         if (std__io__files__isFile(toml)) {
             LarMemory memory_2 = lar_memory_growable();
-            LarString main__6339 = editor__session__tomlMain(&memory_2, toml);
-            if (!lar_string_eq(main__6339, lar_string("", 0))) {
+            LarString main__6319 = editor__session__tomlMain(&memory_2, toml);
+            if (!lar_string_eq(main__6319, lar_string("", 0))) {
                 LarMemory line43000106_temps = lar_memory_growable();
-                LarString result = std__io__path__normalize(lar_result_memory, std__io__path__join(&line43000106_temps, dir, main__6339));
+                LarString result = std__io__path__normalize(lar_result_memory, std__io__path__join(&line43000106_temps, dir, main__6319));
                 lar_memory_free(&line43000106_temps);
                 lar_memory_free(&memory_2);
                 lar_memory_free(&memory);
@@ -49406,7 +49288,7 @@ LarString editor__session__projectMain(LarMemory* lar_result_memory, LarString f
         dir = up;
         lar_memory_free(&memory);
     }
-    return file_6336;
+    return file_6316;
 }
 
 LarString editor__session__tomlMain(LarMemory* lar_result_memory, LarString path) {
@@ -49465,13 +49347,13 @@ int32_t editor__session__checkCommand(List_s* rest) {
         }
     }
     LarMemory line43000138_temps = lar_memory_growable();
-    LarString main__6349 = std__io__path__normalize(&memory, std__io__path__absolute(&line43000138_temps, target));
+    LarString main__6329 = std__io__path__normalize(&memory, std__io__path__absolute(&line43000138_temps, target));
     lar_memory_free(&line43000138_temps);
-    if (std__io__files__isDirectory(main__6349)) {
-        main__6349 = editor__session__projectMain(&memory, std__io__path__join(&memory, main__6349, lar_string("larimar.toml", 12)));
+    if (std__io__files__isDirectory(main__6329)) {
+        main__6329 = editor__session__projectMain(&memory, std__io__path__join(&memory, main__6329, lar_string("larimar.toml", 12)));
     }
     LarMemory line43000140_temps = lar_memory_growable();
-    bool ok = editor__session__analyzeFile(main__6349, std__os__cwd(&line43000140_temps));
+    bool ok = editor__session__analyzeFile(main__6329, std__os__cwd(&line43000140_temps));
     lar_memory_free(&line43000140_temps);
     List_editor__session__Diagnostic* found = editor__session__diagnostics(&memory);
     if (json) {
@@ -49876,7 +49758,7 @@ LarString project__cc__installHint(LarMemory* lar_result_memory) {
 }
 
 List_project__testing__TestFunction* project__testing__testFunctions(LarMemory* lar_result_memory, LarString source) {
-    syntax__ast__FunctionDecl* f_6386 = NULL;
+    syntax__ast__FunctionDecl* f_6366 = NULL;
     List_project__testing__TestFunction* list = List_project__testing__TestFunction_new(lar_result_memory, LINE(64000061));
     List_project__testing__TestFunction* out = list;
     syntax__ast__Program* p = syntax__parser__parseProgram(NULL, source, 1);
@@ -49887,19 +49769,19 @@ List_project__testing__TestFunction* project__testing__testFunctions(LarMemory* 
         List_syntax__ast__Node* list_2 = (p)->decls;
         for (int32_t index = 0; index < list_2->length; index++) {
             syntax__ast__Node* d = list_2->items[index];
-            if (((f_6386 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (f_6386)->isTest) {
+            if (((f_6366 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (f_6366)->isTest) {
                 LarString setup = lar_string("", 0);
-                if ((((f_6386)->params)->length == 1) && (!((((f_6386)->params)->items[lar_index((int64_t)(0), ((f_6386)->params)->length, LINE(64000067))])->type == NULL))) {
-                    setup = (((syntax__ast__TypeRef*)lar_unwrap((void*)((((f_6386)->params)->items[lar_index((int64_t)(0), ((f_6386)->params)->length, LINE(64000067))])->type), LINE(64000067))))->name;
+                if ((((f_6366)->params)->length == 1) && (!((((f_6366)->params)->items[lar_index((int64_t)(0), ((f_6366)->params)->length, LINE(64000067))])->type == NULL))) {
+                    setup = (((syntax__ast__TypeRef*)lar_unwrap((void*)((((f_6366)->params)->items[lar_index((int64_t)(0), ((f_6366)->params)->length, LINE(64000067))])->type), LINE(64000067))))->name;
                 }
-                LarString error = ((!((f_6386)->throwsType == NULL)) ? (((syntax__ast__TypeRef*)lar_unwrap((void*)((f_6386)->throwsType), LINE(64000068))))->name : lar_string("", 0));
+                LarString error = ((!((f_6366)->throwsType == NULL)) ? (((syntax__ast__TypeRef*)lar_unwrap((void*)((f_6366)->throwsType), LINE(64000068))))->name : lar_string("", 0));
                 LarMemory* place = (out)->mem;
                 project__testing__TestFunction* new_project__testing__TestFunction = (project__testing__TestFunction*)lar_memory_alloc(place, sizeof(project__testing__TestFunction), LINE(64000069));
                 LarCloneMap clones = lar_clone_map();
-                LarString copy = clone_s((f_6386)->name, (out)->mem, &clones);
+                LarString copy = clone_s((f_6366)->name, (out)->mem, &clones);
                 lar_clone_done(&clones);
                 LarString value = copy;
-                int32_t value_2 = (f_6386)->_super.line;
+                int32_t value_2 = (f_6366)->_super.line;
                 LarCloneMap clones_2 = lar_clone_map();
                 LarString copy_2 = clone_s(setup, (out)->mem, &clones_2);
                 lar_clone_done(&clones_2);
@@ -49916,13 +49798,13 @@ List_project__testing__TestFunction* project__testing__testFunctions(LarMemory* 
 }
 
 bool project__testing__hasMain(LarString source) {
-    syntax__ast__FunctionDecl* f_6392 = NULL;
+    syntax__ast__FunctionDecl* f_6372 = NULL;
     syntax__ast__Program* p = syntax__parser__parseProgram(NULL, source, 1);
     {
         List_syntax__ast__Node* list = (p)->decls;
         for (int32_t index = 0; index < list->length; index++) {
             syntax__ast__Node* d = list->items[index];
-            if ((((f_6392 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && lar_string_eq((f_6392)->name, lar_string("main", 4))) && lar_string_eq((f_6392)->typeName, lar_string("", 0))) {
+            if ((((f_6372 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && lar_string_eq((f_6372)->name, lar_string("main", 4))) && lar_string_eq((f_6372)->typeName, lar_string("", 0))) {
                 return true;
             }
         }
@@ -50583,8 +50465,8 @@ LarString project__testing__read(LarMemory* lar_result_memory, LarString path) {
     return zero_value;
 }
 
-LarString project__testing__head(LarMemory* lar_result_memory, LarString text_6461, int32_t count) {
-    LarString value = String_trim(text_6461, NULL);
+LarString project__testing__head(LarMemory* lar_result_memory, LarString text_6441, int32_t count) {
+    LarString value = String_trim(text_6441, NULL);
     List_s* value_2 = List_s_new(lar_result_memory, 64000362);
     LarString value_3 = lar_string("\n", 1);
     if (value_3.len == 0) {
@@ -50854,7 +50736,7 @@ LarString project__testing__exeName(LarMemory* lar_result_memory, LarString b) {
     return value;
 }
 
-void project__testing__runTestFile(LarString file_6496, LarString shown, LarString source) {
+void project__testing__runTestFile(LarString file_6476, LarString shown, LarString source) {
     (void)source;
     LarMemory memory_2 = lar_memory_growable();
     LarString b = project__testing__base(&memory_2, shown);
@@ -50870,7 +50752,7 @@ void project__testing__runTestFile(LarString file_6496, LarString shown, LarStri
     List_s* list = List_s_new(&memory_2, LINE(64000448));
     List_s_add(list, project__cc__selfPath(&memory_2), LINE(64000448));
     List_s_add(list, lar_string("test-main", 9), LINE(64000448));
-    List_s_add(list, file_6496, LINE(64000448));
+    List_s_add(list, file_6476, LINE(64000448));
     List_s_add(list, lar_string("-o", 2), LINE(64000448));
     List_s_add(list, cFile, LINE(64000448));
     List_s* cmd = list;
@@ -51426,7 +51308,7 @@ bool editor__ide__nameByte(uint8_t c) {
     return (std__text__isIdentifierPart(c) || (c >= (uint8_t)128));
 }
 
-List_i32* editor__ide__wordColumns(LarMemory* lar_result_memory, LarString text_6651, LarString word, int32_t dotted) {
+List_i32* editor__ide__wordColumns(LarMemory* lar_result_memory, LarString text_6631, LarString word, int32_t dotted) {
     (void)lar_result_memory;
     List_i32* list = List_i32_new(&lar_default_memory, LINE(84000108));
     List_i32* out = list;
@@ -51435,15 +51317,15 @@ List_i32* editor__ide__wordColumns(LarMemory* lar_result_memory, LarString text_
     }
     int32_t from = 0;
     while (true) {
-        Opt_i32 at = String_indexOf_2(text_6651, word, from);
+        Opt_i32 at = String_indexOf_2(text_6631, word, from);
         if (!(at).has) {
             break;
         }
         int32_t a = at.value;
         int32_t end = ((int32_t)((uint32_t)(a) + (uint32_t)((word).len)));
-        bool before = ((a > 0) && editor__ide__nameByte(lar_string_byte(text_6651, (int64_t)(((int32_t)((uint32_t)(a) - (uint32_t)(1)))), LINE(84000116))));
-        bool after = ((end < (text_6651).len) && editor__ide__nameByte(lar_string_byte(text_6651, (int64_t)(end), LINE(84000117))));
-        bool dot = ((a > 0) && (lar_string_byte(text_6651, (int64_t)(((int32_t)((uint32_t)(a) - (uint32_t)(1)))), LINE(84000118)) == (uint8_t)46));
+        bool before = ((a > 0) && editor__ide__nameByte(lar_string_byte(text_6631, (int64_t)(((int32_t)((uint32_t)(a) - (uint32_t)(1)))), LINE(84000116))));
+        bool after = ((end < (text_6631).len) && editor__ide__nameByte(lar_string_byte(text_6631, (int64_t)(end), LINE(84000117))));
+        bool dot = ((a > 0) && (lar_string_byte(text_6631, (int64_t)(((int32_t)((uint32_t)(a) - (uint32_t)(1)))), LINE(84000118)) == (uint8_t)46));
         if (((!(before)) && (!(after))) && ((dotted < 0) || ((dotted == 1) == dot))) {
             List_i32_push(out, a);
         }
@@ -51632,9 +51514,9 @@ LarString editor__ide__typeText(LarMemory* lar_result_memory, semantics__types__
 }
 
 void editor__ide__collect(void) {
-    syntax__ast__VarDecl* v_6710 = NULL;
-    syntax__ast__ConstDecl* c_6711 = NULL;
-    syntax__ast__Lambda* l_6713 = NULL;
+    syntax__ast__VarDecl* v_6690 = NULL;
+    syntax__ast__ConstDecl* c_6691 = NULL;
+    syntax__ast__Lambda* l_6693 = NULL;
     if (editor__ide__collected) {
         return;
     }
@@ -51708,11 +51590,11 @@ void editor__ide__collect(void) {
         List_syntax__ast__Node* list_10 = (editor__session__program)->decls;
         for (int32_t index_10 = 0; index_10 < list_10->length; index_10++) {
             syntax__ast__Node* d = list_10->items[index_10];
-            if ((v_6710 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) {
-                syntax__ast__exprAll((v_6710)->init, true, editor__ide__exprs);
+            if ((v_6690 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) {
+                syntax__ast__exprAll((v_6690)->init, true, editor__ide__exprs);
             }
-            if ((c_6711 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL) {
-                syntax__ast__exprAll((c_6711)->value, true, editor__ide__exprs);
+            if ((c_6691 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL) {
+                syntax__ast__exprAll((c_6691)->value, true, editor__ide__exprs);
             }
         }
     }
@@ -51720,8 +51602,8 @@ void editor__ide__collect(void) {
         List_syntax__ast__Expr* list_11 = editor__ide__exprs;
         for (int32_t index_11 = 0; index_11 < list_11->length; index_11++) {
             syntax__ast__Expr* e = list_11->items[index_11];
-            if ((l_6713 = (syntax__ast__Lambda*)lar_as_class((void*)(e), &lar_class_syntax__ast__Lambda)) != NULL) {
-                semantics__types__LambdaInfo* lambdaInfo = (l_6713)->_super._super.lambda;
+            if ((l_6693 = (syntax__ast__Lambda*)lar_as_class((void*)(e), &lar_class_syntax__ast__Lambda)) != NULL) {
+                semantics__types__LambdaInfo* lambdaInfo = (l_6693)->_super._super.lambda;
                 if (!(lambdaInfo == NULL)) {
                     {
                         List_semantics__types__Symbol* list_12 = (lambdaInfo)->params;
@@ -51732,7 +51614,7 @@ void editor__ide__collect(void) {
                         }
                     }
                 }
-                editor__ide__statements((l_6713)->body);
+                editor__ide__statements((l_6693)->body);
             }
         }
     }
@@ -51758,9 +51640,9 @@ void editor__ide__body(List_syntax__ast__Stmt* b) {
 }
 
 void editor__ide__statements(List_syntax__ast__Stmt* b) {
-    syntax__ast__VarDecl* v_6722 = NULL;
-    syntax__ast__ForStmt* f_6723 = NULL;
-    syntax__ast__TryStmt* t_6724 = NULL;
+    syntax__ast__VarDecl* v_6702 = NULL;
+    syntax__ast__ForStmt* f_6703 = NULL;
+    syntax__ast__TryStmt* t_6704 = NULL;
     List_syntax__ast__Stmt* list = List_syntax__ast__Stmt_new(&lar_default_memory, LINE(84000299));
     List_syntax__ast__Stmt* all = list;
     syntax__ast__allStmts(b, all);
@@ -51768,20 +51650,20 @@ void editor__ide__statements(List_syntax__ast__Stmt* b) {
         List_syntax__ast__Stmt* list_2 = all;
         for (int32_t index = 0; index < list_2->length; index++) {
             syntax__ast__Stmt* s = list_2->items[index];
-            if (((v_6722 = (syntax__ast__VarDecl*)lar_as_class((void*)(s), &lar_class_syntax__ast__VarDecl)) != NULL) && (!((v_6722)->_super._super.symbol == NULL))) {
-                List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)lar_unwrap((void*)((v_6722)->_super._super.symbol), LINE(84000302))));
+            if (((v_6702 = (syntax__ast__VarDecl*)lar_as_class((void*)(s), &lar_class_syntax__ast__VarDecl)) != NULL) && (!((v_6702)->_super._super.symbol == NULL))) {
+                List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)lar_unwrap((void*)((v_6702)->_super._super.symbol), LINE(84000302))));
             }
-            if (((f_6723 = (syntax__ast__ForStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__ForStmt)) != NULL) && (!((f_6723)->_super._super.forInfo == NULL))) {
-                if (!((((semantics__types__ForInfo*)lar_unwrap((void*)((f_6723)->_super._super.forInfo), LINE(84000304))))->index_ == NULL)) {
-                    List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)lar_unwrap((void*)((((semantics__types__ForInfo*)lar_unwrap((void*)((f_6723)->_super._super.forInfo), LINE(84000304))))->index_), LINE(84000304))));
+            if (((f_6703 = (syntax__ast__ForStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__ForStmt)) != NULL) && (!((f_6703)->_super._super.forInfo == NULL))) {
+                if (!((((semantics__types__ForInfo*)lar_unwrap((void*)((f_6703)->_super._super.forInfo), LINE(84000304))))->index_ == NULL)) {
+                    List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)lar_unwrap((void*)((((semantics__types__ForInfo*)lar_unwrap((void*)((f_6703)->_super._super.forInfo), LINE(84000304))))->index_), LINE(84000304))));
                 }
-                if (!((((semantics__types__ForInfo*)lar_unwrap((void*)((f_6723)->_super._super.forInfo), LINE(84000305))))->value == NULL)) {
-                    List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)lar_unwrap((void*)((((semantics__types__ForInfo*)lar_unwrap((void*)((f_6723)->_super._super.forInfo), LINE(84000305))))->value), LINE(84000305))));
+                if (!((((semantics__types__ForInfo*)lar_unwrap((void*)((f_6703)->_super._super.forInfo), LINE(84000305))))->value == NULL)) {
+                    List_semantics__types__Symbol_push(editor__ide__locals, ((semantics__types__Symbol*)lar_unwrap((void*)((((semantics__types__ForInfo*)lar_unwrap((void*)((f_6703)->_super._super.forInfo), LINE(84000305))))->value), LINE(84000305))));
                 }
             }
-            if ((t_6724 = (syntax__ast__TryStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__TryStmt)) != NULL) {
+            if ((t_6704 = (syntax__ast__TryStmt*)lar_as_class((void*)(s), &lar_class_syntax__ast__TryStmt)) != NULL) {
                 {
-                    List_syntax__ast__CatchClause* list_3 = (t_6724)->catches;
+                    List_syntax__ast__CatchClause* list_3 = (t_6704)->catches;
                     for (int32_t index_2 = 0; index_2 < list_3->length; index_2++) {
                         syntax__ast__CatchClause* c = list_3->items[index_2];
                         if ((!((c)->_super.catchInfo == NULL)) && (!((((semantics__types__CatchInfo*)lar_unwrap((void*)((c)->_super.catchInfo), LINE(84000309))))->variable == NULL))) {
@@ -51804,8 +51686,8 @@ editor__ide__Target* editor__ide__none(LarMemory* lar_result_memory) {
 
 editor__ide__Target* editor__ide__ofSymbol(LarMemory* lar_result_memory, semantics__types__Symbol* s) {
     (void)lar_result_memory;
-    syntax__ast__VarDecl* v_6729 = NULL;
-    syntax__ast__ConstDecl* c_6730 = NULL;
+    syntax__ast__VarDecl* v_6709 = NULL;
+    syntax__ast__ConstDecl* c_6710 = NULL;
     if ((((s)->kind).tag == (((semantics__types__SymbolKind){ .tag = semantics__types__SymbolKind_Function })).tag) && (!((s)->func == NULL))) {
         return editor__ide__ofFunc(NULL, ((semantics__types__FunctionInfo*)lar_unwrap((void*)((s)->func), LINE(84000348))));
     }
@@ -51822,13 +51704,13 @@ editor__ide__Target* editor__ide__ofSymbol(LarMemory* lar_result_memory, semanti
             List_syntax__ast__Node* list = (editor__session__program)->decls;
             for (int32_t index = 0; index < list->length; index++) {
                 syntax__ast__Node* d = list->items[index];
-                if (((v_6729 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) && lar_string_eq((v_6729)->name, (s)->name)) {
-                    (target)->decl = ((syntax__ast__Node*)(v_6729));
-                    (target)->line = (v_6729)->_super._super.line;
+                if (((v_6709 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) && lar_string_eq((v_6709)->name, (s)->name)) {
+                    (target)->decl = ((syntax__ast__Node*)(v_6709));
+                    (target)->line = (v_6709)->_super._super.line;
                 }
-                if (((c_6730 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL) && lar_string_eq((c_6730)->name, (s)->name)) {
-                    (target)->decl = ((syntax__ast__Node*)(c_6730));
-                    (target)->line = (c_6730)->_super.line;
+                if (((c_6710 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL) && lar_string_eq((c_6710)->name, (s)->name)) {
+                    (target)->decl = ((syntax__ast__Node*)(c_6710));
+                    (target)->line = (c_6710)->_super.line;
                 }
             }
         }
@@ -51891,7 +51773,7 @@ editor__ide__Target* editor__ide__ofVariant(LarMemory* lar_result_memory, semant
 
 editor__ide__Target* editor__ide__ofType(LarMemory* lar_result_memory, LarString linked) {
     (void)lar_result_memory;
-    syntax__ast__NativeTypeDecl* n_6744 = NULL;
+    syntax__ast__NativeTypeDecl* n_6724 = NULL;
     int32_t line = 0;
     semantics__types__StructInfo* structInfo = semantics__types__structOf(NULL, linked);
     if (!(structInfo == NULL)) {
@@ -51918,8 +51800,8 @@ editor__ide__Target* editor__ide__ofType(LarMemory* lar_result_memory, LarString
             List_syntax__ast__Node* list = (editor__session__program)->decls;
             for (int32_t index = 0; index < list->length; index++) {
                 syntax__ast__Node* d = list->items[index];
-                if (((n_6744 = (syntax__ast__NativeTypeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeTypeDecl)) != NULL) && lar_string_eq((n_6744)->name, linked)) {
-                    line = (n_6744)->_super.line;
+                if (((n_6724 = (syntax__ast__NativeTypeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeTypeDecl)) != NULL) && lar_string_eq((n_6724)->name, linked)) {
+                    line = (n_6724)->_super.line;
                 }
             }
         }
@@ -51942,8 +51824,8 @@ editor__ide__Target* editor__ide__ofType(LarMemory* lar_result_memory, LarString
 
 editor__ide__Target* editor__ide__ofLinked(LarMemory* lar_result_memory, LarString linked) {
     (void)lar_result_memory;
-    syntax__ast__VarDecl* v_6749 = NULL;
-    syntax__ast__ConstDecl* c_6750 = NULL;
+    syntax__ast__VarDecl* v_6729 = NULL;
+    syntax__ast__ConstDecl* c_6730 = NULL;
     editor__ide__Target* target = editor__ide__ofType(NULL, linked);
     if (!((target)->kind == 0)) {
         return target;
@@ -51956,16 +51838,16 @@ editor__ide__Target* editor__ide__ofLinked(LarMemory* lar_result_memory, LarStri
         List_syntax__ast__Node* list = (editor__session__program)->decls;
         for (int32_t index = 0; index < list->length; index++) {
             syntax__ast__Node* d = list->items[index];
-            if ((((v_6749 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) && lar_string_eq((v_6749)->name, linked)) && (!((v_6749)->_super._super.symbol == NULL))) {
-                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)lar_unwrap((void*)((v_6749)->_super._super.symbol), LINE(84000406))));
+            if ((((v_6729 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) && lar_string_eq((v_6729)->name, linked)) && (!((v_6729)->_super._super.symbol == NULL))) {
+                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)lar_unwrap((void*)((v_6729)->_super._super.symbol), LINE(84000406))));
             }
-            if (((c_6750 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL) && lar_string_eq((c_6750)->name, linked)) {
+            if (((c_6730 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL) && lar_string_eq((c_6730)->name, linked)) {
                 LarMemory* place = &lar_default_memory;
                 editor__ide__Target* new_editor__ide__Target = (editor__ide__Target*)lar_memory_alloc(place, sizeof(editor__ide__Target), LINE(84000408));
                 LarCloneMap clones = lar_clone_map();
                 LarString copy = clone_s(editor__ide__shortName(NULL, linked), &lar_default_memory, &clones);
                 lar_clone_done(&clones);
-                *new_editor__ide__Target = (editor__ide__Target){ .header = { (const void*)&methods_editor__ide__Target, place }, .kind = 2, .name = copy, .line = (c_6750)->_super.line, .symbol = NULL, .func = NULL, .method = NULL, .field = NULL, .typeName = lar_string("", 0), .variant = NULL, .enumName = lar_string("", 0), .module = lar_string("", 0), .decl = ((syntax__ast__Node*)(c_6750)) };
+                *new_editor__ide__Target = (editor__ide__Target){ .header = { (const void*)&methods_editor__ide__Target, place }, .kind = 2, .name = copy, .line = (c_6730)->_super.line, .symbol = NULL, .func = NULL, .method = NULL, .field = NULL, .typeName = lar_string("", 0), .variant = NULL, .enumName = lar_string("", 0), .module = lar_string("", 0), .decl = ((syntax__ast__Node*)(c_6730)) };
                 return new_editor__ide__Target;
             }
         }
@@ -51975,18 +51857,18 @@ editor__ide__Target* editor__ide__ofLinked(LarMemory* lar_result_memory, LarStri
 
 editor__ide__Target* editor__ide__targetAt(LarMemory* lar_result_memory, int32_t index_, int32_t line, editor__ide__Word* w) {
     (void)lar_result_memory;
-    syntax__ast__VarDecl* v_6770 = NULL;
-    syntax__ast__ConstDecl* c_6771 = NULL;
-    syntax__ast__NativeTypeDecl* n_6773 = NULL;
-    syntax__ast__Member* m_6776 = NULL;
-    syntax__ast__Ident* id_6777 = NULL;
-    syntax__ast__Call* c_6779 = NULL;
-    syntax__ast__Member* m_6780 = NULL;
-    syntax__ast__Ident* id_6781 = NULL;
-    syntax__ast__Member* m_6785 = NULL;
-    syntax__ast__Ident* id_6790 = NULL;
-    syntax__ast__Call* c_6792 = NULL;
-    syntax__ast__Ident* id_6793 = NULL;
+    syntax__ast__VarDecl* v_6750 = NULL;
+    syntax__ast__ConstDecl* c_6751 = NULL;
+    syntax__ast__NativeTypeDecl* n_6753 = NULL;
+    syntax__ast__Member* m_6756 = NULL;
+    syntax__ast__Ident* id_6757 = NULL;
+    syntax__ast__Call* c_6759 = NULL;
+    syntax__ast__Member* m_6760 = NULL;
+    syntax__ast__Ident* id_6761 = NULL;
+    syntax__ast__Member* m_6765 = NULL;
+    syntax__ast__Ident* id_6770 = NULL;
+    syntax__ast__Call* c_6772 = NULL;
+    syntax__ast__Ident* id_6773 = NULL;
     editor__ide__collect();
     int32_t enc = ((int32_t)((uint32_t)(((int32_t)((uint32_t)(index_) * (uint32_t)(1000000)))) + (uint32_t)(line)));
     LarString word = (w)->text;
@@ -52114,21 +51996,21 @@ editor__ide__Target* editor__ide__targetAt(LarMemory* lar_result_memory, int32_t
         List_syntax__ast__Node* list_14 = (editor__session__program)->decls;
         for (int32_t index_14 = 0; index_14 < list_14->length; index_14++) {
             syntax__ast__Node* d = list_14->items[index_14];
-            if (((((v_6770 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) && ((v_6770)->_super._super.line == enc)) && lar_string_eq(editor__ide__shortName(NULL, (v_6770)->name), word)) && (!((v_6770)->_super._super.symbol == NULL))) {
-                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)lar_unwrap((void*)((v_6770)->_super._super.symbol), LINE(84000447))));
+            if (((((v_6750 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) && ((v_6750)->_super._super.line == enc)) && lar_string_eq(editor__ide__shortName(NULL, (v_6750)->name), word)) && (!((v_6750)->_super._super.symbol == NULL))) {
+                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)lar_unwrap((void*)((v_6750)->_super._super.symbol), LINE(84000447))));
             }
-            if ((((c_6771 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL) && ((c_6771)->_super.line == enc)) && lar_string_eq(editor__ide__shortName(NULL, (c_6771)->name), word)) {
+            if ((((c_6751 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL) && ((c_6751)->_super.line == enc)) && lar_string_eq(editor__ide__shortName(NULL, (c_6751)->name), word)) {
                 LarMemory* place = &lar_default_memory;
                 editor__ide__Target* new_editor__ide__Target = (editor__ide__Target*)lar_memory_alloc(place, sizeof(editor__ide__Target), LINE(84000449));
                 LarCloneMap clones = lar_clone_map();
                 LarString copy = clone_s(word, &lar_default_memory, &clones);
                 lar_clone_done(&clones);
-                *new_editor__ide__Target = (editor__ide__Target){ .header = { (const void*)&methods_editor__ide__Target, place }, .kind = 2, .name = copy, .line = (c_6771)->_super.line, .symbol = NULL, .func = NULL, .method = NULL, .field = NULL, .typeName = lar_string("", 0), .variant = NULL, .enumName = lar_string("", 0), .module = lar_string("", 0), .decl = ((syntax__ast__Node*)(c_6771)) };
+                *new_editor__ide__Target = (editor__ide__Target){ .header = { (const void*)&methods_editor__ide__Target, place }, .kind = 2, .name = copy, .line = (c_6751)->_super.line, .symbol = NULL, .func = NULL, .method = NULL, .field = NULL, .typeName = lar_string("", 0), .variant = NULL, .enumName = lar_string("", 0), .module = lar_string("", 0), .decl = ((syntax__ast__Node*)(c_6751)) };
                 editor__ide__Target* target = new_editor__ide__Target;
                 return target;
             }
-            if ((((n_6773 = (syntax__ast__NativeTypeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeTypeDecl)) != NULL) && ((n_6773)->_super.line == enc)) && lar_string_eq((n_6773)->name, word)) {
-                return editor__ide__ofType(NULL, (n_6773)->name);
+            if ((((n_6753 = (syntax__ast__NativeTypeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeTypeDecl)) != NULL) && ((n_6753)->_super.line == enc)) && lar_string_eq((n_6753)->name, word)) {
+                return editor__ide__ofType(NULL, (n_6753)->name);
             }
         }
     }
@@ -52145,14 +52027,14 @@ editor__ide__Target* editor__ide__targetAt(LarMemory* lar_result_memory, int32_t
         List_syntax__ast__Expr* list_16 = editor__ide__exprs;
         for (int32_t index_16 = 0; index_16 < list_16->length; index_16++) {
             syntax__ast__Expr* e = list_16->items[index_16];
-            if (((((((e)->_super.line == enc) && ((m_6776 = (syntax__ast__Member*)lar_as_class((void*)(e), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m_6776)->name, word)) && (w)->dotted) && (!((m_6776)->replaced == NULL))) && ((id_6777 = (syntax__ast__Ident*)lar_as_class((void*)(((syntax__ast__Expr*)lar_unwrap((void*)((m_6776)->replaced), LINE(84000459)))), &lar_class_syntax__ast__Ident)) != NULL)) {
-                editor__ide__Target* byName = editor__ide__ofLinked(NULL, (id_6777)->name);
+            if (((((((e)->_super.line == enc) && ((m_6756 = (syntax__ast__Member*)lar_as_class((void*)(e), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m_6756)->name, word)) && (w)->dotted) && (!((m_6756)->replaced == NULL))) && ((id_6757 = (syntax__ast__Ident*)lar_as_class((void*)(((syntax__ast__Expr*)lar_unwrap((void*)((m_6756)->replaced), LINE(84000459)))), &lar_class_syntax__ast__Ident)) != NULL)) {
+                editor__ide__Target* byName = editor__ide__ofLinked(NULL, (id_6757)->name);
                 if (!((byName)->kind == 0)) {
                     return byName;
                 }
             }
-            if ((((((((e)->_super.line == enc) && ((c_6779 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL)) && ((m_6780 = (syntax__ast__Member*)lar_as_class((void*)((c_6779)->callee), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m_6780)->name, word)) && (w)->dotted) && (!((m_6780)->replaced == NULL))) && ((id_6781 = (syntax__ast__Ident*)lar_as_class((void*)(((syntax__ast__Expr*)lar_unwrap((void*)((m_6780)->replaced), LINE(84000463)))), &lar_class_syntax__ast__Ident)) != NULL)) {
-                editor__ide__Target* byName = editor__ide__ofLinked(NULL, (id_6781)->name);
+            if ((((((((e)->_super.line == enc) && ((c_6759 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL)) && ((m_6760 = (syntax__ast__Member*)lar_as_class((void*)((c_6759)->callee), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m_6760)->name, word)) && (w)->dotted) && (!((m_6760)->replaced == NULL))) && ((id_6761 = (syntax__ast__Ident*)lar_as_class((void*)(((syntax__ast__Expr*)lar_unwrap((void*)((m_6760)->replaced), LINE(84000463)))), &lar_class_syntax__ast__Ident)) != NULL)) {
+                editor__ide__Target* byName = editor__ide__ofLinked(NULL, (id_6761)->name);
                 if (!((byName)->kind == 0)) {
                     return byName;
                 }
@@ -52171,7 +52053,7 @@ editor__ide__Target* editor__ide__targetAt(LarMemory* lar_result_memory, int32_t
                 if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__Call)) {
                     syntax__ast__Call* c = (syntax__ast__Call*)subject;
                     {
-                        if ((((m_6785 = (syntax__ast__Member*)lar_as_class((void*)((c)->callee), &lar_class_syntax__ast__Member)) != NULL) && lar_string_eq((m_6785)->name, word)) && (w)->dotted) {
+                        if ((((m_6765 = (syntax__ast__Member*)lar_as_class((void*)((c)->callee), &lar_class_syntax__ast__Member)) != NULL) && lar_string_eq((m_6765)->name, word)) && (w)->dotted) {
                             semantics__types__CallInfo* callInfo = (c)->_super._super.call;
                             if (!(callInfo == NULL)) {
                                 if (!((callInfo)->method == NULL)) {
@@ -52237,8 +52119,8 @@ editor__ide__Target* editor__ide__targetAt(LarMemory* lar_result_memory, int32_t
         List_syntax__ast__Expr* list_18 = editor__ide__exprs;
         for (int32_t index_18 = 0; index_18 < list_18->length; index_18++) {
             syntax__ast__Expr* e = list_18->items[index_18];
-            if (((((e)->_super.line == enc) && ((id_6790 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL)) && lar_string_eq(editor__ide__shortName(NULL, (id_6790)->name), word)) && (!((id_6790)->_super._super.symbol == NULL))) {
-                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)lar_unwrap((void*)((id_6790)->_super._super.symbol), LINE(84000496))));
+            if (((((e)->_super.line == enc) && ((id_6770 = (syntax__ast__Ident*)lar_as_class((void*)(e), &lar_class_syntax__ast__Ident)) != NULL)) && lar_string_eq(editor__ide__shortName(NULL, (id_6770)->name), word)) && (!((id_6770)->_super._super.symbol == NULL))) {
+                return editor__ide__ofSymbol(NULL, ((semantics__types__Symbol*)lar_unwrap((void*)((id_6770)->_super._super.symbol), LINE(84000496))));
             }
         }
     }
@@ -52246,8 +52128,8 @@ editor__ide__Target* editor__ide__targetAt(LarMemory* lar_result_memory, int32_t
         List_syntax__ast__Expr* list_19 = editor__ide__exprs;
         for (int32_t index_19 = 0; index_19 < list_19->length; index_19++) {
             syntax__ast__Expr* e = list_19->items[index_19];
-            if (((((((e)->_super.line == enc) && ((c_6792 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL)) && ((id_6793 = (syntax__ast__Ident*)lar_as_class((void*)((c_6792)->callee), &lar_class_syntax__ast__Ident)) != NULL)) && lar_string_eq(editor__ide__shortName(NULL, (id_6793)->name), word)) && (!((c_6792)->_super._super.call == NULL))) && (!((((semantics__types__CallInfo*)lar_unwrap((void*)((c_6792)->_super._super.call), LINE(84000499))))->func == NULL))) {
-                return editor__ide__ofFunc(NULL, ((semantics__types__FunctionInfo*)lar_unwrap((void*)((((semantics__types__CallInfo*)lar_unwrap((void*)((c_6792)->_super._super.call), LINE(84000500))))->func), LINE(84000500))));
+            if (((((((e)->_super.line == enc) && ((c_6772 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL)) && ((id_6773 = (syntax__ast__Ident*)lar_as_class((void*)((c_6772)->callee), &lar_class_syntax__ast__Ident)) != NULL)) && lar_string_eq(editor__ide__shortName(NULL, (id_6773)->name), word)) && (!((c_6772)->_super._super.call == NULL))) && (!((((semantics__types__CallInfo*)lar_unwrap((void*)((c_6772)->_super._super.call), LINE(84000499))))->func == NULL))) {
+                return editor__ide__ofFunc(NULL, ((semantics__types__FunctionInfo*)lar_unwrap((void*)((((semantics__types__CallInfo*)lar_unwrap((void*)((c_6772)->_super._super.call), LINE(84000500))))->func), LINE(84000500))));
             }
         }
     }
@@ -52431,7 +52313,7 @@ LarString editor__ide__methodLabel(LarMemory* lar_result_memory, semantics__type
 }
 
 LarString editor__ide__detail(LarMemory* lar_result_memory, editor__ide__Target* target) {
-    syntax__ast__ConstDecl* c_6826 = NULL;
+    syntax__ast__ConstDecl* c_6806 = NULL;
     int32_t subject = (target)->kind;
     {
         if (subject == 1) {
@@ -52470,13 +52352,13 @@ LarString editor__ide__detail(LarMemory* lar_result_memory, editor__ide__Target*
         if (subject == 2) {
             {
                 syntax__ast__Node* d = (target)->decl;
-                if ((!(d == NULL)) && ((c_6826 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL)) {
+                if ((!(d == NULL)) && ((c_6806 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL)) {
                     LarMemory line84000575_temps = lar_memory_growable();
                     LarTextBuilder text_3 = lar_text_builder_mem(lar_result_memory, LINE(84000575));
                     lar_text_builder_add(&text_3, "const ", 6);
-                    lar_text_builder_str(&text_3, editor__ide__shortName(NULL, (c_6826)->name));
+                    lar_text_builder_str(&text_3, editor__ide__shortName(NULL, (c_6806)->name));
                     lar_text_builder_add(&text_3, ": ", 2);
-                    lar_text_builder_str(&text_3, ((!((c_6826)->_super.ty == NULL)) ? editor__ide__typeText(&line84000575_temps, (c_6826)->_super.ty) : editor__ide__typeOfConst(NULL, c_6826)));
+                    lar_text_builder_str(&text_3, ((!((c_6806)->_super.ty == NULL)) ? editor__ide__typeText(&line84000575_temps, (c_6806)->_super.ty) : editor__ide__typeOfConst(NULL, c_6806)));
                     LarString result_3 = lar_text_builder_finish(&text_3);
                     lar_memory_free(&line84000575_temps);
                     return result_3;
@@ -53347,7 +53229,7 @@ LarString editor__ide__referencesJson(LarMemory* lar_result_memory, LarString pa
 }
 
 int32_t editor__ide__refersTo(syntax__ast__Expr* e, editor__ide__Target* target) {
-    syntax__ast__ConstDecl* c_6931 = NULL;
+    syntax__ast__ConstDecl* c_6911 = NULL;
     syntax__ast__Expr* subject = e;
     {
         if (lar_is_a(lar_object_class(subject), &lar_class_syntax__ast__Ident)) {
@@ -53368,7 +53250,7 @@ int32_t editor__ide__refersTo(syntax__ast__Expr* e, editor__ide__Target* target)
                 bool condition_2 = (((target)->kind == 2) && ((target)->symbol == NULL));
                 if (condition_2) {
                     LarString value_2 = (s)->name;
-                    condition_2 = lar_string_eq(value_2, (((!((target)->decl == NULL)) && ((c_6931 = (syntax__ast__ConstDecl*)lar_as_class((void*)(((syntax__ast__Node*)lar_unwrap((void*)((target)->decl), LINE(84000869)))), &lar_class_syntax__ast__ConstDecl)) != NULL)) ? (c_6931)->name : lar_string("", 0)));
+                    condition_2 = lar_string_eq(value_2, (((!((target)->decl == NULL)) && ((c_6911 = (syntax__ast__ConstDecl*)lar_as_class((void*)(((syntax__ast__Node*)lar_unwrap((void*)((target)->decl), LINE(84000869)))), &lar_class_syntax__ast__ConstDecl)) != NULL)) ? (c_6911)->name : lar_string("", 0)));
                 }
                 if (condition_2) {
                     return 0;
@@ -53854,12 +53736,12 @@ int32_t editor__ide__blockEnd(int32_t index_, int32_t line) {
 
 void editor__ide__prepareCompletion(LarString path, int32_t line0, int32_t char16, bool signatureHelp) {
     LarMemory memory = lar_memory_growable();
-    Opt_s text_6992 = editor__opendocuments__openDocument(NULL, path);
-    if (!(text_6992).has) {
+    Opt_s text_6972 = editor__opendocuments__openDocument(NULL, path);
+    if (!(text_6972).has) {
         lar_memory_free(&memory);
         return;
     }
-    LarString value_2 = text_6992.value;
+    LarString value_2 = text_6972.value;
     List_s* value_3 = List_s_new(&memory, 84001030);
     LarString value_4 = lar_string("\n", 1);
     if (value_4.len == 0) {
@@ -53909,7 +53791,7 @@ void editor__ide__prepareCompletion(LarString path, int32_t line0, int32_t char1
             lar_clone_done(&clones_2);
             editor__ide__probeChain = copy_2;
             editor__ide__probeMember = true;
-            replacement = editor__ide__probeStatement(&memory, text_6992.value, before, ((int32_t)((uint32_t)(((int32_t)((uint32_t)((name)->from) - (uint32_t)(1)))) - (uint32_t)((editor__ide__probeChain).len))), indent);
+            replacement = editor__ide__probeStatement(&memory, text_6972.value, before, ((int32_t)((uint32_t)(((int32_t)((uint32_t)((name)->from) - (uint32_t)(1)))) - (uint32_t)((editor__ide__probeChain).len))), indent);
         }
     } else {
         editor__ide__Word* w = editor__ide__wordAt(NULL, before, (before).len);
@@ -53924,8 +53806,8 @@ void editor__ide__prepareCompletion(LarString path, int32_t line0, int32_t char1
             lar_clone_done(&clones_4);
             editor__ide__probeChain = copy_4;
             LarString value_8;
-            if (lar_string_eq(String_trim(after, NULL), lar_string("", 0)) || editor__ide__needsNoProbe(text_6992.value, editor__ide__probeChain)) {
-                value_8 = editor__ide__probeStatement(&memory, text_6992.value, before, ((int32_t)((uint32_t)(((int32_t)((uint32_t)((w)->from) - (uint32_t)(1)))) - (uint32_t)((editor__ide__probeChain).len))), indent);
+            if (lar_string_eq(String_trim(after, NULL), lar_string("", 0)) || editor__ide__needsNoProbe(text_6972.value, editor__ide__probeChain)) {
+                value_8 = editor__ide__probeStatement(&memory, text_6972.value, before, ((int32_t)((uint32_t)(((int32_t)((uint32_t)((w)->from) - (uint32_t)(1)))) - (uint32_t)((editor__ide__probeChain).len))), indent);
             } else {
                 LarTextBuilder text_2 = lar_text_builder_mem(&memory, LINE(84001059));
                 LarString value_9 = before;
@@ -53958,8 +53840,8 @@ void editor__ide__prepareCompletion(LarString path, int32_t line0, int32_t char1
     lar_memory_free(&memory);
 }
 
-LarString editor__ide__probeStatement(LarMemory* lar_result_memory, LarString text_7007, LarString before, int32_t chainStart, LarString indent) {
-    if (editor__ide__needsNoProbe(text_7007, editor__ide__probeChain)) {
+LarString editor__ide__probeStatement(LarMemory* lar_result_memory, LarString text_6987, LarString before, int32_t chainStart, LarString indent) {
+    if (editor__ide__needsNoProbe(text_6987, editor__ide__probeChain)) {
         return lar_string("", 0);
     }
     LarString value;
@@ -53989,7 +53871,7 @@ LarString editor__ide__probeStatement(LarMemory* lar_result_memory, LarString te
     return lar_text_builder_finish(&text_2);
 }
 
-bool editor__ide__needsNoProbe(LarString text_7013, LarString chain) {
+bool editor__ide__needsNoProbe(LarString text_6993, LarString chain) {
     {
         LarString text = chain;
         for (int32_t index = 0; index < text.len; index++) {
@@ -54007,7 +53889,7 @@ bool editor__ide__needsNoProbe(LarString text_7013, LarString chain) {
     lar_text_builder_add(&text_2, " as ", 4);
     lar_text_builder_str(&text_2, chain);
     lar_text_builder_add(&text_2, ";", 1);
-    bool result = String_contains(text_7013, lar_text_builder_finish(&text_2));
+    bool result = String_contains(text_6993, lar_text_builder_finish(&text_2));
     lar_memory_free(&line84001090_temps);
     return result;
 }
@@ -54184,19 +54066,19 @@ LarString editor__ide__completionJson(LarMemory* lar_result_memory, LarString pa
 
 syntax__ast__Expr* editor__ide__probeObject(LarMemory* lar_result_memory, int32_t index_) {
     (void)lar_result_memory;
-    syntax__ast__Member* m_7050 = NULL;
-    syntax__ast__Call* c_7051 = NULL;
-    syntax__ast__Member* m2_7052 = NULL;
+    syntax__ast__Member* m_7030 = NULL;
+    syntax__ast__Call* c_7031 = NULL;
+    syntax__ast__Member* m2_7032 = NULL;
     int32_t enc = ((int32_t)((uint32_t)(((int32_t)((uint32_t)(index_) * (uint32_t)(1000000)))) + (uint32_t)(editor__ide__probeLine)));
     {
         List_syntax__ast__Expr* list = editor__ide__exprs;
         for (int32_t index = 0; index < list->length; index++) {
             syntax__ast__Expr* e = list->items[index];
-            if ((((e)->_super.line == enc) && ((m_7050 = (syntax__ast__Member*)lar_as_class((void*)(e), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m_7050)->name, lar_string("larimarCompletionProbe", 22))) {
-                return (m_7050)->object;
+            if ((((e)->_super.line == enc) && ((m_7030 = (syntax__ast__Member*)lar_as_class((void*)(e), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m_7030)->name, lar_string("larimarCompletionProbe", 22))) {
+                return (m_7030)->object;
             }
-            if (((((e)->_super.line == enc) && ((c_7051 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL)) && ((m2_7052 = (syntax__ast__Member*)lar_as_class((void*)((c_7051)->callee), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m2_7052)->name, lar_string("larimarCompletionProbe", 22))) {
-                return (m2_7052)->object;
+            if (((((e)->_super.line == enc) && ((c_7031 = (syntax__ast__Call*)lar_as_class((void*)(e), &lar_class_syntax__ast__Call)) != NULL)) && ((m2_7032 = (syntax__ast__Member*)lar_as_class((void*)((c_7031)->callee), &lar_class_syntax__ast__Member)) != NULL)) && lar_string_eq((m2_7032)->name, lar_string("larimarCompletionProbe", 22))) {
+                return (m2_7032)->object;
             }
         }
     }
@@ -54466,8 +54348,8 @@ LarString editor__ide__docOf(LarMemory* lar_result_memory, int32_t encoded) {
 }
 
 void editor__ide__nameItem(editor__ide__Items* items, LarString name, LarString linked) {
-    syntax__ast__VarDecl* v_7086 = NULL;
-    syntax__ast__ConstDecl* c_7087 = NULL;
+    syntax__ast__VarDecl* v_7066 = NULL;
+    syntax__ast__ConstDecl* c_7067 = NULL;
     semantics__types__FunctionInfo* functionInfo = semantics__types__functionOf(NULL, linked);
     if (!(functionInfo == NULL)) {
         LarMemory line84001318_temps = lar_memory_growable();
@@ -54510,31 +54392,31 @@ void editor__ide__nameItem(editor__ide__Items* items, LarString name, LarString 
         List_syntax__ast__Node* list = (editor__session__program)->decls;
         for (int32_t index = 0; index < list->length; index++) {
             syntax__ast__Node* d = list->items[index];
-            if (((v_7086 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) && lar_string_eq((v_7086)->name, linked)) {
+            if (((v_7066 = (syntax__ast__VarDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__VarDecl)) != NULL) && lar_string_eq((v_7066)->name, linked)) {
                 LarMemory line84001328_temps = lar_memory_growable();
                 LarString value_2;
-                if (!((v_7086)->_super._super.symbol == NULL)) {
+                if (!((v_7066)->_super._super.symbol == NULL)) {
                     LarTextBuilder text = lar_text_builder_mem(&line84001328_temps, LINE(84001328));
                     lar_text_builder_add(&text, "let ", 4);
                     lar_text_builder_str(&text, name);
                     lar_text_builder_add(&text, ": ", 2);
-                    lar_text_builder_str(&text, editor__ide__typeText(&line84001328_temps, (((semantics__types__Symbol*)lar_unwrap((void*)((v_7086)->_super._super.symbol), LINE(84001328))))->type));
+                    lar_text_builder_str(&text, editor__ide__typeText(&line84001328_temps, (((semantics__types__Symbol*)lar_unwrap((void*)((v_7066)->_super._super.symbol), LINE(84001328))))->type));
                     value_2 = lar_text_builder_finish(&text);
                 } else {
                     value_2 = lar_string("", 0);
                 }
                 LarString value_3 = value_2;
-                editor__ide__add(items, name, 6, value_3, editor__ide__docOf(&line84001328_temps, (v_7086)->_super._super.line));
+                editor__ide__add(items, name, 6, value_3, editor__ide__docOf(&line84001328_temps, (v_7066)->_super._super.line));
                 lar_memory_free(&line84001328_temps);
                 return;
             }
-            if (((c_7087 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL) && lar_string_eq((c_7087)->name, linked)) {
+            if (((c_7067 = (syntax__ast__ConstDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ConstDecl)) != NULL) && lar_string_eq((c_7067)->name, linked)) {
                 LarMemory line84001332_temps = lar_memory_growable();
                 LarTextBuilder text_2 = lar_text_builder_mem(&line84001332_temps, LINE(84001332));
                 lar_text_builder_add(&text_2, "const ", 6);
                 lar_text_builder_str(&text_2, name);
                 LarString value_4 = lar_text_builder_finish(&text_2);
-                editor__ide__add(items, name, 21, value_4, editor__ide__docOf(&line84001332_temps, (c_7087)->_super.line));
+                editor__ide__add(items, name, 21, value_4, editor__ide__docOf(&line84001332_temps, (c_7067)->_super.line));
                 lar_memory_free(&line84001332_temps);
                 return;
             }
@@ -54889,10 +54771,10 @@ LarString editor__ide__diagnosticsJson(LarMemory* lar_result_memory, LarString r
         List_editor__session__Diagnostic* list_2 = found;
         for (int32_t index_2 = 0; index_2 < list_2->length; index_2++) {
             editor__session__Diagnostic* d = list_2->items[index_2];
-            LarString file_7147 = ((!lar_string_eq((d)->file, lar_string("", 0))) ? (d)->file : requested);
-            if (!(lar_any_contains_key(byFile, file_7147))) {
+            LarString file_7127 = ((!lar_string_eq((d)->file, lar_string("", 0))) ? (d)->file : requested);
+            if (!(lar_any_contains_key(byFile, file_7127))) {
                 LarAny value_3 = byFile;
-                lar_any_set(value_3, file_7147, lar_any_b(true), LINE(84001481));
+                lar_any_set(value_3, file_7127, lar_any_b(true), LINE(84001481));
             }
         }
     }
@@ -54907,7 +54789,7 @@ LarString editor__ide__diagnosticsJson(LarMemory* lar_result_memory, LarString r
         int32_t count_2 = table_3 ? table_3->count : 0;
         for (int32_t index_3 = 0; index_3 < count_2; index_3++) {
             if (table_3->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(84001485));
-            LarString file_7150 = table_3->keys[index_3];
+            LarString file_7130 = table_3->keys[index_3];
             LarAny v = table_3->values[index_3];
             (void)v;
             LarMemory memory_2 = lar_memory_growable();
@@ -54915,7 +54797,7 @@ LarString editor__ide__diagnosticsJson(LarMemory* lar_result_memory, LarString r
                 StringBuilder_add__dispatch((StringBuilder*)builder, lar_string("\n", 1));
             }
             first = false;
-            int32_t index_ = editor__ide__fileIndex(file_7150);
+            int32_t index_ = editor__ide__fileIndex(file_7130);
             List_s* list_3 = List_s_new(&memory_2, LINE(84001489));
             List_s* ds = list_3;
             {
@@ -54924,7 +54806,7 @@ LarString editor__ide__diagnosticsJson(LarMemory* lar_result_memory, LarString r
                     editor__session__Diagnostic* d = list_4->items[index_4];
                     LarMemory memory_3 = lar_memory_growable();
                     LarString df = ((!lar_string_eq((d)->file, lar_string("", 0))) ? (d)->file : requested);
-                    if (!lar_string_eq(df, file_7150)) {
+                    if (!lar_string_eq(df, file_7130)) {
                         lar_memory_free(&memory_3);
                         continue;
                     }
@@ -54957,7 +54839,7 @@ LarString editor__ide__diagnosticsJson(LarMemory* lar_result_memory, LarString r
             LarMemory line84001498_temps = lar_memory_growable();
             LarTextBuilder text_3 = lar_text_builder_mem(&line84001498_temps, LINE(84001498));
             lar_text_builder_add(&text_3, "{\"uri\":", 7);
-            lar_text_builder_str(&text_3, std__encoding__json__quote(&line84001498_temps, editor__ide__uriOfPath(&line84001498_temps, file_7150)));
+            lar_text_builder_str(&text_3, std__encoding__json__quote(&line84001498_temps, editor__ide__uriOfPath(&line84001498_temps, file_7130)));
             lar_text_builder_add(&text_3, ",\"diagnostics\":[", 16);
             List_s* value_5 = ds;
             lar_text_builder_str(&text_3, lar_string_join(value_5->items, value_5->length, lar_string(",", 1), &line84001498_temps, LINE(84001498)));
@@ -55072,11 +54954,11 @@ void editor__lsp__notify(LarString method, LarString params) {
     lar_memory_free(&line66000074_temps);
 }
 
-void editor__lsp__log(LarString text_7170) {
+void editor__lsp__log(LarString text_7150) {
     LarMemory line66000077_temps = lar_memory_growable();
     LarTextBuilder text = lar_text_builder_mem(&line66000077_temps, LINE(66000077));
     lar_text_builder_add(&text, "[larimar lsp] ", 14);
-    lar_text_builder_str(&text, text_7170);
+    lar_text_builder_str(&text, text_7150);
     std__io__console__printError(lar_text_builder_finish(&text));
     lar_memory_free(&line66000077_temps);
 }
@@ -55342,7 +55224,7 @@ int32_t editor__lsp__handle(LarString body, LarMemory* kept, editor__lsp__Docume
     return result_3;
 }
 
-void editor__lsp__keep(LarMemory* kept, editor__lsp__Documents* docs, LarString path, LarString text_7194) {
+void editor__lsp__keep(LarMemory* kept, editor__lsp__Documents* docs, LarString path, LarString text_7174) {
     int32_t i = editor__lsp__Documents_find__dispatch((editor__lsp__Documents*)docs, path);
     if (i < 0) {
         i = editor__lsp__Documents_find__dispatch((editor__lsp__Documents*)docs, lar_string("", 0));
@@ -55355,7 +55237,7 @@ void editor__lsp__keep(LarMemory* kept, editor__lsp__Documents* docs, LarString 
         (value)->items[lar_index((int64_t)(i), (value)->length, LINE(66000192))] = copy;
         List_s* value_2 = (docs)->texts;
         LarCloneMap clones_2 = lar_clone_map();
-        LarString copy_2 = clone_s(text_7194, kept, &clones_2);
+        LarString copy_2 = clone_s(text_7174, kept, &clones_2);
         lar_clone_done(&clones_2);
         (value_2)->items[lar_index((int64_t)(i), (value_2)->length, LINE(66000193))] = copy_2;
     } else {
@@ -55364,7 +55246,7 @@ void editor__lsp__keep(LarMemory* kept, editor__lsp__Documents* docs, LarString 
         lar_clone_done(&clones_3);
         List_s_push((docs)->paths, copy_3);
         LarCloneMap clones_4 = lar_clone_map();
-        LarString copy_4 = clone_s(text_7194, kept, &clones_4);
+        LarString copy_4 = clone_s(text_7174, kept, &clones_4);
         lar_clone_done(&clones_4);
         List_s_push((docs)->texts, copy_4);
     }
@@ -55452,7 +55334,7 @@ LarString editor__lsp__pathOf(LarMemory* lar_result_memory, LarAny msg) {
     return editor__lsp__docPath(lar_result_memory, msg);
 }
 
-Opt_s editor__lsp__answer(LarMemory* lar_result_memory, LarAny msg, LarString path, LarString main__7206) {
+Opt_s editor__lsp__answer(LarMemory* lar_result_memory, LarAny msg, LarString path, LarString main__7186) {
     Opt_s value_2 = lar_any_as_s(lar_any_get(msg, lar_string("method", 6)));
     LarString value_3;
     if (value_2.has) value_3 = value_2.value;
@@ -55477,15 +55359,15 @@ Opt_s editor__lsp__answer(LarMemory* lar_result_memory, LarAny msg, LarString pa
     if (lar_string_eq(method, lar_string("textDocument/completion", 23)) || lar_string_eq(method, lar_string("textDocument/signatureHelp", 26))) {
         if (!(editor__opendocuments__openDocument(NULL, path)).has) {
             LarMemory memory = lar_memory_growable();
-            Opt_s text_7210 = editor__lsp__readFile(&memory, path);
-            if (!(!(text_7210).has)) {
-                editor__opendocuments__setOpenDocument(path, text_7210.value);
+            Opt_s text_7190 = editor__lsp__readFile(&memory, path);
+            if (!(!(text_7190).has)) {
+                editor__opendocuments__setOpenDocument(path, text_7190.value);
             }
             lar_memory_free(&memory);
         }
         editor__ide__prepareCompletion(path, line, character, lar_string_eq(method, lar_string("textDocument/signatureHelp", 26)));
     }
-    editor__session__analyzeFile(main__7206, std__io__path__parent(NULL, main__7206));
+    editor__session__analyzeFile(main__7186, std__io__path__parent(NULL, main__7186));
     if (editor__ide__fileIndex(path) < 0) {
         return ((Opt_s){ .has = false });
     }
@@ -55810,8 +55692,8 @@ int32_t editor__lsp__worker(LarString reqPath, LarString respPath) {
     else {
         value_3 = lar_string("", 0);
     }
-    LarString text_7235 = value_3;
-    LarAny req = editor__lsp__parsed(&memory, text_7235);
+    LarString text_7215 = value_3;
+    LarAny req = editor__lsp__parsed(&memory, text_7215);
     LarAny docs = lar_any_get(req, lar_string("documents", 9));
     {
         LarAny table_2_v = docs;
@@ -55839,8 +55721,8 @@ int32_t editor__lsp__worker(LarString reqPath, LarString respPath) {
         value_7 = false;
     }
     bool alone = value_7;
-    LarString main__7243 = (alone ? path : editor__session__projectMain(&memory, path));
-    Opt_s out = editor__lsp__answer(&memory, msg, path, main__7243);
+    LarString main__7223 = (alone ? path : editor__session__projectMain(&memory, path));
+    Opt_s out = editor__lsp__answer(&memory, msg, path, main__7223);
     if ((!(out).has) && alone) {
         out = ((Opt_s){ .has = true, .value = lar_string("null", 4) });
     }
@@ -56026,10 +55908,10 @@ void editor__dap__toBackendRaw(LarString body) {
     try_end: ;
 }
 
-void editor__dap__keep(LarString text_7263) {
-    if (lar_any_is_null(lar_any_get(editor__dap__texts, text_7263))) {
+void editor__dap__keep(LarString text_7243) {
+    if (lar_any_is_null(lar_any_get(editor__dap__texts, text_7243))) {
         LarCloneMap clones = lar_clone_map();
-        LarString copy_2 = clone_s(text_7263, &lar_default_memory, &clones);
+        LarString copy_2 = clone_s(text_7243, &lar_default_memory, &clones);
         lar_clone_done(&clones);
         LarString copy = copy_2;
         LarAny value = editor__dap__texts;
@@ -56066,11 +55948,11 @@ Opt_editor__dap__Handle editor__dap__handleAt(LarMemory* lar_result_memory, int3
     return ((Opt_editor__dap__Handle){ .has = true, .value = (editor__dap__handles)->items[lar_index((int64_t)(((int32_t)((uint32_t)(id) - (uint32_t)(1)))), (editor__dap__handles)->length, LINE(85000169))] });
 }
 
-void editor__dap__log(LarString text_7273) {
+void editor__dap__log(LarString text_7253) {
     LarMemory line85000172_temps = lar_memory_growable();
     LarTextBuilder text = lar_text_builder_mem(&line85000172_temps, LINE(85000172));
     lar_text_builder_add(&text, "[larimar dap] ", 14);
-    lar_text_builder_str(&text, text_7273);
+    lar_text_builder_str(&text, text_7253);
     std__io__console__printError(lar_text_builder_finish(&text));
     lar_memory_free(&line85000172_temps);
 }
@@ -56227,11 +56109,11 @@ void editor__dap__respondError(LarAny req, LarString message) {
     lar_memory_free(&line85000232_temps);
 }
 
-LarAny editor__dap__parse(LarMemory* lar_result_memory, LarString text_7297) {
+LarAny editor__dap__parse(LarMemory* lar_result_memory, LarString text_7277) {
     LarError err;
     err.kind = 0;
     {
-        LarAny value = std__encoding__json__parse(lar_result_memory, text_7297, &err);
+        LarAny value = std__encoding__json__parse(lar_result_memory, text_7277, &err);
         if (err.kind != 0) {
             goto try_catch;
         }
@@ -56254,7 +56136,7 @@ LarAny editor__dap__parse(LarMemory* lar_result_memory, LarString text_7297) {
     return zero_value;
 }
 
-int32_t editor__dap__sendBackend(LarString command_7299, LarString args) {
+int32_t editor__dap__sendBackend(LarString command_7279, LarString args) {
     LarMemory memory = lar_memory_growable();
     int32_t s = editor__dap__nextSeq;
     editor__dap__nextSeq = ((int32_t)((uint32_t)(editor__dap__nextSeq) + (uint32_t)(1)));
@@ -56263,7 +56145,7 @@ int32_t editor__dap__sendBackend(LarString command_7299, LarString args) {
     lar_text_builder_add(&text, "{\"seq\":", 7);
     lar_text_builder_i64(&text, (int64_t)(s));
     lar_text_builder_add(&text, ",\"type\":\"request\",\"command\":", 28);
-    lar_text_builder_str(&text, std__encoding__json__quote(&line85000251_temps, command_7299));
+    lar_text_builder_str(&text, std__encoding__json__quote(&line85000251_temps, command_7279));
     lar_text_builder_add(&text, ",\"arguments\":", 13);
     lar_text_builder_str(&text, args);
     lar_text_builder_add(&text, "}", 1);
@@ -56275,8 +56157,8 @@ int32_t editor__dap__sendBackend(LarString command_7299, LarString args) {
     return result;
 }
 
-LarString editor__dap__call(LarMemory* lar_result_memory, LarString command_7303, LarString args) {
-    int32_t s = editor__dap__sendBackend(command_7303, args);
+LarString editor__dap__call(LarMemory* lar_result_memory, LarString command_7283, LarString args) {
+    int32_t s = editor__dap__sendBackend(command_7283, args);
     while (true) {
         LarMemory memory = lar_memory_growable();
         Opt_s got = editor__dap__backendMessage(lar_result_memory, 1000);
@@ -56402,13 +56284,13 @@ Opt_i64 editor__dap__evalAddress(int32_t frame, LarString expr) {
     return result_4;
 }
 
-LarString editor__dap__command(LarMemory* lar_result_memory, int32_t frame, LarString text_7321) {
+LarString editor__dap__command(LarMemory* lar_result_memory, int32_t frame, LarString text_7301) {
     LarMemory line85000304_temps = lar_memory_growable();
     LarTextBuilder text = lar_text_builder_mem(&line85000304_temps, LINE(85000304));
     lar_text_builder_add(&text, "{\"expression\":", 14);
     LarTextBuilder text_2 = lar_text_builder_mem(&line85000304_temps, LINE(85000304));
     lar_text_builder_add(&text_2, "`", 1);
-    lar_text_builder_str(&text_2, text_7321);
+    lar_text_builder_str(&text_2, text_7301);
     lar_text_builder_str(&text, std__encoding__json__quote(&line85000304_temps, lar_text_builder_finish(&text_2)));
     lar_text_builder_add(&text, ",\"frameId\":", 11);
     lar_text_builder_i64(&text, (int64_t)(frame));
@@ -56759,8 +56641,8 @@ Opt_s editor__dap__stringValue(LarMemory* lar_result_memory, int32_t frame, LarS
         return result_3;
     }
     int32_t n = editor__dap__atMost(length.value, 2000);
-    Opt_s text_7354 = editor__dap__readBytes(&memory, frame, address.value, n);
-    if (!(text_7354).has) {
+    Opt_s text_7334 = editor__dap__readBytes(&memory, frame, address.value, n);
+    if (!(text_7334).has) {
         Opt_s result_4 = ((Opt_s){ .has = true, .value = lar_string("<unreadable>", 12) });
         lar_memory_free(&memory);
         return result_4;
@@ -56769,11 +56651,11 @@ Opt_s editor__dap__stringValue(LarMemory* lar_result_memory, int32_t frame, LarS
     LarString value_2;
     if (((int64_t)(n)) < length.value) {
         LarTextBuilder text_3 = lar_text_builder_mem(lar_result_memory, LINE(85000398));
-        lar_text_builder_str(&text_3, editor__dap__quoteText(&line85000398_temps, text_7354.value));
+        lar_text_builder_str(&text_3, editor__dap__quoteText(&line85000398_temps, text_7334.value));
         lar_text_builder_add(&text_3, "\342\200\246", 3);
         value_2 = lar_text_builder_finish(&text_3);
     } else {
-        value_2 = editor__dap__quoteText(lar_result_memory, text_7354.value);
+        value_2 = editor__dap__quoteText(lar_result_memory, text_7334.value);
     }
     Opt_s result_5 = ((Opt_s){ .has = true, .value = value_2 });
     lar_memory_free(&line85000398_temps);
@@ -58246,7 +58128,7 @@ List_s* editor__dap__globalVariables(LarMemory* lar_result_memory, int32_t frame
     return result;
 }
 
-editor__dap__Resolved* editor__dap__resolvePath(LarMemory* lar_result_memory, int32_t frame, LarString text_7490) {
+editor__dap__Resolved* editor__dap__resolvePath(LarMemory* lar_result_memory, int32_t frame, LarString text_7470) {
     (void)lar_result_memory;
     LarMemory memory = lar_memory_growable();
     LarMemory* place = &lar_default_memory;
@@ -58254,7 +58136,7 @@ editor__dap__Resolved* editor__dap__resolvePath(LarMemory* lar_result_memory, in
     LarTable* table_2 = lar_table_new(place, LINE(85000747));
     *new_editor__dap__Resolved = (editor__dap__Resolved){ .header = { (const void*)&methods_editor__dap__Resolved, place }, .expr = lar_string("", 0), .type = lar_any_t(table_2), .ok = false };
     editor__dap__Resolved* r = new_editor__dap__Resolved;
-    List_s* parts = editor__dap__splitPath(&memory, String_trim(text_7490, NULL));
+    List_s* parts = editor__dap__splitPath(&memory, String_trim(text_7470, NULL));
     if ((parts)->length == 0) {
         editor__dap__Resolved* result = r;
         lar_memory_free(&memory);
@@ -58386,16 +58268,16 @@ editor__dap__Resolved* editor__dap__resolvePath(LarMemory* lar_result_memory, in
     return result_4;
 }
 
-List_s* editor__dap__splitPath(LarMemory* lar_result_memory, LarString text_7504) {
+List_s* editor__dap__splitPath(LarMemory* lar_result_memory, LarString text_7484) {
     List_s* list = List_s_new(lar_result_memory, LINE(85000794));
     List_s* out = list;
     int32_t i = 0;
-    while (i < (text_7504).len) {
-        uint8_t c = lar_string_byte(text_7504, (int64_t)(i), LINE(85000797));
+    while (i < (text_7484).len) {
+        uint8_t c = lar_string_byte(text_7484, (int64_t)(i), LINE(85000797));
         if ((c == (uint8_t)46) || (i == 0)) {
             int32_t from = ((c == (uint8_t)46) ? ((int32_t)((uint32_t)(i) + (uint32_t)(1))) : i);
             int32_t j = from;
-            while ((j < (text_7504).len) && editor__dap__isNameByte(lar_string_byte(text_7504, (int64_t)(j), LINE(85000801)))) {
+            while ((j < (text_7484).len) && editor__dap__isNameByte(lar_string_byte(text_7484, (int64_t)(j), LINE(85000801)))) {
                 j = ((int32_t)((uint32_t)(j) + (uint32_t)(1)));
             }
             if (j == from) {
@@ -58406,23 +58288,23 @@ List_s* editor__dap__splitPath(LarMemory* lar_result_memory, LarString text_7504
             if (c == (uint8_t)46) {
                 LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(85000803));
                 lar_text_builder_add(&text, ".", 1);
-                LarString value_3 = text_7504;
+                LarString value_3 = text_7484;
                 lar_text_builder_str(&text, lar_string_sub(value_3, (int64_t)(from), (int64_t)(j), 85000803));
                 value_2 = lar_text_builder_finish(&text);
             } else {
-                LarString value_4 = text_7504;
+                LarString value_4 = text_7484;
                 value_2 = lar_string_sub(value_4, (int64_t)(from), (int64_t)(j), 85000803);
             }
             List_s_push(out, value_2);
             i = j;
         } else {
             if (c == (uint8_t)91) {
-                Opt_i32 end = String_indexOf_2(text_7504, lar_string("]", 1), i);
+                Opt_i32 end = String_indexOf_2(text_7484, lar_string("]", 1), i);
                 if (!(end).has) {
                     List_s* list_3 = List_s_new(&lar_default_memory, LINE(85000807));
                     return list_3;
                 }
-                LarString value_5 = text_7504;
+                LarString value_5 = text_7484;
                 LarString inside = String_trim(lar_string_sub(value_5, (int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (int64_t)(end.value), 85000808), NULL);
                 if ((!(String_toInt(inside)).has) && (!((String_startsWith(inside, lar_string("\"", 1)) && String_endsWith(inside, lar_string("\"", 1)))))) {
                     List_s* list_4 = List_s_new(&lar_default_memory, LINE(85000809));
@@ -58840,9 +58722,9 @@ void editor__dap__forward(LarString body, LarAny msg, LarString args) {
         lar_text_builder_add(&text_2, "}", 1);
         value_5 = lar_text_builder_finish(&text_2);
     }
-    LarString text_7536 = value_5;
+    LarString text_7516 = value_5;
     lar_memory_free(&line85000913_temps);
-    editor__dap__toBackendRaw(text_7536);
+    editor__dap__toBackendRaw(text_7516);
     lar_memory_free(&memory);
 }
 
@@ -59412,33 +59294,33 @@ void editor__dap__scopes(LarAny msg) {
     LarString writing = value_5;
     lar_memory_free(&line85001033_temps);
     List_s* list = List_s_new(&memory, LINE(85001034));
-    List_s* list_7594 = list;
+    List_s* list_7574 = list;
     if (editor__dap__hasFunction(writing)) {
         LarMemory memory_2 = lar_memory_growable();
-        LarTextBuilder text_2 = lar_text_builder_mem((list_7594)->mem, LINE(85001036));
+        LarTextBuilder text_2 = lar_text_builder_mem((list_7574)->mem, LINE(85001036));
         lar_text_builder_add(&text_2, "{\"name\":\"Locals\",\"presentationHint\":\"locals\",\"variablesReference\":", 66);
         lar_text_builder_i64(&text_2, (int64_t)(editor__dap__newHandle(1, frame, 0, lar_string("", 0), lar_string("", 0))));
         lar_text_builder_add(&text_2, ",\"expensive\":false}", 19);
-        List_s_push(list_7594, lar_text_builder_finish(&text_2));
+        List_s_push(list_7574, lar_text_builder_finish(&text_2));
         LarAny gs = editor__dap__tableOf(&memory_2, lar_any_get(editor__dap__map, lar_string("globals", 7)));
         if (lar_any_length(gs) > 0) {
-            LarTextBuilder text_3 = lar_text_builder_mem((list_7594)->mem, LINE(85001039));
+            LarTextBuilder text_3 = lar_text_builder_mem((list_7574)->mem, LINE(85001039));
             lar_text_builder_add(&text_3, "{\"name\":\"Globals\",\"variablesReference\":", 39);
             lar_text_builder_i64(&text_3, (int64_t)(editor__dap__newHandle(2, frame, 0, lar_string("", 0), lar_string("", 0))));
             lar_text_builder_add(&text_3, ",\"expensive\":false}", 19);
-            List_s_push(list_7594, lar_text_builder_finish(&text_3));
+            List_s_push(list_7574, lar_text_builder_finish(&text_3));
         }
         lar_memory_free(&memory_2);
     }
-    LarTextBuilder text_4 = lar_text_builder_mem((list_7594)->mem, LINE(85001043));
+    LarTextBuilder text_4 = lar_text_builder_mem((list_7574)->mem, LINE(85001043));
     lar_text_builder_add(&text_4, "{\"name\":\"C\",\"variablesReference\":", 33);
     lar_text_builder_i64(&text_4, (int64_t)(editor__dap__newHandle(5, frame, 0, lar_string("", 0), lar_string("", 0))));
     lar_text_builder_add(&text_4, ",\"expensive\":true}", 18);
-    List_s_push(list_7594, lar_text_builder_finish(&text_4));
+    List_s_push(list_7574, lar_text_builder_finish(&text_4));
     LarMemory line85001044_temps = lar_memory_growable();
     LarTextBuilder text_5 = lar_text_builder_mem(&line85001044_temps, LINE(85001044));
     lar_text_builder_add(&text_5, "{\"scopes\":[", 11);
-    List_s* value_6 = list_7594;
+    List_s* value_6 = list_7574;
     lar_text_builder_str(&text_5, lar_string_join(value_6->items, value_6->length, lar_string(",", 1), &line85001044_temps, LINE(85001044)));
     lar_text_builder_add(&text_5, "]}", 2);
     editor__dap__respond(msg, lar_text_builder_finish(&text_5));
@@ -59494,10 +59376,10 @@ void editor__dap__variables(LarAny msg) {
                         lar_text_builder_add(&text, "}", 1);
                         LarAny sc = editor__dap__parse(&memory_2, editor__dap__call(&memory_2, lar_string("scopes", 6), lar_text_builder_finish(&text)));
                         lar_memory_free(&line85001064_temps);
-                        LarAny list_7606 = editor__dap__tableOf(&memory_2, lar_any_get(lar_any_get(sc, lar_string("body", 4)), lar_string("scopes", 6)));
+                        LarAny list_7586 = editor__dap__tableOf(&memory_2, lar_any_get(lar_any_get(sc, lar_string("body", 4)), lar_string("scopes", 6)));
                         int32_t value_8;
-                        if (lar_any_length(list_7606) > 0) {
-                            Opt_i64 value_9 = lar_any_as_i64(lar_any_get(lar_any_at(list_7606, (int64_t)(0)), lar_string("variablesReference", 18)));
+                        if (lar_any_length(list_7586) > 0) {
+                            Opt_i64 value_9 = lar_any_as_i64(lar_any_get(lar_any_at(list_7586, (int64_t)(0)), lar_string("variablesReference", 18)));
                             int64_t value_10;
                             if (value_9.has) value_10 = value_9.value;
                             else {
@@ -59542,9 +59424,9 @@ List_s* editor__dap__backendVariables(LarMemory* lar_result_memory, int32_t fram
     lar_text_builder_add(&text, "}", 1);
     LarAny r = editor__dap__parse(&memory, editor__dap__call(&memory, lar_string("variables", 9), lar_text_builder_finish(&text)));
     lar_memory_free(&line85001077_temps);
-    LarAny list_7611 = editor__dap__tableOf(&memory, lar_any_get(lar_any_get(r, lar_string("body", 4)), lar_string("variables", 9)));
+    LarAny list_7591 = editor__dap__tableOf(&memory, lar_any_get(lar_any_get(r, lar_string("body", 4)), lar_string("variables", 9)));
     {
-        LarAny table_2_v = list_7611;
+        LarAny table_2_v = list_7591;
         LarTable* table_2 = table_2_v.kind == LAR_ANY_TABLE ? table_2_v.as.t : NULL;
         int32_t count = table_2 ? table_2->length : 0;
         for (int32_t index = 0; index < count; index++) {
@@ -59812,11 +59694,11 @@ void editor__dap__exceptionInfo(LarAny msg) {
     else {
         value_9 = lar_string("panic", 5);
     }
-    LarString text_7634 = value_9;
+    LarString text_7614 = value_9;
     LarMemory line85001142_temps = lar_memory_growable();
     LarTextBuilder text_2 = lar_text_builder_mem(&line85001142_temps, LINE(85001142));
     lar_text_builder_add(&text_2, "{\"exceptionId\":\"panic\",\"description\":", 37);
-    lar_text_builder_str(&text_2, std__encoding__json__quote(&line85001142_temps, text_7634));
+    lar_text_builder_str(&text_2, std__encoding__json__quote(&line85001142_temps, text_7614));
     lar_text_builder_add(&text_2, ",\"breakMode\":\"always\"}", 22);
     editor__dap__respond(msg, lar_text_builder_finish(&text_2));
     lar_memory_free(&line85001142_temps);
@@ -60336,8 +60218,8 @@ LarString codegen__debugmap__fnJson(LarMemory* lar_result_memory, LarString cNam
         }
     }
     lar_memory_free(&line86000078_temps);
-    int32_t file_7699 = lar_div_i32(line, 1000000, LINE(86000079));
-    LarString path = (((file_7699 >= 0) && (file_7699 < ((semantics__linker__linking)->filePaths)->length)) ? ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)(file_7699), ((semantics__linker__linking)->filePaths)->length, LINE(86000080))] : lar_string("", 0));
+    int32_t file_7679 = lar_div_i32(line, 1000000, LINE(86000079));
+    LarString path = (((file_7679 >= 0) && (file_7679 < ((semantics__linker__linking)->filePaths)->length)) ? ((semantics__linker__linking)->filePaths)->items[lar_index((int64_t)(file_7679), ((semantics__linker__linking)->filePaths)->length, LINE(86000080))] : lar_string("", 0));
     LarMemory line86000081_temps = lar_memory_growable();
     LarTextBuilder text_2 = lar_text_builder_mem(lar_result_memory, LINE(86000081));
     lar_text_builder_str(&text_2, std__encoding__json__quote(&line86000081_temps, cName));
@@ -60375,7 +60257,7 @@ LarString codegen__debugmap__varJson(LarMemory* lar_result_memory, LarString nam
 }
 
 List_semantics__types__Symbol* codegen__debugmap__localsOf(LarMemory* lar_result_memory, List_syntax__ast__Stmt* body) {
-    syntax__ast__SwitchExpr* sx_7716 = NULL;
+    syntax__ast__SwitchExpr* sx_7696 = NULL;
     List_semantics__types__Symbol* list = List_semantics__types__Symbol_new(lar_result_memory, LINE(86000091));
     List_semantics__types__Symbol* out = list;
     List_syntax__ast__Stmt* list_2 = List_syntax__ast__Stmt_new(lar_result_memory, LINE(86000092));
@@ -60457,8 +60339,8 @@ List_semantics__types__Symbol* codegen__debugmap__localsOf(LarMemory* lar_result
             if ((lar_as_class((void*)(e), &lar_class_syntax__ast__IsExpr) != NULL) && (!((e)->_super.symbol == NULL))) {
                 List_semantics__types__Symbol_push(out, ((semantics__types__Symbol*)lar_unwrap((void*)((e)->_super.symbol), LINE(86000115))));
             }
-            if ((sx_7716 = (syntax__ast__SwitchExpr*)lar_as_class((void*)(e), &lar_class_syntax__ast__SwitchExpr)) != NULL) {
-                codegen__debugmap__switchBindings(sx_7716, out);
+            if ((sx_7696 = (syntax__ast__SwitchExpr*)lar_as_class((void*)(e), &lar_class_syntax__ast__SwitchExpr)) != NULL) {
+                codegen__debugmap__switchBindings(sx_7696, out);
             }
         }
     }
@@ -61116,7 +60998,7 @@ int32_t test(List_s* rest) {
     return result;
 }
 
-int32_t file(LarString main__7774, List_s* rest, List_s* programArgs) {
+int32_t file(LarString main__7754, List_s* rest, List_s* programArgs) {
     LarMemory memory = lar_memory_growable();
     List_s* value = rest;
     LarString value_2 = lar_string("-o", 2);
@@ -61129,7 +61011,7 @@ int32_t file(LarString main__7774, List_s* rest, List_s* programArgs) {
             return result;
         }
         (codegen__gen__generation)->debugLines = debugBuild;
-        int32_t result_2 = writeC(main__7774, (rest)->items[lar_index((int64_t)(1), (rest)->length, LINE(166))]);
+        int32_t result_2 = writeC(main__7754, (rest)->items[lar_index((int64_t)(1), (rest)->length, LINE(166))]);
         lar_memory_free(&memory);
         return result_2;
     }
@@ -61149,16 +61031,16 @@ int32_t file(LarString main__7774, List_s* rest, List_s* programArgs) {
             List_s_push(scriptArgs, a);
         }
     }
-    int32_t result_3 = runScript(main__7774, scriptArgs);
+    int32_t result_3 = runScript(main__7754, scriptArgs);
     lar_memory_free(&memory);
     return result_3;
 }
 
-int32_t writeC(LarString main__7780, LarString output) {
+int32_t writeC(LarString main__7760, LarString output) {
     LarError err;
     err.kind = 0;
     LarMemory memory = lar_memory_growable();
-    LarString generated = compileFile(&memory, main__7780, lar_string(".", 1));
+    LarString generated = compileFile(&memory, main__7760, lar_string(".", 1));
     if ((compileErrors)->length > 0) {
         int32_t result = 1;
         lar_memory_free(&memory);
@@ -61214,10 +61096,10 @@ int32_t writeC(LarString main__7780, LarString output) {
 int32_t plugin(LarString cmd, Slice_s args) {
     LarMemory memory = lar_memory_growable();
     List_s* list = List_s_new(&memory, LINE(194));
-    List_s* problems_7787 = list;
-    List_Plugin* found = plugins(&memory, problems_7787);
+    List_s* problems_7767 = list;
+    List_Plugin* found = plugins(&memory, problems_7767);
     {
-        List_s* list_2 = problems_7787;
+        List_s* list_2 = problems_7767;
         for (int32_t index = 0; index < list_2->length; index++) {
             LarString m = list_2->items[index];
             LarMemory line196_temps = lar_memory_growable();
@@ -61257,8 +61139,8 @@ int32_t usage(void) {
     LarMemory memory = lar_memory_growable();
     printf("larimar %.*s (language %.*s)\n\n  larimar new <name> [--library] create a project in a new folder (a program, or a library)\n  larimar build [folder]        compile the project (larimar.toml) to an executable (a library: check it;\n                                programs use it from their [dependencies])\n  larimar run [folder] [-- args] build, then run it with the arguments\n  larimar build --debug         with -g -O0 and the .lar lines, for a debugger (lldb, gdb, VS Code)\n  larimar check [file|folder]   find the errors without generating C (--json for tools)\n  larimar test [file|folder]... run the tests (tests/ by default; --only <text>, --test <name>,\n                                --list, --json, --no-sanitize)\n  larimar lsp                   language server for editors (speaks LSP on stdin/stdout)\n  larimar dap [--backend <lldb-dap>]  debugger for editors (DAP on stdin/stdout, over lldb-dap)\n  larimar <file.lar> [args]     build one file and run it (with the bundled tcc when there is one:\n                                it starts fast); its own arguments after '--' when they look like ours\n  larimar c <file.lar>          print the generated C of a file\n  larimar <file.lar> -o <out.c> write the generated C of a file\n  larimar build --cc <program>  build with that C compiler instead of the project's ('tcc': the bundled one)\n  larimar ... --target <platform>  generate the C of one platform only (linux, macos, windows, unix),\n                                with no #if: by default the same C builds on every one\n\n", (int)(lar_string("1.12.0", 6)).len, (lar_string("1.12.0", 6)).ptr, (int)(lar_string("1.4", 3)).len, (lar_string("1.4", 3)).ptr);
     List_s* list_2 = List_s_new(&memory, LINE(230));
-    List_s* problems_7791 = list_2;
-    List_Plugin* found = plugins(&memory, problems_7791);
+    List_s* problems_7771 = list_2;
+    List_Plugin* found = plugins(&memory, problems_7771);
     if ((found)->length > 0) {
         fputs("  from plugins ($LARIMAR_HOME/plugins):\n", stdout);
         {
@@ -61277,7 +61159,7 @@ int32_t usage(void) {
         fputs("\n", stdout);
     }
     {
-        List_s* list_4 = problems_7791;
+        List_s* list_4 = problems_7771;
         for (int32_t index_2 = 0; index_2 < list_4->length; index_2++) {
             LarString m = list_4->items[index_2];
             printf("  problem: %.*s\n", (int)(m).len, (m).ptr);
@@ -61302,7 +61184,7 @@ LarString larimarHome(LarMemory* lar_result_memory) {
     return result;
 }
 
-List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7796) {
+List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7776) {
     LarError err;
     err.kind = 0;
     LarMemory memory_2 = lar_memory_growable();
@@ -61394,9 +61276,9 @@ List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7796) {
                 lar_text_builder_add(&text_2, "cannot read ", 12);
                 lar_text_builder_str(&text_2, shown);
                 LarCloneMap clones = lar_clone_map();
-                LarString copy = clone_s(lar_text_builder_finish(&text_2), (problems_7796)->mem, &clones);
+                LarString copy = clone_s(lar_text_builder_finish(&text_2), (problems_7776)->mem, &clones);
                 lar_clone_done(&clones);
-                List_s_push(problems_7796, copy);
+                List_s_push(problems_7776, copy);
                 lar_memory_free(&line293_temps);
                 continue;
             } else if (err.kind == 23) {
@@ -61409,9 +61291,9 @@ List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7796) {
                 lar_text_builder_add(&text_3, ": ", 2);
                 lar_text_builder_str(&text_3, std__encoding__toml__message(&line296_temps, e));
                 LarCloneMap clones_2 = lar_clone_map();
-                LarString copy_2 = clone_s(lar_text_builder_finish(&text_3), (problems_7796)->mem, &clones_2);
+                LarString copy_2 = clone_s(lar_text_builder_finish(&text_3), (problems_7776)->mem, &clones_2);
                 lar_clone_done(&clones_2);
-                List_s_push(problems_7796, copy_2);
+                List_s_push(problems_7776, copy_2);
                 lar_memory_free(&line296_temps);
                 continue;
             } else {
@@ -61432,9 +61314,9 @@ List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7796) {
                 lar_text_builder_str(&text_4, shown);
                 lar_text_builder_add(&text_4, " needs [plugin] program = \"<a program of bin/>\"", 47);
                 LarCloneMap clones_3 = lar_clone_map();
-                LarString copy_3 = clone_s(lar_text_builder_finish(&text_4), (problems_7796)->mem, &clones_3);
+                LarString copy_3 = clone_s(lar_text_builder_finish(&text_4), (problems_7776)->mem, &clones_3);
                 lar_clone_done(&clones_3);
-                List_s_push(problems_7796, copy_3);
+                List_s_push(problems_7776, copy_3);
                 lar_memory_free(&line301_temps);
                 continue;
             }
@@ -61444,24 +61326,24 @@ List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7796) {
                 int32_t count_3 = table_2 ? table_2->count : 0;
                 for (int32_t index_2 = 0; index_2 < count_3; index_2++) {
                     if (table_2->count != count_3) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(304));
-                    LarString command_7807 = table_2->keys[index_2];
+                    LarString command_7787 = table_2->keys[index_2];
                     LarAny value = table_2->values[index_2];
                     LarMemory line305_temps = lar_memory_growable();
                     LarTextBuilder text_5 = lar_text_builder_mem(&line305_temps, LINE(305));
                     lar_text_builder_add(&text_5, " ", 1);
-                    lar_text_builder_str(&text_5, command_7807);
+                    lar_text_builder_str(&text_5, command_7787);
                     lar_text_builder_add(&text_5, " ", 1);
                     if (String_contains(lar_string(" new build run check test test-main lsp lsp-worker dap c version help --version --help -h ", 90), lar_text_builder_finish(&text_5))) {
                         LarMemory line306_temps = lar_memory_growable();
                         LarTextBuilder text_6 = lar_text_builder_mem(&line306_temps, LINE(306));
                         lar_text_builder_str(&text_6, shown);
                         lar_text_builder_add(&text_6, " cannot take 'larimar ", 22);
-                        lar_text_builder_str(&text_6, command_7807);
+                        lar_text_builder_str(&text_6, command_7787);
                         lar_text_builder_add(&text_6, "': it is a command of larimar", 29);
                         LarCloneMap clones_4 = lar_clone_map();
-                        LarString copy_4 = clone_s(lar_text_builder_finish(&text_6), (problems_7796)->mem, &clones_4);
+                        LarString copy_4 = clone_s(lar_text_builder_finish(&text_6), (problems_7776)->mem, &clones_4);
                         lar_clone_done(&clones_4);
-                        List_s_push(problems_7796, copy_4);
+                        List_s_push(problems_7776, copy_4);
                         lar_memory_free(&line306_temps);
                         lar_memory_free(&line305_temps);
                         continue;
@@ -61472,7 +61354,7 @@ List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7796) {
                         List_Plugin* list_5 = out;
                         for (int32_t index_3 = 0; index_3 < list_5->length; index_3++) {
                             Plugin* other = list_5->items[index_3];
-                            if (lar_string_eq((other)->command, command_7807)) {
+                            if (lar_string_eq((other)->command, command_7787)) {
                                 taken = (other)->file;
                             }
                         }
@@ -61481,15 +61363,15 @@ List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7796) {
                         LarMemory line314_temps = lar_memory_growable();
                         LarTextBuilder text_7 = lar_text_builder_mem(&line314_temps, LINE(314));
                         lar_text_builder_add(&text_7, "'larimar ", 9);
-                        lar_text_builder_str(&text_7, command_7807);
+                        lar_text_builder_str(&text_7, command_7787);
                         lar_text_builder_add(&text_7, "' is taken by ", 14);
                         lar_text_builder_str(&text_7, taken);
                         lar_text_builder_add(&text_7, " and by ", 8);
                         lar_text_builder_str(&text_7, shown);
                         LarCloneMap clones_5 = lar_clone_map();
-                        LarString copy_5 = clone_s(lar_text_builder_finish(&text_7), (problems_7796)->mem, &clones_5);
+                        LarString copy_5 = clone_s(lar_text_builder_finish(&text_7), (problems_7776)->mem, &clones_5);
                         lar_clone_done(&clones_5);
-                        List_s_push(problems_7796, copy_5);
+                        List_s_push(problems_7776, copy_5);
                         lar_memory_free(&line314_temps);
                         continue;
                     }
@@ -61527,7 +61409,7 @@ List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7796) {
                     lar_clone_done(&clones_8);
                     LarString value_11 = copy_8;
                     LarCloneMap clones_9 = lar_clone_map();
-                    LarString copy_9 = clone_s(command_7807, (out)->mem, &clones_9);
+                    LarString copy_9 = clone_s(command_7787, (out)->mem, &clones_9);
                     lar_clone_done(&clones_9);
                     *new_Plugin = (Plugin){ .header = { (const void*)&methods_Plugin, place }, .file = value_10, .program = value_11, .command = copy_9, .args = args };
                     List_Plugin_push(out, new_Plugin);
@@ -61540,7 +61422,7 @@ List_Plugin* plugins(LarMemory* lar_result_memory, List_s* problems_7796) {
     return result_3;
 }
 
-int32_t runPlugin(Plugin* plugin_7814, Slice_s args) {
+int32_t runPlugin(Plugin* plugin_7794, Slice_s args) {
     LarError err;
     err.kind = 0;
     LarMemory memory = lar_memory_growable();
@@ -61549,22 +61431,22 @@ int32_t runPlugin(Plugin* plugin_7814, Slice_s args) {
     LarString value_3;
     if (project__cc__windows()) {
         LarTextBuilder text = lar_text_builder_mem(&memory, LINE(328));
-        lar_text_builder_str(&text, (plugin_7814)->program);
+        lar_text_builder_str(&text, (plugin_7794)->program);
         lar_text_builder_add(&text, ".exe", 4);
         value_3 = lar_text_builder_finish(&text);
     } else {
-        value_3 = (plugin_7814)->program;
+        value_3 = (plugin_7794)->program;
     }
     LarString exe = std__io__path__join(&memory, value_2, value_3);
     if (!(std__io__files__isFile(exe))) {
         LarMemory line330_temps = lar_memory_growable();
         LarTextBuilder text_2 = lar_text_builder_mem(&line330_temps, LINE(330));
         lar_text_builder_add(&text_2, "'larimar ", 9);
-        lar_text_builder_str(&text_2, (plugin_7814)->command);
+        lar_text_builder_str(&text_2, (plugin_7794)->command);
         lar_text_builder_add(&text_2, "' is answered by ", 17);
-        lar_text_builder_str(&text_2, (plugin_7814)->program);
+        lar_text_builder_str(&text_2, (plugin_7794)->program);
         lar_text_builder_add(&text_2, " (", 2);
-        lar_text_builder_str(&text_2, (plugin_7814)->file);
+        lar_text_builder_str(&text_2, (plugin_7794)->file);
         lar_text_builder_add(&text_2, "), but ", 7);
         lar_text_builder_str(&text_2, std__io__path__join(&line330_temps, lar_string("bin", 3), std__io__path__fileName(NULL, exe)));
         lar_text_builder_add(&text_2, " does not exist in ", 19);
@@ -61580,7 +61462,7 @@ int32_t runPlugin(Plugin* plugin_7814, Slice_s args) {
     List_s* list = List_s_new(&memory, LINE(332));
     List_s* all = list;
     {
-        List_s* list_2 = (plugin_7814)->args;
+        List_s* list_2 = (plugin_7794)->args;
         for (int32_t index = 0; index < list_2->length; index++) {
             LarString a = list_2->items[index];
             List_s_push(all, a);
@@ -61645,8 +61527,8 @@ int32_t runPlugin(Plugin* plugin_7814, Slice_s args) {
     return result_4;
 }
 
-LarString compileFile(LarMemory* lar_result_memory, LarString main__7824, LarString shownFrom) {
-    pipeline__Compilation* unit = editor__session__compilationOf(lar_result_memory, main__7824, shownFrom);
+LarString compileFile(LarMemory* lar_result_memory, LarString main__7804, LarString shownFrom) {
+    pipeline__Compilation* unit = editor__session__compilationOf(lar_result_memory, main__7804, shownFrom);
     LarMemory line356_temps = lar_memory_growable();
     bool ok = pipeline__run(unit, pipeline__compilerPasses(&line356_temps));
     lar_memory_free(&line356_temps);
@@ -61672,38 +61554,17 @@ LarString compileFile(LarMemory* lar_result_memory, LarString main__7824, LarStr
         return lar_string("", 0);
     }
     LarString c = (unit)->c;
-    if (((semantics__linker__linking)->unsafeSources)->length > 0) {
-        LarMemory line362_temps = lar_memory_growable();
-        LarTextBuilder text = lar_text_builder_mem(&line362_temps, LINE(362));
-        lar_text_builder_add(&text, "note: unsafe C (native interface) from: ", 40);
-        List_s* value = (semantics__linker__linking)->unsafeSources;
-        lar_text_builder_str(&text, lar_string_join(value->items, value->length, lar_string(", ", 2), &line362_temps, LINE(362)));
-        std__io__console__printError(lar_text_builder_finish(&text));
-        lar_memory_free(&line362_temps);
-        {
-            List_s* list_2 = (semantics__linker__linking)->unsafeNotes;
-            for (int32_t index_2 = 0; index_2 < list_2->length; index_2++) {
-                LarString n = list_2->items[index_2];
-                LarMemory line363_temps = lar_memory_growable();
-                LarTextBuilder text_2 = lar_text_builder_mem(&line363_temps, LINE(363));
-                lar_text_builder_add(&text_2, "note: ", 6);
-                lar_text_builder_str(&text_2, n);
-                std__io__console__printError(lar_text_builder_finish(&text_2));
-                lar_memory_free(&line363_temps);
-            }
-        }
-    }
     return c;
 }
 
 project__cc__CCompiler* testCompiler(LarMemory* lar_result_memory, LarString wanted) {
     LarMemory memory = lar_memory_growable();
-    List_s* list = List_s_new(&memory, LINE(374));
+    List_s* list = List_s_new(&memory, LINE(370));
     List_s* problem = list;
     project__cc__CCompiler* cc = project__cc__chooseCompiler(lar_result_memory, larimarHome(lar_result_memory), wanted, false, false, problem);
     if (cc == NULL) {
         LarCloneMap clones = lar_clone_map();
-        LarString copy = clone_s((problem)->items[lar_index((int64_t)(0), (problem)->length, LINE(376))], &lar_default_memory, &clones);
+        LarString copy = clone_s((problem)->items[lar_index((int64_t)(0), (problem)->length, LINE(372))], &lar_default_memory, &clones);
         lar_clone_done(&clones);
         toolError = copy;
     }
@@ -61726,15 +61587,15 @@ project__testing__TestSettings* testSettings(LarMemory* lar_result_memory) {
             return NULL;
         }
         LarMemory* place = lar_result_memory;
-        project__testing__TestSettings* new_project__testing__TestSettings = (project__testing__TestSettings*)lar_memory_alloc(place, sizeof(project__testing__TestSettings), LINE(386));
+        project__testing__TestSettings* new_project__testing__TestSettings = (project__testing__TestSettings*)lar_memory_alloc(place, sizeof(project__testing__TestSettings), LINE(382));
         LarString value_4 = (cc)->program;
         List_s* value_5 = (cc)->first;
         bool value_6 = (cc)->bundled;
-        List_s* list = List_s_new(lar_result_memory, LINE(387));
+        List_s* list = List_s_new(lar_result_memory, LINE(383));
         List_s* value_7 = list;
-        List_s* list_2 = List_s_new(lar_result_memory, LINE(387));
+        List_s* list_2 = List_s_new(lar_result_memory, LINE(383));
         List_s* value_8 = list_2;
-        List_s* list_3 = List_s_new(lar_result_memory, LINE(388));
+        List_s* list_3 = List_s_new(lar_result_memory, LINE(384));
         List_s* value_9 = list_3;
         *new_project__testing__TestSettings = (project__testing__TestSettings){ .header = { (const void*)&methods_project__testing__TestSettings, place }, .compiler = value_4, .first = value_5, .bundled = value_6, .links = value_7, .includePaths = value_8, .sources = value_9, .root = lar_string("", 0), .outDir = std__io__path__join(lar_result_memory, here, lar_string("build/test", 10)) };
         return new_project__testing__TestSettings;
@@ -61748,15 +61609,15 @@ project__testing__TestSettings* testSettings(LarMemory* lar_result_memory) {
         return NULL;
     }
     LarMemory* place_2 = lar_result_memory;
-    project__testing__TestSettings* new_project__testing__TestSettings_2 = (project__testing__TestSettings*)lar_memory_alloc(place_2, sizeof(project__testing__TestSettings), LINE(395));
+    project__testing__TestSettings* new_project__testing__TestSettings_2 = (project__testing__TestSettings*)lar_memory_alloc(place_2, sizeof(project__testing__TestSettings), LINE(391));
     LarString value_10 = (cc)->program;
     List_s* value_11 = (cc)->first;
     bool value_12 = (cc)->bundled;
-    List_s* list_4 = List_s_new(lar_result_memory, LINE(396));
+    List_s* list_4 = List_s_new(lar_result_memory, LINE(392));
     List_s* value_13 = list_4;
-    List_s* list_5 = List_s_new(lar_result_memory, LINE(396));
+    List_s* list_5 = List_s_new(lar_result_memory, LINE(392));
     List_s* value_14 = list_5;
-    List_s* list_6 = List_s_new(lar_result_memory, LINE(396));
+    List_s* list_6 = List_s_new(lar_result_memory, LINE(392));
     List_s* value_15 = list_6;
     LarString value_16 = std__io__path__parent(NULL, resolve(lar_result_memory, here, (p)->main_));
     *new_project__testing__TestSettings_2 = (project__testing__TestSettings){ .header = { (const void*)&methods_project__testing__TestSettings, place_2 }, .compiler = value_10, .first = value_11, .bundled = value_12, .links = value_13, .includePaths = value_14, .sources = value_15, .root = value_16, .outDir = std__io__path__join(lar_result_memory, resolve(lar_result_memory, here, (p)->buildDir), lar_string("test", 4)) };
@@ -61767,21 +61628,21 @@ int32_t testMain(List_s* rest) {
     LarError err;
     err.kind = 0;
     LarMemory memory = lar_memory_growable();
-    LarString file_7839 = lar_string("", 0);
+    LarString file_7818 = lar_string("", 0);
     LarString output = lar_string("", 0);
     LarString root = lar_string("", 0);
     int32_t i = 0;
     while (i < (rest)->length) {
-        if (lar_string_eq((rest)->items[lar_index((int64_t)(i), (rest)->length, LINE(412))], lar_string("-o", 2)) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (rest)->length)) {
-            output = (rest)->items[lar_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (rest)->length, LINE(413))];
+        if (lar_string_eq((rest)->items[lar_index((int64_t)(i), (rest)->length, LINE(408))], lar_string("-o", 2)) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (rest)->length)) {
+            output = (rest)->items[lar_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (rest)->length, LINE(409))];
             i = ((int32_t)((uint32_t)(i) + (uint32_t)(2)));
         } else {
-            if (lar_string_eq((rest)->items[lar_index((int64_t)(i), (rest)->length, LINE(415))], lar_string("--root", 6)) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (rest)->length)) {
-                root = (rest)->items[lar_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (rest)->length, LINE(416))];
+            if (lar_string_eq((rest)->items[lar_index((int64_t)(i), (rest)->length, LINE(411))], lar_string("--root", 6)) && (((int32_t)((uint32_t)(i) + (uint32_t)(1))) < (rest)->length)) {
+                root = (rest)->items[lar_index((int64_t)(((int32_t)((uint32_t)(i) + (uint32_t)(1)))), (rest)->length, LINE(412))];
                 i = ((int32_t)((uint32_t)(i) + (uint32_t)(2)));
             } else {
-                if (lar_string_eq(file_7839, lar_string("", 0))) {
-                    file_7839 = (rest)->items[lar_index((int64_t)(i), (rest)->length, LINE(419))];
+                if (lar_string_eq(file_7818, lar_string("", 0))) {
+                    file_7818 = (rest)->items[lar_index((int64_t)(i), (rest)->length, LINE(415))];
                     i = ((int32_t)((uint32_t)(i) + (uint32_t)(1)));
                 } else {
                     int32_t result = fail(lar_string("usage: larimarc test-main <file.lar> -o <out.c> [--root <folder>]", 65));
@@ -61791,23 +61652,23 @@ int32_t testMain(List_s* rest) {
             }
         }
     }
-    if (lar_string_eq(file_7839, lar_string("", 0)) || lar_string_eq(output, lar_string("", 0))) {
+    if (lar_string_eq(file_7818, lar_string("", 0)) || lar_string_eq(output, lar_string("", 0))) {
         int32_t result_2 = fail(lar_string("usage: larimarc test-main <file.lar> -o <out.c> [--root <folder>]", 65));
         lar_memory_free(&memory);
         return result_2;
     }
-    Opt_s source = semantics__linker__readSource(NULL, file_7839);
+    Opt_s source = semantics__linker__readSource(NULL, file_7818);
     if (!(source).has) {
-        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(427));
+        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(423));
         lar_text_builder_add(&text, "cannot read ", 12);
-        lar_text_builder_str(&text, file_7839);
+        lar_text_builder_str(&text, file_7818);
         int32_t result_3 = fail(lar_text_builder_finish(&text));
         lar_memory_free(&memory);
         return result_3;
     }
     if (project__testing__hasMain(source.value)) {
-        LarTextBuilder text_2 = lar_text_builder_mem(&lar_default_memory, LINE(428));
-        lar_text_builder_str(&text_2, file_7839);
+        LarTextBuilder text_2 = lar_text_builder_mem(&lar_default_memory, LINE(424));
+        lar_text_builder_str(&text_2, file_7818);
         lar_text_builder_add(&text_2, " has test functions and a main: larimar test writes the main, so remove it", 74);
         int32_t result_4 = fail(lar_text_builder_finish(&text_2));
         lar_memory_free(&memory);
@@ -61815,27 +61676,27 @@ int32_t testMain(List_s* rest) {
     }
     List_project__testing__TestFunction* tests = project__testing__testFunctions(&memory, source.value);
     LarString full = project__testing__withMain(&memory, source.value, tests);
-    LarMemory line431_temps = lar_memory_growable();
-    editor__opendocuments__setOpenDocument(std__io__path__normalize(&line431_temps, std__io__path__absolute(&line431_temps, file_7839)), full);
-    lar_memory_free(&line431_temps);
+    LarMemory line427_temps = lar_memory_growable();
+    editor__opendocuments__setOpenDocument(std__io__path__normalize(&line427_temps, std__io__path__absolute(&line427_temps, file_7818)), full);
+    lar_memory_free(&line427_temps);
     (semantics__linker__linking)->testsKept = lar_string("main", 4);
     if (!lar_string_eq(root, lar_string("", 0))) {
-        LarMemory line433_temps = lar_memory_growable();
+        LarMemory line429_temps = lar_memory_growable();
         LarCloneMap clones = lar_clone_map();
-        LarString copy = clone_s(std__io__path__normalize(&line433_temps, std__io__path__absolute(&line433_temps, root)), &lar_default_memory, &clones);
+        LarString copy = clone_s(std__io__path__normalize(&line429_temps, std__io__path__absolute(&line429_temps, root)), &lar_default_memory, &clones);
         lar_clone_done(&clones);
         editor__session__sourceRoot = copy;
-        lar_memory_free(&line433_temps);
+        lar_memory_free(&line429_temps);
     }
     LarString value_2;
     if (String_endsWith(output, lar_string(".c", 2))) {
         LarString value_3 = output;
-        value_2 = lar_string_sub(value_3, (int64_t)(0), (int64_t)(((int32_t)((uint32_t)((output).len) - (uint32_t)(2)))), 434);
+        value_2 = lar_string_sub(value_3, (int64_t)(0), (int64_t)(((int32_t)((uint32_t)((output).len) - (uint32_t)(2)))), 430);
     } else {
         value_2 = output;
     }
     LarString base = value_2;
-    List_s* list = List_s_new(&memory, LINE(435));
+    List_s* list = List_s_new(&memory, LINE(431));
     List_s* names = list;
     {
         List_project__testing__TestFunction* list_2 = tests;
@@ -61845,28 +61706,28 @@ int32_t testMain(List_s* rest) {
         }
     }
     {
-        LarMemory line438_temps = lar_memory_growable();
-        LarTextBuilder text_3 = lar_text_builder_mem(&line438_temps, LINE(438));
+        LarMemory line434_temps = lar_memory_growable();
+        LarTextBuilder text_3 = lar_text_builder_mem(&line434_temps, LINE(434));
         lar_text_builder_str(&text_3, base);
         lar_text_builder_add(&text_3, ".lar", 4);
         std__io__files__writeString(lar_text_builder_finish(&text_3), full, &err);
         if (err.kind != 0) {
-            lar_memory_free(&line438_temps);
+            lar_memory_free(&line434_temps);
             goto try_catch;
         }
-        lar_memory_free(&line438_temps);
-        LarMemory line439_temps = lar_memory_growable();
-        LarTextBuilder text_4 = lar_text_builder_mem(&line439_temps, LINE(439));
+        lar_memory_free(&line434_temps);
+        LarMemory line435_temps = lar_memory_growable();
+        LarTextBuilder text_4 = lar_text_builder_mem(&line435_temps, LINE(435));
         lar_text_builder_str(&text_4, base);
         lar_text_builder_add(&text_4, ".tests", 6);
         LarString value_4 = lar_text_builder_finish(&text_4);
         List_s* value_5 = names;
-        std__io__files__writeString(value_4, lar_string_join(value_5->items, value_5->length, lar_string("\n", 1), &line439_temps, LINE(439)), &err);
+        std__io__files__writeString(value_4, lar_string_join(value_5->items, value_5->length, lar_string("\n", 1), &line435_temps, LINE(435)), &err);
         if (err.kind != 0) {
-            lar_memory_free(&line439_temps);
+            lar_memory_free(&line435_temps);
             goto try_catch;
         }
-        lar_memory_free(&line439_temps);
+        lar_memory_free(&line435_temps);
     }
     goto try_end;
     try_catch:
@@ -61874,7 +61735,7 @@ int32_t testMain(List_s* rest) {
         std__io__IoError e = err.as.e_std__io__IoError;
         (void)e;
         err.kind = 0;
-        LarTextBuilder text_5 = lar_text_builder_mem(&lar_default_memory, LINE(441));
+        LarTextBuilder text_5 = lar_text_builder_mem(&lar_default_memory, LINE(437));
         lar_text_builder_add(&text_5, "cannot write ", 13);
         lar_text_builder_str(&text_5, base);
         lar_text_builder_add(&text_5, ".lar", 4);
@@ -61886,7 +61747,7 @@ int32_t testMain(List_s* rest) {
         lar_panic("uncaught error", 0);
     }
     try_end: ;
-    LarString c = compileFile(&memory, file_7839, lar_string(".", 1));
+    LarString c = compileFile(&memory, file_7818, lar_string(".", 1));
     if ((compileErrors)->length > 0) {
         int32_t result_6 = 1;
         lar_memory_free(&memory);
@@ -61904,7 +61765,7 @@ int32_t testMain(List_s* rest) {
         std__io__IoError e = err.as.e_std__io__IoError;
         (void)e;
         err.kind = 0;
-        LarTextBuilder text_6 = lar_text_builder_mem(&lar_default_memory, LINE(448));
+        LarTextBuilder text_6 = lar_text_builder_mem(&lar_default_memory, LINE(444));
         lar_text_builder_add(&text_6, "cannot write ", 13);
         lar_text_builder_str(&text_6, output);
         int32_t result_7 = fail(lar_text_builder_finish(&text_6));
@@ -61923,11 +61784,11 @@ int32_t testMain(List_s* rest) {
 Project* load(LarMemory* lar_result_memory, LarString dir) {
     LarError err;
     err.kind = 0;
-    LarMemory line471_temps = lar_memory_growable();
-    Opt_s source = semantics__linker__readSource(NULL, std__io__path__join(&line471_temps, dir, lar_string("larimar.toml", 12)));
-    lar_memory_free(&line471_temps);
+    LarMemory line467_temps = lar_memory_growable();
+    Opt_s source = semantics__linker__readSource(NULL, std__io__path__join(&line467_temps, dir, lar_string("larimar.toml", 12)));
+    lar_memory_free(&line467_temps);
     if (!(source).has) {
-        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(473));
+        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(469));
         lar_text_builder_add(&text, "no larimar.toml in ", 19);
         lar_text_builder_str(&text, dir);
         lar_text_builder_add(&text, ". Create a project with 'larimar new <name>'.", 45);
@@ -61953,7 +61814,7 @@ Project* load(LarMemory* lar_result_memory, LarString dir) {
             if (subject.tag == std__encoding__toml__TomlError_Invalid) {
                 int32_t line = subject.as.Invalid.line;
                 LarString why = subject.as.Invalid.why;
-                LarTextBuilder text_2 = lar_text_builder_mem((compileErrors)->mem, LINE(480));
+                LarTextBuilder text_2 = lar_text_builder_mem((compileErrors)->mem, LINE(476));
                 lar_text_builder_add(&text_2, "Project Error [larimar.toml:", 28);
                 lar_text_builder_i64(&text_2, (int64_t)(line));
                 lar_text_builder_add(&text_2, "]: ", 3);
@@ -61973,18 +61834,18 @@ Project* load(LarMemory* lar_result_memory, LarString dir) {
 
 LarString keysOf(LarMemory* lar_result_memory, LarString section) {
     (void)lar_result_memory;
-    return (lar_string_eq(section, lar_string("project", 7)) ? lar_string("[build_dir, kind, main, name, output, unsafe_c, version]", 56) : lar_string("[compiler, flags]", 17));
+    return (lar_string_eq(section, lar_string("project", 7)) ? lar_string("[build_dir, kind, main, name, output, version]", 46) : lar_string("[compiler, flags]", 17));
 }
 
 bool allowedKey(LarString section, LarString key) {
-    LarMemory line496_temps = lar_memory_growable();
-    LarTextBuilder text = lar_text_builder_mem(&line496_temps, LINE(496));
+    LarMemory line492_temps = lar_memory_growable();
+    LarTextBuilder text = lar_text_builder_mem(&line492_temps, LINE(492));
     lar_text_builder_add(&text, "[", 1);
     lar_text_builder_str(&text, key);
     lar_text_builder_add(&text, ",", 1);
     bool condition = String_contains(keysOf(NULL, section), lar_text_builder_finish(&text));
     if (!condition) {
-        LarTextBuilder text_2 = lar_text_builder_mem(&line496_temps, LINE(496));
+        LarTextBuilder text_2 = lar_text_builder_mem(&line492_temps, LINE(492));
         lar_text_builder_add(&text_2, " ", 1);
         lar_text_builder_str(&text_2, key);
         lar_text_builder_add(&text_2, ",", 1);
@@ -61992,27 +61853,27 @@ bool allowedKey(LarString section, LarString key) {
     }
     bool condition_2 = condition;
     if (!condition_2) {
-        LarTextBuilder text_3 = lar_text_builder_mem(&line496_temps, LINE(496));
+        LarTextBuilder text_3 = lar_text_builder_mem(&line492_temps, LINE(492));
         lar_text_builder_add(&text_3, " ", 1);
         lar_text_builder_str(&text_3, key);
         lar_text_builder_add(&text_3, "]", 1);
         condition_2 = String_contains(keysOf(NULL, section), lar_text_builder_finish(&text_3));
     }
     bool result = condition_2;
-    lar_memory_free(&line496_temps);
+    lar_memory_free(&line492_temps);
     return result;
 }
 
 Project* project(LarMemory* lar_result_memory, LarString dir, LarAny config) {
     LarMemory memory = lar_memory_growable();
-    List_s* list_2 = List_s_new(&memory, LINE(500));
+    List_s* list_2 = List_s_new(&memory, LINE(496));
     List_s* topKeys = list_2;
     {
         LarAny table_2_v = config;
         LarTable* table_2 = table_2_v.kind == LAR_ANY_TABLE ? table_2_v.as.t : NULL;
         int32_t count_2 = table_2 ? table_2->count : 0;
         for (int32_t index = 0; index < count_2; index++) {
-            if (table_2->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(501));
+            if (table_2->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(497));
             LarString sectionName = table_2->keys[index];
             LarAny section = table_2->values[index];
             if (!(isSection(section))) {
@@ -62026,7 +61887,7 @@ Project* project(LarMemory* lar_result_memory, LarString dir, LarAny config) {
                 continue;
             }
             if ((!lar_string_eq(sectionName, lar_string("project", 7))) && (!lar_string_eq(sectionName, lar_string("c", 1)))) {
-                LarTextBuilder text_2 = lar_text_builder_mem((problems)->mem, LINE(509));
+                LarTextBuilder text_2 = lar_text_builder_mem((problems)->mem, LINE(505));
                 lar_text_builder_add(&text_2, "unknown section [", 17);
                 lar_text_builder_str(&text_2, sectionName);
                 lar_text_builder_add(&text_2, "] (sections: [project], [c], [dependencies])", 44);
@@ -62039,12 +61900,12 @@ Project* project(LarMemory* lar_result_memory, LarString dir, LarAny config) {
                 LarTable* table_3 = table_3_v.kind == LAR_ANY_TABLE ? table_3_v.as.t : NULL;
                 int32_t count_3 = table_3 ? table_3->count : 0;
                 for (int32_t index_2 = 0; index_2 < count_3; index_2++) {
-                    if (table_3->count != count_3) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(513));
+                    if (table_3->count != count_3) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(509));
                     LarString key = table_3->keys[index_2];
                     LarAny value = table_3->values[index_2];
                     if ((lar_string_eq(sectionName, lar_string("c", 1)) && isSection(value)) && (isPlatform(key) || hasNames(value))) {
                         if (!(isPlatform(key))) {
-                            LarTextBuilder text_3 = lar_text_builder_mem((problems)->mem, LINE(517));
+                            LarTextBuilder text_3 = lar_text_builder_mem((problems)->mem, LINE(513));
                             lar_text_builder_add(&text_3, "unknown section [c.", 19);
                             lar_text_builder_str(&text_3, key);
                             lar_text_builder_add(&text_3, "] (platforms: [c.linux], [c.macos], [c.windows], [c.unix])", 58);
@@ -62056,12 +61917,12 @@ Project* project(LarMemory* lar_result_memory, LarString dir, LarAny config) {
                             LarTable* table_4 = table_4_v.kind == LAR_ANY_TABLE ? table_4_v.as.t : NULL;
                             int32_t count_4 = table_4 ? table_4->count : 0;
                             for (int32_t index_3 = 0; index_3 < count_4; index_3++) {
-                                if (table_4->count != count_4) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(520));
+                                if (table_4->count != count_4) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(516));
                                 LarString platformKey = table_4->keys[index_3];
                                 LarAny platformValue = table_4->values[index_3];
                                 (void)platformValue;
                                 if (!(allowedKey(lar_string("c", 1), platformKey))) {
-                                    LarTextBuilder text_4 = lar_text_builder_mem((problems)->mem, LINE(522));
+                                    LarTextBuilder text_4 = lar_text_builder_mem((problems)->mem, LINE(518));
                                     lar_text_builder_add(&text_4, "unknown key '", 13);
                                     lar_text_builder_str(&text_4, platformKey);
                                     lar_text_builder_add(&text_4, "' in [c.", 8);
@@ -62074,16 +61935,20 @@ Project* project(LarMemory* lar_result_memory, LarString dir, LarAny config) {
                             }
                         }
                     } else {
-                        if (!(allowedKey(sectionName, key))) {
-                            LarTextBuilder text_5 = lar_text_builder_mem((problems)->mem, LINE(526));
-                            lar_text_builder_add(&text_5, "unknown key '", 13);
-                            lar_text_builder_str(&text_5, key);
-                            lar_text_builder_add(&text_5, "' in [", 6);
-                            lar_text_builder_str(&text_5, sectionName);
-                            lar_text_builder_add(&text_5, "] (keys: ", 9);
-                            lar_text_builder_str(&text_5, allowed);
-                            lar_text_builder_add(&text_5, ")", 1);
-                            List_s_push(problems, lar_text_builder_finish(&text_5));
+                        if (lar_string_eq(sectionName, lar_string("project", 7)) && lar_string_eq(key, lar_string("unsafe_c", 8))) {
+                            List_s_push(problems, lar_string("unsafe_c is gone: a C library of a program goes in the native interface of an UnsafeTask (std.os.process), in a process of its own; remove it from [project]", 156));
+                        } else {
+                            if (!(allowedKey(sectionName, key))) {
+                                LarTextBuilder text_5 = lar_text_builder_mem((problems)->mem, LINE(524));
+                                lar_text_builder_add(&text_5, "unknown key '", 13);
+                                lar_text_builder_str(&text_5, key);
+                                lar_text_builder_add(&text_5, "' in [", 6);
+                                lar_text_builder_str(&text_5, sectionName);
+                                lar_text_builder_add(&text_5, "] (keys: ", 9);
+                                lar_text_builder_str(&text_5, allowed);
+                                lar_text_builder_add(&text_5, ")", 1);
+                                List_s_push(problems, lar_text_builder_finish(&text_5));
+                            }
                         }
                     }
                 }
@@ -62091,21 +61956,21 @@ Project* project(LarMemory* lar_result_memory, LarString dir, LarAny config) {
         }
     }
     if ((topKeys)->length > 0) {
-        LarMemory line530_temps = lar_memory_growable();
-        LarTextBuilder text_6 = lar_text_builder_mem((problems)->mem, LINE(530));
+        LarMemory line528_temps = lar_memory_growable();
+        LarTextBuilder text_6 = lar_text_builder_mem((problems)->mem, LINE(528));
         lar_text_builder_add(&text_6, "keys must go inside [project], [c] or [dependencies]: [", 55);
         List_s* value_2 = topKeys;
-        lar_text_builder_str(&text_6, lar_string_join(value_2->items, value_2->length, lar_string(", ", 2), &line530_temps, LINE(530)));
+        lar_text_builder_str(&text_6, lar_string_join(value_2->items, value_2->length, lar_string(", ", 2), &line528_temps, LINE(528)));
         lar_text_builder_add(&text_6, "]", 1);
         List_s_push(problems, lar_text_builder_finish(&text_6));
-        lar_memory_free(&line530_temps);
+        lar_memory_free(&line528_temps);
     }
     LarAny p = lar_any_get(config, lar_string("project", 7));
     LarAny c = lar_any_get(config, lar_string("c", 1));
     LarString name = text(lar_result_memory, p, lar_string("name", 4), lar_string("", 0));
     LarString kind = text(lar_result_memory, p, lar_string("kind", 4), lar_string("program", 7));
     if ((!lar_string_eq(kind, lar_string("program", 7))) && (!lar_string_eq(kind, lar_string("library", 7)))) {
-        LarTextBuilder text_7 = lar_text_builder_mem((problems)->mem, LINE(535));
+        LarTextBuilder text_7 = lar_text_builder_mem((problems)->mem, LINE(533));
         lar_text_builder_add(&text_7, "kind = \"", 8);
         lar_text_builder_str(&text_7, kind);
         lar_text_builder_add(&text_7, "\" in [project]: it is \"program\" (the default) or \"library\"", 58);
@@ -62118,31 +61983,31 @@ Project* project(LarMemory* lar_result_memory, LarString dir, LarAny config) {
             List_s_push(problems, lar_string("the project name can only use letters, digits, '_', '-' and '.'", 63));
         } else {
             if (lar_string_eq(kind, lar_string("library", 7)) && (!(moduleName(name)))) {
-                LarMemory line541_temps = lar_memory_growable();
-                LarTextBuilder text_8 = lar_text_builder_mem((problems)->mem, LINE(541));
+                LarMemory line539_temps = lar_memory_growable();
+                LarTextBuilder text_8 = lar_text_builder_mem((problems)->mem, LINE(539));
                 lar_text_builder_add(&text_8, "a ", 2);
                 lar_text_builder_str(&text_8, kind);
                 lar_text_builder_add(&text_8, "'s name is also its module (import ", 35);
-                lar_text_builder_str(&text_8, String_replace(String_replace(name, &line541_temps, lar_string("-", 1), lar_string("_", 1)), &line541_temps, lar_string(".", 1), lar_string("_", 1)));
+                lar_text_builder_str(&text_8, String_replace(String_replace(name, &line539_temps, lar_string("-", 1), lar_string("_", 1)), &line539_temps, lar_string(".", 1), lar_string("_", 1)));
                 lar_text_builder_add(&text_8, ") and its files: use only letters, digits and '_'", 49);
                 List_s_push(problems, lar_text_builder_finish(&text_8));
-                lar_memory_free(&line541_temps);
+                lar_memory_free(&line539_temps);
             }
         }
     }
-    LarString version_7875 = text(lar_result_memory, p, lar_string("version", 7), lar_string("0.1.0", 5));
-    LarString main__7876 = text(lar_result_memory, p, lar_string("main", 4), lar_string("src/main.lar", 12));
+    LarString version_7854 = text(lar_result_memory, p, lar_string("version", 7), lar_string("0.1.0", 5));
+    LarString main__7855 = text(lar_result_memory, p, lar_string("main", 4), lar_string("src/main.lar", 12));
     LarString buildDir = text(lar_result_memory, p, lar_string("build_dir", 9), lar_string("build", 5));
     LarString exeSuffix = (project__cc__windows() ? lar_string(".exe", 4) : lar_string("", 0));
     LarString value_3;
     if (lar_string_eq(kind, lar_string("library", 7))) {
-        LarTextBuilder text_9 = lar_text_builder_mem(lar_result_memory, LINE(547));
+        LarTextBuilder text_9 = lar_text_builder_mem(lar_result_memory, LINE(545));
         lar_text_builder_str(&text_9, buildDir);
         lar_text_builder_add(&text_9, "/", 1);
         lar_text_builder_str(&text_9, name);
         value_3 = lar_text_builder_finish(&text_9);
     } else {
-        LarTextBuilder text_10 = lar_text_builder_mem(lar_result_memory, LINE(547));
+        LarTextBuilder text_10 = lar_text_builder_mem(lar_result_memory, LINE(545));
         lar_text_builder_str(&text_10, buildDir);
         lar_text_builder_add(&text_10, "/", 1);
         lar_text_builder_str(&text_10, name);
@@ -62160,8 +62025,8 @@ Project* project(LarMemory* lar_result_memory, LarString dir, LarAny config) {
     LarAny unix_ = (project__cc__windows() ? lar_any_null() : lar_any_get(c, lar_string("unix", 4)));
     LarAny here = lar_any_get(c, std__platform__Platform_name(NULL));
     LarString compiler = text(lar_result_memory, here, lar_string("compiler", 8), text(lar_result_memory, unix_, lar_string("compiler", 8), text(lar_result_memory, c, lar_string("compiler", 8), cc)));
-    List_s* list_3 = List_s_new(lar_result_memory, LINE(554));
-    List_s_add(list_3, lar_string("-O2", 3), LINE(554));
+    List_s* list_3 = List_s_new(lar_result_memory, LINE(552));
+    List_s_add(list_3, lar_string("-O2", 3), LINE(552));
     List_s* flags = list(lar_result_memory, c, lar_string("flags", 5), list_3);
     Arr_any_2 platformSections = ((Arr_any_2){ .length = 2, .items = { unix_, here } });
     {
@@ -62169,7 +62034,7 @@ Project* project(LarMemory* lar_result_memory, LarString dir, LarAny config) {
         for (int32_t index_4 = 0; index_4 < array->length; index_4++) {
             LarAny platform = array->items[index_4];
             {
-                List_s* list_4 = List_s_new(lar_result_memory, LINE(557));
+                List_s* list_4 = List_s_new(lar_result_memory, LINE(555));
                 List_s* list_5 = list(lar_result_memory, platform, lar_string("flags", 5), list_4);
                 for (int32_t index_5 = 0; index_5 < list_5->length; index_5++) {
                     LarString x = list_5->items[index_5];
@@ -62187,7 +62052,7 @@ Project* project(LarMemory* lar_result_memory, LarString dir, LarAny config) {
             List_s* list_6 = problems;
             for (int32_t index_6 = 0; index_6 < list_6->length; index_6++) {
                 LarString m = list_6->items[index_6];
-                LarTextBuilder text_11 = lar_text_builder_mem((compileErrors)->mem, LINE(561));
+                LarTextBuilder text_11 = lar_text_builder_mem((compileErrors)->mem, LINE(559));
                 lar_text_builder_add(&text_11, "Project Error [larimar.toml]: ", 30);
                 lar_text_builder_str(&text_11, m);
                 List_s_push(compileErrors, lar_text_builder_finish(&text_11));
@@ -62198,15 +62063,15 @@ Project* project(LarMemory* lar_result_memory, LarString dir, LarAny config) {
         return result;
     }
     LarMemory* place = lar_result_memory;
-    Project* new_Project = (Project*)lar_memory_alloc(place, sizeof(Project), LINE(564));
-    *new_Project = (Project){ .header = { (const void*)&methods_Project, place }, .dir = dir, .name = name, .version = version_7875, .kind = kind, .main_ = main__7876, .output = output, .buildDir = buildDir, .compiler = compiler, .flags = flags, .larimarLibraries = larimarLibs };
+    Project* new_Project = (Project*)lar_memory_alloc(place, sizeof(Project), LINE(562));
+    *new_Project = (Project){ .header = { (const void*)&methods_Project, place }, .dir = dir, .name = name, .version = version_7854, .kind = kind, .main_ = main__7855, .output = output, .buildDir = buildDir, .compiler = compiler, .flags = flags, .larimarLibraries = larimarLibs };
     Project* result_2 = new_Project;
     lar_memory_free(&memory);
     return result_2;
 }
 
 bool moduleName(LarString name) {
-    if (String_isEmpty(name) || std__text__isDigit(lar_string_byte(name, (int64_t)(0), LINE(571)))) {
+    if (String_isEmpty(name) || std__text__isDigit(lar_string_byte(name, (int64_t)(0), LINE(569)))) {
         return false;
     }
     {
@@ -62231,7 +62096,7 @@ bool hasNames(LarAny value) {
         LarTable* table_2 = table_2_v.kind == LAR_ANY_TABLE ? table_2_v.as.t : NULL;
         int32_t count_2 = table_2 ? table_2->count : 0;
         for (int32_t index = 0; index < count_2; index++) {
-            if (table_2->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(586));
+            if (table_2->count != count_2) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(584));
             LarString k = table_2->keys[index];
             (void)k;
             LarAny v = table_2->values[index];
@@ -62259,7 +62124,7 @@ bool isSection(LarAny value) {
             goto switch_end;
         }
     }
-    lar_panic("no case of the switch matched", LINE(591));
+    lar_panic("no case of the switch matched", LINE(589));
     switch_end: ;
     return value_2;
 }
@@ -62276,7 +62141,7 @@ LarString text(LarMemory* lar_result_memory, LarAny section, LarString key, LarS
         lar_clone_done(&clones);
         return copy;
     }
-    LarTextBuilder text = lar_text_builder_mem((problems)->mem, LINE(602));
+    LarTextBuilder text = lar_text_builder_mem((problems)->mem, LINE(600));
     lar_text_builder_add(&text, "'", 1);
     lar_text_builder_str(&text, key);
     lar_text_builder_add(&text, "' must be a \"string\"", 20);
@@ -62289,7 +62154,7 @@ List_s* list(LarMemory* lar_result_memory, LarAny section, LarString key, List_s
     if (lar_any_is_null(value)) {
         return def;
     }
-    List_s* list_2 = List_s_new(lar_result_memory, LINE(609));
+    List_s* list_2 = List_s_new(lar_result_memory, LINE(607));
     List_s* items = list_2;
     LarAny subject = value;
     bool value_2;
@@ -62308,7 +62173,7 @@ List_s* list(LarMemory* lar_result_memory, LarAny section, LarString key, List_s
             goto switch_end;
         }
     }
-    lar_panic("no case of the switch matched", LINE(610));
+    lar_panic("no case of the switch matched", LINE(608));
     switch_end: ;
     bool isList = value_2;
     if (isList) {
@@ -62317,13 +62182,13 @@ List_s* list(LarMemory* lar_result_memory, LarAny section, LarString key, List_s
             LarTable* table_2 = table_2_v.kind == LAR_ANY_TABLE ? table_2_v.as.t : NULL;
             int32_t count = table_2 ? table_2->length : 0;
             for (int32_t index = 0; index < count; index++) {
-                if (table_2->length != count) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(615));
+                if (table_2->length != count) lar_panic("an Any table cannot gain or lose entries while it is being iterated", LINE(613));
                 int32_t i = index;
                 (void)i;
                 LarAny item = table_2->items[index];
-                Opt_s text_7912 = lar_any_as_s(item);
-                if (!(text_7912).has) {
-                    LarTextBuilder text = lar_text_builder_mem((problems)->mem, LINE(618));
+                Opt_s text_7891 = lar_any_as_s(item);
+                if (!(text_7891).has) {
+                    LarTextBuilder text = lar_text_builder_mem((problems)->mem, LINE(616));
                     lar_text_builder_add(&text, "'", 1);
                     lar_text_builder_str(&text, key);
                     lar_text_builder_add(&text, "' must be a list of strings: ", 29);
@@ -62333,14 +62198,14 @@ List_s* list(LarMemory* lar_result_memory, LarAny section, LarString key, List_s
                     return def;
                 }
                 LarCloneMap clones = lar_clone_map();
-                LarString copy = clone_s(text_7912.value, (items)->mem, &clones);
+                LarString copy = clone_s(text_7891.value, (items)->mem, &clones);
                 lar_clone_done(&clones);
                 List_s_push(items, copy);
             }
         }
         return items;
     }
-    LarTextBuilder text_2 = lar_text_builder_mem((problems)->mem, LINE(625));
+    LarTextBuilder text_2 = lar_text_builder_mem((problems)->mem, LINE(623));
     lar_text_builder_add(&text_2, "'", 1);
     lar_text_builder_str(&text_2, key);
     lar_text_builder_add(&text_2, "' must be a list: ", 18);
@@ -62367,17 +62232,17 @@ bool validName(LarString name) {
 }
 
 LarString resolve(LarMemory* lar_result_memory, LarString dir, LarString p) {
-    LarMemory line642_temps = lar_memory_growable();
-    LarString result = std__io__path__normalize(lar_result_memory, std__io__path__join(&line642_temps, dir, p));
-    lar_memory_free(&line642_temps);
+    LarMemory line640_temps = lar_memory_growable();
+    LarString result = std__io__path__normalize(lar_result_memory, std__io__path__join(&line640_temps, dir, p));
+    lar_memory_free(&line640_temps);
     return result;
 }
 
 LarString build(LarMemory* lar_result_memory, Project* p, bool debug) {
     LarMemory memory = lar_memory_growable();
-    LarString main__7919 = resolve(&memory, (p)->dir, (p)->main_);
-    if (!(std__io__files__isFile(main__7919))) {
-        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(648));
+    LarString main__7898 = resolve(&memory, (p)->dir, (p)->main_);
+    if (!(std__io__files__isFile(main__7898))) {
+        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(646));
         lar_text_builder_add(&text, "the main file ", 14);
         lar_text_builder_str(&text, (p)->main_);
         lar_text_builder_add(&text, " does not exist (set it with main = \"...\" in [project])", 55);
@@ -62386,32 +62251,32 @@ LarString build(LarMemory* lar_result_memory, Project* p, bool debug) {
         lar_memory_free(&memory);
         return result;
     }
-    LarString result_2 = buildFrom(lar_result_memory, p, main__7919, debug);
+    LarString result_2 = buildFrom(lar_result_memory, p, main__7898, debug);
     lar_memory_free(&memory);
     return result_2;
 }
 
-LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__7921, bool debug) {
+LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__7900, bool debug) {
     LarError err;
     err.kind = 0;
     LarMemory memory = lar_memory_growable();
     LarString dir = (p)->dir;
     (codegen__gen__generation)->debugLines = debug;
-    LarString generated = compileFile(&memory, main__7921, dir);
+    LarString generated = compileFile(&memory, main__7900, dir);
     if ((compileErrors)->length > 0) {
         LarString result = lar_string("", 0);
         lar_memory_free(&memory);
         return result;
     }
-    LarMemory line660_temps = lar_memory_growable();
-    LarTextBuilder text = lar_text_builder_mem(&line660_temps, LINE(660));
+    LarMemory line658_temps = lar_memory_growable();
+    LarTextBuilder text = lar_text_builder_mem(&line658_temps, LINE(658));
     lar_text_builder_str(&text, (p)->name);
     lar_text_builder_add(&text, ".c", 2);
-    LarString cFile = resolve(&memory, std__io__path__join(&line660_temps, dir, (p)->buildDir), lar_text_builder_finish(&text));
-    lar_memory_free(&line660_temps);
-    LarMemory line661_temps = lar_memory_growable();
-    LarString c = (debug ? codegen__gen__spreadLines(&memory, generated, std__io__path__normalize(&line661_temps, std__io__path__absolute(&line661_temps, cFile))) : generated);
-    lar_memory_free(&line661_temps);
+    LarString cFile = resolve(&memory, std__io__path__join(&line658_temps, dir, (p)->buildDir), lar_text_builder_finish(&text));
+    lar_memory_free(&line658_temps);
+    LarMemory line659_temps = lar_memory_growable();
+    LarString c = (debug ? codegen__gen__spreadLines(&memory, generated, std__io__path__normalize(&line659_temps, std__io__path__absolute(&line659_temps, cFile))) : generated);
+    lar_memory_free(&line659_temps);
     LarString exe = resolve(lar_result_memory, dir, (p)->output);
     {
         std__io__files__createDirectories(std__io__path__parent(NULL, cFile), &err);
@@ -62427,14 +62292,14 @@ LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__79
             goto try_catch;
         }
         if (debug) {
-            LarMemory line667_temps = lar_memory_growable();
-            LarString value = debugMapPath(&line667_temps, cFile);
-            std__io__files__writeString(value, codegen__debugmap__debugMap(&line667_temps), &err);
+            LarMemory line665_temps = lar_memory_growable();
+            LarString value = debugMapPath(&line665_temps, cFile);
+            std__io__files__writeString(value, codegen__debugmap__debugMap(&line665_temps), &err);
             if (err.kind != 0) {
-                lar_memory_free(&line667_temps);
+                lar_memory_free(&line665_temps);
                 goto try_catch;
             }
-            lar_memory_free(&line667_temps);
+            lar_memory_free(&line665_temps);
         }
     }
     goto try_end;
@@ -62443,7 +62308,7 @@ LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__79
         std__io__IoError e = err.as.e_std__io__IoError;
         (void)e;
         err.kind = 0;
-        LarTextBuilder text_2 = lar_text_builder_mem(&lar_default_memory, LINE(669));
+        LarTextBuilder text_2 = lar_text_builder_mem(&lar_default_memory, LINE(667));
         lar_text_builder_add(&text_2, "cannot write ", 13);
         lar_text_builder_str(&text_2, cFile);
         toolError = lar_text_builder_finish(&text_2);
@@ -62455,14 +62320,14 @@ LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__79
         lar_panic("uncaught error", 0);
     }
     try_end: ;
-    List_s* list = List_s_new(&memory, LINE(672));
+    List_s* list = List_s_new(&memory, LINE(670));
     List_s* problem = list;
     LarString value_2 = larimarHome(&memory);
     LarString value_3 = ((!lar_string_eq(compilerOverride, lar_string("", 0))) ? compilerOverride : (p)->compiler);
     project__cc__CCompiler* chosen = project__cc__chooseCompiler(&memory, value_2, value_3, false, String_contains(generated, lar_string("#define LAR_NET_TLS", 19)), problem);
     if (chosen == NULL) {
         LarCloneMap clones = lar_clone_map();
-        LarString copy = clone_s((problem)->items[lar_index((int64_t)(0), (problem)->length, LINE(675))], &lar_default_memory, &clones);
+        LarString copy = clone_s((problem)->items[lar_index((int64_t)(0), (problem)->length, LINE(673))], &lar_default_memory, &clones);
         lar_clone_done(&clones);
         toolError = copy;
         LarString result_3 = lar_string("", 0);
@@ -62470,8 +62335,8 @@ LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__79
         return result_3;
     }
     project__cc__CCompiler* cc = chosen;
-    List_s* list_2 = List_s_new(&memory, LINE(679));
-    List_s_add(list_2, (cc)->program, LINE(679));
+    List_s* list_2 = List_s_new(&memory, LINE(677));
+    List_s_add(list_2, (cc)->program, LINE(677));
     List_s* cmd = list_2;
     {
         List_s* list_3 = (cc)->first;
@@ -62497,9 +62362,9 @@ LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__79
     List_s_push(cmd, lar_string("-o", 2));
     List_s_push(cmd, exe);
     List_s_push(cmd, cFile);
-    LarMemory line692_temps = lar_memory_growable();
+    LarMemory line690_temps = lar_memory_growable();
     {
-        List_s* list_5 = project__cc__systemLibraries(&line692_temps, c);
+        List_s* list_5 = project__cc__systemLibraries(&line690_temps, c);
         for (int32_t index_3 = 0; index_3 < list_5->length; index_3++) {
             LarString l = list_5->items[index_3];
             LarCloneMap clones_2 = lar_clone_map();
@@ -62508,12 +62373,12 @@ LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__79
             List_s_push(cmd, copy_2);
         }
     }
-    lar_memory_free(&line692_temps);
-    LarMemory line693_temps = lar_memory_growable();
-    int32_t code = std__os__runCommand(project__cc__commandLine(&line693_temps, cmd));
-    lar_memory_free(&line693_temps);
+    lar_memory_free(&line690_temps);
+    LarMemory line691_temps = lar_memory_growable();
+    int32_t code = std__os__runCommand(project__cc__commandLine(&line691_temps, cmd));
+    lar_memory_free(&line691_temps);
     if (code == 127) {
-        LarTextBuilder text_3 = lar_text_builder_mem(&lar_default_memory, LINE(695));
+        LarTextBuilder text_3 = lar_text_builder_mem(&lar_default_memory, LINE(693));
         lar_text_builder_add(&text_3, "cannot run the C compiler '", 27);
         lar_text_builder_str(&text_3, (cc)->program);
         lar_text_builder_add(&text_3, "'. Install one (", 16);
@@ -62525,45 +62390,45 @@ LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__79
         return result_4;
     }
     if (!(code == 0)) {
-        LarMemory line699_temps = lar_memory_growable();
-        LarTextBuilder text_4 = lar_text_builder_mem(&lar_default_memory, LINE(699));
+        LarMemory line697_temps = lar_memory_growable();
+        LarTextBuilder text_4 = lar_text_builder_mem(&lar_default_memory, LINE(697));
         lar_text_builder_add(&text_4, "the C compiler failed (exit ", 28);
         lar_text_builder_i64(&text_4, (int64_t)(code));
         lar_text_builder_add(&text_4, "). Command: ", 12);
         List_s* value_4 = cmd;
-        lar_text_builder_str(&text_4, lar_string_join(value_4->items, value_4->length, lar_string(" ", 1), &line699_temps, LINE(699)));
+        lar_text_builder_str(&text_4, lar_string_join(value_4->items, value_4->length, lar_string(" ", 1), &line697_temps, LINE(697)));
         lar_text_builder_add(&text_4, "\nThe generated C is in ", 23);
-        lar_text_builder_str(&text_4, std__io__path__relative(&line699_temps, dir, cFile));
+        lar_text_builder_str(&text_4, std__io__path__relative(&line697_temps, dir, cFile));
         toolError = lar_text_builder_finish(&text_4);
-        lar_memory_free(&line699_temps);
+        lar_memory_free(&line697_temps);
         LarString result_5 = lar_string("", 0);
         lar_memory_free(&memory);
         return result_5;
     }
     if ((cc)->fallback) {
-        LarMemory line703_temps = lar_memory_growable();
-        LarTextBuilder text_5 = lar_text_builder_mem(&line703_temps, LINE(703));
+        LarMemory line701_temps = lar_memory_growable();
+        LarTextBuilder text_5 = lar_text_builder_mem(&line701_temps, LINE(701));
         lar_text_builder_add(&text_5, "note: no C compiler found, so the bundled tcc built it (fast to build, not optimized). For faster programs: ", 108);
         lar_text_builder_str(&text_5, project__cc__installHint(NULL));
         std__io__console__printError(lar_text_builder_finish(&text_5));
-        lar_memory_free(&line703_temps);
+        lar_memory_free(&line701_temps);
     }
-    LarMemory line705_temps = lar_memory_growable();
+    LarMemory line703_temps = lar_memory_growable();
     LarString value_5;
     if (debug) {
-        LarTextBuilder text_6 = lar_text_builder_mem(&line705_temps, LINE(705));
+        LarTextBuilder text_6 = lar_text_builder_mem(&line703_temps, LINE(703));
         lar_text_builder_add(&text_6, "built ", 6);
-        lar_text_builder_str(&text_6, std__io__path__relative(&line705_temps, dir, exe));
+        lar_text_builder_str(&text_6, std__io__path__relative(&line703_temps, dir, exe));
         lar_text_builder_add(&text_6, " (debug)", 8);
         value_5 = lar_text_builder_finish(&text_6);
     } else {
-        LarTextBuilder text_7 = lar_text_builder_mem(&line705_temps, LINE(705));
+        LarTextBuilder text_7 = lar_text_builder_mem(&line703_temps, LINE(703));
         lar_text_builder_add(&text_7, "built ", 6);
-        lar_text_builder_str(&text_7, std__io__path__relative(&line705_temps, dir, exe));
+        lar_text_builder_str(&text_7, std__io__path__relative(&line703_temps, dir, exe));
         value_5 = lar_text_builder_finish(&text_7);
     }
     std__io__console__printError(value_5);
-    lar_memory_free(&line705_temps);
+    lar_memory_free(&line703_temps);
     LarString result_6 = exe;
     lar_memory_free(&memory);
     return result_6;
@@ -62571,9 +62436,9 @@ LarString buildFrom(LarMemory* lar_result_memory, Project* p, LarString main__79
 
 bool checkLibrary(Project* p) {
     LarMemory memory = lar_memory_growable();
-    LarString main__7938 = resolve(&memory, (p)->dir, (p)->main_);
-    if (!(std__io__files__isFile(main__7938))) {
-        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(716));
+    LarString main__7917 = resolve(&memory, (p)->dir, (p)->main_);
+    if (!(std__io__files__isFile(main__7917))) {
+        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(714));
         lar_text_builder_add(&text, "the main file ", 14);
         lar_text_builder_str(&text, (p)->main_);
         lar_text_builder_add(&text, " does not exist (set it with main = \"...\" in [project])", 55);
@@ -62583,7 +62448,7 @@ bool checkLibrary(Project* p) {
         return result;
     }
     (semantics__types__declared)->buildingLibrary = true;
-    bool ok = editor__session__analyzeFile(main__7938, (p)->dir);
+    bool ok = editor__session__analyzeFile(main__7917, (p)->dir);
     {
         List_s* list = editor__session__readErrors;
         for (int32_t index = 0; index < list->length; index++) {
@@ -62610,29 +62475,29 @@ bool checkLibrary(Project* p) {
         lar_memory_free(&memory);
         return result_2;
     }
-    LarMemory line725_temps = lar_memory_growable();
-    LarTextBuilder text_2 = lar_text_builder_mem(&line725_temps, LINE(725));
+    LarMemory line723_temps = lar_memory_growable();
+    LarTextBuilder text_2 = lar_text_builder_mem(&line723_temps, LINE(723));
     lar_text_builder_add(&text_2, "checked ", 8);
     lar_text_builder_str(&text_2, (p)->name);
     lar_text_builder_add(&text_2, ": a library is used from the [dependencies] of a program (its tests: larimar test)", 82);
     std__io__console__printError(lar_text_builder_finish(&text_2));
-    lar_memory_free(&line725_temps);
+    lar_memory_free(&line723_temps);
     bool result_3 = true;
     lar_memory_free(&memory);
     return result_3;
 }
 
-int32_t runScript(LarString file_7943, List_s* args) {
+int32_t runScript(LarString file_7922, List_s* args) {
     LarError err;
     err.kind = 0;
     LarMemory memory = lar_memory_growable();
-    LarString generated = compileFile(&memory, file_7943, lar_string(".", 1));
+    LarString generated = compileFile(&memory, file_7922, lar_string(".", 1));
     if ((compileErrors)->length > 0) {
         int32_t result_2 = 1;
         lar_memory_free(&memory);
         return result_2;
     }
-    List_s* list = List_s_new(&memory, LINE(737));
+    List_s* list = List_s_new(&memory, LINE(735));
     List_s* problem = list;
     LarString value_2;
     if (!lar_string_eq(compilerOverride, lar_string("", 0))) {
@@ -62651,7 +62516,7 @@ int32_t runScript(LarString file_7943, List_s* args) {
     project__cc__CCompiler* chosen = project__cc__chooseCompiler(&memory, value_5, wanted, true, String_contains(generated, lar_string("#define LAR_NET_TLS", 19)), problem);
     if (chosen == NULL) {
         LarCloneMap clones = lar_clone_map();
-        LarString copy = clone_s((problem)->items[lar_index((int64_t)(0), (problem)->length, LINE(740))], &lar_default_memory, &clones);
+        LarString copy = clone_s((problem)->items[lar_index((int64_t)(0), (problem)->length, LINE(738))], &lar_default_memory, &clones);
         lar_clone_done(&clones);
         int32_t result_3 = fail(copy);
         lar_memory_free(&memory);
@@ -62669,20 +62534,20 @@ int32_t runScript(LarString file_7943, List_s* args) {
         temp = (project__cc__windows() ? lar_string(".", 1) : lar_string("/tmp", 4));
     }
     LarString dir = std__io__path__join(&memory, temp, lar_string("larimar", 7));
-    LarString name = std__io__path__fileName(NULL, file_7943);
-    LarTextBuilder text = lar_text_builder_mem(&memory, LINE(746));
+    LarString name = std__io__path__fileName(NULL, file_7922);
+    LarTextBuilder text = lar_text_builder_mem(&memory, LINE(744));
     LarString value_8 = name;
-    lar_text_builder_str(&text, lar_string_sub(value_8, (int64_t)(0), (int64_t)(((int32_t)((uint32_t)((name).len) - (uint32_t)(4)))), 746));
+    lar_text_builder_str(&text, lar_string_sub(value_8, (int64_t)(0), (int64_t)(((int32_t)((uint32_t)((name).len) - (uint32_t)(4)))), 744));
     lar_text_builder_add(&text, "-", 1);
     lar_text_builder_i64(&text, (int64_t)(std__os__processId()));
     LarString base = std__io__path__join(&memory, dir, lar_text_builder_finish(&text));
-    LarTextBuilder text_2 = lar_text_builder_mem(&memory, LINE(747));
+    LarTextBuilder text_2 = lar_text_builder_mem(&memory, LINE(745));
     lar_text_builder_str(&text_2, base);
     lar_text_builder_add(&text_2, ".c", 2);
     LarString cFile = lar_text_builder_finish(&text_2);
     LarString value_9;
     if (project__cc__windows()) {
-        LarTextBuilder text_3 = lar_text_builder_mem(&memory, LINE(748));
+        LarTextBuilder text_3 = lar_text_builder_mem(&memory, LINE(746));
         lar_text_builder_str(&text_3, base);
         lar_text_builder_add(&text_3, ".exe", 4);
         value_9 = lar_text_builder_finish(&text_3);
@@ -62706,15 +62571,15 @@ int32_t runScript(LarString file_7943, List_s* args) {
         std__io__IoError e = err.as.e_std__io__IoError;
         (void)e;
         err.kind = 0;
-        LarMemory line753_temps = lar_memory_growable();
-        LarTextBuilder text_4 = lar_text_builder_mem(&line753_temps, LINE(753));
+        LarMemory line751_temps = lar_memory_growable();
+        LarTextBuilder text_4 = lar_text_builder_mem(&line751_temps, LINE(751));
         lar_text_builder_add(&text_4, "cannot write ", 13);
         lar_text_builder_str(&text_4, cFile);
         LarCloneMap clones_2 = lar_clone_map();
         LarString copy_2 = clone_s(lar_text_builder_finish(&text_4), &lar_default_memory, &clones_2);
         lar_clone_done(&clones_2);
         int32_t result_4 = fail(copy_2);
-        lar_memory_free(&line753_temps);
+        lar_memory_free(&line751_temps);
         lar_memory_free(&memory);
         return result_4;
     } else {
@@ -62722,8 +62587,8 @@ int32_t runScript(LarString file_7943, List_s* args) {
         lar_panic("uncaught error", 0);
     }
     try_end: ;
-    List_s* list_2 = List_s_new(&memory, LINE(755));
-    List_s_add(list_2, (cc)->program, LINE(755));
+    List_s* list_2 = List_s_new(&memory, LINE(753));
+    List_s_add(list_2, (cc)->program, LINE(753));
     List_s* cmd = list_2;
     {
         List_s* list_3 = (cc)->first;
@@ -62743,9 +62608,9 @@ int32_t runScript(LarString file_7943, List_s* args) {
     if (!(project__cc__windows())) {
         List_s_push(cmd, lar_string("-lm", 3));
     }
-    LarMemory line760_temps = lar_memory_growable();
+    LarMemory line758_temps = lar_memory_growable();
     {
-        List_s* list_4 = project__cc__systemLibraries(&line760_temps, generated);
+        List_s* list_4 = project__cc__systemLibraries(&line758_temps, generated);
         for (int32_t index_3 = 0; index_3 < list_4->length; index_3++) {
             LarString l = list_4->items[index_3];
             LarCloneMap clones_3 = lar_clone_map();
@@ -62754,19 +62619,19 @@ int32_t runScript(LarString file_7943, List_s* args) {
             List_s_push(cmd, copy_3);
         }
     }
-    lar_memory_free(&line760_temps);
-    LarTextBuilder text_5 = lar_text_builder_mem(&memory, LINE(761));
+    lar_memory_free(&line758_temps);
+    LarTextBuilder text_5 = lar_text_builder_mem(&memory, LINE(759));
     lar_text_builder_str(&text_5, base);
     lar_text_builder_add(&text_5, ".txt", 4);
     LarString log_ = lar_text_builder_finish(&text_5);
-    LarMemory line762_temps = lar_memory_growable();
-    LarTextBuilder text_6 = lar_text_builder_mem(&line762_temps, LINE(762));
-    lar_text_builder_str(&text_6, project__cc__commandLine(&line762_temps, cmd));
+    LarMemory line760_temps = lar_memory_growable();
+    LarTextBuilder text_6 = lar_text_builder_mem(&line760_temps, LINE(760));
+    lar_text_builder_str(&text_6, project__cc__commandLine(&line760_temps, cmd));
     lar_text_builder_add(&text_6, " > ", 3);
-    lar_text_builder_str(&text_6, project__cc__quote(&line762_temps, log_));
+    lar_text_builder_str(&text_6, project__cc__quote(&line760_temps, log_));
     lar_text_builder_add(&text_6, " 2>&1", 5);
     int32_t code = std__os__runCommand(lar_text_builder_finish(&text_6));
-    lar_memory_free(&line762_temps);
+    lar_memory_free(&line760_temps);
     if (!(code == 0)) {
         LarMemory memory_2 = lar_memory_growable();
         LarString said = lar_string("", 0);
@@ -62789,8 +62654,8 @@ int32_t runScript(LarString file_7943, List_s* args) {
             lar_panic("uncaught error", 0);
         }
         try_end_2: ;
-        LarMemory line766_temps = lar_memory_growable();
-        LarTextBuilder text_7 = lar_text_builder_mem(&line766_temps, LINE(766));
+        LarMemory line764_temps = lar_memory_growable();
+        LarTextBuilder text_7 = lar_text_builder_mem(&line764_temps, LINE(764));
         lar_text_builder_add(&text_7, "the C compiler failed (exit ", 28);
         lar_text_builder_i64(&text_7, (int64_t)(code));
         lar_text_builder_add(&text_7, "): ", 3);
@@ -62801,7 +62666,7 @@ int32_t runScript(LarString file_7943, List_s* args) {
         LarString copy_4 = clone_s(lar_text_builder_finish(&text_7), &lar_default_memory, &clones_4);
         lar_clone_done(&clones_4);
         int32_t result_5 = fail(copy_4);
-        lar_memory_free(&line766_temps);
+        lar_memory_free(&line764_temps);
         lar_memory_free(&memory_2);
         lar_memory_free(&memory);
         return result_5;
@@ -62838,8 +62703,8 @@ int32_t runScript(LarString file_7943, List_s* args) {
 
 int32_t execute(LarString exe, List_s* args) {
     LarMemory memory = lar_memory_growable();
-    List_s* list = List_s_new(&memory, LINE(777));
-    List_s_add(list, project__cc__quote(&memory, exe), LINE(777));
+    List_s* list = List_s_new(&memory, LINE(775));
+    List_s_add(list, project__cc__quote(&memory, exe), LINE(775));
     List_s* parts = list;
     {
         List_s* list_2 = args;
@@ -62848,10 +62713,10 @@ int32_t execute(LarString exe, List_s* args) {
             List_s_push(parts, project__cc__quote((parts)->mem, a));
         }
     }
-    LarMemory line779_temps = lar_memory_growable();
+    LarMemory line777_temps = lar_memory_growable();
     List_s* value = parts;
-    int32_t result = std__os__runCommand(lar_string_join(value->items, value->length, lar_string(" ", 1), &line779_temps, LINE(779)));
-    lar_memory_free(&line779_temps);
+    int32_t result = std__os__runCommand(lar_string_join(value->items, value->length, lar_string(" ", 1), &line777_temps, LINE(777)));
+    lar_memory_free(&line777_temps);
     lar_memory_free(&memory);
     return result;
 }
@@ -62872,7 +62737,7 @@ int32_t create(LarString path, bool library) {
         return result_2;
     }
     if (std__io__files__exists(path)) {
-        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(790));
+        LarTextBuilder text = lar_text_builder_mem(&lar_default_memory, LINE(788));
         lar_text_builder_str(&text, path);
         lar_text_builder_add(&text, " already exists", 15);
         int32_t result_3 = fail(lar_text_builder_finish(&text));
@@ -62885,42 +62750,42 @@ int32_t create(LarString path, bool library) {
         return result_4;
     }
     {
-        LarMemory line793_temps = lar_memory_growable();
-        std__io__files__createDirectories(std__io__path__join(&line793_temps, path, lar_string("src", 3)), &err);
+        LarMemory line791_temps = lar_memory_growable();
+        std__io__files__createDirectories(std__io__path__join(&line791_temps, path, lar_string("src", 3)), &err);
         if (err.kind != 0) {
-            lar_memory_free(&line793_temps);
+            lar_memory_free(&line791_temps);
             goto try_catch;
         }
-        lar_memory_free(&line793_temps);
-        LarMemory line794_temps = lar_memory_growable();
-        LarTextBuilder text_2 = lar_text_builder_mem(&line794_temps, LINE(794));
+        lar_memory_free(&line791_temps);
+        LarMemory line792_temps = lar_memory_growable();
+        LarTextBuilder text_2 = lar_text_builder_mem(&line792_temps, LINE(792));
         lar_text_builder_add(&text_2, "[project]\nname = \"", 18);
         lar_text_builder_str(&text_2, name);
         lar_text_builder_add(&text_2, "\"\nversion = \"0.1.0\"\nmain = \"src/main.lar\"\n\n[c]\nflags = [\"-O2\"]\n", 63);
-        std__io__files__writeString(std__io__path__join(&line794_temps, path, lar_string("larimar.toml", 12)), lar_text_builder_finish(&text_2), &err);
+        std__io__files__writeString(std__io__path__join(&line792_temps, path, lar_string("larimar.toml", 12)), lar_text_builder_finish(&text_2), &err);
         if (err.kind != 0) {
-            lar_memory_free(&line794_temps);
+            lar_memory_free(&line792_temps);
             goto try_catch;
         }
-        lar_memory_free(&line794_temps);
-        LarMemory line803_temps = lar_memory_growable();
-        LarTextBuilder text_3 = lar_text_builder_mem(&line803_temps, LINE(803));
+        lar_memory_free(&line792_temps);
+        LarMemory line801_temps = lar_memory_growable();
+        LarTextBuilder text_3 = lar_text_builder_mem(&line801_temps, LINE(801));
         lar_text_builder_add(&text_3, "function main(): int32 {\n    println(\"Hello from ", 49);
         lar_text_builder_str(&text_3, name);
         lar_text_builder_add(&text_3, "!\");\n    return 0;\n}\n", 21);
-        std__io__files__writeString(std__io__path__join(&line803_temps, path, lar_string("src/main.lar", 12)), lar_text_builder_finish(&text_3), &err);
+        std__io__files__writeString(std__io__path__join(&line801_temps, path, lar_string("src/main.lar", 12)), lar_text_builder_finish(&text_3), &err);
         if (err.kind != 0) {
-            lar_memory_free(&line803_temps);
+            lar_memory_free(&line801_temps);
             goto try_catch;
         }
-        lar_memory_free(&line803_temps);
-        LarMemory line809_temps = lar_memory_growable();
-        std__io__files__writeString(std__io__path__join(&line809_temps, path, lar_string(".gitignore", 10)), lar_string("build/\n", 7), &err);
+        lar_memory_free(&line801_temps);
+        LarMemory line807_temps = lar_memory_growable();
+        std__io__files__writeString(std__io__path__join(&line807_temps, path, lar_string(".gitignore", 10)), lar_string("build/\n", 7), &err);
         if (err.kind != 0) {
-            lar_memory_free(&line809_temps);
+            lar_memory_free(&line807_temps);
             goto try_catch;
         }
-        lar_memory_free(&line809_temps);
+        lar_memory_free(&line807_temps);
     }
     goto try_end;
     try_catch:
@@ -62928,7 +62793,7 @@ int32_t create(LarString path, bool library) {
         std__io__IoError e = err.as.e_std__io__IoError;
         (void)e;
         err.kind = 0;
-        LarTextBuilder text_4 = lar_text_builder_mem(&lar_default_memory, LINE(811));
+        LarTextBuilder text_4 = lar_text_builder_mem(&lar_default_memory, LINE(809));
         lar_text_builder_add(&text_4, "cannot create ", 14);
         lar_text_builder_str(&text_4, path);
         int32_t result_5 = fail(lar_text_builder_finish(&text_4));
@@ -62949,22 +62814,22 @@ int32_t createLibrary(LarString path, LarString name) {
     LarError err;
     err.kind = 0;
     {
+        LarMemory line818_temps = lar_memory_growable();
+        std__io__files__createDirectories(std__io__path__join(&line818_temps, path, lar_string("src", 3)), &err);
+        if (err.kind != 0) {
+            lar_memory_free(&line818_temps);
+            goto try_catch;
+        }
+        lar_memory_free(&line818_temps);
+        LarMemory line819_temps = lar_memory_growable();
+        std__io__files__createDirectories(std__io__path__join(&line819_temps, path, lar_string("tests", 5)), &err);
+        if (err.kind != 0) {
+            lar_memory_free(&line819_temps);
+            goto try_catch;
+        }
+        lar_memory_free(&line819_temps);
         LarMemory line820_temps = lar_memory_growable();
-        std__io__files__createDirectories(std__io__path__join(&line820_temps, path, lar_string("src", 3)), &err);
-        if (err.kind != 0) {
-            lar_memory_free(&line820_temps);
-            goto try_catch;
-        }
-        lar_memory_free(&line820_temps);
-        LarMemory line821_temps = lar_memory_growable();
-        std__io__files__createDirectories(std__io__path__join(&line821_temps, path, lar_string("tests", 5)), &err);
-        if (err.kind != 0) {
-            lar_memory_free(&line821_temps);
-            goto try_catch;
-        }
-        lar_memory_free(&line821_temps);
-        LarMemory line822_temps = lar_memory_growable();
-        LarTextBuilder text = lar_text_builder_mem(&line822_temps, LINE(822));
+        LarTextBuilder text = lar_text_builder_mem(&line820_temps, LINE(820));
         lar_text_builder_add(&text, "[project]\nname = \"", 18);
         lar_text_builder_str(&text, name);
         lar_text_builder_add(&text, "\"\nversion = \"0.1.0\"\nkind = \"library\"\nmain = \"src/", 49);
@@ -62976,33 +62841,33 @@ int32_t createLibrary(LarString path, LarString name) {
         lar_text_builder_add(&text, "\", then import ", 15);
         lar_text_builder_str(&text, name);
         lar_text_builder_add(&text, ".\n\n[c]\nflags = [\"-O2\"]\n", 23);
-        std__io__files__writeString(std__io__path__join(&line822_temps, path, lar_string("larimar.toml", 12)), lar_text_builder_finish(&text), &err);
+        std__io__files__writeString(std__io__path__join(&line820_temps, path, lar_string("larimar.toml", 12)), lar_text_builder_finish(&text), &err);
         if (err.kind != 0) {
-            lar_memory_free(&line822_temps);
+            lar_memory_free(&line820_temps);
             goto try_catch;
         }
-        lar_memory_free(&line822_temps);
-        LarMemory line834_temps = lar_memory_growable();
-        LarTextBuilder text_2 = lar_text_builder_mem(&line834_temps, LINE(834));
+        lar_memory_free(&line820_temps);
+        LarMemory line832_temps = lar_memory_growable();
+        LarTextBuilder text_2 = lar_text_builder_mem(&line832_temps, LINE(832));
         lar_text_builder_add(&text_2, "src/", 4);
         lar_text_builder_str(&text_2, name);
         lar_text_builder_add(&text_2, ".lar", 4);
-        LarTextBuilder text_3 = lar_text_builder_mem(&line834_temps, LINE(834));
+        LarTextBuilder text_3 = lar_text_builder_mem(&line832_temps, LINE(832));
         lar_text_builder_add(&text_3, "/** A greeting for someone. */\npublic function greeting(who: String): String {\n    return \"Hello, ${who}, from ", 111);
         lar_text_builder_str(&text_3, name);
         lar_text_builder_add(&text_3, "!\";\n}\n", 6);
-        std__io__files__writeString(std__io__path__join(&line834_temps, path, lar_text_builder_finish(&text_2)), lar_text_builder_finish(&text_3), &err);
+        std__io__files__writeString(std__io__path__join(&line832_temps, path, lar_text_builder_finish(&text_2)), lar_text_builder_finish(&text_3), &err);
         if (err.kind != 0) {
-            lar_memory_free(&line834_temps);
+            lar_memory_free(&line832_temps);
             goto try_catch;
         }
-        lar_memory_free(&line834_temps);
-        LarMemory line840_temps = lar_memory_growable();
-        LarTextBuilder text_4 = lar_text_builder_mem(&line840_temps, LINE(840));
+        lar_memory_free(&line832_temps);
+        LarMemory line838_temps = lar_memory_growable();
+        LarTextBuilder text_4 = lar_text_builder_mem(&line838_temps, LINE(838));
         lar_text_builder_add(&text_4, "tests/", 6);
         lar_text_builder_str(&text_4, name);
         lar_text_builder_add(&text_4, "_test.lar", 9);
-        LarTextBuilder text_5 = lar_text_builder_mem(&line840_temps, LINE(840));
+        LarTextBuilder text_5 = lar_text_builder_mem(&line838_temps, LINE(838));
         lar_text_builder_add(&text_5, "import ", 7);
         lar_text_builder_str(&text_5, name);
         lar_text_builder_add(&text_5, ";\nimport std.test { checkText };\n\ntest function greets(): void {\n    checkText(\"Hello, Ana, from ", 97);
@@ -63010,19 +62875,19 @@ int32_t createLibrary(LarString path, LarString name) {
         lar_text_builder_add(&text_5, "!\", ", 4);
         lar_text_builder_str(&text_5, name);
         lar_text_builder_add(&text_5, ".greeting(\"Ana\"));\n}\n", 21);
-        std__io__files__writeString(std__io__path__join(&line840_temps, path, lar_text_builder_finish(&text_4)), lar_text_builder_finish(&text_5), &err);
+        std__io__files__writeString(std__io__path__join(&line838_temps, path, lar_text_builder_finish(&text_4)), lar_text_builder_finish(&text_5), &err);
         if (err.kind != 0) {
-            lar_memory_free(&line840_temps);
+            lar_memory_free(&line838_temps);
             goto try_catch;
         }
-        lar_memory_free(&line840_temps);
-        LarMemory line848_temps = lar_memory_growable();
-        std__io__files__writeString(std__io__path__join(&line848_temps, path, lar_string(".gitignore", 10)), lar_string("build/\n", 7), &err);
+        lar_memory_free(&line838_temps);
+        LarMemory line846_temps = lar_memory_growable();
+        std__io__files__writeString(std__io__path__join(&line846_temps, path, lar_string(".gitignore", 10)), lar_string("build/\n", 7), &err);
         if (err.kind != 0) {
-            lar_memory_free(&line848_temps);
+            lar_memory_free(&line846_temps);
             goto try_catch;
         }
-        lar_memory_free(&line848_temps);
+        lar_memory_free(&line846_temps);
     }
     goto try_end;
     try_catch:
@@ -63030,7 +62895,7 @@ int32_t createLibrary(LarString path, LarString name) {
         std__io__IoError e = err.as.e_std__io__IoError;
         (void)e;
         err.kind = 0;
-        LarTextBuilder text_6 = lar_text_builder_mem(&lar_default_memory, LINE(850));
+        LarTextBuilder text_6 = lar_text_builder_mem(&lar_default_memory, LINE(848));
         lar_text_builder_add(&text_6, "cannot create ", 14);
         lar_text_builder_str(&text_6, path);
         return fail(lar_text_builder_finish(&text_6));
@@ -63137,10 +63002,10 @@ void std__os__posix__PosixSystem_programPath(Slice_u8 into) {
     #endif
 }
 
-int32_t std__os__posix__PosixSystem_shell(LarString command_7983) {
+int32_t std__os__posix__PosixSystem_shell(LarString command_7962) {
     #if !defined(_WIN32)
     LarMemory line3000024_temps = lar_memory_growable();
-    int32_t result = lar_PosixSystem_shell_3000024(lar_text_to_c(command_7983, &line3000024_temps, LINE(3000024)));
+    int32_t result = lar_PosixSystem_shell_3000024(lar_text_to_c(command_7962, &line3000024_temps, LINE(3000024)));
     lar_memory_free(&line3000024_temps);
     return result;
     #else
@@ -63186,10 +63051,10 @@ void std__os__windows__WindowsSystem_programPath(Slice_u8 into) {
     #endif
 }
 
-int32_t std__os__windows__WindowsSystem_shell(LarString command_7987) {
+int32_t std__os__windows__WindowsSystem_shell(LarString command_7966) {
     #if defined(_WIN32)
     LarMemory line5000029_temps = lar_memory_growable();
-    int32_t result = lar_WindowsSystem_shell_5000029(lar_text_to_c(command_7987, &line5000029_temps, LINE(5000029)));
+    int32_t result = lar_WindowsSystem_shell_5000029(lar_text_to_c(command_7966, &line5000029_temps, LINE(5000029)));
     lar_memory_free(&line5000029_temps);
     return result;
     #else
@@ -63234,19 +63099,19 @@ int64_t std__io__files__posix__PosixFolders_listOpen(LarString path) {
     return (int64_t)0;
 }
 
-bool std__io__files__posix__PosixFolders_listNext(int64_t list_7994, Slice_u8 into) {
+bool std__io__files__posix__PosixFolders_listNext(int64_t list_7973, Slice_u8 into) {
     #if !defined(_WIN32)
     Slice_u8 value = into;
-    return lar_PosixFolders_listNext_10000022(list_7994, (void*)value.items, value.length);
+    return lar_PosixFolders_listNext_10000022(list_7973, (void*)value.items, value.length);
     #else
     lar_panic_str(lar_string("'std.io.files.posix.PosixFolders.listNext' is for unix, not for this system", 75), LINE(10000022));
     #endif
     return (bool)0;
 }
 
-void std__io__files__posix__PosixFolders_listClose(int64_t list_7996) {
+void std__io__files__posix__PosixFolders_listClose(int64_t list_7975) {
     #if !defined(_WIN32)
-    lar_PosixFolders_listClose_10000029(list_7996);
+    lar_PosixFolders_listClose_10000029(list_7975);
     #else
     lar_panic_str(lar_string("'std.io.files.posix.PosixFolders.listClose' is for unix, not for this system", 76), LINE(10000029));
     #endif
@@ -63288,19 +63153,19 @@ int64_t std__io__files__windows__WindowsFolders_listOpen(LarString path) {
     return (int64_t)0;
 }
 
-bool std__io__files__windows__WindowsFolders_listNext(int64_t list_8003, Slice_u8 into) {
+bool std__io__files__windows__WindowsFolders_listNext(int64_t list_7982, Slice_u8 into) {
     #if defined(_WIN32)
     Slice_u8 value = into;
-    return lar_WindowsFolders_listNext_11000037(list_8003, (void*)value.items, value.length);
+    return lar_WindowsFolders_listNext_11000037(list_7982, (void*)value.items, value.length);
     #else
     lar_panic_str(lar_string("'std.io.files.windows.WindowsFolders.listNext' is for windows, not for this system", 82), LINE(11000037));
     #endif
     return (bool)0;
 }
 
-void std__io__files__windows__WindowsFolders_listClose(int64_t list_8005) {
+void std__io__files__windows__WindowsFolders_listClose(int64_t list_7984) {
     #if defined(_WIN32)
-    lar_WindowsFolders_listClose_11000045(list_8005);
+    lar_WindowsFolders_listClose_11000045(list_7984);
     #else
     lar_panic_str(lar_string("'std.io.files.windows.WindowsFolders.listClose' is for windows, not for this system", 83), LINE(11000045));
     #endif
@@ -63416,19 +63281,19 @@ std__os__sharedmemory__SharedMemoryInputStream* std__os__sharedmemory__SharedMem
 
 
 /* ---- Methods --------------------------------------------------------------- */
-static void StringBuilder_add(StringBuilder* self_, LarString text_8037) {
+static void StringBuilder_add(StringBuilder* self_, LarString text_8016) {
     StringBuilder* self = (StringBuilder*)self_;
     (void)self;
     LarMemory line87000378_temps = lar_memory_growable();
-    lar_text_buf_add((self)->buf, lar_text_to_c(text_8037, &line87000378_temps, LINE(87000378)));
+    lar_text_buf_add((self)->buf, lar_text_to_c(text_8016, &line87000378_temps, LINE(87000378)));
     lar_memory_free(&line87000378_temps);
 }
 
-static void StringBuilder_addLine(StringBuilder* self_, LarString text_8039) {
+static void StringBuilder_addLine(StringBuilder* self_, LarString text_8018) {
     StringBuilder* self = (StringBuilder*)self_;
     (void)self;
     LarMemory line87000380_temps = lar_memory_growable();
-    lar_text_buf_add((self)->buf, lar_text_to_c(text_8039, &line87000380_temps, LINE(87000380)));
+    lar_text_buf_add((self)->buf, lar_text_to_c(text_8018, &line87000380_temps, LINE(87000380)));
     lar_memory_free(&line87000380_temps);
     LarMemory line87000381_temps = lar_memory_growable();
     lar_text_buf_add((self)->buf, lar_text_to_c(lar_string("\n", 1), &line87000381_temps, LINE(87000381)));
@@ -63749,12 +63614,12 @@ static uint8_t syntax__lexer__Lexer_peek(syntax__lexer__Lexer* self_, int32_t k)
     return ((((int32_t)((uint32_t)((self)->pos) + (uint32_t)(k))) < ((self)->src).len) ? lar_string_byte((self)->src, (int64_t)(((int32_t)((uint32_t)((self)->pos) + (uint32_t)(k)))), LINE(19000099)) : (uint8_t)0);
 }
 
-static void syntax__lexer__Lexer_add(syntax__lexer__Lexer* self_, syntax__lexer__TokenType kind, LarString text_8126, int32_t length) {
+static void syntax__lexer__Lexer_add(syntax__lexer__Lexer* self_, syntax__lexer__TokenType kind, LarString text_8105, int32_t length) {
     syntax__lexer__Lexer* self = (syntax__lexer__Lexer*)self_;
     (void)self;
     LarMemory* place = ((self)->toks)->mem;
     syntax__lexer__Token* new_syntax__lexer__Token = (syntax__lexer__Token*)lar_memory_alloc(place, sizeof(syntax__lexer__Token), LINE(19000103));
-    *new_syntax__lexer__Token = (syntax__lexer__Token){ .header = { (const void*)&methods_syntax__lexer__Token, place }, .kind = kind, .text = text_8126, .line = (self)->line, .num = 0LL, .big = false, .huge = false };
+    *new_syntax__lexer__Token = (syntax__lexer__Token){ .header = { (const void*)&methods_syntax__lexer__Token, place }, .kind = kind, .text = text_8105, .line = (self)->line, .num = 0LL, .big = false, .huge = false };
     List_syntax__lexer__Token_push((self)->toks, new_syntax__lexer__Token);
     (self)->pos = ((int32_t)((uint32_t)((self)->pos) + (uint32_t)(length)));
 }
@@ -63939,19 +63804,19 @@ static void syntax__lexer__Lexer_intToken(syntax__lexer__Lexer* self_, LarString
     }
     LarTextBuilder text_4 = lar_text_builder_mem(&memory, LINE(19000225));
     lar_text_builder_u64(&text_4, (uint64_t)(v));
-    LarString text_8152 = lar_text_builder_finish(&text_4);
+    LarString text_8131 = lar_text_builder_finish(&text_4);
     if (huge) {
         LarString t = digits;
         while (((t).len > 1) && String_startsWith(t, lar_string("0", 1))) {
             t = String_substring(t, NULL, 1);
         }
-        text_8152 = t;
+        text_8131 = t;
     }
     LarMemory* place = ((self)->toks)->mem;
     syntax__lexer__Token* new_syntax__lexer__Token = (syntax__lexer__Token*)lar_memory_alloc(place, sizeof(syntax__lexer__Token), LINE(19000231));
     syntax__lexer__TokenType value = ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Int });
     LarCloneMap clones = lar_clone_map();
-    LarString copy = clone_s(text_8152, ((self)->toks)->mem, &clones);
+    LarString copy = clone_s(text_8131, ((self)->toks)->mem, &clones);
     lar_clone_done(&clones);
     *new_syntax__lexer__Token = (syntax__lexer__Token){ .header = { (const void*)&methods_syntax__lexer__Token, place }, .kind = value, .text = copy, .line = (self)->line, .num = ((int64_t)(v)), .big = (v > 9223372036854775807ULL), .huge = huge };
     List_syntax__lexer__Token_push((self)->toks, new_syntax__lexer__Token);
@@ -64033,8 +63898,8 @@ static void syntax__lexer__Lexer_number(syntax__lexer__Lexer* self_) {
         return;
     }
     LarString value_5 = (self)->src;
-    LarString text_8164 = lar_string_sub(value_5, (int64_t)(start), (int64_t)((self)->pos), 19000273);
-    LarString clean = syntax__lexer__Lexer_cleanDigits__dispatch((syntax__lexer__Lexer*)self, &memory, text_8164, text_8164);
+    LarString text_8143 = lar_string_sub(value_5, (int64_t)(start), (int64_t)((self)->pos), 19000273);
+    LarString clean = syntax__lexer__Lexer_cleanDigits__dispatch((syntax__lexer__Lexer*)self, &memory, text_8143, text_8143);
     if (!lar_string_eq((self)->error, lar_string("", 0))) {
         lar_memory_free(&memory);
         return;
@@ -64049,7 +63914,7 @@ static void syntax__lexer__Lexer_number(syntax__lexer__Lexer* self_) {
         *new_syntax__lexer__Token = (syntax__lexer__Token){ .header = { (const void*)&methods_syntax__lexer__Token, place }, .kind = value_6, .text = copy, .line = (self)->line, .num = 0LL, .big = false, .huge = false };
         List_syntax__lexer__Token_push((self)->toks, new_syntax__lexer__Token);
     } else {
-        syntax__lexer__Lexer_intToken__dispatch((syntax__lexer__Lexer*)self, clean, 10, text_8164);
+        syntax__lexer__Lexer_intToken__dispatch((syntax__lexer__Lexer*)self, clean, 10, text_8143);
     }
     lar_memory_free(&memory);
 }
@@ -64175,14 +64040,14 @@ static void syntax__lexer__Lexer_textBlock(syntax__lexer__Lexer* self_) {
         }
     }
     LarString value = (self)->src;
-    LarString text_8178 = String_replace(lar_string_sub(value, (int64_t)(begin), (int64_t)((self)->pos), 19000361), &memory, lar_string("\015", 1), lar_string("", 0));
+    LarString text_8157 = String_replace(lar_string_sub(value, (int64_t)(begin), (int64_t)((self)->pos), 19000361), &memory, lar_string("\015", 1), lar_string("", 0));
     (self)->pos = ((int32_t)((uint32_t)((self)->pos) + (uint32_t)(3)));
     LarMemory line19000363_temps = lar_memory_growable();
     LarMemory* place = ((self)->toks)->mem;
     syntax__lexer__Token* new_syntax__lexer__Token = (syntax__lexer__Token*)lar_memory_alloc(place, sizeof(syntax__lexer__Token), LINE(19000363));
     syntax__lexer__TokenType value_2 = ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Str });
     LarCloneMap clones = lar_clone_map();
-    LarString copy = clone_s(syntax__lexer__stripIndent(&line19000363_temps, text_8178), ((self)->toks)->mem, &clones);
+    LarString copy = clone_s(syntax__lexer__stripIndent(&line19000363_temps, text_8157), ((self)->toks)->mem, &clones);
     lar_clone_done(&clones);
     *new_syntax__lexer__Token = (syntax__lexer__Token){ .header = { (const void*)&methods_syntax__lexer__Token, place }, .kind = value_2, .text = copy, .line = start, .num = 0LL, .big = false, .huge = false };
     List_syntax__lexer__Token_push((self)->toks, new_syntax__lexer__Token);
@@ -64227,10 +64092,10 @@ static void syntax__lexer__Lexer_rawTextBlock(syntax__lexer__Lexer* self_) {
         (self)->pos = ((int32_t)((uint32_t)((self)->pos) + (uint32_t)(1)));
     }
     LarString value = (self)->src;
-    LarString text_8183 = syntax__lexer__stripIndent(&memory, String_replace(lar_string_sub(value, (int64_t)(begin), (int64_t)((self)->pos), 19000396), &memory, lar_string("\015", 1), lar_string("", 0)));
+    LarString text_8162 = syntax__lexer__stripIndent(&memory, String_replace(lar_string_sub(value, (int64_t)(begin), (int64_t)((self)->pos), 19000396), &memory, lar_string("\015", 1), lar_string("", 0)));
     (self)->pos = ((int32_t)((uint32_t)((self)->pos) + (uint32_t)(quotes)));
     LarMemory line19000399_temps = lar_memory_growable();
-    LarString escaped = String_replace(String_replace(text_8183, &line19000399_temps, lar_string("\\", 1), lar_string("\\\\", 2)), &memory, lar_string("$", 1), lar_string("\\$", 2));
+    LarString escaped = String_replace(String_replace(text_8162, &line19000399_temps, lar_string("\\", 1), lar_string("\\\\", 2)), &memory, lar_string("$", 1), lar_string("\\$", 2));
     lar_memory_free(&line19000399_temps);
     LarMemory* place = ((self)->toks)->mem;
     syntax__lexer__Token* new_syntax__lexer__Token = (syntax__lexer__Token*)lar_memory_alloc(place, sizeof(syntax__lexer__Token), LINE(19000400));
@@ -65391,134 +65256,85 @@ static LarString semantics__rules__NoCOutsideStd_spec(semantics__rules__NoCOutsi
 static void semantics__rules__NoCOutsideStd_check(semantics__rules__NoCOutsideStd* self_, semantics__linker__Module* module) {
     semantics__rules__NoCOutsideStd* self = (semantics__rules__NoCOutsideStd*)self_;
     (void)self;
-    syntax__ast__NativeInterfaceDecl* nativeInterface_8277 = NULL;
-    syntax__ast__NativeInterfaceDecl* ni_8282 = NULL;
-    syntax__ast__CCodeDecl* cc_8283 = NULL;
-    syntax__ast__ExternTypeDecl* et_8285 = NULL;
+    syntax__ast__NativeInterfaceDecl* nativeInterface_8253 = NULL;
+    syntax__ast__NativeInterfaceDecl* ni_8257 = NULL;
+    syntax__ast__CCodeDecl* cc_8258 = NULL;
     LarMemory memory = lar_memory_growable();
     if (semantics__linker__trusted(module, semantics__linker__linkedMainFile(NULL))) {
         lar_memory_free(&memory);
         return;
     }
-    bool interfaces = semantics__linker__unsafeModule(module);
-    List_s* declared = semantics__rules__interfaceTypes(&memory, module);
-    LarTable* table = lar_table_new(&memory, LINE(47000148));
+    LarTable* table = lar_table_new(&memory, LINE(47000135));
     LarAny parts = lar_any_t(table);
-    LarTable* table_2 = lar_table_new(&memory, LINE(47000149));
-    LarAny opened = lar_any_t(table_2);
     {
         List_syntax__ast__Node* list = semantics__linker__declarationsOf(NULL, module);
         for (int32_t index = 0; index < list->length; index++) {
             syntax__ast__Node* d = list->items[index];
-            if ((nativeInterface_8277 = (syntax__ast__NativeInterfaceDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl)) != NULL) {
+            if ((nativeInterface_8253 = (syntax__ast__NativeInterfaceDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl)) != NULL) {
                 {
-                    List_s* list_2 = (nativeInterface_8277)->members;
+                    List_s* list_2 = (nativeInterface_8253)->members;
                     for (int32_t index_2 = 0; index_2 < list_2->length; index_2++) {
                         LarString n = list_2->items[index_2];
-                        LarMemory line47000152_temps = lar_memory_growable();
+                        LarMemory line47000138_temps = lar_memory_growable();
                         LarAny value = parts;
-                        LarTextBuilder text = lar_text_builder_mem(&line47000152_temps, LINE(47000152));
-                        lar_text_builder_str(&text, (nativeInterface_8277)->name);
+                        LarTextBuilder text = lar_text_builder_mem(&line47000138_temps, LINE(47000138));
+                        lar_text_builder_str(&text, (nativeInterface_8253)->name);
                         lar_text_builder_add(&text, "__", 2);
                         lar_text_builder_str(&text, n);
-                        lar_any_set(value, lar_text_builder_finish(&text), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(47000152));
-                        lar_memory_free(&line47000152_temps);
+                        lar_any_set(value, lar_text_builder_finish(&text), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(47000138));
+                        lar_memory_free(&line47000138_temps);
                     }
                 }
-                if ((nativeInterface_8277)->opened) {
-                    {
-                        List_s* list_3 = (nativeInterface_8277)->members;
-                        for (int32_t index_3 = 0; index_3 < list_3->length; index_3++) {
-                            LarString n = list_3->items[index_3];
-                            LarMemory line47000154_temps = lar_memory_growable();
-                            LarAny value_2 = opened;
-                            LarTextBuilder text_2 = lar_text_builder_mem(&line47000154_temps, LINE(47000154));
-                            lar_text_builder_str(&text_2, (nativeInterface_8277)->name);
-                            lar_text_builder_add(&text_2, "__", 2);
-                            lar_text_builder_str(&text_2, n);
-                            lar_any_set(value_2, lar_text_builder_finish(&text_2), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(47000154));
-                            lar_memory_free(&line47000154_temps);
-                        }
-                    }
-                    {
-                        List_s* list_4 = (nativeInterface_8277)->types;
-                        for (int32_t index_4 = 0; index_4 < list_4->length; index_4++) {
-                            LarString n = list_4->items[index_4];
-                            LarAny value_3 = opened;
-                            lar_any_set(value_3, n, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(47000155));
-                        }
+                {
+                    List_s* list_3 = (nativeInterface_8253)->types;
+                    for (int32_t index_3 = 0; index_3 < list_3->length; index_3++) {
+                        LarString n = list_3->items[index_3];
+                        LarAny value_2 = parts;
+                        lar_any_set(value_2, n, lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(47000139));
                     }
                 }
             }
         }
     }
     {
-        List_syntax__ast__Node* list_5 = semantics__linker__declarationsOf(NULL, module);
-        for (int32_t index_5 = 0; index_5 < list_5->length; index_5++) {
-            syntax__ast__Node* d = list_5->items[index_5];
-            if (((ni_8282 = (syntax__ast__NativeInterfaceDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl)) != NULL) && (ni_8282)->opened) {
+        List_syntax__ast__Node* list_4 = semantics__linker__declarationsOf(NULL, module);
+        for (int32_t index_4 = 0; index_4 < list_4->length; index_4++) {
+            syntax__ast__Node* d = list_4->items[index_4];
+            if (((ni_8257 = (syntax__ast__NativeInterfaceDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl)) != NULL) && (ni_8257)->opened) {
                 if (!(semantics__rules__importsUnsafeTask(module))) {
-                    LarMemory line47000162_temps = lar_memory_growable();
-                    int32_t value_4 = (ni_8282)->_super.line;
-                    LarTextBuilder text_3 = lar_text_builder_mem(&line47000162_temps, LINE(47000162));
-                    lar_text_builder_add(&text_3, "Native interface '", 18);
-                    lar_text_builder_str(&text_3, (ni_8282)->name);
-                    lar_text_builder_add(&text_3, "' is in a class that implements an UnsafeTask that is not std.os.process's: import it from std.os.process.", 106);
-                    semantics__linker__ruleError(value_4, semantics__rules__NoCOutsideStd_id__dispatch((semantics__rules__NoCOutsideStd*)self, &line47000162_temps), lar_text_builder_finish(&text_3));
-                    lar_memory_free(&line47000162_temps);
+                    LarMemory line47000145_temps = lar_memory_growable();
+                    int32_t value_3 = (ni_8257)->_super.line;
+                    LarTextBuilder text_2 = lar_text_builder_mem(&line47000145_temps, LINE(47000145));
+                    lar_text_builder_add(&text_2, "Native interface '", 18);
+                    lar_text_builder_str(&text_2, (ni_8257)->name);
+                    lar_text_builder_add(&text_2, "' is in a class that implements an UnsafeTask that is not std.os.process's: import it from std.os.process.", 106);
+                    semantics__linker__ruleError(value_3, semantics__rules__NoCOutsideStd_id__dispatch((semantics__rules__NoCOutsideStd*)self, &line47000145_temps), lar_text_builder_finish(&text_2));
+                    lar_memory_free(&line47000145_temps);
                 }
                 continue;
             }
-            if (((cc_8283 = (syntax__ast__CCodeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__CCodeDecl)) != NULL) && (cc_8283)->ofInterface) {
+            if (((cc_8258 = (syntax__ast__CCodeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__CCodeDecl)) != NULL) && (cc_8258)->ofInterface) {
                 continue;
             }
-            if ((!((lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl) != NULL))) && (!lar_any_is_null(lar_any_get(opened, syntax__ast__declName(NULL, d))))) {
+            if ((!((lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl) != NULL))) && (!lar_any_is_null(lar_any_get(parts, syntax__ast__declName(NULL, d))))) {
                 continue;
             }
-            if (interfaces && (lar_as_class((void*)(d), &lar_class_syntax__ast__NativeInterfaceDecl) != NULL)) {
-                LarString from = semantics__linker__sourceOf(NULL, module);
-                List_s* value_5 = (semantics__linker__linking)->unsafeSources;
-                LarString value_6 = from;
-                bool found = false;
-                for (int32_t index_6 = 0; index_6 < value_5->length; index_6++) if (lar_string_eq(value_5->items[index_6], value_6)) { found = true; break; }
-                if (!(found)) {
-                    LarCloneMap clones = lar_clone_map();
-                    LarString copy = clone_s(from, &lar_default_memory, &clones);
-                    lar_clone_done(&clones);
-                    List_s_push((semantics__linker__linking)->unsafeSources, copy);
+            LarString what = semantics__rules__cKind(NULL, d);
+            if (lar_string_eq(what, lar_string("native interface", 16))) {
+                LarMemory line47000153_temps = lar_memory_growable();
+                int32_t value_4 = (d)->line;
+                semantics__linker__ruleError(value_4, semantics__rules__NoCOutsideStd_id__dispatch((semantics__rules__NoCOutsideStd*)self, &line47000153_temps), lar_string("A native interface of a program goes in a class that implements UnsafeTask (std.os.process): its C runs in a process of its own, where a crash is an error of the task.", 167));
+                lar_memory_free(&line47000153_temps);
+            } else {
+                if (!lar_string_eq(what, lar_string("", 0))) {
+                    LarMemory line47000155_temps = lar_memory_growable();
+                    int32_t value_5 = (d)->line;
+                    LarTextBuilder text_3 = lar_text_builder_mem(&line47000155_temps, LINE(47000155));
+                    lar_text_builder_str(&text_3, what);
+                    lar_text_builder_add(&text_3, " is only for the standard library: C is written there, and a program uses what std gives (or an UnsafeTask, for a C library).", 125);
+                    semantics__linker__ruleError(value_5, semantics__rules__NoCOutsideStd_id__dispatch((semantics__rules__NoCOutsideStd*)self, &line47000155_temps), lar_text_builder_finish(&text_3));
+                    lar_memory_free(&line47000155_temps);
                 }
-                continue;
-            }
-            bool condition = ((((interfaces && ((et_8285 = (syntax__ast__ExternTypeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__ExternTypeDecl)) != NULL)) && String_endsWith(String_trim((et_8285)->cType, NULL), lar_string("*", 1))) && (!lar_string_eq(String_trim((et_8285)->cType, NULL), lar_string("void*", 5)))) && lar_string_eq((et_8285)->releasedBy, lar_string("", 0)));
-            if (condition) {
-                List_s* value_7 = declared;
-                LarString value_8 = (et_8285)->name;
-                bool found_2 = false;
-                for (int32_t index_7 = 0; index_7 < value_7->length; index_7++) if (lar_string_eq(value_7->items[index_7], value_8)) { found_2 = true; break; }
-                condition = found_2;
-            }
-            if (condition) {
-                LarTextBuilder text_4 = lar_text_builder_mem(&lar_default_memory, LINE(47000174));
-                lar_text_builder_str(&text_4, semantics__linker__sourceOf(NULL, module));
-                lar_text_builder_add(&text_4, ": type ", 7);
-                lar_text_builder_str(&text_4, (et_8285)->name);
-                lar_text_builder_add(&text_4, " (", 2);
-                lar_text_builder_str(&text_4, (et_8285)->cType);
-                lar_text_builder_add(&text_4, ") has no 'released by': nothing frees it", 40);
-                List_s_push((semantics__linker__linking)->unsafeNotes, lar_text_builder_finish(&text_4));
-            }
-            LarString what = semantics__rules__cKind(NULL, d, interfaces, declared, parts);
-            if (!lar_string_eq(what, lar_string("", 0))) {
-                LarString open_ = (lar_string_eq(what, lar_string("native interface", 16)) ? lar_string(", or for a project with [project] unsafe_c = true (its C has none of the language's guarantees)", 95) : lar_string("", 0));
-                LarMemory line47000179_temps = lar_memory_growable();
-                int32_t value_9 = (d)->line;
-                LarTextBuilder text_5 = lar_text_builder_mem(&line47000179_temps, LINE(47000179));
-                lar_text_builder_str(&text_5, what);
-                lar_text_builder_add(&text_5, " is only for the standard library", 33);
-                lar_text_builder_str(&text_5, open_);
-                lar_text_builder_add(&text_5, ": C is written there, and a program uses what std gives.", 56);
-                semantics__linker__ruleError(value_9, semantics__rules__NoCOutsideStd_id__dispatch((semantics__rules__NoCOutsideStd*)self, &line47000179_temps), lar_text_builder_finish(&text_5));
-                lar_memory_free(&line47000179_temps);
             }
         }
     }
@@ -65542,22 +65358,22 @@ static LarString semantics__rules__BodyNeeded_spec(semantics__rules__BodyNeeded*
 static void semantics__rules__BodyNeeded_check(semantics__rules__BodyNeeded* self_, semantics__linker__Module* module) {
     semantics__rules__BodyNeeded* self = (semantics__rules__BodyNeeded*)self_;
     (void)self;
-    syntax__ast__FunctionDecl* f_8293 = NULL;
+    syntax__ast__FunctionDecl* f_8265 = NULL;
     {
         List_syntax__ast__Node* list = semantics__linker__declarationsOf(NULL, module);
         for (int32_t index = 0; index < list->length; index++) {
             syntax__ast__Node* d = list->items[index];
-            if (((((f_8293 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (!((f_8293)->hasBody))) && (!((f_8293)->isTest))) && (!((f_8293)->isNative))) {
-                LarMemory line47000215_temps = lar_memory_growable();
-                int32_t value = (f_8293)->_super.line;
-                LarTextBuilder text = lar_text_builder_mem(&line47000215_temps, LINE(47000215));
+            if (((((f_8265 = (syntax__ast__FunctionDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__FunctionDecl)) != NULL) && (!((f_8265)->hasBody))) && (!((f_8265)->isTest))) && (!((f_8265)->isNative))) {
+                LarMemory line47000187_temps = lar_memory_growable();
+                int32_t value = (f_8265)->_super.line;
+                LarTextBuilder text = lar_text_builder_mem(&line47000187_temps, LINE(47000187));
                 lar_text_builder_add(&text, "Function '", 10);
-                lar_text_builder_str(&text, (f_8293)->name);
+                lar_text_builder_str(&text, (f_8265)->name);
                 lar_text_builder_add(&text, "' needs its body: function ", 27);
-                lar_text_builder_str(&text, (f_8293)->name);
+                lar_text_builder_str(&text, (f_8265)->name);
                 lar_text_builder_add(&text, "(...) { ... } (only the compiler's own, in std.lang, have none)", 63);
-                semantics__linker__ruleError(value, semantics__rules__BodyNeeded_id__dispatch((semantics__rules__BodyNeeded*)self, &line47000215_temps), lar_text_builder_finish(&text));
-                lar_memory_free(&line47000215_temps);
+                semantics__linker__ruleError(value, semantics__rules__BodyNeeded_id__dispatch((semantics__rules__BodyNeeded*)self, &line47000187_temps), lar_text_builder_finish(&text));
+                lar_memory_free(&line47000187_temps);
             }
         }
     }
@@ -65580,7 +65396,7 @@ static LarString semantics__rules__LanguageTypeOnlyInLang_spec(semantics__rules_
 static void semantics__rules__LanguageTypeOnlyInLang_check(semantics__rules__LanguageTypeOnlyInLang* self_, semantics__linker__Module* module) {
     semantics__rules__LanguageTypeOnlyInLang* self = (semantics__rules__LanguageTypeOnlyInLang*)self_;
     (void)self;
-    syntax__ast__NativeTypeDecl* t_8299 = NULL;
+    syntax__ast__NativeTypeDecl* t_8271 = NULL;
     if (semantics__linker__isLanguage(module)) {
         return;
     }
@@ -65588,24 +65404,24 @@ static void semantics__rules__LanguageTypeOnlyInLang_check(semantics__rules__Lan
         List_syntax__ast__Node* list = semantics__linker__declarationsOf(NULL, module);
         for (int32_t index = 0; index < list->length; index++) {
             syntax__ast__Node* d = list->items[index];
-            if (((t_8299 = (syntax__ast__NativeTypeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeTypeDecl)) != NULL) && (t_8299)->language) {
-                LarMemory line47000229_temps = lar_memory_growable();
-                int32_t value = (t_8299)->_super.line;
-                LarTextBuilder text = lar_text_builder_mem(&line47000229_temps, LINE(47000229));
+            if (((t_8271 = (syntax__ast__NativeTypeDecl*)lar_as_class((void*)(d), &lar_class_syntax__ast__NativeTypeDecl)) != NULL) && (t_8271)->language) {
+                LarMemory line47000201_temps = lar_memory_growable();
+                int32_t value = (t_8271)->_super.line;
+                LarTextBuilder text = lar_text_builder_mem(&line47000201_temps, LINE(47000201));
                 lar_text_builder_add(&text, "'type ", 6);
-                lar_text_builder_str(&text, (t_8299)->name);
+                lar_text_builder_str(&text, (t_8271)->name);
                 lar_text_builder_add(&text, " { }' is a type of the language: it is only in std.lang (C types are declared in a native interface of std)", 107);
-                semantics__linker__ruleError(value, semantics__rules__LanguageTypeOnlyInLang_id__dispatch((semantics__rules__LanguageTypeOnlyInLang*)self, &line47000229_temps), lar_text_builder_finish(&text));
-                lar_memory_free(&line47000229_temps);
+                semantics__linker__ruleError(value, semantics__rules__LanguageTypeOnlyInLang_id__dispatch((semantics__rules__LanguageTypeOnlyInLang*)self, &line47000201_temps), lar_text_builder_finish(&text));
+                lar_memory_free(&line47000201_temps);
             }
         }
     }
 }
 
-static void codegen__cprogram__CProgram_add(codegen__cprogram__CProgram* self_, LarString text_8301) {
+static void codegen__cprogram__CProgram_add(codegen__cprogram__CProgram* self_, LarString text_8273) {
     codegen__cprogram__CProgram* self = (codegen__cprogram__CProgram*)self_;
     (void)self;
-    if (lar_string_eq(text_8301, lar_string("", 0))) {
+    if (lar_string_eq(text_8273, lar_string("", 0))) {
         return;
     }
     int32_t n = ((self)->parts)->length;
@@ -65614,7 +65430,7 @@ static void codegen__cprogram__CProgram_add(codegen__cprogram__CProgram* self_, 
         codegen__cprogram__CPart* value = ((self)->parts)->items[lar_index((int64_t)(((int32_t)((uint32_t)(n) - (uint32_t)(1)))), ((self)->parts)->length, LINE(48000030))];
         LarTextBuilder text_2 = lar_text_builder_mem(&line48000030_temps, LINE(48000030));
         lar_text_builder_str(&text_2, (((self)->parts)->items[lar_index((int64_t)(((int32_t)((uint32_t)(n) - (uint32_t)(1)))), ((self)->parts)->length, LINE(48000030))])->text);
-        lar_text_builder_str(&text_2, text_8301);
+        lar_text_builder_str(&text_2, text_8273);
         LarCloneMap clones = lar_clone_map();
         LarString copy = clone_s(lar_text_builder_finish(&text_2), &lar_default_memory, &clones);
         lar_clone_done(&clones);
@@ -65625,13 +65441,13 @@ static void codegen__cprogram__CProgram_add(codegen__cprogram__CProgram* self_, 
     LarMemory* place = &lar_default_memory;
     codegen__cprogram__CPart* new_codegen__cprogram__CPart = (codegen__cprogram__CPart*)lar_memory_alloc(place, sizeof(codegen__cprogram__CPart), LINE(48000033));
     LarCloneMap clones_2 = lar_clone_map();
-    LarString copy_2 = clone_s(text_8301, &lar_default_memory, &clones_2);
+    LarString copy_2 = clone_s(text_8273, &lar_default_memory, &clones_2);
     lar_clone_done(&clones_2);
     *new_codegen__cprogram__CPart = (codegen__cprogram__CPart){ .header = { (const void*)&methods_codegen__cprogram__CPart, place }, .text = copy_2, .cFunction = NULL };
     List_codegen__cprogram__CPart_push((self)->parts, new_codegen__cprogram__CPart);
 }
 
-static void codegen__cprogram__CProgram_addFunction(codegen__cprogram__CProgram* self_, LarString name, LarString text_8305) {
+static void codegen__cprogram__CProgram_addFunction(codegen__cprogram__CProgram* self_, LarString name, LarString text_8277) {
     codegen__cprogram__CProgram* self = (codegen__cprogram__CProgram*)self_;
     (void)self;
     LarMemory* place = &lar_default_memory;
@@ -65643,7 +65459,7 @@ static void codegen__cprogram__CProgram_addFunction(codegen__cprogram__CProgram*
     lar_clone_done(&clones);
     LarString value = copy;
     LarCloneMap clones_2 = lar_clone_map();
-    LarString copy_2 = clone_s(text_8305, &lar_default_memory, &clones_2);
+    LarString copy_2 = clone_s(text_8277, &lar_default_memory, &clones_2);
     lar_clone_done(&clones_2);
     List_s* list = List_s_new(place_2, LINE(48000012));
     *new_codegen__cprogram__CFunction = (codegen__cprogram__CFunction){ .header = { (const void*)&methods_codegen__cprogram__CFunction, place_2 }, .name = value, .text = copy_2, .uses = list };
@@ -65892,7 +65708,7 @@ static Opt_s std__os__process__internal__Child_launch(std__os__process__internal
     return ((Opt_s){ .has = false });
 }
 
-static bool std__os__process__internal__Child_send(std__os__process__internal__Child* self_, LarString text_8348) {
+static bool std__os__process__internal__Child_send(std__os__process__internal__Child* self_, LarString text_8320) {
     std__os__process__internal__Child* self = (std__os__process__internal__Child*)self_;
     (void)self;
     LarMemory memory = lar_memory_growable();
@@ -65904,7 +65720,7 @@ static bool std__os__process__internal__Child_send(std__os__process__internal__C
     List_u8* list = List_u8_new(&memory, LINE(68000066));
     List_u8* bytes = list;
     {
-        LarString text = text_8348;
+        LarString text = text_8320;
         for (int32_t index = 0; index < text.len; index++) {
             uint8_t b = (uint8_t)text.ptr[index];
             List_u8_push(bytes, b);
@@ -65976,10 +65792,10 @@ static Opt_s std__os__process__internal__Child_read(std__os__process__internal__
     LarCloneMap clones = lar_clone_map();
     LarString copy = clone_s(stringOfRange(&line68000111_temps, ((Slice_u8){ ((self)->pending)->items, ((self)->pending)->length }), (self)->taken, ((int32_t)((uint32_t)((self)->taken) + (uint32_t)(count)))), lar_result_memory, &clones);
     lar_clone_done(&clones);
-    LarString text_8363 = copy;
+    LarString text_8335 = copy;
     lar_memory_free(&line68000111_temps);
     (self)->taken = ((int32_t)((uint32_t)((self)->taken) + (uint32_t)(count)));
-    return ((Opt_s){ .has = true, .value = text_8363 });
+    return ((Opt_s){ .has = true, .value = text_8335 });
 }
 
 static LarString std__os__process__internal__Child_readAll(std__os__process__internal__Child* self_, LarMemory* lar_result_memory, int32_t ms) {
@@ -65992,10 +65808,10 @@ static LarString std__os__process__internal__Child_readAll(std__os__process__int
     LarCloneMap clones = lar_clone_map();
     LarString copy = clone_s(stringOfRange(&line68000120_temps, ((Slice_u8){ ((self)->pending)->items, ((self)->pending)->length }), (self)->taken, ((self)->pending)->length), lar_result_memory, &clones);
     lar_clone_done(&clones);
-    LarString text_8367 = copy;
+    LarString text_8339 = copy;
     lar_memory_free(&line68000120_temps);
     (self)->taken = ((self)->pending)->length;
-    return text_8367;
+    return text_8339;
 }
 
 static bool std__os__process__internal__Child_fill(std__os__process__internal__Child* self_, int64_t until) {
@@ -66455,10 +66271,10 @@ static LarAny std__os__process__TaskWire_read(std__os__process__TaskWire* self_,
     err.kind = 0;
     int64_t until = ((int64_t)((uint64_t)(std__time__monotonic()) + (uint64_t)(((int64_t)(ms)))));
     while (!((self)->ended)) {
-        Opt_s text_8466 = std__os__internal__frames__Frames_next__dispatch((std__os__internal__frames__Frames*)(self)->frames, lar_result_memory);
-        if (!(!(text_8466).has)) {
+        Opt_s text_8438 = std__os__internal__frames__Frames_next__dispatch((std__os__internal__frames__Frames*)(self)->frames, lar_result_memory);
+        if (!(!(text_8438).has)) {
             {
-                LarAny value_2 = std__encoding__json__parse(lar_result_memory, text_8466.value, &err);
+                LarAny value_2 = std__encoding__json__parse(lar_result_memory, text_8438.value, &err);
                 if (err.kind != 0) {
                     goto try_catch;
                 }
@@ -66834,12 +66650,12 @@ static int32_t std__os__process__Process_join(std__os__process__Process* self_, 
     return value_3;
 }
 
-static void std__os__process__Process_write(std__os__process__Process* self_, LarString text_8491, LarError* err_out) {
+static void std__os__process__Process_write(std__os__process__Process* self_, LarString text_8463, LarError* err_out) {
     std__os__process__Process* self = (std__os__process__Process*)self_;
     (void)self;
     LarError err;
     err.kind = 0;
-    if (!(std__os__process__internal__Child_send__dispatch((std__os__process__internal__Child*)self, text_8491))) {
+    if (!(std__os__process__internal__Child_send__dispatch((std__os__process__internal__Child*)self, text_8463))) {
         err.kind = 25;
         err.as.e_std__os__process__ProcessError = ((std__os__process__ProcessError){ .tag = std__os__process__ProcessError_NotRunning });
         *err_out = err;
@@ -67177,32 +66993,32 @@ List_i32* String_codePoints(LarString self, LarMemory* lar_result_memory) {
 /* ---- Lambdas --------------------------------------------------------------- */
 static void lambda_0(void* env_) {
     Env_0* env = (Env_0*)env_;
-    List_syntax__ast__TypeRef_push(env->parameterTypes_2075, syntax__parser__types__type(NULL, env->parser_2072));
+    List_syntax__ast__TypeRef_push(env->parameterTypes_2072, syntax__parser__types__type(NULL, env->parser_2069));
 }
 
 static void lambda_1(void* env_) {
     Env_1* env = (Env_1*)env_;
-    List_syntax__ast__Expr_push((env->call_2148)->args, syntax__parser__expressions__expression(NULL, env->parser_2146));
+    List_syntax__ast__Expr_push((env->call_2145)->args, syntax__parser__expressions__expression(NULL, env->parser_2143));
 }
 
 static void lambda_2(void* env_) {
     Env_2* env = (Env_2*)env_;
-    syntax__lexer__Token* start = syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)env->parser_2165, NULL);
+    syntax__lexer__Token* start = syntax__parser__Parser_current__dispatch((syntax__parser__Parser*)env->parser_2162, NULL);
     LarMemory line21000215_temps = lar_memory_growable();
-    if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->parser_2165, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident })) && (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->parser_2165, &line21000215_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Colon })).tag)) {
-        syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->parser_2165, NULL);
-        syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->parser_2165, NULL);
+    if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->parser_2162, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident })) && (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->parser_2162, &line21000215_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Colon })).tag)) {
+        syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->parser_2162, NULL);
+        syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->parser_2162, NULL);
         LarMemory* place_2 = &lar_default_memory;
         syntax__ast__FieldInit* new_syntax__ast__FieldInit = (syntax__ast__FieldInit*)lar_memory_alloc(place_2, sizeof(syntax__ast__FieldInit), LINE(21000218));
         int32_t value_2 = (start)->line;
         LarString value_3 = (start)->text;
         List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
-        *new_syntax__ast__FieldInit = (syntax__ast__FieldInit){ ._super = { .header = { (const void*)&methods_syntax__ast__FieldInit, place_2 }, .line = value_2, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) }, .name = value_3, .value = syntax__parser__expressions__expression(NULL, env->parser_2165), .shorthand = false };
-        List_syntax__ast__FieldInit_push((env->literal_2168)->fields, new_syntax__ast__FieldInit);
+        *new_syntax__ast__FieldInit = (syntax__ast__FieldInit){ ._super = { .header = { (const void*)&methods_syntax__ast__FieldInit, place_2 }, .line = value_2, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) }, .name = value_3, .value = syntax__parser__expressions__expression(NULL, env->parser_2162), .shorthand = false };
+        List_syntax__ast__FieldInit_push((env->literal_2165)->fields, new_syntax__ast__FieldInit);
     } else {
         LarMemory line21000219_temps = lar_memory_growable();
-        if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->parser_2165, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident })) && ((((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->parser_2165, &line21000219_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Comma })).tag) || (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->parser_2165, &line21000219_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace })).tag))) {
-            syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->parser_2165, NULL);
+        if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->parser_2162, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident })) && ((((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->parser_2162, &line21000219_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Comma })).tag) || (((syntax__parser__Parser_next__dispatch((syntax__parser__Parser*)env->parser_2162, &line21000219_temps))->kind).tag == (((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_RBrace })).tag))) {
+            syntax__parser__Parser_advance__dispatch((syntax__parser__Parser*)env->parser_2162, NULL);
             LarMemory* place_3 = &lar_default_memory;
             syntax__ast__FieldInit* new_syntax__ast__FieldInit_2 = (syntax__ast__FieldInit*)lar_memory_alloc(place_3, sizeof(syntax__ast__FieldInit), LINE(21000221));
             int32_t value_4 = (start)->line;
@@ -67213,14 +67029,14 @@ static void lambda_2(void* env_) {
             List_semantics__types__PatternInfo* list_3 = List_semantics__types__PatternInfo_new(place_4, LINE(16000048));
             *new_syntax__ast__Ident = (syntax__ast__Ident){ ._super = { ._super = { .header = { (const void*)&methods_syntax__ast__Ident, place_4 }, .line = (start)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_3, .computed = lar_string("", 0) } }, .name = (start)->text };
             *new_syntax__ast__FieldInit_2 = (syntax__ast__FieldInit){ ._super = { .header = { (const void*)&methods_syntax__ast__FieldInit, place_3 }, .line = value_4, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_2, .computed = lar_string("", 0) }, .name = value_5, .value = ((syntax__ast__Expr*)(new_syntax__ast__Ident)), .shorthand = true };
-            List_syntax__ast__FieldInit_push((env->literal_2168)->fields, new_syntax__ast__FieldInit_2);
+            List_syntax__ast__FieldInit_push((env->literal_2165)->fields, new_syntax__ast__FieldInit_2);
         } else {
             LarMemory* place_5 = &lar_default_memory;
             syntax__ast__FieldInit* new_syntax__ast__FieldInit_3 = (syntax__ast__FieldInit*)lar_memory_alloc(place_5, sizeof(syntax__ast__FieldInit), LINE(21000223));
             int32_t value_6 = (start)->line;
             List_semantics__types__PatternInfo* list_4 = List_semantics__types__PatternInfo_new(place_5, LINE(16000048));
-            *new_syntax__ast__FieldInit_3 = (syntax__ast__FieldInit){ ._super = { .header = { (const void*)&methods_syntax__ast__FieldInit, place_5 }, .line = value_6, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_4, .computed = lar_string("", 0) }, .name = lar_string("", 0), .value = syntax__parser__expressions__expression(NULL, env->parser_2165), .shorthand = false };
-            List_syntax__ast__FieldInit_push((env->literal_2168)->fields, new_syntax__ast__FieldInit_3);
+            *new_syntax__ast__FieldInit_3 = (syntax__ast__FieldInit){ ._super = { .header = { (const void*)&methods_syntax__ast__FieldInit, place_5 }, .line = value_6, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_4, .computed = lar_string("", 0) }, .name = lar_string("", 0), .value = syntax__parser__expressions__expression(NULL, env->parser_2162), .shorthand = false };
+            List_syntax__ast__FieldInit_push((env->literal_2165)->fields, new_syntax__ast__FieldInit_3);
         }
         lar_memory_free(&line21000219_temps);
     }
@@ -67229,40 +67045,40 @@ static void lambda_2(void* env_) {
 
 static void lambda_3(void* env_) {
     Env_3* env = (Env_3*)env_;
-    List_syntax__ast__Param_push((env->lambda_2175)->params, syntax__parser__declarations__parameter(NULL, env->parser_2174, false));
+    List_syntax__ast__Param_push((env->lambda_2172)->params, syntax__parser__declarations__parameter(NULL, env->parser_2171, false));
 }
 
 static void lambda_4(void* env_) {
     Env_4* env = (Env_4*)env_;
-    LarString fieldName = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->parser_2182, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected a field name", 21)))->text;
-    List_s_push((env->pattern_2184)->fields, fieldName);
-    List_s_push((env->pattern_2184)->bindings, (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)env->parser_2182, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Colon })) ? (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->parser_2182, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected a name after ':'", 25)))->text : fieldName));
+    LarString fieldName = (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->parser_2179, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected a field name", 21)))->text;
+    List_s_push((env->pattern_2181)->fields, fieldName);
+    List_s_push((env->pattern_2181)->bindings, (syntax__parser__Parser_optional__dispatch((syntax__parser__Parser*)env->parser_2179, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Colon })) ? (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->parser_2179, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected a name after ':'", 25)))->text : fieldName));
 }
 
 static void lambda_5(void* env_) {
     Env_5* env = (Env_5*)env_;
-    List_syntax__ast__Param_push(env->list_2351, syntax__parser__declarations__parameter(NULL, env->parser_2350, true));
+    List_syntax__ast__Param_push(env->list_2348, syntax__parser__declarations__parameter(NULL, env->parser_2347, true));
 }
 
 static void lambda_6(void* env_) {
     Env_6* env = (Env_6*)env_;
-    syntax__lexer__Token* variantName = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->parser_2399, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected variant name", 21));
+    syntax__lexer__Token* variantName = syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->parser_2396, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected variant name", 21));
     LarMemory* place_2 = &lar_default_memory;
     syntax__ast__EnumVariant* new_syntax__ast__EnumVariant = (syntax__ast__EnumVariant*)lar_memory_alloc(place_2, sizeof(syntax__ast__EnumVariant), LINE(20000345));
     List_semantics__types__PatternInfo* list = List_semantics__types__PatternInfo_new(place_2, LINE(16000048));
     List_syntax__ast__Param* list_2 = List_syntax__ast__Param_new(place_2, LINE(16000225));
     *new_syntax__ast__EnumVariant = (syntax__ast__EnumVariant){ ._super = { .header = { (const void*)&methods_syntax__ast__EnumVariant, place_2 }, .line = (variantName)->line, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list, .computed = lar_string("", 0) }, .name = (variantName)->text, .fields = list_2, .hasPayload = false };
     syntax__ast__EnumVariant* variant = new_syntax__ast__EnumVariant;
-    if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->parser_2399, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LParen }))) {
+    if (syntax__parser__Parser_at__dispatch((syntax__parser__Parser*)env->parser_2396, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_LParen }))) {
         (variant)->hasPayload = true;
-        (variant)->fields = syntax__parser__declarations__parameters(NULL, env->parser_2399);
+        (variant)->fields = syntax__parser__declarations__parameters(NULL, env->parser_2396);
     }
-    List_syntax__ast__EnumVariant_push((env->declaration_2401)->variants, variant);
+    List_syntax__ast__EnumVariant_push((env->declaration_2398)->variants, variant);
 }
 
 static void lambda_7(void* env_) {
     Env_7* env = (Env_7*)env_;
-    List_s_push((env->declaration_2440)->names, (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->parser_2436, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected a name to import", 25)))->text);
+    List_s_push((env->declaration_2437)->names, (syntax__parser__Parser_expect__dispatch((syntax__parser__Parser*)env->parser_2433, NULL, ((syntax__lexer__TokenType){ .tag = syntax__lexer__TokenType_Ident }), lar_string("Expected a name to import", 25)))->text);
 }
 
 
@@ -67854,9 +67670,6 @@ static void* semantics__linker__Linking__clone(void* self_, LarMemory* mem, LarC
     n->linkErrors = clone_Ls(n->linkErrors, mem, cm);
     n->linkedMain = clone_s(n->linkedMain, mem, cm);
     n->testsKept = clone_s(n->testsKept, mem, cm);
-    n->libraryUnsafe = clone_Lb(n->libraryUnsafe, mem, cm);
-    n->unsafeSources = clone_Ls(n->unsafeSources, mem, cm);
-    n->unsafeNotes = clone_Ls(n->unsafeNotes, mem, cm);
     n->libraryNames = clone_Ls(n->libraryNames, mem, cm);
     n->libraryRoots = clone_Ls(n->libraryRoots, mem, cm);
     n->showFrom = clone_s(n->showFrom, mem, cm);
@@ -71973,7 +71786,7 @@ static void init_globals(void) {
     LarTable* table_9 = lar_table_new(&lar_default_memory, LINE(25000009));
     editor__opendocuments__texts = lar_any_t(table_9);
     LarMemory* place_15 = &lar_default_memory;
-    semantics__linker__Linking* new_semantics__linker__Linking = (semantics__linker__Linking*)lar_memory_alloc(place_15, sizeof(semantics__linker__Linking), LINE(15000090));
+    semantics__linker__Linking* new_semantics__linker__Linking = (semantics__linker__Linking*)lar_memory_alloc(place_15, sizeof(semantics__linker__Linking), LINE(15000084));
     List_semantics__linker__Module* list_25 = List_semantics__linker__Module_new(place_15, LINE(15000051));
     LarTable* table_10 = lar_table_new(place_15, LINE(15000052));
     List_semantics__linker__Module* list_26 = List_semantics__linker__Module_new(place_15, LINE(15000053));
@@ -71983,33 +71796,30 @@ static void init_globals(void) {
     List_s* list_29 = List_s_new(place_15, LINE(15000066));
     List_s* list_30 = List_s_new(place_15, LINE(15000067));
     List_s* list_31 = List_s_new(place_15, LINE(15000069));
-    List_b* list_32 = List_b_new(place_15, LINE(15000079));
-    List_s* list_33 = List_s_new(place_15, LINE(15000080));
-    List_s* list_34 = List_s_new(place_15, LINE(15000081));
-    List_s* list_35 = List_s_new(place_15, LINE(15000083));
-    List_s* list_36 = List_s_new(place_15, LINE(15000084));
-    *new_semantics__linker__Linking = (semantics__linker__Linking){ .header = { (const void*)&methods_semantics__linker__Linking, place_15 }, .mods = list_25, .modIndex = lar_any_t(table_10), .order = list_26, .errors = list_27, .root = semantics__linker__newModule(NULL, lar_string("", 0), 0), .lang = NULL, .words = lar_any_t(table_11), .rootDir = lar_string("", 0), .target = lar_string("", 0), .stdDir = lar_string("std", 3), .fileNames = list_28, .filePaths = list_29, .fileSources = list_30, .linkErrors = list_31, .linkedMain = lar_string("", 0), .taskClasses = false, .testsKept = lar_string("none", 4), .unsafeC = false, .projectUnsafe = false, .libraryUnsafe = list_32, .unsafeSources = list_33, .unsafeNotes = list_34, .libraryNames = list_35, .libraryRoots = list_36, .showFrom = lar_string("", 0) };
+    List_s* list_32 = List_s_new(place_15, LINE(15000077));
+    List_s* list_33 = List_s_new(place_15, LINE(15000078));
+    *new_semantics__linker__Linking = (semantics__linker__Linking){ .header = { (const void*)&methods_semantics__linker__Linking, place_15 }, .mods = list_25, .modIndex = lar_any_t(table_10), .order = list_26, .errors = list_27, .root = semantics__linker__newModule(NULL, lar_string("", 0), 0), .lang = NULL, .words = lar_any_t(table_11), .rootDir = lar_string("", 0), .target = lar_string("", 0), .stdDir = lar_string("std", 3), .fileNames = list_28, .filePaths = list_29, .fileSources = list_30, .linkErrors = list_31, .linkedMain = lar_string("", 0), .taskClasses = false, .testsKept = lar_string("none", 4), .unsafeC = false, .libraryNames = list_32, .libraryRoots = list_33, .showFrom = lar_string("", 0) };
     semantics__linker__linking = new_semantics__linker__Linking;
     semantics__linker__texts = lar_memory_growable();
     semantics__linker__rm = (semantics__linker__linking)->root;
-    List_any* list_37 = List_any_new(&lar_default_memory, LINE(15000792));
-    semantics__linker__scopes = list_37;
+    List_any* list_34 = List_any_new(&lar_default_memory, LINE(15000764));
+    semantics__linker__scopes = list_34;
     semantics__linker__scopeDepth = 0;
     semantics__analyzer__threads__markRound = 0;
     semantics__expressions__operators__externArg = false;
     semantics__expressions__operators__lt = semantics__types__T_ERROR;
     semantics__expressions__operators__rt = semantics__types__T_ERROR;
     semantics__expressions__calls__toC = false;
-    List_syntax__ast__InterfaceDecl* list_38 = List_syntax__ast__InterfaceDecl_new(&lar_default_memory, LINE(41000029));
-    semantics__analyzer__declarations__interfaceDecls = list_38;
-    List_syntax__ast__ClassDecl* list_39 = List_syntax__ast__ClassDecl_new(&lar_default_memory, LINE(41000030));
-    semantics__analyzer__declarations__classDecls = list_39;
+    List_syntax__ast__InterfaceDecl* list_35 = List_syntax__ast__InterfaceDecl_new(&lar_default_memory, LINE(41000029));
+    semantics__analyzer__declarations__interfaceDecls = list_35;
+    List_syntax__ast__ClassDecl* list_36 = List_syntax__ast__ClassDecl_new(&lar_default_memory, LINE(41000030));
+    semantics__analyzer__declarations__classDecls = list_36;
     semantics__analyzer__statements__staticName = lar_string("", 0);
     semantics__expressions__selfInLambda = false;
-    List_semantics__analyzer__compact__CompactCall* list_40 = List_semantics__analyzer__compact__CompactCall_new(&lar_default_memory, LINE(30000025));
-    semantics__analyzer__compact__compactCalls = list_40;
-    List_semantics__analyzer__compact__Mixing* list_41 = List_semantics__analyzer__compact__Mixing_new(&lar_default_memory, LINE(30000033));
-    semantics__analyzer__compact__mixings = list_41;
+    List_semantics__analyzer__compact__CompactCall* list_37 = List_semantics__analyzer__compact__CompactCall_new(&lar_default_memory, LINE(30000025));
+    semantics__analyzer__compact__compactCalls = list_37;
+    List_semantics__analyzer__compact__Mixing* list_38 = List_semantics__analyzer__compact__Mixing_new(&lar_default_memory, LINE(30000033));
+    semantics__analyzer__compact__mixings = list_38;
     semantics__analyzer__compact__platformCtx = lar_string("", 0);
     LarTable* table_12 = lar_table_new(&lar_default_memory, LINE(29000021));
     lar_table_set(table_12, lar_string("substring", 9), lar_any_i((int64_t)(1LL), LAR_ANY_I64), LINE(29000021));
@@ -72030,40 +71840,40 @@ static void init_globals(void) {
     LarTable* table_15 = lar_table_new(&lar_default_memory, LINE(29000027));
     semantics__analyzer__flow__creatingMethods = lar_any_t(table_15);
     semantics__analyzer__flow__flowSelfClass = lar_string("", 0);
-    List_syntax__ast__Param* list_42 = List_syntax__ast__Param_new(&lar_default_memory, LINE(29000197));
-    semantics__analyzer__flow__flowParams = list_42;
+    List_syntax__ast__Param* list_39 = List_syntax__ast__Param_new(&lar_default_memory, LINE(29000197));
+    semantics__analyzer__flow__flowParams = list_39;
     semantics__expressions__conversions__blockMemories = 0;
     semantics__analyzer__analysis = semantics__analyzer__newAnalysis(NULL);
     codegen__localnames__MARK = codegen__localnames__markByte(&lar_default_memory);
     codegen__localnames__made = 0;
-    List_s* list_43 = List_s_new(&lar_default_memory, LINE(51000124));
-    List_s_add(list_43, lar_string("base", 4), LINE(51000124));
-    List_s_add(list_43, lar_string("threads", 7), LINE(51000124));
-    List_s_add(list_43, lar_string("panic", 5), LINE(51000124));
-    List_s_add(list_43, lar_string("memory", 6), LINE(51000124));
-    List_s_add(list_43, lar_string("thread", 6), LINE(51000124));
-    List_s_add(list_43, lar_string("string", 6), LINE(51000124));
-    List_s_add(list_43, lar_string("string_methods", 14), LINE(51000124));
-    List_s_add(list_43, lar_string("integer", 7), LINE(51000124));
-    List_s_add(list_43, lar_string("class", 5), LINE(51000124));
-    List_s_add(list_43, lar_string("any", 3), LINE(51000124));
-    codegen__prune__runtimeFiles = list_43;
+    List_s* list_40 = List_s_new(&lar_default_memory, LINE(51000124));
+    List_s_add(list_40, lar_string("base", 4), LINE(51000124));
+    List_s_add(list_40, lar_string("threads", 7), LINE(51000124));
+    List_s_add(list_40, lar_string("panic", 5), LINE(51000124));
+    List_s_add(list_40, lar_string("memory", 6), LINE(51000124));
+    List_s_add(list_40, lar_string("thread", 6), LINE(51000124));
+    List_s_add(list_40, lar_string("string", 6), LINE(51000124));
+    List_s_add(list_40, lar_string("string_methods", 14), LINE(51000124));
+    List_s_add(list_40, lar_string("integer", 7), LINE(51000124));
+    List_s_add(list_40, lar_string("class", 5), LINE(51000124));
+    List_s_add(list_40, lar_string("any", 3), LINE(51000124));
+    codegen__prune__runtimeFiles = list_40;
     codegen__prune__runtimeRead = ((Opt_s){ .has = false });
     codegen__prune__inComment = false;
     codegen__expressions__strings__cLength = 0;
-    List_semantics__types__Type* list_44 = List_semantics__types__Type_new(&lar_default_memory, LINE(54000013));
-    codegen__expressions__clone__cloneTypes = list_44;
+    List_semantics__types__Type* list_41 = List_semantics__types__Type_new(&lar_default_memory, LINE(54000013));
+    codegen__expressions__clone__cloneTypes = list_41;
     LarTable* table_16 = lar_table_new(&lar_default_memory, LINE(54000014));
     codegen__expressions__clone__cloneSeen = lar_any_t(table_16);
     codegen__expressions__lazyPre = lar_string("", 0);
-    List_semantics__types__Type* list_45 = List_semantics__types__Type_new(&lar_default_memory, LINE(52000372));
-    codegen__expressions__boxTypes = list_45;
+    List_semantics__types__Type* list_42 = List_semantics__types__Type_new(&lar_default_memory, LINE(52000372));
+    codegen__expressions__boxTypes = list_42;
     LarTable* table_17 = lar_table_new(&lar_default_memory, LINE(52000373));
     codegen__expressions__boxSeen = lar_any_t(table_17);
     LarMemory* place_16 = &lar_default_memory;
     codegen__gen__Generation* new_codegen__gen__Generation = (codegen__gen__Generation*)lar_memory_alloc(place_16, sizeof(codegen__gen__Generation), LINE(49000107));
-    List_s* list_46 = List_s_new(place_16, LINE(49000084));
-    List_s* list_47 = List_s_new(place_16, LINE(49000086));
+    List_s* list_43 = List_s_new(place_16, LINE(49000084));
+    List_s* list_44 = List_s_new(place_16, LINE(49000086));
     LarTable* table_18 = lar_table_new(place_16, LINE(49000087));
     LarMemory* place_17 = place_16;
     StringBuilder* new_StringBuilder = (StringBuilder*)lar_memory_alloc(place_17, sizeof(StringBuilder), LINE(49000088));
@@ -72077,51 +71887,51 @@ static void init_globals(void) {
     LarMemory* place_20 = place_16;
     StringBuilder* new_StringBuilder_4 = (StringBuilder*)lar_memory_alloc(place_20, sizeof(StringBuilder), LINE(49000091));
     *new_StringBuilder_4 = (StringBuilder){ .header = { (const void*)&methods_StringBuilder, place_20 }, .buf = lar_text_buf_new(place_20) };
-    List_s* list_48 = List_s_new(place_16, LINE(49000092));
-    List_b* list_49 = List_b_new(place_16, LINE(49000093));
+    List_s* list_45 = List_s_new(place_16, LINE(49000092));
+    List_b* list_46 = List_b_new(place_16, LINE(49000093));
     LarTable* table_19 = lar_table_new(place_16, LINE(49000095));
-    List_s* list_50 = List_s_new(place_16, LINE(49000096));
-    List_s* list_51 = List_s_new(place_16, LINE(49000097));
-    List_s* list_52 = List_s_new(place_16, LINE(49000098));
+    List_s* list_47 = List_s_new(place_16, LINE(49000096));
+    List_s* list_48 = List_s_new(place_16, LINE(49000097));
+    List_s* list_49 = List_s_new(place_16, LINE(49000098));
     LarTable* table_20 = lar_table_new(place_16, LINE(49000099));
-    *new_codegen__gen__Generation = (codegen__gen__Generation){ .header = { (const void*)&methods_codegen__gen__Generation, place_16 }, .writing = codegen__gen__newFunctionCode(NULL), .counter = 0, .hasErrors = false, .generatorErrors = list_46, .samInterfaces = list_47, .samSeen = lar_any_t(table_18), .literalTypes = new_StringBuilder, .literalPrototypes = new_StringBuilder_2, .literalTables = new_StringBuilder_3, .literalThunks = new_StringBuilder_4, .lambdaDefs = list_48, .lambdaDone = list_49, .callbackSeen = lar_any_t(table_19), .callbackNames = list_50, .callbackTexts = list_51, .resizeHelpers = list_52, .resizeSeen = lar_any_t(table_20), .loopBlock = NULL, .debugLines = false, .hasInit = false };
+    *new_codegen__gen__Generation = (codegen__gen__Generation){ .header = { (const void*)&methods_codegen__gen__Generation, place_16 }, .writing = codegen__gen__newFunctionCode(NULL), .counter = 0, .hasErrors = false, .generatorErrors = list_43, .samInterfaces = list_44, .samSeen = lar_any_t(table_18), .literalTypes = new_StringBuilder, .literalPrototypes = new_StringBuilder_2, .literalTables = new_StringBuilder_3, .literalThunks = new_StringBuilder_4, .lambdaDefs = list_45, .lambdaDone = list_46, .callbackSeen = lar_any_t(table_19), .callbackNames = list_47, .callbackTexts = list_48, .resizeHelpers = list_49, .resizeSeen = lar_any_t(table_20), .loopBlock = NULL, .debugLines = false, .hasInit = false };
     codegen__gen__generation = new_codegen__gen__Generation;
     LarMemory* place_21 = &lar_default_memory;
     syntax__ast__Program* new_syntax__ast__Program = (syntax__ast__Program*)lar_memory_alloc(place_21, sizeof(syntax__ast__Program), LINE(45000077));
-    List_semantics__types__PatternInfo* list_53 = List_semantics__types__PatternInfo_new(place_21, LINE(16000048));
-    List_syntax__ast__Node* list_54 = List_syntax__ast__Node_new(place_21, LINE(16000078));
-    List_syntax__ast__ImportDecl* list_55 = List_syntax__ast__ImportDecl_new(place_21, LINE(16000079));
-    List_s* list_56 = List_s_new(place_21, LINE(16000080));
-    *new_syntax__ast__Program = (syntax__ast__Program){ ._super = { .header = { (const void*)&methods_syntax__ast__Program, place_21 }, .line = 1, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_53, .computed = lar_string("", 0) }, .error = lar_string("", 0), .decls = list_54, .imports = list_55, .publics = list_56 };
+    List_semantics__types__PatternInfo* list_50 = List_semantics__types__PatternInfo_new(place_21, LINE(16000048));
+    List_syntax__ast__Node* list_51 = List_syntax__ast__Node_new(place_21, LINE(16000078));
+    List_syntax__ast__ImportDecl* list_52 = List_syntax__ast__ImportDecl_new(place_21, LINE(16000079));
+    List_s* list_53 = List_s_new(place_21, LINE(16000080));
+    *new_syntax__ast__Program = (syntax__ast__Program){ ._super = { .header = { (const void*)&methods_syntax__ast__Program, place_21 }, .line = 1, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_50, .computed = lar_string("", 0) }, .error = lar_string("", 0), .decls = list_51, .imports = list_52, .publics = list_53 };
     pipeline__program = new_syntax__ast__Program;
     LarMemory* place_22 = &lar_default_memory;
     codegen__cprogram__CProgram* new_codegen__cprogram__CProgram = (codegen__cprogram__CProgram*)lar_memory_alloc(place_22, sizeof(codegen__cprogram__CProgram), LINE(45000165));
-    List_codegen__cprogram__CPart* list_57 = List_codegen__cprogram__CPart_new(place_22, LINE(48000023));
-    *new_codegen__cprogram__CProgram = (codegen__cprogram__CProgram){ .header = { (const void*)&methods_codegen__cprogram__CProgram, place_22 }, .parts = list_57 };
+    List_codegen__cprogram__CPart* list_54 = List_codegen__cprogram__CPart_new(place_22, LINE(48000023));
+    *new_codegen__cprogram__CProgram = (codegen__cprogram__CProgram){ .header = { (const void*)&methods_codegen__cprogram__CProgram, place_22 }, .parts = list_54 };
     pipeline__emitted = new_codegen__cprogram__CProgram;
     LarMemory* place_23 = &lar_default_memory;
     syntax__ast__Program* new_syntax__ast__Program_2 = (syntax__ast__Program*)lar_memory_alloc(place_23, sizeof(syntax__ast__Program), LINE(43000020));
-    List_semantics__types__PatternInfo* list_58 = List_semantics__types__PatternInfo_new(place_23, LINE(16000048));
-    List_syntax__ast__Node* list_59 = List_syntax__ast__Node_new(place_23, LINE(16000078));
-    List_syntax__ast__ImportDecl* list_60 = List_syntax__ast__ImportDecl_new(place_23, LINE(16000079));
-    List_s* list_61 = List_s_new(place_23, LINE(16000080));
-    *new_syntax__ast__Program_2 = (syntax__ast__Program){ ._super = { .header = { (const void*)&methods_syntax__ast__Program, place_23 }, .line = 1, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_58, .computed = lar_string("", 0) }, .error = lar_string("", 0), .decls = list_59, .imports = list_60, .publics = list_61 };
+    List_semantics__types__PatternInfo* list_55 = List_semantics__types__PatternInfo_new(place_23, LINE(16000048));
+    List_syntax__ast__Node* list_56 = List_syntax__ast__Node_new(place_23, LINE(16000078));
+    List_syntax__ast__ImportDecl* list_57 = List_syntax__ast__ImportDecl_new(place_23, LINE(16000079));
+    List_s* list_58 = List_s_new(place_23, LINE(16000080));
+    *new_syntax__ast__Program_2 = (syntax__ast__Program){ ._super = { .header = { (const void*)&methods_syntax__ast__Program, place_23 }, .line = 1, .builtin = false, .rewritten = false, .ty = NULL, .region = NULL, .conversionOf = NULL, .symbol = NULL, .narrowed = false, .call = NULL, .member = NULL, .place = NULL, .lambda = NULL, .sw = NULL, .forInfo = NULL, .catchInfo = NULL, .opMethod = NULL, .memArg = NULL, .callback = NULL, .throwing = false, .method = NULL, .tested = NULL, .variant = NULL, .boxPlace = NULL, .anyFields = false, .patternInfos = list_55, .computed = lar_string("", 0) }, .error = lar_string("", 0), .decls = list_56, .imports = list_57, .publics = list_58 };
     editor__session__program = new_syntax__ast__Program_2;
-    List_s* list_62 = List_s_new(&lar_default_memory, LINE(43000023));
-    editor__session__readErrors = list_62;
+    List_s* list_59 = List_s_new(&lar_default_memory, LINE(43000023));
+    editor__session__readErrors = list_59;
     editor__session__sourceRoot = lar_string("", 0);
     project__testing__passed = 0;
     project__testing__failedCount = 0;
     project__testing__skipped = 0;
-    List_s* list_63 = List_s_new(&lar_default_memory, LINE(64000133));
-    project__testing__failedNames = list_63;
+    List_s* list_60 = List_s_new(&lar_default_memory, LINE(64000133));
+    project__testing__failedNames = list_60;
     project__testing__settings = NULL;
     project__testing__sanitize = true;
     project__testing__only = lar_string("", 0);
     project__testing__json = false;
     project__testing__listing = false;
-    List_s* list_64 = List_s_new(&lar_default_memory, LINE(64000140));
-    project__testing__exact = list_64;
+    List_s* list_61 = List_s_new(&lar_default_memory, LINE(64000140));
+    project__testing__exact = list_61;
     LarTable* table_21 = lar_table_new(&lar_default_memory, LINE(64000141));
     project__testing__lines = lar_any_t(table_21);
     LarMemory* place_24 = &lar_default_memory;
@@ -72130,14 +71940,14 @@ static void init_globals(void) {
     *new_std__os__sharedmemory__Counter = (std__os__sharedmemory__Counter){ .header = { (const void*)&methods_std__os__sharedmemory__Counter, (&sync_2->own) }, .n = 0 };
     new_std__os__sharedmemory__Counter->_sync = sync_2;
     std__os__sharedmemory__counter = new_std__os__sharedmemory__Counter;
-    List_editor__ide__Lines* list_65 = List_editor__ide__Lines_new(&lar_default_memory, LINE(84000039));
-    editor__ide__lineCache = list_65;
-    List_syntax__ast__Expr* list_66 = List_syntax__ast__Expr_new(&lar_default_memory, LINE(84000241));
-    editor__ide__exprs = list_66;
-    List_semantics__types__Symbol* list_67 = List_semantics__types__Symbol_new(&lar_default_memory, LINE(84000242));
-    editor__ide__locals = list_67;
-    List_semantics__types__Symbol* list_68 = List_semantics__types__Symbol_new(&lar_default_memory, LINE(84000243));
-    editor__ide__paramSyms = list_68;
+    List_editor__ide__Lines* list_62 = List_editor__ide__Lines_new(&lar_default_memory, LINE(84000039));
+    editor__ide__lineCache = list_62;
+    List_syntax__ast__Expr* list_63 = List_syntax__ast__Expr_new(&lar_default_memory, LINE(84000241));
+    editor__ide__exprs = list_63;
+    List_semantics__types__Symbol* list_64 = List_semantics__types__Symbol_new(&lar_default_memory, LINE(84000242));
+    editor__ide__locals = list_64;
+    List_semantics__types__Symbol* list_65 = List_semantics__types__Symbol_new(&lar_default_memory, LINE(84000243));
+    editor__ide__paramSyms = list_65;
     editor__ide__collected = false;
     editor__ide__probeLine = 0;
     editor__ide__probePrefix = lar_string("", 0);
@@ -72161,33 +71971,33 @@ static void init_globals(void) {
     editor__dap__backendPath = lar_string("", 0);
     LarMemory* place_25 = &lar_default_memory;
     std__os__process__Process* new_std__os__process__Process = (std__os__process__Process*)lar_memory_alloc(place_25, sizeof(std__os__process__Process), LINE(85000061));
-    List_s* list_69 = List_s_new(place_25, LINE(68000031));
-    List_s* list_70 = List_s_new(place_25, LINE(68000033));
-    List_u8* list_71 = List_u8_new(place_25, LINE(68000043));
-    List_u8* list_72 = List_u8_new(place_25, LINE(68000045));
-    *new_std__os__process__Process = (std__os__process__Process){ ._super = { .header = { (const void*)&methods_std__os__process__Process, place_25 }, .program = lar_string("", 0), .args = list_69, .env_ = list_70, .quiet = false, .mergeErrors = false, .shareConsole = false, .handle = NULL, .pending = list_71, .taken = 0, .chunk = list_72, .ended = false }, .run = ((Opt_std__os__process__Task){ .has = false }), .messages = NULL, .joined = false, .handler = ((Opt_F1){ .has = false }) };
+    List_s* list_66 = List_s_new(place_25, LINE(68000031));
+    List_s* list_67 = List_s_new(place_25, LINE(68000033));
+    List_u8* list_68 = List_u8_new(place_25, LINE(68000043));
+    List_u8* list_69 = List_u8_new(place_25, LINE(68000045));
+    *new_std__os__process__Process = (std__os__process__Process){ ._super = { .header = { (const void*)&methods_std__os__process__Process, place_25 }, .program = lar_string("", 0), .args = list_66, .env_ = list_67, .quiet = false, .mergeErrors = false, .shareConsole = false, .handle = NULL, .pending = list_68, .taken = 0, .chunk = list_69, .ended = false }, .run = ((Opt_std__os__process__Task){ .has = false }), .messages = NULL, .joined = false, .handler = ((Opt_F1){ .has = false }) };
     editor__dap__backend = new_std__os__process__Process;
     editor__dap__editorEnded = false;
     editor__dap__backendEnded = false;
-    List_editor__dap__Handle* list_73 = List_editor__dap__Handle_new(&lar_default_memory, LINE(85000147));
-    editor__dap__handles = list_73;
+    List_editor__dap__Handle* list_70 = List_editor__dap__Handle_new(&lar_default_memory, LINE(85000147));
+    editor__dap__handles = list_70;
     LarTable* table_26 = lar_table_new(&lar_default_memory, LINE(85000149));
     editor__dap__texts = lar_any_t(table_26);
     LarTable* table_27 = lar_table_new(&lar_default_memory, LINE(85000689));
     editor__dap__frameFunction = lar_any_t(table_27);
     LarTable* table_28 = lar_table_new(&lar_default_memory, LINE(85000690));
     editor__dap__frameLine = lar_any_t(table_28);
-    List_s* list_74 = List_s_new(&lar_default_memory, LINE(86000020));
-    codegen__debugmap__typesOut = list_74;
+    List_s* list_71 = List_s_new(&lar_default_memory, LINE(86000020));
+    codegen__debugmap__typesOut = list_71;
     LarTable* table_29 = lar_table_new(&lar_default_memory, LINE(86000021));
     codegen__debugmap__typesSeen = lar_any_t(table_29);
     toolError = lar_string("", 0);
-    List_s* list_75 = List_s_new(&lar_default_memory, LINE(47));
-    compileErrors = list_75;
+    List_s* list_72 = List_s_new(&lar_default_memory, LINE(47));
+    compileErrors = list_72;
     debugBuild = false;
     compilerOverride = lar_string("", 0);
-    List_s* list_76 = List_s_new(&lar_default_memory, LINE(486));
-    problems = list_76;
+    List_s* list_73 = List_s_new(&lar_default_memory, LINE(482));
+    problems = list_73;
 }
 
 int main(int argc, char** argv) {

@@ -23,6 +23,10 @@ Each version of the compiler (`larimar --version`) and the version of the langua
   x: int32; let y: int32; }`, with only the fields used (the header gives the layout, so a union is
   written as a struct). There is no `struct` member in an interface any more (`std.io.files` now says
   `type Stat = struct stat { ... }`). A `T[]` of C structs goes to C as an array, with its count.
+- **`[project] unsafe_c` is gone**: a program or a library has no C of its own in its process. A C
+  library goes in the native interface of an `UnsafeTask`, whose C runs in the task's own process (a
+  crash there is a `ProcessError`); a native interface outside one is an error that says so, and so is
+  `unsafe_c` in `larimar.toml`. `larimarc --unsafe-c` stays, for the compiler's tests of std's C.
 - **Callbacks to C: a function and its "this"** (spec §D.10). A parameter of a native function may have
   a function type, and `void*` is a type. A call passes the same pair C asks for: a method and its object
   (`Sqlite.sqlite3_exec(db!, sql, self::onRow, self, null)`), a lambda and itself (`row, row`), or a

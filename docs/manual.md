@@ -2637,7 +2637,7 @@ function main(): int32 {
 - **`UnsafeTask`: C of its own, in its own process.** A task that uses a C library implements
   `UnsafeTask`, declares the library's native interface in its class, and binds it in `setup`, which
   runs once in each process. The functions are found in the library when the task runs, and a crash in
-  them is a `ProcessError` here, not the end of the program. It needs no `unsafe_c`.
+  them is a `ProcessError` here, not the end of the program.
 
   ```ts
   import std.os.process { Channel, UnsafeTask, ProcessError };
@@ -2672,7 +2672,7 @@ function main(): int32 {
 ### C libraries in a task: dynamic, static, and batching
 
 An `UnsafeTask` opens its libraries when it runs, so **a program needs no C flags to use them**: no
-`-lSDL2`, no `-L`, no `unsafe_c`. What the C compiler still needs is the **header**: when it is not in
+`-lSDL2`, no `-L`. What the C compiler still needs is the **header**: when it is not in
 the usual places (Homebrew puts its headers in `/opt/homebrew/include`), `[c]` says where:
 
 ```toml
@@ -2692,18 +2692,12 @@ A file is what has a folder in it, or ends in `.so`, `.dylib` or `.dll`. What th
 Linux and macOS as the library was built (its `rpath`).
 
 **A static library** (`.a`, `.lib`) cannot be opened when the program runs: it is object code that only
-the linker uses, when building. Two ways:
-
-- **Make it a shared one**, and `bind` it as a file (its objects must have been built with `-fPIC`, as
+the linker uses, when building. **Make it a shared one**, and `bind` it as a file (its objects must have been built with `-fPIC`, as
   those of package managers are):
   ```sh
   cc -shared -o libxyz.so -Wl,--whole-archive libxyz.a -Wl,--no-whole-archive     # Linux
   cc -dynamiclib -o libxyz.dylib -Wl,-all_load libxyz.a                            # macOS
   ```
-- **Link it into the program**, with `unsafe_c = true` and `flags = ["libxyz.a"]`: then its C runs in
-  the program's own process, as any native interface outside a task (see "C of its own: `unsafe_c =
-  true`"). On Linux this does not work yet: `[c]` flags go before the program's C, and the linker takes
-  from an archive only what is asked for before it. There, make it shared.
 
 **Batching: few messages, not many.** What goes through a channel is copied from one process to the
 other. One message for each small thing (each sprite of a frame, each row of a table) costs more than the
@@ -3675,7 +3669,6 @@ version = "0.1.0"
 kind = "program"             # the default; or "library" (see chapter 27)
 main = "src/main.lar"        # the default; its folder is the root of the modules
 output = "dist/melody"       # by default build/<name> (build/<name>.exe on Windows)
-unsafe_c = true              # native interfaces of its own: C (chapter 27); by default false
 
 [c]
 compiler = "gcc"             # by default the system's (cc, gcc, clang) or the bundled tcc
@@ -4119,66 +4112,53 @@ function main(): int32 {
 - `larimar build` in the library's folder checks it (its errors), and `larimar test` runs its `tests/`,
   which import it like a program does.
 
-### C of its own: `unsafe_c = true`
+### C of its own: in an `UnsafeTask`
 
-A program or a library has no C, unless its `[project]` says **`unsafe_c = true`**. Then its
-modules may have **native interfaces**, and nothing else of C: what a C header gives, under one name.
-
-```toml
-[project]
-name = "cubes"
-kind = "library"
-main = "src/cubes.lar"
-unsafe_c = true
-```
+A program or a library has the C of the standard library, and no C of its own in its process. A C library
+it needs goes in an **`UnsafeTask`** ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)):
+its class declares the library's **native interface**, what a C header gives under one name, and that C
+runs in the task's own process, where a crash is a `ProcessError` the program catches. The Larimar that
+uses the library runs there too, at the speed of C: a loop that draws, a sort with its callback.
 
 ```ts
-// src/cubes.lar
-native interface LibM "<math.h>" {
-    function cbrt(x: float64): float64;              // LibM.cbrt calls C's cbrt
-}
+class Users implements UnsafeTask {
+    native interface Sqlite "<sqlite3.h>" {
+        type sqlite3 released by sqlite3_close;
+        function sqlite3_open(path: String, db: sqlite3?*): int32;
+        function sqlite3_exec(db: sqlite3, sql: String, row: (void*, int32, String[], String?[]) -> int32,
+                              data: void*, error: void*): int32;
+    }
 
-public function side(volume: float64): float64 { return LibM.cbrt(volume); }
+    override function setup(loader: LibraryLoader): void throws LoadError { loader.bind(Sqlite, "sqlite3"); }
+
+    override function run(channel: Channel): void throws ProcessError {
+        let names: String[*] = [];
+        let row: (void*, int32, String[], String?[]) -> int32 = (data, count, values, columns) -> {
+            names.push(values[0].clone());       // values: as many as count
+            return 0;
+        };
+        // ... sqlite3_open, then:
+        // Sqlite.sqlite3_exec(db!, "select name from users", row, row, null);
+        channel.send(names.join(","));
+    }
+}
 ```
 
 - **A type of C** is a `type` in the interface: `type FILE released by fclose;` is C's `FILE*`, and the
   memory it is in calls `fclose` when it is freed. A function that takes a pointer says `T*`, and the
-  call gives `&x`. The header reaches the C only when something of it is used.
-- **It is said every time.** A program that uses such a library is built with that C, and every build
-  says it: `note: unsafe C (native interface) from: cubes`. It also names the pointer types of those
-  interfaces that nothing releases (`type Cell (int*) has no 'released by'`).
-- **The language's guarantees stop there.** The compiler checks the Larimar around the call, not what the
-  C does: a native interface is for one header, for something specific. For a whole C library, an
-  `UnsafeTask` ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)) keeps its failures in
-  another process, and needs no `unsafe_c`.
+  call gives `&x`.
 - **Callbacks**: a C function that calls back takes a function and its "this", a `void*`. Larimar passes
-  the same pair: a method and its object (`self::onRow, self`), a lambda and itself (`row, row`), or a
-  function without state (a lambda that captures nothing, `::compare`) and `null`. The compiler writes
-  the C function that turns the `void*` back into the object or the lambda (spec §D.10).
-
-  ```ts
-  native interface Sqlite "<sqlite3.h>" {
-      type sqlite3 released by sqlite3_close;
-      function sqlite3_exec(db: sqlite3, sql: String, row: (void*, int32, String[], String?[]) -> int32,
-                            data: void*, error: void*): int32;
-  }
-
-  let names: String[*] = [];
-  let row: (void*, int32, String[], String?[]) -> int32 = (data, count, values, columns) -> {
-      names.push(values[0].clone());       // values: as many as count
-      return 0;
-  };
-  Sqlite.sqlite3_exec(db!, "select name from users", row, row, null);
-  ```
-- `ccode`, `cinclude` and functions with a body of C stay the standard library's, with or without
-  `unsafe_c`.
+  the same pair: a method and its object (`self::onRow, self`), a lambda and itself (`row, row`, as
+  above), or a function without state (a lambda that captures nothing, `::compare`) and `null`. The
+  compiler writes the C function that turns the `void*` back into the object or the lambda (spec §D.10).
+- `ccode`, `cinclude` and functions with a body of C are the standard library's; outside an
+  `UnsafeTask`, so is a native interface.
 
 ### Clarifications
 
-- **No C of its own, by default.** A library, like a program, has no C: what Larimar does
-  not have runs in another process ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)).
-  A library written by someone else brings C only if its `[project]` says `unsafe_c = true`, and then
-  every build of the program says so.
+- **No C of its own in the process.** A library, like a program, has the C of std; a C library goes in
+  an `UnsafeTask` ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)), and a library
+  written in Larimar may give one.
 - **No package manager.** `[dependencies]` names folders; how they get there is up to the project.
 - **A library or another program.** A library is faster (a call is a call) and shares everything with
   the program; another program is apart (a call goes to another process and back, a few microseconds)
@@ -4462,7 +4442,7 @@ What Larimar does not have, and will not have, with what is used instead:
 - **No surprise `null`.** Only what carries `?` can be `null` ([section 14](#14-optionals-and-null)).
 - **No implicit conversions.** Numeric types are converted with `as`, in plain sight: `int32 + int64` does not compile.
 - **No undefined behavior.** Integers wrap around, indexes are checked, and a failure stops with its file and line ([section 20](#20-failures-at-run-time)).
-- **No C of its own, by default.** A program and its libraries use the C of the standard library: what std does not have runs in another process ([chapter 23](#23-other-programs-calls-shared-memory-and-processes)). With `[project] unsafe_c = true` a project may declare native interfaces of C headers, and every build says so ([chapter 27](#c-of-its-own-unsafe_c--true)).
+- **No C of its own in the process.** A program and its libraries use the C of the standard library; a C library runs in another process, an `UnsafeTask`, where a crash is an error of the task ([chapter 27](#c-of-its-own-in-an-unsafetask)).
 
 ### Not yet
 

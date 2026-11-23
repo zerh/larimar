@@ -2637,7 +2637,7 @@ function main(): int32 {
 - **`UnsafeTask`: C propio, en su propio proceso.** Una tarea que usa una librería de C implementa
   `UnsafeTask`, declara la native interface de la librería en su clase y la enlaza en `setup`, que corre
   una vez en cada proceso. Las funciones se buscan en la librería cuando la tarea corre, y un crash en
-  ellas es un `ProcessError` aquí, no el final del programa. No necesita `unsafe_c`.
+  ellas es un `ProcessError` aquí, no el final del programa.
 
   ```ts
   import std.os.process { Channel, UnsafeTask, ProcessError };
@@ -2672,7 +2672,7 @@ function main(): int32 {
 ### Librerías de C en una tarea: dinámicas, estáticas y por lotes
 
 Una `UnsafeTask` abre sus librerías al correr, así que **un programa no necesita flags de C para
-usarlas**: ni `-lSDL2`, ni `-L`, ni `unsafe_c`. Lo que el compilador de C sí necesita es el **header**:
+usarlas**: ni `-lSDL2`, ni `-L`. Lo que el compilador de C sí necesita es el **header**:
 cuando no está en los lugares de siempre (Homebrew pone los suyos en `/opt/homebrew/include`), `[c]` dice
 dónde:
 
@@ -2693,19 +2693,12 @@ vez necesita (SDL2_image necesita libpng) lo busca el sistema por su cuenta: en 
 la DLL que lo pide; en Linux y macOS, según se compiló la librería (su `rpath`).
 
 **Una librería estática** (`.a`, `.lib`) no se puede abrir cuando el programa corre: es código objeto
-que solo usa el enlazador, al compilar. Dos caminos:
-
-- **Convertirla en compartida**, y hacerle `bind` como archivo (sus objetos tienen que estar compilados
+que solo usa el enlazador, al compilar. **Conviértela en compartida**, y hazle `bind` como archivo (sus objetos tienen que estar compilados
   con `-fPIC`, como los de los gestores de paquetes):
   ```sh
   cc -shared -o libxyz.so -Wl,--whole-archive libxyz.a -Wl,--no-whole-archive     # Linux
   cc -dynamiclib -o libxyz.dylib -Wl,-all_load libxyz.a                            # macOS
   ```
-- **Enlazarla dentro del programa**, con `unsafe_c = true` y `flags = ["libxyz.a"]`: entonces su C corre
-  en el propio proceso del programa, como cualquier native interface fuera de una tarea (ver "C propio:
-  `unsafe_c = true`"). En Linux esto todavía no funciona: los flags de `[c]` van antes del C del
-  programa, y el enlazador toma de un archivo `.a` solo lo que se pidió antes de él. Ahí, conviértela en
-  compartida.
 
 **Por lotes: pocos mensajes, no muchos.** Lo que pasa por un canal se copia de un proceso al otro. Un
 mensaje por cada cosa pequeña (cada sprite de un cuadro, cada fila de una tabla) cuesta más que la cosa
@@ -3677,7 +3670,6 @@ version = "0.1.0"
 kind = "program"             # por defecto; o "library" (ver el capítulo 27)
 main = "src/main.lar"        # por defecto; su carpeta es la raíz de los módulos
 output = "dist/melody"       # por defecto build/<name> (build/<name>.exe en Windows)
-unsafe_c = true              # native interfaces propias: C (capítulo 27); por defecto false
 
 [c]
 compiler = "gcc"             # por defecto el del sistema (cc, gcc, clang) o el tcc incluido
@@ -4125,67 +4117,55 @@ function main(): int32 {
 - `larimar build` en la carpeta de la biblioteca la revisa (sus errores), y `larimar test` ejecuta sus
   `tests/`, que la importan como lo hace un programa.
 
-### C propio: `unsafe_c = true`
+### C propio: en una `UnsafeTask`
 
-Un programa o una biblioteca no tiene C, salvo que su `[project]` diga **`unsafe_c = true`**.
-Entonces sus módulos pueden tener **native interfaces**, y nada más de C: lo que da una cabecera de C,
-bajo un nombre.
-
-```toml
-[project]
-name = "cubes"
-kind = "library"
-main = "src/cubes.lar"
-unsafe_c = true
-```
+Un programa o una biblioteca tiene el C de la biblioteca estándar, y ningún C propio en su proceso. Una
+biblioteca de C que necesite va en una **`UnsafeTask`** ([capítulo 23](#23-otros-programas-llamadas-memoria-compartida-y-procesos)):
+su clase declara la **native interface** de la biblioteca, lo que da una cabecera de C bajo un nombre, y
+ese C corre en el propio proceso de la tarea, donde un crash es un `ProcessError` que el programa captura.
+El Larimar que usa la biblioteca corre allí también, a la velocidad de C: un bucle que dibuja, un
+ordenamiento con su callback.
 
 ```ts
-// src/cubes.lar
-native interface LibM "<math.h>" {
-    function cbrt(x: float64): float64;              // LibM.cbrt llama al cbrt de C
-}
+class Users implements UnsafeTask {
+    native interface Sqlite "<sqlite3.h>" {
+        type sqlite3 released by sqlite3_close;
+        function sqlite3_open(path: String, db: sqlite3?*): int32;
+        function sqlite3_exec(db: sqlite3, sql: String, row: (void*, int32, String[], String?[]) -> int32,
+                              data: void*, error: void*): int32;
+    }
 
-public function side(volume: float64): float64 { return LibM.cbrt(volume); }
+    override function setup(loader: LibraryLoader): void throws LoadError { loader.bind(Sqlite, "sqlite3"); }
+
+    override function run(channel: Channel): void throws ProcessError {
+        let names: String[*] = [];
+        let row: (void*, int32, String[], String?[]) -> int32 = (data, count, values, columns) -> {
+            names.push(values[0].clone());       // values: tantos como count
+            return 0;
+        };
+        // ... sqlite3_open, y luego:
+        // Sqlite.sqlite3_exec(db!, "select name from users", row, row, null);
+        channel.send(names.join(","));
+    }
+}
 ```
 
 - **Un tipo de C** es un `type` en la interfaz: `type FILE released by fclose;` es el `FILE*` de C, y la
   memoria donde está llama a `fclose` cuando se libera. Una función que recibe un puntero dice `T*`, y la
-  llamada da `&x`. La cabecera llega al C solo cuando algo de ella se usa.
-- **Se dice siempre.** Un programa que usa esa biblioteca se compila con ese C, y cada build lo dice:
-  `note: unsafe C (native interface) from: cubes`. También nombra los tipos puntero de esas interfaces
-  que nada libera (`type Cell (int*) has no 'released by'`).
-- **Las garantías del lenguaje terminan ahí.** El compilador revisa el Larimar alrededor de la llamada,
-  no lo que hace el C: una native interface es para una cabecera, para algo puntual. Para una biblioteca
-  de C entera, una `UnsafeTask` ([capítulo 23](#23-otros-programas-llamadas-memoria-compartida-y-procesos)) deja
-  sus fallos en otro proceso, y no necesita `unsafe_c`.
+  llamada da `&x`.
 - **Callbacks**: una función de C que llama de vuelta recibe una función y su "this", un `void*`. Larimar
-  pasa el mismo par: un método y su objeto (`self::onRow, self`), una lambda y ella misma (`row, row`), o
-  una función sin estado (una lambda que no captura nada, `::compare`) y `null`. El compilador escribe la
-  función de C que convierte el `void*` de vuelta en el objeto o la lambda (spec §D.10).
-
-  ```ts
-  native interface Sqlite "<sqlite3.h>" {
-      type sqlite3 released by sqlite3_close;
-      function sqlite3_exec(db: sqlite3, sql: String, row: (void*, int32, String[], String?[]) -> int32,
-                            data: void*, error: void*): int32;
-  }
-
-  let names: String[*] = [];
-  let row: (void*, int32, String[], String?[]) -> int32 = (data, count, values, columns) -> {
-      names.push(values[0].clone());       // values: tantos como count
-      return 0;
-  };
-  Sqlite.sqlite3_exec(db!, "select name from users", row, row, null);
-  ```
-- `ccode`, `cinclude` y las funciones con cuerpo de C siguen siendo de la biblioteca estándar, con o sin
-  `unsafe_c`.
+  pasa el mismo par: un método y su objeto (`self::onRow, self`), una lambda y ella misma (`row, row`,
+  como arriba), o una función sin estado (una lambda que no captura nada, `::compare`) y `null`. El
+  compilador escribe la función de C que convierte el `void*` de vuelta en el objeto o la lambda (spec
+  §D.10).
+- `ccode`, `cinclude` y las funciones con cuerpo de C son de la biblioteca estándar; fuera de una
+  `UnsafeTask`, también lo es una native interface.
 
 ### Aclaraciones
 
-- **Sin C propio, de entrada.** Una biblioteca, como un programa, no tiene C: lo que
-  Larimar no tiene corre en otro proceso ([capítulo 23](#23-otros-programas-llamadas-memoria-compartida-y-procesos)).
-  Una biblioteca escrita por otro trae C solo si su `[project]` dice `unsafe_c = true`, y entonces cada
-  build del programa lo dice.
+- **Sin C propio en el proceso.** Una biblioteca, como un programa, tiene el C de std; una biblioteca de
+  C va en una `UnsafeTask` ([capítulo 23](#23-otros-programas-llamadas-memoria-compartida-y-procesos)), y
+  una biblioteca escrita en Larimar puede dar una.
 - **Sin gestor de paquetes.** `[dependencies]` nombra carpetas; cómo llegan ahí lo decide el proyecto.
 - **¿Biblioteca u otro programa?** Una biblioteca es más rápida (una llamada es una llamada) y lo comparte
   todo con el programa; otro programa está aparte (una llamada va a otro proceso y vuelve, unos
@@ -4468,7 +4448,7 @@ Lo que Larimar no tiene, ni va a tener, con lo que se usa en su lugar:
 - **Sin `null` por sorpresa.** Solo puede ser `null` lo que lleva `?` ([sección 14](#14-opcionales-y-null)).
 - **Sin conversiones implícitas.** Entre tipos numéricos se convierte con `as`, a la vista: `int32 + int64` no compila.
 - **Sin comportamiento indefinido.** Los enteros dan la vuelta, los índices se comprueban y un fallo se detiene con su archivo y su línea ([sección 20](#20-fallos-en-tiempo-de-ejecución)).
-- **Sin C propio, de entrada.** Un programa y sus bibliotecas usan el C de la biblioteca estándar: lo que std no tiene corre en otro proceso ([capítulo 23](#23-otros-programas-llamadas-memoria-compartida-y-procesos)). Con `[project] unsafe_c = true` un proyecto puede declarar native interfaces de cabeceras de C, y cada build lo dice ([capítulo 27](#c-propio-unsafe_c--true)).
+- **Sin C propio en el proceso.** Un programa y sus bibliotecas usan el C de la biblioteca estándar; una biblioteca de C corre en otro proceso, una `UnsafeTask`, donde un crash es un error de la tarea ([capítulo 27](#c-propio-en-una-unsafetask)).
 
 ### Todavía no
 

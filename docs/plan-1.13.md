@@ -96,6 +96,81 @@ See the Done list and spec §D.10. What is left of it:
   `const char*` is the same function in practice, but clang's `-fsanitize=function` can see the
   difference.
 
+### C only in an `UnsafeTask` (step 1 done)
+
+The C of a program, or of a library written in Larimar, runs in a process apart: Larimar takes the idea
+of regions to failures. A value lives in a region and cannot escape it; C the compiler does not check
+lives in the process of a task, and a crash there does not cross into the program (it is a
+`ProcessError`). The cost is smaller than it looks: the Larimar that uses the library runs inside the
+task too, at the speed of C (a loop that draws, a `qsort` with its callback); only messages cross. When
+a case of speed truly needs C in the program's process, the answer is std, which is C reviewed and
+tested, as libc already is.
+
+1. **Done: `[project] unsafe_c` is gone.** A native interface outside a class that implements
+   `UnsafeTask` is an error that says where it goes; `unsafe_c` in `larimar.toml` too.
+2. **Native interfaces at module level, used only "inside the task".** Declared in a module, so two tasks
+   or a library (`sdlkit`: the interface, a `Window` class, helpers) share them. A function or method that
+   calls `Sdl.*` is of the task, and so is everything that calls it, upwards; reaching it from outside an
+   `UnsafeTask` (from `main`, from a thread of the program) is a compile error that shows the path:
+   `main → draw → Sdl.SDL_FillRect: Sdl's C runs only in an UnsafeTask`. It is the analysis the compiler
+   already does for threads (owners and edges), with another question. Constants and structs by value of
+   the interface (`SDL_KEYDOWN`, `SDL_Rect`) are data and go anywhere; a type `released by` is of the task
+   (releasing it calls C).
+3. **`from`: the library of an interface** (below). With it the task opens, when its process starts, the
+   libraries of every interface its code reaches.
+
+**`setup` becomes optional, by composition.** An interface has no methods with a default body, so:
+
+```ts
+public interface UnsafeTask extends Task { }                         // the mark: this task brings C
+public interface PreparedUnsafeTask extends UnsafeTask {             // and it prepares itself in each process
+    function setup(loader: LibraryLoader): void throws LoadError;
+}
+```
+
+`UnsafeTask` keeps no method of its own: it is the mark that the task brings C (for the compiler, what
+opens its interfaces; for whoever reads, it is in the type). `PreparedUnsafeTask` has `setup(loader)`,
+implemented only to choose the library when the task runs (`loader.bind(Sdl, path)`) or to prepare it
+once in each process (`SDL_Init`, a connection). Because it extends `UnsafeTask`, nothing implements it
+without being a task with C, and a class names only one: `class Game implements PreparedUnsafeTask`.
+(A type declared inside another, `UnsafeTask.Setup`, would say it too, but Larimar has no nested types;
+`extends` is enough.) Until `from` exists, `setup` is the only way to load a library, so this comes with it.
+
+### The library of an interface: `from` (next)
+
+The interface says the header and the library, all the C it uses, as `released by` says who frees a type:
+
+```ts
+native interface Sdl "<SDL2/SDL.h>" from "SDL2" { ... }
+```
+
+- **A name** (`"SDL2"`): the dynamic library, found where the system keeps them, and on macOS also in
+  `/opt/homebrew/lib` and `/usr/local/lib` (where brew installs, on ARM and on Intel): the search
+  `std.os.library.fileNames` already does. The task opens it when its process starts.
+- **A path** (it has `/`, or ends in `.a`, `.so`, `.dylib`, `.dll`, `.lib`): a library that comes with the
+  project, relative to its folder. A dynamic one is opened from next to the program. A **static** one
+  (`.a`, `.lib`) cannot be opened when the task runs, but a task runs in a copy of the program: the
+  compiler can link it into the executable and the task finds its functions in the program itself
+  (`dlopen(NULL)`, `GetModuleHandle(NULL)`). To try; until then a static library is made shared.
+- **What belongs to a machine goes in `larimar.toml`**, never an absolute path in the code: folders to
+  look in, per system, next to those of the headers:
+
+  ```toml
+  [c.macos]
+  libraries = ["/opt/local/lib"]        # besides the usual ones
+  headers = ["/opt/local/include"]
+  ```
+- **`loader.bind` stays** (in `PreparedUnsafeTask`) for what is decided when the task runs: plugins, a path
+  from the configuration.
+- Later: `from pkg "sdl2"`, which asks `pkg-config` for paths and flags (GTK, GStreamer: libraries with
+  many of their own).
+- **Where the `.h` comes from**: a library (`.dll`, `.so`, `.dylib`) has its compiled code and the names
+  of its functions, not their types nor the layout of its structs; the header says them, and comes with
+  the library's development package (brew: both; Linux: `libsdl2-dev` beside `libsdl2`; Windows: a zip
+  with `include/`, `lib/` and the `.dll`). The string of a native interface is written as an `#include`
+  in the C Larimar makes, so the C compiler checks types, fields and macros; the task needs the header to
+  compile and the library to run.
+
 ### After that
 
 - **Messages with a type**: a struct whose fields cross (the rule of the fields of a `Task`) goes

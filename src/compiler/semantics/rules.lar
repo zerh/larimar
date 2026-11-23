@@ -10,8 +10,8 @@
 import syntax.ast { CCodeDecl, CIncludeDecl, ExternFunctionDecl, ExternTypeDecl, ExternValueDecl, FunctionDecl, NativeInterfaceDecl,
     NativeTypeDecl, Node, StructDecl, declName };
 import semantics.linker {
-    declarationsOf, importsOf, isLanguage, isStd, linkedMainFile, linking, Module, ruleError, sourceOf,
-    stdFileOpened, trusted, unsafeModule
+    declarationsOf, importsOf, isLanguage, isStd, linkedMainFile, linking, Module, ruleError,
+    stdFileOpened, trusted
 };
 
 /** A rule of the language. */
@@ -109,17 +109,6 @@ class InternalImport implements Rule {
 
 // ---- where C may be ------------------------------------------------------------------------------
 
-/** The types and structs the native interfaces of a module declare (their names). */
-function interfaceTypes(module: Module in default): String[*] {
-    let names: String[*] = [];
-    for (d in declarationsOf(module)) {
-        if (d is NativeInterfaceDecl nativeInterface) {
-            for (t in nativeInterface.types) { names.push(t); }
-        }
-    }
-    return names;
-}
-
 /** Whether the module takes UnsafeTask from std.os.process (by name, or through an alias). */
 function importsUnsafeTask(module: Module in default): bool {
     if (module.program == null) { return false; }
@@ -134,26 +123,20 @@ function importsUnsafeTask(module: Module in default): bool {
 }
 
 /**
- * C is only the standard library's: a program, and a library written in Larimar, use what std gives (and,
- * for the rest, other programs). With [project] unsafe_c = true, native interfaces (and nothing else of
- * C), which every build says (unsafeSources).
+ * C is the standard library's, and an UnsafeTask's: a program, and a library written in Larimar, use what
+ * std gives; a C library of their own runs in a process apart, through the native interface of an
+ * UnsafeTask.
  */
 class NoCOutsideStd implements Rule {
     override function id(): String { return "no-c-outside-std"; }
     override function spec(): String { return "Appendix D: the C of the standard library"; }
     override function check(module: Module in default): void {
         if (trusted(module, linkedMainFile())) { return; }
-        let interfaces: bool = unsafeModule(module);
-        let declared: String[*] = interfaceTypes(module);
         let parts: Any = {};                     // what native interfaces declare: said once, at the interface
-        let opened: Any = {};                    // what the interfaces of an UnsafeTask declare: C of its own process
         for (d in declarationsOf(module)) {
             if (d is NativeInterfaceDecl nativeInterface) {
                 for (n in nativeInterface.members) { parts["${nativeInterface.name}__${n}"] = 1; }
-                if (nativeInterface.opened) {
-                    for (n in nativeInterface.members) { opened["${nativeInterface.name}__${n}"] = 1; }
-                    for (n in nativeInterface.types) { opened[n] = 1; }
-                }
+                for (n in nativeInterface.types) { parts[n] = 1; }
             }
         }
         for (d in declarationsOf(module)) {
@@ -164,33 +147,22 @@ class NoCOutsideStd implements Rule {
                 continue;
             }
             if (d is CCodeDecl cc && cc.ofInterface) { continue; }
-            if (!(d is NativeInterfaceDecl) && opened[declName(d)] != null) { continue; }
-            if (interfaces && d is NativeInterfaceDecl) {          // unsafe_c: allowed, and said at build
-                let from: String = sourceOf(module);
-                if (!linking.unsafeSources.contains(from)) { linking.unsafeSources.push(from.clone() in default); }
-                continue;
-            }
-            if (interfaces && d is ExternTypeDecl et && et.cType.trim().endsWith("*") && et.cType.trim() != "void*" && et.releasedBy == "" && declared.contains(et.name)) {
-                linking.unsafeNotes.push("${sourceOf(module)}: type ${et.name} (${et.cType}) has no 'released by': nothing frees it" in default);
-            }
-            let what: String = cKind(d, interfaces, declared, parts);
-            if (what != "") {
-                let open: String = what == "native interface" ? ", or for a project with [project] unsafe_c = true (its C has none of the language's guarantees)" : "";
-                ruleError(d.line, self.id(), "${what} is only for the standard library${open}: C is written there, and a program uses what std gives.");
+            if (!(d is NativeInterfaceDecl) && parts[declName(d)] != null) { continue; }
+            let what: String = cKind(d);
+            if (what == "native interface") {
+                ruleError(d.line, self.id(), "A native interface of a program goes in a class that implements UnsafeTask (std.os.process): its C runs in a process of its own, where a crash is an error of the task.");
+            } else if (what != "") {
+                ruleError(d.line, self.id(), "${what} is only for the standard library: C is written there, and a program uses what std gives (or an UnsafeTask, for a C library).");
             }
         }
     }
 }
 
-/** What of C a declaration is ("" when it is not C, or is what a native interface allows). */
-function cKind(d: Node, interfaces: bool, declared: String[*], parts: Any): String {
+/** What of C a declaration is ("" when it is not C). */
+function cKind(d: Node): String {
     return switch (d) {
         case NativeInterfaceDecl n -> "native interface";
-        case CIncludeDecl c when c.gives != "" -> "";
-        case ExternTypeDecl t when interfaces && declared.contains(t.name) -> "";
-        case StructDecl st when interfaces && declared.contains(st.name) -> "";
-        case ExternFunctionDecl f when parts[f.name] != null -> "";
-        case ExternValueDecl v when parts[v.name] != null -> "";
+        case CIncludeDecl c when c.gives != "" -> "";       // a header of a native interface: said there
         case CIncludeDecl c -> "cinclude";
         case CCodeDecl c -> "ccode";
         case ExternTypeDecl t -> "native type";
